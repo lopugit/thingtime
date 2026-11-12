@@ -5,7 +5,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { commanderSearchResults } from '~/components/Search/commanderSearch';
 import { isFolder, thingDisplayName, thingIcon, sortThings, type ThingsThing } from '~/components/Things/thingsCore';
 import { isProtectedThingtime } from '~/schemas/registry';
-import { MAX_POST_THINGS, type PostThingReference } from './postThingReferences';
+import type { PostThingReference } from './postThingReferences';
 
 // Commander search + the same owned folder/list vocabulary as /things. Labels
 // are transient UI state; the published payload contains only ids and modes.
@@ -51,17 +51,17 @@ export function PostThingPicker({ value, onChange }: { value: PostThingReference
     return () => { cancelled = true; clearTimeout(timer); };
   }, [request, page, user?.id]);
   const selected = new Set(value.map(item => item.id));
-  const toggle = (id: string) => onChange(selected.has(id) ? value.filter(item => item.id !== id) : value.length < MAX_POST_THINGS ? [...value, { id, mode: 'interactive' }] : value);
+  const toggle = (id: string) => onChange(selected.has(id) ? value.filter(item => item.id !== id) : [...value, { id, mode: 'interactive' }]);
   return <Box border="1px solid var(--tt-border)" borderRadius="12px" p={3} minW={0} data-testid="post-thing-picker">
     <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search Things with Commander…" aria-label="Search Things to attach" size="sm" />
     <Flex gap={1} wrap="wrap" my={2} align="center">
       <Button size="xs" variant="ghost" onClick={() => { setQuery(''); setPath([]); }}>All my Things</Button>
       {path.map((entry, index) => <Button key={entry.id} size="xs" variant="ghost" maxW="180px" onClick={() => { setQuery(''); setPath(path.slice(0, index + 1)); }}>{entry.title}</Button>)}
-      <Text fontSize="xs" color="var(--tt-muted)" ml="auto">{value.length}/{MAX_POST_THINGS} selected</Text>
+      <Text fontSize="xs" color="var(--tt-muted)" ml="auto">{value.length} selected</Text>
     </Flex>
     <Box maxH="260px" overflowY="auto" borderTop="1px solid var(--tt-border)">
       {items.map(thing => <Flex key={thing.id} align="center" gap={2} py={2} minW={0} borderBottom="1px solid var(--tt-border)">
-        <Checkbox size="md" minW="20px" sx={{ '.chakra-checkbox__control': { border: '2px solid var(--tt-muted, #9a9aa6)', width: '18px', height: '18px' } }} aria-label={`Attach ${thingDisplayName(thing)}`} isChecked={selected.has(thing.id)} isDisabled={!selected.has(thing.id) && value.length >= MAX_POST_THINGS} onChange={() => toggle(thing.id)} />
+        <Checkbox size="md" minW="20px" sx={{ '.chakra-checkbox__control': { border: '2px solid var(--tt-muted, #9a9aa6)', width: '18px', height: '18px' } }} aria-label={`Attach ${thingDisplayName(thing)}`} isChecked={selected.has(thing.id)} onChange={() => toggle(thing.id)} />
         <Text flexShrink={0}>{thingIcon(thing)}</Text>
         <Button variant="ghost" size="sm" flex={1} minW={0} justifyContent="flex-start" whiteSpace="normal" height="auto" py={1} textAlign="left" onClick={() => isFolder(thing) ? (setQuery(''), setPath([...path, { id: thing.id, title: thingDisplayName(thing) }])) : toggle(thing.id)}>{thingDisplayName(thing)}{isFolder(thing) ? ' ›' : ''}</Button>
       </Flex>)}

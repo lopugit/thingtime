@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compositionReferences, sharedOperationAllowed } from './sharedCompositionCore';
+import { rewriteComposition } from './forkCompositionCore';
+
+test('instance argument bindings never turn parent row data into stored dependency grants', () => {
+	const blocks = [{ id: 'row', type: 'collection', props: { itemsPath: 'result.rows' }, children: [
+		{ id: 'child', type: 'component', component: 'saved-child', args: { label: 'Literal' },
+			argBindings: { action: '{item.action}', component: 'unrelated-component', media: '/api/v1/attachments/content?id=unrelated' } },
+		{ id: 'expanded', type: 'container', args: { label: 'Literal' }, argBindings: { action: '{item.action}' },
+			children: [{ id: 'action', type: 'element', tag: 'button', props: { 'data-tt-action': '{action}' } }] }
+	] }];
+	assert.deepEqual(compositionReferences(['webpage'], { blocks }), [
+		{ kind: 'component', ref: 'saved-child', args: { label: 'Literal' } }
+	]);
+	const copy = rewriteComposition(['webpage'], { blocks }, (_kind, ref) => 'copy-' + ref);
+	assert.equal(copy.blocks[0].children[0].component, 'copy-saved-child');
+	assert.deepEqual(copy.blocks[0].children[0].argBindings, blocks[0].children[0].argBindings);
+});
 
 test('saved action references use defaults, saved args and every persisted page instance', () => {
 	const crystal = {
@@ -113,7 +129,7 @@ test('dynamic user-controlled references do not grant inherited access', () => {
 });
 
 test('shared execution has no saved-data mutation operations and defaults unknown operations to denied', () => {
-	for (const op of ['things.create', 'things.update', 'things.delete', 'unknown']) assert.equal(sharedOperationAllowed(op), false);
+	for (const op of ['things.create', 'things.ensure', 'things.update', 'things.delete', 'unknown']) assert.equal(sharedOperationAllowed(op), false);
 	for (const op of ['return', 'compute', 'things.get', 'things.search', 'actions.invoke', 'each']) assert.equal(sharedOperationAllowed(op), true);
 });
 
@@ -144,4 +160,30 @@ test('collection discovery follows authored row controls while refusing row-data
 	assert.deepEqual(compositionReferences(['component'], crystal), [{ kind: 'action', ref: 'save' }]);
 	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'div', props: crystal.render.props } }), []);
 	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'tt-dialog', props: { closeOnAction: 'private' } } }), []);
+});
+
+
+test('a stored map includes its declared source and marker Component without borrowing row authority', () => {
+	const props = {
+		favouritesSource: { action: 'saved-map-source', inputs: { component: '{item.component}' } },
+		routeSource: { action: '{item.action}' },
+		pointsSource: { action: 'saved-points-source', inputs: { candidate: 'not-an-action' } },
+		points: [{ component: 'ungranted-row-component', renderComponent: 'ungranted-row-renderer' }]
+	};
+	assert.deepEqual(compositionReferences(['webpage'], { blocks: [{
+		type: 'element', tag: 'tt-mapbox', props, children: [{
+			type: 'container', children: [
+				{ type: 'component', component: 'saved-marker', args: { label: '{point.label}' } },
+				{ type: 'component', component: '{item.component}' }
+			]
+		}]
+	}] }), [
+		{ kind: 'action', ref: 'saved-map-source' },
+		{ kind: 'action', ref: 'saved-points-source' },
+		{ kind: 'component', ref: 'saved-marker', args: { label: '{point.label}' } }
+	]);
+	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'tt-mapbox', props } }), [
+		{ kind: 'action', ref: 'saved-map-source' },
+		{ kind: 'action', ref: 'saved-points-source' }
+	]);
 });

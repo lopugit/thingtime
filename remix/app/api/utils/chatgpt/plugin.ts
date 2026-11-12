@@ -1,19 +1,29 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import {
+  CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION,
+  connectorConfirmationsForMutation, effectiveConnectorConfirmations, parseConnectorConfirmations,
+  requiredConnectorConfirmations, type ConnectorConfirmationAction, type ConnectorConfirmations
+} from './connectorProtections';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
+import { authCookie } from '~/api/utils/auth/authCookie';
+import { characterIdentity } from '~/api/utils/auth/characterCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
-import { mintPatToken, PAT_SCOPE_CATALOG, revokePatToken } from '~/api/utils/auth/patTokens';
+import { isKnownPatScope, mintPatToken, PAT_SCOPE_CATALOG, resolvePatIntrospection, revokePatToken } from '~/api/utils/auth/patTokens';
 import { createSession, getLiveSession, revokedSessionPipeline, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
+import { findUserById } from '~/api/utils/auth/users';
+import { createMutationStore, mutationDigest, type MutationStorageScope, type MutationStore } from './mutationStore';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
 import { validateThingtimeCrystal, validateValueAgainstFields } from '~/schemas/registry';
 
 import {
   CHATGPT_AUTHORIZE_PATH,
+  CHATGPT_BASE_OAUTH_SCOPES,
   CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
   CHATGPT_OAUTH_RELAY_PATH,
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
@@ -21,6 +31,7 @@ import {
   CHATGPT_MCP_INSTRUCTIONS,
   CHATGPT_MCP_METHOD_FEATURES,
   CHATGPT_PLUGIN_FEATURES,
+  CHATGPT_OAUTH_PERMISSION_SCOPES,
   allowedThingtimeEndpoints,
   applyUpstreamQuery,
   escapeHtml,
@@ -31,17 +42,19 @@ import {
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
-  renderConnectionPage
+  renderConnectionPage,
+  renderScopedConnectionPage,
+  requestedOAuthPermissions
 } from './pluginCore';
 import type {
   CHATGPT_MCP_TOOL_FEATURES,
   ChatGptConnection,
   ChatGptCredentialBundle,
   ChatGptDynamicOAuthClient,
+  ChatGptOAuthPermissionScope,
   ChatGptOAuthRequest
 } from './pluginCore';
 import {
-  MAX_LIMITLESS_HISTORY,
   MAX_LIMITLESS_WORKFLOW_RUNS,
   THINGTIME_CAPABILITY_CONTRACT,
   THINGTIME_CAPABILITY_CONTRACT_URI,
@@ -69,7 +82,6 @@ const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_UPSTREAM_RESPONSE_BYTES = 512 * 1024;
 const MAX_ENCRYPTED_BUNDLE_PLAINTEXT_BYTES = 768 * 1024;
-const MAX_ENCRYPTED_STATE_BYTES = 384 * 1024;
 
 type Failure = { ok: false; status: number; error: string };
 type Success<T> = { ok: true; value: T };
@@ -147,9 +159,12 @@ const decryptBundle = (ciphertext: unknown): Result<ChatGptCredentialBundle> => 
   }
 };
 
-const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES): Promise<Result<string>> => {
+const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES, admitLarger?: () => Promise<boolean>): Promise<Result<string>> => {
   const length = Number(request.headers.get('content-length') || 0);
-  if (Number.isFinite(length) && length > maxBytes) return { ok: false, status: 413, error: 'Request body too large' };
+  if (Number.isFinite(length) && length > maxBytes) {
+    if (!admitLarger || !await admitLarger()) return { ok: false, status: 413, error: 'Request body too large' };
+    maxBytes = Infinity;
+  }
   const reader = request.body?.getReader();
   if (!reader) return { ok: true, value: '' };
   const chunks: Uint8Array[] = [];
@@ -160,8 +175,11 @@ const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES):
     if (!value) continue;
     received += value.byteLength;
     if (received > maxBytes) {
-      await reader.cancel().catch(() => {});
-      return { ok: false, status: 413, error: 'Request body too large' };
+      if (!admitLarger || !await admitLarger()) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, status: 413, error: 'Request body too large' };
+      }
+      maxBytes = Infinity;
     }
     chunks.push(value);
   }
@@ -212,7 +230,11 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
   const rawScope = Array.isArray(claims.scope) ? claims.scope.filter((value): value is string => typeof value === 'string') : [];
   const scope = normalizeChatGptOAuthScopes(rawScope);
   if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope) return null;
-  return { clientId, redirectUri, state, codeChallenge, resource, scope };
+  return {
+    clientId, redirectUri, state, codeChallenge, resource, scope,
+    ...(isUuid(claims.requestId) ? { requestId: claims.requestId } : {}),
+    ...(isUuid(claims.browserSessionJti) ? { browserSessionJti: claims.browserSessionJti } : {})
+  };
 };
 
 const dynamicClientFromId = async (clientId: string, origin: string): Promise<ChatGptDynamicOAuthClient | null> => {
@@ -263,7 +285,7 @@ const endpointRequest = async (
   endpoint: string,
   token: string,
   path: string,
-  init: { method?: string; query?: Record<string, string | number | null | undefined>; body?: unknown } = {}
+  init: { method?: string; query?: Record<string, string | number | null | undefined>; body?: unknown; wholeThing?: boolean } = {}
 ): Promise<Result<unknown>> => {
   const normalizedEndpoint = normalizeThingtimeEndpoint(endpoint);
   if (!normalizedEndpoint) return { ok: false, status: 403, error: 'This Thingtime endpoint is no longer allowed by the gateway' };
@@ -273,15 +295,18 @@ const endpointRequest = async (
     const response = await fetch(url, {
       method: init.method || 'GET',
       redirect: 'error',
+      cache: 'no-store',
       signal: AbortSignal.timeout(15_000),
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: 'application/json',
         ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' })
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body)
     });
-    const text = await boundedResponseText(response);
+    const text = response.ok && init.wholeThing
+      ? { ok: true as const, value: await response.text() }
+      : await boundedResponseText(response);
     if (!text.ok) return text;
     let payload: unknown;
     try {
@@ -325,6 +350,16 @@ const validateCredential = async (endpoint: string, token: string): Promise<Resu
 const requestClaimsToken = async (request: ChatGptOAuthRequest) =>
   signPurposeToken(OAUTH_REQUEST_PURPOSE, request, '10m');
 
+const oauthAttemptId = ({ clientId, redirectUri, state, codeChallenge, resource }: ChatGptOAuthRequest) => {
+  // Reloading the consent page is still the same client/state/PKCE attempt.
+  // Scopes are signed separately: changing them cannot create a second attempt
+  // under the same host state and PKCE proof.
+  const hash = createHash('sha256').update('thingtime:chatgpt:scoped-consent:v1\0').update(JSON.stringify([clientId, redirectUri, state, codeChallenge, resource])).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+};
+
+const oauthAttemptUsed = async (jti: string) => Boolean(await (await getSessionsCollection()).findOne({ jti, purpose: OAUTH_CODE_PURPOSE }, { projection: { _id: 1 } }));
+
 type McpConnectionReference = { connectionId: string; sessionJti: string };
 type ResolvedMcpBundle = { bundle: ChatGptCredentialBundle; connection: SessionDoc | null };
 
@@ -339,8 +374,9 @@ const connectionReferenceFromMeta = (meta: unknown): McpConnectionReference | nu
     : null;
 };
 
-const scopeText = (hasOfflineAccess: boolean) => (hasOfflineAccess ? 'thingtime offline_access' : 'thingtime');
 const hasOfflineAccess = (scope: readonly string[]) => scope.includes('offline_access');
+const readOAuthGrantScopes = (value: unknown, legacy: readonly string[] = ['thingtime']) =>
+  value === undefined ? [...legacy] : Array.isArray(value) && value.every((item) => typeof item === 'string') ? normalizeChatGptOAuthScopes(value) : null;
 
 const createMcpConnection = async ({
   userId,
@@ -366,16 +402,18 @@ const createMcpConnection = async ({
 const createMcpAccessGrant = async ({
   userId,
   resource,
-  connection
+  connection,
+  scope
 }: {
   userId: string;
   resource: string;
   connection: McpConnectionReference;
+  scope: string[];
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_SESSION_PURPOSE,
     expiresAt: null,
-    meta: { resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+    meta: { resource, scope, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
   return {
     accessToken: await signJwt({ sub: userId, jti: session.jti, expiresIn: null })
@@ -386,17 +424,19 @@ const createMcpRefreshGrant = async ({
   userId,
   clientId,
   resource,
-  connection
+  connection,
+  scope
 }: {
   userId: string;
   clientId: string;
   resource: string;
   connection: McpConnectionReference;
+  scope: string[];
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_REFRESH_SESSION_PURPOSE,
     expiresAt: null,
-    meta: { clientId, resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+    meta: { clientId, resource, scope, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
   return signJwt({ sub: userId, jti: session.jti, expiresIn: null });
 };
@@ -436,10 +476,16 @@ export const beginChatGptAuthorization = async ({ request }: { request: Request 
   if (!allowed.length) return oauthErrorPage(503, 'No Thingtime API endpoints have been configured for ChatGPT connections.');
   if (!configuredCipherKey()) return oauthErrorPage(503, 'This Thingtime endpoint has not configured encrypted ChatGPT credential storage.');
 
-  const requestToken = await requestClaimsToken(parsed.request);
+  const permissions = requestedOAuthPermissions(parsed.request.scope);
+  const requestId = permissions.length ? oauthAttemptId(parsed.request) : null;
+  if (requestId && await oauthAttemptUsed(requestId)) return oauthErrorPage(409, 'This authorization request has already been used. Return to your app and start again.');
+  const requestToken = await requestClaimsToken({ ...parsed.request, ...(requestId ? { requestId } : {}) });
   const normalizedOrigin = normalizeThingtimeEndpoint(requestOrigin(request));
   const defaultEndpoint = normalizedOrigin && allowed.includes(normalizedOrigin) ? normalizedOrigin : allowed[0];
-  return new Response(renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
+  if (permissions.length && normalizedOrigin !== defaultEndpoint) return oauthErrorPage(503, 'This origin is not available for scoped Thingtime connections.');
+  return new Response(permissions.length
+    ? renderScopedConnectionPage(requestToken, PAT_SCOPE_CATALOG, permissions)
+    : renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
     headers: {
       ...noStoreHeaders,
       'Content-Type': 'text/html; charset=utf-8',
@@ -459,6 +505,9 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
   if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length < 1 || rawRedirectUris.length > 8) {
     return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight supported ChatGPT or loopback callbacks' }, { status: 400, headers: noStoreHeaders });
   }
+  const scope = candidate?.scope === undefined ? [...CHATGPT_BASE_OAUTH_SCOPES]
+    : typeof candidate.scope === 'string' ? normalizeChatGptOAuthScopes(candidate.scope.split(/\s+/)) : null;
+  if (!scope) return json({ error: 'invalid_client_metadata', error_description: 'scope must include thingtime and contain only supported scopes' }, { status: 400, headers: noStoreHeaders });
   const redirectUris = [...new Set(rawRedirectUris.map((value) => normalizeRegisteredClientRedirectUri(value, requestOrigin(request))).filter((value): value is string => Boolean(value)))];
   if (redirectUris.length !== rawRedirectUris.length) {
     return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact ChatGPT connector, loopback callback, or a first-party short-lived OAuth relay callback' }, { status: 400, headers: noStoreHeaders });
@@ -472,7 +521,7 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
       response_types: ['code'],
       grant_types: ['authorization_code', 'refresh_token'],
       token_endpoint_auth_method: 'none',
-      scope: 'thingtime offline_access'
+      scope: scope.join(' ')
     },
     { status: 201, headers: noStoreHeaders }
   );
@@ -548,6 +597,92 @@ export const handleChatGptOAuthRelay = async ({ request }: { request: Request })
   return json({ status: 'complete', response }, { headers: noStoreHeaders });
 };
 
+const completeOAuthCallback = (oauthRequest: ChatGptOAuthRequest, origin: string, params: Record<string, string>, wantsJson: boolean) => {
+  const callback = new URL(oauthRequest.redirectUri);
+  callback.searchParams.set('state', oauthRequest.state);
+  callback.searchParams.set('iss', origin);
+  for (const [key, value] of Object.entries(params)) callback.searchParams.set(key, value);
+  return wantsJson ? json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders }) : redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
+};
+
+const oauthCodeMetadata = (oauthRequest: ChatGptOAuthRequest) => ({
+  clientId: oauthRequest.clientId,
+  redirectUri: oauthRequest.redirectUri,
+  state: oauthRequest.state,
+  codeChallenge: oauthRequest.codeChallenge,
+  codeChallengeMethod: 'S256',
+  resource: oauthRequest.resource,
+  scope: oauthRequest.scope,
+  connectionId: crypto.randomUUID()
+});
+
+const readConsentingBrowser = async (request: Request) => {
+  if (request.headers.has('authorization')) return null;
+  const cookie = await authCookie.parse(request.headers.get('cookie'));
+  const claims = typeof cookie === 'string' ? await verifyJwt(cookie) : null;
+  if (!claims) return null;
+  const [session, user] = await Promise.all([getLiveSession(claims.jti), getCurrentUser(request)]);
+  return session && (session.purpose === 'browser' || session.purpose == null) && session.userId === claims.sub &&
+    !session.meta?.activeCharacterId && user?.id === claims.sub && user.accountKind !== 'service' && !user.isCharacter && !user.temporary ? { user, session } : null;
+};
+
+const submitScopedChatGptConsent = async (
+  request: Request,
+  form: URLSearchParams,
+  oauthRequest: ChatGptOAuthRequest,
+  signedRequest: string,
+  permissions: readonly ChatGptOAuthPermissionScope[]
+) => {
+  const origin = requestOrigin(request);
+  const reject = (status: number, error: string) => json({ ok: false, error }, { status, headers: noStoreHeaders });
+  if (!oauthRequest.requestId || request.headers.get('origin') !== origin || !allowedThingtimeEndpoints().includes(origin)) {
+    return reject(400, 'This authorization request does not match this Thingtime origin.');
+  }
+  const intent = form.get('intent');
+  const browser = await readConsentingBrowser(request);
+  const unboundCancel = intent === 'cancel' && !oauthRequest.browserSessionJti;
+  if (!browser && !unboundCancel) return reject(401, 'Sign in with Thingtime to continue.');
+  if (oauthRequest.browserSessionJti && oauthRequest.browserSessionJti !== browser?.session.jti) {
+    return reject(409, 'The signed-in Thingtime account changed. Return to your app and start again.');
+  }
+  if (intent === 'prepare') {
+    if (await oauthAttemptUsed(oauthRequest.requestId)) return reject(409, 'This authorization request has already been used. Return to your app and start again.');
+    const bound = oauthRequest.browserSessionJti ? signedRequest : await requestClaimsToken({ ...oauthRequest, browserSessionJti: browser.session.jti });
+    return json({ ok: true, request: bound, username: browser.user.username }, { headers: noStoreHeaders });
+  }
+  if (!unboundCancel && (!oauthRequest.browserSessionJti || (intent !== 'complete' && intent !== 'cancel'))) {
+    return reject(400, 'Review the signed-in account before approving this connection.');
+  }
+
+  const optional = form.getAll('scope');
+  if (intent === 'complete' && (!optional.every(isKnownPatScope) || optional.length > PAT_SCOPE_CATALOG.length)) {
+    return reject(400, 'Review the selected access rules and try again.');
+  }
+  const scopes = [...new Set([...permissions, ...optional])];
+  let codeSession: SessionDoc;
+  try {
+    // Retain the one-use row beyond both the unbound and browser-bound signed
+    // requests. The authorization JWT itself still expires in five minutes.
+    // A signed-out cancellation has no owner or credential. Store only the
+    // short-lived attempt marker so another open tab cannot approve it later.
+    codeSession = await createSession(browser?.user.id ?? '', {
+      jti: oauthRequest.requestId,
+      purpose: OAUTH_CODE_PURPOSE,
+      expiresAt: new Date(Date.now() + 20 * 60 * 1000),
+      meta: intent === 'cancel' ? { cancelled: true } : {
+        ...oauthCodeMetadata(oauthRequest),
+        scopedConsent: { browserSessionJti: browser?.session.jti, scopes }
+      }
+    });
+  } catch (error) {
+    if ((error as { code?: number })?.code !== 11000) throw error;
+    return reject(409, 'This authorization request has already been used. Return to your app and start again.');
+  }
+  if (intent === 'cancel') return completeOAuthCallback(oauthRequest, origin, { error: 'access_denied' }, true);
+  const code = await signJwt({ sub: browser.user.id, jti: codeSession.jti, expiresIn: '5m' });
+  return completeOAuthCallback(oauthRequest, origin, { code }, true);
+};
+
 export const submitChatGptAuthorization = async ({ request }: { request: Request }) => {
   const form = await formBody(request);
   if (form.ok === false) return oauthErrorPage(form.status, form.error);
@@ -555,7 +690,12 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const signedRequest = form.value.get('request');
   const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
   const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
-  if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  const origin = requestOrigin(request);
+  if (!oauthRequest || !isMcpResourceForOrigin(oauthRequest.resource, origin) || (request.headers.has('origin') && request.headers.get('origin') !== origin)) {
+    return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  }
+  const permissions = requestedOAuthPermissions(oauthRequest.scope);
+  if (permissions.length) return submitScopedChatGptConsent(request, form.value, oauthRequest, signedRequest!, permissions);
   const wantsJsonCompletion = form.value.get('intent') === 'complete';
 
   if (form.value.get('intent') === 'prepare') {
@@ -642,32 +782,46 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const encrypted = encryptBundle({ version: 1, defaultConnectionId: connections[0].id, connections });
   if (encrypted.ok === false) return oauthErrorPage(encrypted.status, encrypted.error);
   const expiresAt = new Date(Date.now() + OAUTH_CODE_TTL_MS);
-  const connectionId = crypto.randomUUID();
   const codeSession = await createSession(connections[0].user.id, {
     purpose: OAUTH_CODE_PURPOSE,
     expiresAt,
     meta: {
-      clientId: oauthRequest.clientId,
-      redirectUri: oauthRequest.redirectUri,
-      state: oauthRequest.state,
-      codeChallenge: oauthRequest.codeChallenge,
-      codeChallengeMethod: 'S256',
-      resource: oauthRequest.resource,
-      scope: oauthRequest.scope,
-      connectionId,
+      ...oauthCodeMetadata(oauthRequest),
       ciphertext: encrypted.value
     }
   });
   const code = await signJwt({ sub: connections[0].user.id, jti: codeSession.jti, expiresIn: '5m' });
-  const callback = new URL(oauthRequest.redirectUri);
-  callback.searchParams.set('code', code);
-  callback.searchParams.set('state', oauthRequest.state);
-  callback.searchParams.set('iss', requestOrigin(request));
-  if (wantsJsonCompletion) return json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders });
-  return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
+  return completeOAuthCallback(oauthRequest, origin, { code }, wantsJsonCompletion);
 };
 
 const invalidGrant = () => json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid, expired, already used, or does not match this request' }, { status: 400, headers: noStoreHeaders });
+
+const mintScopedOAuthBundle = async (session: SessionDoc, origin: string, permissions: readonly ChatGptOAuthPermissionScope[]): Promise<Result<{ bundle: ChatGptCredentialBundle; tokenId: string }>> => {
+  const consent = session.meta?.scopedConsent;
+  if (!isUuid(consent?.browserSessionJti) || !Array.isArray(consent?.scopes) || !consent.scopes.every(isKnownPatScope) ||
+      !permissions.every((permission) => consent.scopes.includes(permission)) || !allowedThingtimeEndpoints().includes(origin)) {
+    return { ok: false, status: 400, error: 'The approved Thingtime permissions do not match this request.' };
+  }
+  const [browser, user] = await Promise.all([getLiveSession(consent.browserSessionJti), findUserById(session.userId)]);
+  if (!browser || (browser.purpose !== 'browser' && browser.purpose != null) || browser.userId !== session.userId || browser.meta?.activeCharacterId ||
+      !user || user.accountKind === 'service' || user.meta?.temporary || characterIdentity(user)) {
+    return { ok: false, status: 400, error: 'The Thingtime browser approval is no longer valid.' };
+  }
+  const minted = await mintPatToken(session.userId, {
+    name: `Thingtime ChatGPT connection · @${user.username}`, scopes: consent.scopes, expiresInMs: null,
+    maxUses: null, visibility: 'all', createdVia: 'chatgpt-oauth'
+  });
+  if (minted.ok === false) return minted;
+  const accountId = crypto.randomUUID();
+  return { ok: true, value: {
+    tokenId: minted.tokenInfo.id,
+    bundle: { version: 1, defaultConnectionId: accountId, connections: [{
+      id: accountId, label: user.displayName?.trim() || user.username, endpoint: origin, token: minted.token,
+      user: { id: session.userId, username: user.username, displayName: user.displayName ?? null },
+      scopes: minted.tokenInfo.scopes, connectedAt: new Date().toISOString()
+    }] }
+  } };
+};
 
 const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: string) => {
   const code = params.get('code')?.trim() || '';
@@ -691,41 +845,40 @@ const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: s
       'meta.clientId': clientId,
       'meta.redirectUri': redirectUri,
       'meta.resource': resource,
-      'meta.codeChallengeMethod': 'S256'
+      'meta.codeChallengeMethod': 'S256',
+      'meta.codeChallenge': createHash('sha256').update(verifier).digest('base64url')
     },
     { $set: { revokedAt: now, 'meta.consumedAt': now } },
     { returnDocument: 'before' }
   );
   if (!consumed || !pkceVerifierMatches(verifier, consumed.meta?.codeChallenge)) return invalidGrant();
 
-  const bundle = decryptBundle(consumed.meta?.ciphertext);
+  const scope = readOAuthGrantScopes(consumed.meta?.scope);
+  if (!scope) return invalidGrant();
+  const permissions = requestedOAuthPermissions(scope);
+  const scoped = permissions.length ? await mintScopedOAuthBundle(consumed, origin, permissions) : null;
+  if (scoped?.ok === false) return json({ error: 'invalid_grant', error_description: scoped.error }, { status: scoped.status, headers: noStoreHeaders });
+  const bundle = scoped?.ok ? { ok: true as const, value: scoped.value.bundle } : decryptBundle(consumed.meta?.ciphertext);
   if (bundle.ok === false) return json({ error: 'server_error', error_description: bundle.error }, { status: bundle.status, headers: noStoreHeaders });
-  const encrypted = encryptBundle(bundle.value);
-  if (encrypted.ok === false) return json({ error: 'server_error', error_description: encrypted.error }, { status: encrypted.status, headers: noStoreHeaders });
-  const connection = await createMcpConnection({
-    userId: claims.sub,
-    clientId,
-    resource,
-    ciphertext: encrypted.value,
-    connectionId: isUuid(consumed.meta?.connectionId) ? consumed.meta.connectionId : crypto.randomUUID()
-  });
-  const access = await createMcpAccessGrant({ userId: claims.sub, resource, connection });
-  const scope = normalizeChatGptOAuthScopes(
-    Array.isArray(consumed.meta?.scope) ? consumed.meta.scope.filter((value): value is string => typeof value === 'string') : ['thingtime']
-  ) || ['thingtime'];
-  const offlineAccess = hasOfflineAccess(scope);
-  const refreshToken = offlineAccess
-    ? await createMcpRefreshGrant({ userId: claims.sub, clientId, resource, connection })
-    : null;
-  return json(
-    {
-      access_token: access.accessToken,
-      token_type: 'Bearer',
-      scope: scopeText(offlineAccess),
-      ...(refreshToken ? { refresh_token: refreshToken } : {})
-    },
-    { headers: noStoreHeaders }
-  );
+  let connection: McpConnectionReference | undefined;
+  try {
+    const encrypted = encryptBundle(bundle.value);
+    if (encrypted.ok === false) {
+      if (scoped?.ok) await revokePatToken(claims.sub, scoped.value.tokenId);
+      return json({ error: 'server_error', error_description: encrypted.error }, { status: encrypted.status, headers: noStoreHeaders });
+    }
+    connection = await createMcpConnection({
+      userId: claims.sub, clientId, resource, ciphertext: encrypted.value,
+      connectionId: isUuid(consumed.meta?.connectionId) ? consumed.meta.connectionId : crypto.randomUUID()
+    });
+    const access = await createMcpAccessGrant({ userId: claims.sub, resource, connection, scope });
+    const refreshToken = hasOfflineAccess(scope) ? await createMcpRefreshGrant({ userId: claims.sub, clientId, resource, connection, scope }) : null;
+    return json({ access_token: access.accessToken, token_type: 'Bearer', scope: scope.join(' '), ...(refreshToken ? { refresh_token: refreshToken } : {}) }, { headers: noStoreHeaders });
+  } catch (error) {
+    if (scoped?.ok) await revokePatToken(claims.sub, scoped.value.tokenId);
+    if (connection) await revokeSession(connection.sessionJti);
+    throw error;
+  }
 };
 
 const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string) => {
@@ -733,6 +886,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   const clientId = params.get('client_id')?.trim() || '';
   const requestedResource = params.get('resource');
   const resource = requestedResource?.trim() || '';
+  const requestedScope = params.get('scope');
   if (!refreshToken || !clientId || (requestedResource !== null && (!resource || !isMcpResourceForOrigin(resource, origin)))) return invalidGrant();
 
   const claims = await verifyJwt(refreshToken);
@@ -747,16 +901,30 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   };
   Object.assign(refreshFilter, infiniteExpiryFilter(now));
   if (resource) refreshFilter['meta.resource'] = resource;
-  const consumed = await (await getSessionsCollection()).findOneAndUpdate(
-    refreshFilter,
-    consumedSessionPipeline(now),
-    { returnDocument: 'before' }
-  );
-  if (!consumed) return invalidGrant();
-
-  const resolved = await resolveMcpBundle(consumed, origin);
-  const connection = connectionReferenceFromMeta(consumed.meta);
+  const sessions = await getSessionsCollection();
+  const pending = await sessions.findOne(refreshFilter);
+  const scope = pending && readOAuthGrantScopes(pending.meta?.scope, CHATGPT_BASE_OAUTH_SCOPES);
+  if (!scope || !isMcpResourceForOrigin(pending?.meta?.resource, origin)) return invalidGrant();
+  if (requestedScope !== null) {
+    const requested = normalizeChatGptOAuthScopes(requestedScope.split(/\s+/));
+    if (!requested || requested.length !== scope.length || !requested.every((value) => scope.includes(value))) {
+      return json({ error: 'invalid_scope', error_description: 'Refresh cannot change permissions; authorize the requested scopes again.' }, { status: 400, headers: noStoreHeaders });
+    }
+  }
+  const resolved = await resolveMcpBundle(pending!, origin);
+  const connection = connectionReferenceFromMeta(pending!.meta);
   if (resolved.ok === false || !resolved.value.connection || !connection) return invalidGrant();
+  const permissions = requestedOAuthPermissions(scope);
+  if (permissions.length) {
+    // New scoped grants have one approved account. A revoked backing PAT may
+    // never be advertised as still authorizing this OAuth permission.
+    const account = accountFor(resolved.value.bundle, undefined);
+    if (account?.endpoint !== origin) return invalidGrant();
+    const live = await resolvePatIntrospection(new Request(`${origin}/api/v1/tokens/self`, { headers: { Authorization: `Bearer ${account.token}` } }));
+    if (live.ok === false || live.token.status !== 'active' || live.user.id !== claims.sub || !permissions.every((permission) => live.token.scopes.includes(permission))) return invalidGrant();
+  }
+  const consumed = await sessions.findOneAndUpdate(refreshFilter, consumedSessionPipeline(now), { returnDocument: 'before' });
+  if (!consumed) return invalidGrant();
 
   const extended = await (await getSessionsCollection()).updateOne(
     {
@@ -772,14 +940,14 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (!extended.matchedCount) return invalidGrant();
 
   const storedResource = typeof consumed.meta?.resource === 'string' ? consumed.meta.resource : '';
-  const access = await createMcpAccessGrant({ userId: claims.sub, resource: storedResource, connection });
-  const nextRefreshToken = await createMcpRefreshGrant({ userId: claims.sub, clientId, resource: storedResource, connection });
+  const access = await createMcpAccessGrant({ userId: claims.sub, resource: storedResource, connection, scope });
+  const nextRefreshToken = await createMcpRefreshGrant({ userId: claims.sub, clientId, resource: storedResource, connection, scope });
   return json(
     {
       access_token: access.accessToken,
       token_type: 'Bearer',
       refresh_token: nextRefreshToken,
-      scope: scopeText(true)
+      scope: scope.join(' ')
     },
     { headers: noStoreHeaders }
   );
@@ -800,6 +968,7 @@ type McpSession = {
   bundle: ChatGptCredentialBundle;
   connection: SessionDoc | null;
   persistBundle?: (bundle: ChatGptCredentialBundle) => Promise<Result<void>>;
+  mutationStore?: MutationStore;
 };
 
 const persistMcpBundle = async (context: McpSession): Promise<Result<void>> => {
@@ -835,11 +1004,20 @@ const persistMcpBundle = async (context: McpSession): Promise<Result<void>> => {
 };
 
 const revokeMcpConnection = async (context: McpSession) => {
-  if (!context.connection) return revokeSession(context.session.jti);
   const reference = connectionReferenceFromMeta(context.session.meta);
-  if (!reference) return revokeSession(context.session.jti);
   const sessions = await getSessionsCollection();
   const now = new Date();
+  const mutationPurposes = ['chatgpt-mcp-mutation', 'chatgpt-mcp-mutation-chunk'];
+  if (!context.connection || !reference) {
+    await revokeSession(context.session.jti);
+    await sessions.updateMany({
+      userId: context.session.userId,
+      purpose: { $in: mutationPurposes },
+      revokedAt: null,
+      'meta.connectionSessionJti': context.session.jti
+    }, revokedSessionPipeline(now));
+    return;
+  }
   // Bridge sessions no longer expire on their own, so a disconnect has to leave
   // behind a reap date: the sessions TTL index skips expiresAt: null, and these
   // revoked records would accumulate forever without one. revokedSessionPipeline
@@ -860,7 +1038,7 @@ const revokeMcpConnection = async (context: McpSession) => {
     sessions.updateMany(
       {
         userId: context.session.userId,
-        purpose: { $in: [MCP_SESSION_PURPOSE, MCP_REFRESH_SESSION_PURPOSE] },
+        purpose: { $in: [MCP_SESSION_PURPOSE, MCP_REFRESH_SESSION_PURPOSE, ...mutationPurposes] },
         revokedAt: null,
         'meta.connectionSessionJti': context.connection.jti
       },
@@ -929,9 +1107,6 @@ const AGENT_REPORTING_REQUIREMENTS = {
 // Negotiate afresh on each call: deployment changes and a repaired manifest must
 // never remain hidden behind an earlier rejection or a different account origin.
 const requireAgentReporting = async (account: ChatGptConnection): Promise<Result<true>> => {
-  if (!accountScopeCovers(account, 'agents.report')) {
-    return { ok: false, status: 403, error: 'The selected Thingtime token needs the independent agents.report scope. Existing things access does not include it. Authorize agents.report once in Advanced connection settings and reconnect; no scope is upgraded automatically.' };
-  }
   const result = await endpointRequest(account.endpoint, account.token, THINGTIME_CAPABILITY_MANIFEST_PATH);
   if (result.ok === false) return result;
   const manifest = asRecord(result.value);
@@ -948,43 +1123,195 @@ const requireAgentReporting = async (account: ChatGptConnection): Promise<Result
   return { ok: true, value: true };
 };
 
+type ConnectorPolicy = { confirmations: ConnectorConfirmations; source: 'account-settings' | 'safe-default' };
+
+const readConnectorPolicy = async (account: ChatGptConnection): Promise<ConnectorPolicy> => {
+  const fallback = (): ConnectorPolicy => ({ confirmations: effectiveConnectorConfirmations(), source: 'safe-default' });
+  // Never cache a disabled preference or look it up at another origin.
+  const manifestResult = await endpointRequest(account.endpoint, '', THINGTIME_CAPABILITY_MANIFEST_PATH);
+  if (!manifestResult.ok) return fallback();
+  const manifest = asRecord(manifestResult.value);
+  const version = asRecord(asRecord(manifest?.features)?.[CONNECTOR_PROTECTIONS_FEATURE])?.version;
+  if (manifest?.schemaVersion !== 1 || manifest.origin !== account.endpoint ||
+      typeof version !== 'string' || !capabilitySatisfies(version, CONNECTOR_PROTECTIONS_VERSION)) return fallback();
+  const result = await endpointRequest(account.endpoint, account.token, CONNECTOR_PROTECTIONS_PATH);
+  const payload = result.ok ? asRecord(result.value) : null;
+  const confirmations = payload?.ok === true && payload.accountId === account.user.id
+    ? parseConnectorConfirmations(payload.confirmations) : null;
+  return confirmations ? { confirmations, source: 'account-settings' } : fallback();
+};
+
+const previewConfirmationActions = (preview: LimitlessMutationPreview, workflow = false): ConnectorConfirmationAction[] => [
+  ...(preview.source?.kind === 'undo' ? ['undo'] as const : []),
+  ...(workflow || preview.source?.kind === 'workflow' ? ['workflow'] as const : []),
+  ...preview.operations.flatMap(item => connectorConfirmationsForMutation(item.action, item.thing ?? item.patch, item.before))
+];
+
+const describeConnectorConfirmation = async (account: ChatGptConnection, actions: Iterable<ConnectorConfirmationAction>, policy?: ConnectorPolicy) => {
+  const active = policy ?? await readConnectorPolicy(account);
+  const confirmationActions = requiredConnectorConfirmations(active.confirmations, actions);
+  return { confirmationRequired: confirmationActions.length > 0, confirmationActions, confirmationSource: active.source };
+};
+
+const requireConnectorConfirmation = async (account: ChatGptConnection, confirmed: unknown, actions: Iterable<ConnectorConfirmationAction>, policy?: ConnectorPolicy) => {
+  // The client assertion of explicit approval is separate from host approvals,
+  // token scopes, and upstream authorization.
+  if (confirmed === true) return null;
+  const details = await describeConnectorConfirmation(account, actions, policy);
+  return details.confirmationRequired
+    ? { error: 'Review the selected account, targets, and effects and obtain the user’s explicit confirmation before retrying with confirmed=true.',
+        code: 'confirmation_required', status: 409, account: publicConnection(account), ...details }
+    : null;
+};
+
+const requireDirectChangeConfirmation = async (
+  account: ChatGptConnection, confirmed: unknown, action: 'update' | 'delete', id: string, payload?: unknown
+) => {
+  if (confirmed === true) return null;
+  const policy = await readConnectorPolicy(account);
+  const base = await requireConnectorConfirmation(account, confirmed, connectorConfirmationsForMutation(action, payload), policy);
+  if (base) return base;
+  if (!(['comment', 'reaction', 'save', 'share'] as const).some(key => policy.confirmations[key])) return null;
+  const current = await readExactThing(account, id);
+  if (current.ok === false) return { error: current.error, status: current.status };
+  return requireConnectorConfirmation(account, confirmed, connectorConfirmationsForMutation(action, payload, current.value), policy);
+};
+
+const directConfirmationActions = {
+  comment_on_thingtime_thing: 'comment',
+  react_to_thingtime_thing: 'reaction',
+  save_thingtime_thing: 'save',
+  share_thingtime_thing: 'share'
+} as const satisfies Record<string, ConnectorConfirmationAction>;
+
 const requiredScopeForOperation = (operation: LimitlessMutationOperation): string =>
   operation.action === 'create' ? 'things.create' : operation.action === 'update' ? 'things.update' : 'things.delete';
 
 const readExactThing = async (account: ChatGptConnection, id: string): Promise<Result<Record<string, unknown>>> => {
-  const upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/things', { query: { id } });
+  const upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/things', { query: { id }, wholeThing: true });
   if (upstream.ok === false) return upstream;
   const payload = asRecord(upstream.value);
   const thing = payload ? asRecord(payload.thing) : null;
   return thing ? { ok: true, value: thing } : { ok: false, status: 502, error: 'Thingtime endpoint returned no Thing' };
 };
 
-const safeStateSize = (bundle: ChatGptCredentialBundle): number =>
-  Buffer.byteLength(JSON.stringify({ history: bundle.history || [], runs: bundle.runs || [] }), 'utf8');
+const mutationStorage = (context: McpSession, account: ChatGptConnection) => {
+  const key = configuredCipherKey();
+  const store = context.mutationStore || (key ? createMutationStore(key) : null);
+  const scope: MutationStorageScope = {
+    ownerId: context.session.userId,
+    connectionSessionJti: context.connection?.jti || context.session.jti,
+    resource: context.session.meta?.resource,
+    accountId: account.id,
+    endpoint: account.endpoint
+  };
+  return store && scope.ownerId && scope.connectionSessionJti && scope.resource ? { store, scope } : null;
+};
 
-const pruneMcpState = (bundle: ChatGptCredentialBundle) => {
-  bundle.history = (bundle.history || []).slice(-MAX_LIMITLESS_HISTORY);
-  bundle.runs = (bundle.runs || []).slice(-MAX_LIMITLESS_WORKFLOW_RUNS);
-  while (safeStateSize(bundle) > MAX_ENCRYPTED_STATE_BYTES && ((bundle.history?.length || 0) || (bundle.runs?.length || 0))) {
-    const historyTime = bundle.history?.[0]?.createdAt || '9999';
-    const runTime = bundle.runs?.[0]?.createdAt || '9999';
-    if (historyTime <= runTime && bundle.history?.length) bundle.history.shift();
-    else if (bundle.runs?.length) bundle.runs.shift();
-    else break;
+const storageFailure = (): Failure => ({ ok: false, status: 503, error: 'Encrypted MCP mutation storage is unavailable' });
+
+const upsertWorkflowRun = (bundle: ChatGptCredentialBundle, run: ThingtimeMcpWorkflowRun) => {
+  bundle.runs = [...(bundle.runs || []).filter((entry) => entry.id !== run.id), run].slice(-MAX_LIMITLESS_WORKFLOW_RUNS);
+};
+
+const PREVIEW_PAGE_BYTES = 256 * 1024; // Delivery target only; always deliver one complete Thing.
+const reviewPage = (preview: LimitlessMutationPreview, start = 0) => {
+  const operations = [];
+  let bytes = 0;
+  for (let index = start; index < preview.operations.length; index += 1) {
+    const item = preview.operations[index];
+    // Return each canonical view once. The mutation inputs and inverse remain
+    // server-side and are never reconstructed from these presentation fields.
+    const view = { action: item.action, id: item.id, expectedUpdatedAt: item.expectedUpdatedAt, before: item.before, after: item.after, summary: item.summary };
+    const size = Buffer.byteLength(JSON.stringify(view));
+    if (operations.length && bytes + size > PREVIEW_PAGE_BYTES) break;
+    operations.push(view);
+    bytes += size;
+  }
+  const end = start + operations.length;
+  return {
+    version: preview.version,
+    previewId: preview.previewId,
+    accountId: preview.accountId,
+    createdAt: preview.createdAt,
+    source: preview.source,
+    operations,
+    total: preview.operations.length,
+    cursor: start,
+    nextCursor: end < preview.operations.length ? end : null
+  };
+};
+
+const uploadIdValue = (value: unknown) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : null;
+const nonnegativeInteger = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
+
+const stageMutationPlan = async (context: McpSession, account: ChatGptConnection, args: Record<string, unknown>) => {
+  const id = uploadIdValue(args.id);
+  const operations = Array.isArray(args.operations) && args.operations.length ? args.operations : null;
+  const data = typeof args.data === 'string' && args.data.length ? args.data : null;
+  if (!id || !nonnegativeInteger(args.part) || Boolean(operations) === Boolean(data)) {
+    return { error: 'id, a non-negative part number, and exactly one of operations or data are required', status: 400 };
+  }
+  const storage = mutationStorage(context, account);
+  if (!storage) return storageFailure();
+  if (operations) {
+    const checked = normalizeLimitlessMutationOperations(operations);
+    if (checked.ok === false) return { error: checked.error, status: 400 };
+    for (const operation of checked.value) {
+      if (!accountScopeCovers(account, requiredScopeForOperation(operation))) return { error: `The selected Thingtime token needs ${requiredScopeForOperation(operation)}`, status: 403 };
+    }
+  } else if (!['things.create', 'things.update', 'things.delete'].some((scope) => accountScopeCovers(account, scope))) {
+    return { error: 'The selected Thingtime token needs a Thing mutation scope', status: 403 };
+  }
+  try {
+    // Keep the original bytes/shape; retries of a part lacking create IDs
+    // remain identical. Stable create IDs are assigned once on preview.
+    const result = await storage.store.put(storage.scope, 'upload', `${id}:${args.part}`, operations ?? data);
+    return result === 'conflict'
+      ? { error: 'This plan part already contains different operations', status: 409 }
+      : { id, part: args.part, staged: true };
+  } catch {
+    return storageFailure();
   }
 };
 
-const appendHistory = (bundle: ChatGptCredentialBundle, entry: ThingtimeMcpHistoryEntry) => {
-  bundle.history = [...(bundle.history || []), entry];
-  pruneMcpState(bundle);
-};
-
-const upsertWorkflowRun = (bundle: ChatGptCredentialBundle, run: ThingtimeMcpWorkflowRun) => {
-  bundle.runs = [...(bundle.runs || []).filter((entry) => entry.id !== run.id), run];
-  pruneMcpState(bundle);
+const readStagedOperations = async (context: McpSession, account: ChatGptConnection, raw: unknown): Promise<Result<unknown[]>> => {
+  const staged = asRecord(raw);
+  const id = uploadIdValue(staged?.id);
+  if (!id || !nonnegativeInteger(staged?.parts) || staged.parts === 0) {
+    return { ok: false, status: 400, error: 'stagedPlan needs its id and positive part count' };
+  }
+  const storage = mutationStorage(context, account);
+  if (!storage) return storageFailure();
+  try {
+    const operations: unknown[] = [];
+    const data: string[] = [];
+    for (let index = 0; index < staged.parts; index += 1) {
+      const part = await storage.store.get(storage.scope, 'upload', `${id}:${index}`);
+      if (!part) return { ok: false, status: 409, error: `Plan part ${index} is missing or expired` };
+      if (Array.isArray(part.value) && data.length === 0) {
+        for (const operation of part.value) operations.push(operation);
+      } else if (typeof part.value === 'string' && operations.length === 0) {
+        data.push(part.value);
+      } else {
+        return { ok: false, status: 400, error: 'Use the same data or operations format for every part of a staged plan' };
+      }
+    }
+    if (data.length) {
+      try {
+        const parsed = JSON.parse(data.join(''));
+        if (Array.isArray(parsed)) return { ok: true, value: parsed };
+      } catch { /* Return the same parse error for all invalid staged JSON. */ }
+      return { ok: false, status: 400, error: 'Staged data must concatenate to one JSON operations array' };
+    }
+    return { ok: true, value: operations };
+  } catch {
+    return storageFailure();
+  }
 };
 
 const previewMutations = async (
+  context: McpSession,
   account: ChatGptConnection,
   rawOperations: unknown,
   source?: LimitlessMutationPreview['source']
@@ -1015,24 +1342,45 @@ const previewMutations = async (
   const built = buildLimitlessMutationPreview({ accountId: account.id, operations: normalized.value, beforeById });
   if (built.ok === false) return { ok: false, status: built.error.startsWith('thing_not_found') ? 404 : 409, error: built.error };
   if (source) built.value.source = source;
-  const receipt = await signPurposeToken(THINGTIME_MUTATION_RECEIPT_PURPOSE, { preview: built.value }, '30m');
-  return { ok: true, value: { preview: built.value, receipt } };
+  const storage = mutationStorage(context, account);
+  if (!storage) return storageFailure();
+  try {
+    const saved = await storage.store.put(storage.scope, 'preview', built.value.previewId, built.value);
+    if (saved === 'conflict') return { ok: false, status: 409, error: 'Mutation preview already exists with different contents' };
+    const receipt = await signPurposeToken(THINGTIME_MUTATION_RECEIPT_PURPOSE, {
+      previewId: built.value.previewId,
+      digest: mutationDigest(built.value),
+      accountId: account.id
+    }, '30m');
+    return { ok: true, value: { preview: built.value, receipt } };
+  } catch {
+    return storageFailure();
+  }
 };
 
-const previewFromReceipt = async (receipt: unknown): Promise<Result<LimitlessMutationPreview>> => {
-  if (typeof receipt !== 'string' || receipt.length > MAX_REQUEST_BYTES) {
-    return { ok: false, status: 400, error: 'A signed preview receipt is required' };
-  }
+const previewFromReceipt = async (context: McpSession, account: ChatGptConnection, receipt: unknown): Promise<Result<LimitlessMutationPreview>> => {
+  const invalid = { ok: false as const, status: 400, error: 'The mutation preview receipt is invalid or expired' };
+  // Receipts carry a fixed-size digest and identifier, never document bytes.
+  if (typeof receipt !== 'string' || receipt.length > MAX_REQUEST_BYTES) return invalid;
   const claims = await verifyPurposeToken(receipt, THINGTIME_MUTATION_RECEIPT_PURPOSE);
-  const preview = claims ? asRecord(claims.preview) : null;
-  if (!preview || preview.version !== 1 || typeof preview.previewId !== 'string' || typeof preview.accountId !== 'string' || !Array.isArray(preview.operations) || !Array.isArray(preview.inverseOperations)) {
-    return { ok: false, status: 400, error: 'The mutation preview receipt is invalid or expired' };
+  if (typeof claims?.previewId !== 'string' || typeof claims?.digest !== 'string') return invalid;
+  if (claims.accountId !== account.id) return { ok: false, status: 409, error: 'The preview receipt belongs to a different Thingtime account' };
+  const storage = mutationStorage(context, account);
+  if (!storage) return storageFailure();
+  try {
+    const stored = await storage.store.get(storage.scope, 'preview', claims.previewId);
+    const preview = asRecord(stored?.value);
+    if (!preview || stored?.digest !== claims.digest || preview.previewId !== claims.previewId || preview.version !== 1 || preview.accountId !== account.id) return invalid;
+    return { ok: true, value: preview as unknown as LimitlessMutationPreview };
+  } catch {
+    return storageFailure();
   }
-  return { ok: true, value: preview as unknown as LimitlessMutationPreview };
 };
 
 const preflightPreview = async (account: ChatGptConnection, preview: LimitlessMutationPreview): Promise<Result<void>> => {
   for (const operation of preview.operations) {
+    const required = requiredScopeForOperation(operation);
+    if (!accountScopeCovers(account, required)) return { ok: false, status: 403, error: `The selected Thingtime token needs ${required}` };
     const current = await readExactThing(account, operation.id);
     if (operation.action === 'create') {
       if (current.ok === true) return { ok: false, status: 409, error: `Thing ${operation.id} was created after the preview; build a new preview` };
@@ -1049,14 +1397,15 @@ const preflightPreview = async (account: ChatGptConnection, preview: LimitlessMu
 
 const applyMutationOperation = async (account: ChatGptConnection, operation: LimitlessMutationOperation): Promise<Result<unknown>> => {
   if (operation.action === 'create') {
-    return endpointRequest(account.endpoint, account.token, '/api/v1/things', { method: 'POST', body: operation.thing });
+    return endpointRequest(account.endpoint, account.token, '/api/v1/things', { method: 'POST', body: operation.thing, wholeThing: true });
   }
   if (operation.action === 'update') {
     return endpointRequest(account.endpoint, account.token, '/api/v1/things/update', {
       method: 'POST',
+      wholeThing: true,
       body: {
-        id: operation.id,
         ...(operation.patch || {}),
+        id: operation.id,
         ...(operation.replaceCrystal ? { replaceCrystal: true } : {}),
         ...(operation.expectedUpdatedAt ? { expectedUpdatedAt: operation.expectedUpdatedAt } : {})
       }
@@ -1068,30 +1417,13 @@ const applyMutationOperation = async (account: ChatGptConnection, operation: Lim
   });
 };
 
-const inverseForItem = (preview: LimitlessMutationPreview, item: LimitlessMutationPreview['operations'][number]): LimitlessMutationOperation | null => {
-  if (item.action === 'create') return { action: 'delete', id: item.id };
-  if (item.action === 'delete') {
-    const thing = item.before && asRecord(item.before) ? {
-      shareId: item.before.id,
-      thingtime: item.before.thingtime,
-      crystal: item.before.crystal,
-      extended: item.before.extended,
-      acl: item.before.acl,
-      tags: item.before.tags,
-      folderId: item.before.folderId,
-      targetId: item.before.targetId
-    } : null;
-    return thing ? { action: 'create', id: item.id, thing } : null;
-  }
-  return preview.inverseOperations.find((entry) => entry.action === 'update' && entry.id === item.id) || null;
-};
-
 const applyMutationPreview = async (
   account: ChatGptConnection,
   preview: LimitlessMutationPreview
 ): Promise<{ history: ThingtimeMcpHistoryEntry; applied: number }> => {
   const results: ThingtimeMcpHistoryEntry['results'] = [];
   const inverseOperations: LimitlessMutationOperation[] = [];
+  const inverseById = new Map(preview.inverseOperations.map((item) => [item.id, item]));
   let stopped = false;
   for (const item of preview.operations) {
     if (stopped) {
@@ -1101,8 +1433,13 @@ const applyMutationPreview = async (
     const result = await applyMutationOperation(account, item);
     if (result.ok === true) {
       results.push({ action: item.action, id: item.id, ok: true });
-      const inverse = inverseForItem(preview, item);
-      if (inverse) inverseOperations.unshift(inverse);
+      const inverse = inverseById.get(item.id);
+      const upstream = asRecord(result.value);
+      const revision = asRecord(upstream?.thing)?.updatedAt ?? asRecord(upstream?.post)?.updatedAt;
+      if (inverse?.action === 'create') inverseOperations.push(inverse);
+      else if (inverse && typeof revision === 'string' && Number.isFinite(Date.parse(revision))) {
+        inverseOperations.push({ ...inverse, expectedUpdatedAt: revision });
+      }
     } else {
       results.push({ action: item.action, id: item.id, ok: false, error: result.error });
       stopped = true;
@@ -1110,16 +1447,44 @@ const applyMutationPreview = async (
   }
   const succeeded = results.filter((entry) => entry.ok).length;
   const history: ThingtimeMcpHistoryEntry = {
-    id: randomBytes(16).toString('hex'),
+    id: `${Date.now().toString().padStart(13, '0')}-${preview.previewId}`,
     accountId: account.id,
     createdAt: new Date().toISOString(),
     action: preview.source?.kind === 'undo' ? 'undo' : 'apply',
     status: succeeded === results.length ? 'succeeded' : succeeded ? 'partial' : 'failed',
     summaries: preview.operations.map((entry) => entry.summary),
     results,
-    ...(inverseOperations.length ? { inverseOperations } : {})
+    ...(inverseOperations.length ? { inverseOperations: inverseOperations.reverse() } : {})
   };
   return { history, applied: succeeded };
+};
+
+const historyView = (history: ThingtimeMcpHistoryEntry, start = 0) => {
+  const { summaries, results, inverseOperations, ...metadata } = history;
+  const end = Math.min(start + 100, results.length);
+  return {
+    ...metadata, summaries: summaries.slice(start, end), results: results.slice(start, end),
+    undoAvailable: Boolean(inverseOperations?.length),
+    total: results.length,
+    nextCursor: end < results.length ? end : null
+  };
+};
+
+const historySummary = (history: ThingtimeMcpHistoryEntry) => ({
+  id: history.id,
+  accountId: history.accountId,
+  createdAt: history.createdAt,
+  action: history.action,
+  status: history.status,
+  total: history.results.length,
+  undoAvailable: Boolean(history.inverseOperations?.length)
+});
+
+const storedHistory = async (context: McpSession, account: ChatGptConnection, id: string) => {
+  const storage = mutationStorage(context, account);
+  const value = storage ? (await storage.store.get(storage.scope, 'history', id))?.value : null;
+  return (value as ThingtimeMcpHistoryEntry | null) ??
+    (context.bundle.history || []).find((entry) => entry.id === id && entry.accountId === account.id) ?? null;
 };
 
 const oauthSecurityScheme = [{ type: 'oauth2', scopes: ['thingtime'] }] as const;
@@ -1151,6 +1516,15 @@ const loginTool = <T extends Record<string, unknown>>(tool: T) => ({ ...loginToo
 
 type ChatGptMcpToolName = keyof typeof CHATGPT_MCP_TOOL_FEATURES;
 const protectedThingtimeTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => protectedTool(tool);
+const toolWithPermissions = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T, permissions: readonly ChatGptOAuthPermissionScope[]) => {
+  const securitySchemes = [{ type: 'oauth2', scopes: ['thingtime', ...permissions] }] as const;
+  return { ...protectedThingtimeTool(tool), securitySchemes, _meta: { ...protectedToolContract._meta, securitySchemes } };
+};
+const confirmationArgument = {
+  type: 'boolean',
+  description: 'Set true only after the user explicitly confirms this action or the exact signed plan. Omit it when Thingtime does not require confirmation. Host approvals still apply.'
+} as const;
+
 const loginThingtimeTool = <T extends Record<string, unknown> & { name: 'login_thingtime' }>(tool: T) => loginTool(tool);
 
 const agentTaskIdentityProperties = {
@@ -1158,8 +1532,9 @@ const agentTaskIdentityProperties = {
   externalTaskId: { type: 'string', minLength: 1, description: 'Stable chat/task identity, reused across restarts.' }
 };
 const agentReportActionNames = ['createProject', 'createTask', 'updateTask', 'updateWorkItem', 'createAgent', 'addTodo', 'completeTodo', 'addProgress', 'askQuestion', 'answerQuestion', 'recordMeasurements', 'recordTokenUsage', 'recordProgressPercent', 'recordStartTime', 'recordEndTime', 'readOverview'] as const;
+const reportingTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => toolWithPermissions(tool, ['agents.report']);
 const reportingTools = [
-  protectedThingtimeTool({
+  reportingTool({
     name: 'prepare_thingtime_agent_task', title: 'Prepare private agent task reporting',
     description: 'Reuse or prepare a distinct task Character and binding to the existing private saved workspace. Requires independent agents.report authorization and compatible selected-origin capabilities. Standing authorization for private task lifecycle reporting permits this bounded operation without repeat confirmation. Never falls back to the public owner identity or creates replacement workspace schemas.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'displayName', 'workspace'], properties: {
@@ -1173,19 +1548,19 @@ const reportingTools = [
     } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'get_thingtime_agent_task', title: 'Read private agent task binding',
     description: 'Read the existing private task binding by stable task identity. Requires agents.report and origin-bound capability negotiation. Returns safe Character/workspace/record IDs without credentials or private ownership links.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId'], properties: { ...agentTaskIdentityProperties, recordIds: { type: 'array', uniqueItems: true, items: { type: 'string' }, description: 'Optional exact IDs of this task Character’s private workspace Data Things for independent ACL-checked readback.' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'report_thingtime_agent_task', title: 'Report private agent task progress',
     description: 'Invoke one registered saved workspace reporting Action through the bound task Character. Reuse requestId and immutable inputs after uncertain completion. Standing authorization permits private lifecycle updates without repeat confirmation; generic mutation and security confirmations remain unchanged. No arbitrary Action ID, route, URL or public identity fallback is accepted.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'actionName', 'inputs'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, actionName: { type: 'string', enum: agentReportActionNames }, inputs: { type: 'object' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'coordinate_thingtime_agent_task', title: 'Maintain private agent coordination post',
     description: 'Create or update this task’s single private coordination post as its distinct Character in the bound existing Thingtime Agents subspace. Reuses the stable task post and immutable requestId; requires an explicit renderComponent definition or saved Component reference. Standing private coordination authorization permits this bounded operation without repeat confirmation. Cannot select arbitrary subspaces, public identity, Actions or routes.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'title', 'text', 'renderComponent'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, title: { type: 'string', minLength: 1 }, text: { type: 'string', minLength: 1 }, renderComponent: { type: 'object', description: 'Explicit embedded Component definition or saved Component reference supported by the canonical renderer.' } } },
@@ -1197,8 +1572,11 @@ export const thingtimeToolDefinitions = [
   loginThingtimeTool({
     name: 'login_thingtime',
     title: 'Log in to Thingtime',
-    description: 'Use for “@Thingtime login”. This public bootstrap returns a tool-level OAuth challenge when no connection exists, so the invoking ChatGPT or Codex host opens its native browser authorization flow and owns the registered callback. The connection page can add multiple named accounts.',
-    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+    description: 'Use for “@Thingtime login”. This public bootstrap lets the invoking host open its native OAuth browser and own the registered callback. Pass an exact connected accountId and requiredScopes to request missing permissions with explicit consent. After approval list accounts and verify the same owner/origin before using the new account ID.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {
+      accountId: { type: 'string', description: 'Exact existing account ID when requesting additional permissions.' },
+      requiredScopes: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', enum: CHATGPT_OAUTH_PERMISSION_SCOPES }, description: 'Additional independent OAuth permissions needed for this task.' }
+    } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
   protectedThingtimeTool({
@@ -1218,9 +1596,16 @@ export const thingtimeToolDefinitions = [
   protectedThingtimeTool({
     name: 'remove_thingtime_account',
     title: 'Disconnect Thingtime account',
-    description: 'Disconnect one Thingtime account from ChatGPT. The original Thingtime personal access token remains revocable in Thingtime Settings.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { accountId: { type: 'string' } } },
+    description: 'Disconnect an account from ChatGPT. Follow its disconnect confirmation setting. The original token remains revocable in Thingtime Settings.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
+    name: 'get_thingtime_confirmation_requirements',
+    title: 'Read Thingtime connector confirmation requirements',
+    description: 'Read the selected account’s current Thingtime confirmation settings before a mutation. Safe defaults require confirmation when account settings are unavailable. Connected AI app approvals are separate.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'get_thingtime_profile',
@@ -1301,37 +1686,51 @@ export const thingtimeToolDefinitions = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
   protectedThingtimeTool({
+    name: 'stage_thingtime_mutation_plan',
+    title: 'Upload a part of a large Thingtime mutation plan',
+    description: 'Stage one immutable part of a large plan without changing any Thing. Choose a unique id, number parts from zero, and send complete operations arrays or consecutive data fragments of a single JSON operations array. Then call preview_thingtime_mutation with that id and part count. Repeating identical parts is safe; different contents conflict.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'part'], properties: { accountId: { type: 'string' }, id: { type: 'string' }, part: { type: 'integer', minimum: 0 }, operations: { type: 'array', minItems: 1, items: { type: 'object' } }, data: { type: 'string', minLength: 1 } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
+    name: 'get_thingtime_mutation_preview',
+    title: 'Review the next page of a Thingtime mutation',
+    description: 'Read another page of complete before/after values from the exact signed plan. Follow preview.nextCursor until it is null before reviewing the complete plan and applying it.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['receipt', 'cursor'], properties: { accountId: { type: 'string' }, receipt: { type: 'string' }, cursor: { type: 'integer', minimum: 0 } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
     name: 'preview_thingtime_mutation',
     title: 'Preview a safe Thingtime mutation',
-    description: 'Build a signed before/after preview for up to 25 create, update, or delete operations. It checks scopes and exact current Things but writes nothing. Apply only after explicit confirmation.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['operations'], properties: { accountId: { type: 'string' }, operations: { type: 'array', minItems: 1, maxItems: 25, items: { type: 'object' } } } },
+    description: 'Build a signed before/after preview from operations or a stagedPlan without changing Things. Review the plan and follow confirmationRequired; apply rechecks current settings.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, operations: { type: 'array', minItems: 1, items: { type: 'object' } }, stagedPlan: { type: 'object', additionalProperties: false, required: ['id', 'parts'], properties: { id: { type: 'string' }, parts: { type: 'integer', minimum: 1 } } } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'apply_thingtime_mutation',
-    title: 'Apply a confirmed Thingtime mutation',
-    description: 'Apply an unexpired signed preview receipt only with confirmed=true after explicit user confirmation. Every target is preflighted for optimistic concurrency first. Operations run serially, stop on first failure, and return durable history plus a bounded undo plan rather than silently claiming atomicity.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['receipt', 'confirmed'], properties: { accountId: { type: 'string' }, receipt: { type: 'string' }, confirmed: { type: 'boolean', const: true, description: 'Must be true only after the user explicitly confirms the reviewed plan.' }, runId: { type: 'string' } } },
+    title: 'Apply a signed Thingtime mutation',
+    description: 'Apply an unexpired signed preview. Obtain explicit confirmation and pass confirmed=true when the account requires it. Every target is checked for revision changes. Operations stop on the first failure and return recorded outcomes.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['receipt'], properties: { accountId: { type: 'string' }, receipt: { type: 'string' }, confirmed: confirmationArgument, runId: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'list_thingtime_history',
     title: 'List Thingtime MCP mutation history',
-    description: 'List bounded encrypted receipts for changes applied through this MCP connection. It does not claim to be a history of writes made elsewhere.',
-    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 50 } } },
+    description: 'Page through summaries of changes applied through this connection. Use get_thingtime_history for exact outcomes.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 50 }, cursor: { type: 'string' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'get_thingtime_history',
     title: 'Get one Thingtime MCP history receipt',
-    description: 'Read one exact bounded MCP mutation history entry, including per-operation outcomes and whether an undo plan is available.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['historyId'], properties: { accountId: { type: 'string' }, historyId: { type: 'string' } } },
+    description: 'Read per-operation outcomes for an exact MCP history entry. Follow history.nextCursor and use undo_thingtime_mutation to review any available undo.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['historyId'], properties: { accountId: { type: 'string' }, historyId: { type: 'string' }, cursor: { type: 'integer', minimum: 0 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'undo_thingtime_mutation',
     title: 'Preview undo for a Thingtime MCP mutation',
-    description: 'Turn a stored inverse plan into a fresh signed preview. This tool does not apply the undo; inspect it and confirm before calling apply_thingtime_mutation.',
+    description: 'Build a fresh signed undo preview. Review it, follow confirmationRequired, and apply the exact receipt with apply_thingtime_mutation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['historyId'], properties: { accountId: { type: 'string' }, historyId: { type: 'string' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   }),
@@ -1352,7 +1751,7 @@ export const thingtimeToolDefinitions = [
   protectedThingtimeTool({
     name: 'start_thingtime_workflow',
     title: 'Start a Thingtime Capability workflow',
-    description: 'Load a Capability Thing, bind its explicit inputs, compile registered mutation operations, and persist an awaiting-confirmation run with a signed preview. It does not apply changes.',
+    description: 'Compile a saved Capability and persist a run with a signed preview and current confirmation requirement. This tool does not apply changes.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['capabilityThingId'], properties: { accountId: { type: 'string' }, capabilityThingId: { type: 'string' }, inputs: { type: 'object' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   }),
@@ -1366,69 +1765,99 @@ export const thingtimeToolDefinitions = [
   protectedThingtimeTool({
     name: 'cancel_thingtime_workflow',
     title: 'Cancel a Thingtime workflow run',
-    description: 'Cancel an awaiting-confirmation workflow run. Applied runs are immutable history and cannot be cancelled.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['runId'], properties: { accountId: { type: 'string' }, runId: { type: 'string' } } },
+    description: 'Cancel an unapplied run. Follow the workflow confirmation setting. Applied runs cannot be cancelled.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['runId'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, runId: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'create_thingtime_thing',
     title: 'Create Thingtime Thing',
-    description: 'Create a Thing using the selected account. Use only after the user confirms the intended content.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things create payload.' } } },
+    description: 'Create a Thing. Follow the create and applicable content confirmation settings.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things create payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
   }),
   protectedThingtimeTool({
     name: 'update_thingtime_thing',
     title: 'Update Thingtime Thing',
-    description: 'Update one owned Thing. Use only after the user confirms the change.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things/update payload including id.' } } },
+    description: 'Update one owned Thing. Follow the update and applicable content or sharing confirmation settings.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things/update payload including id.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedThingtimeTool({
     name: 'delete_thingtime_thing',
     title: 'Delete Thingtime Thing',
-    description: 'Delete one owned Thing. Use only after the user confirms deletion.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
+    description: 'Delete one owned Thing. Follow the delete and applicable content confirmation settings.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, id: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedThingtimeTool({
     name: 'comment_on_thingtime_thing',
     title: 'Comment on Thingtime Thing',
-    description: 'Add a comment to a Thing after the user confirms its text.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['comment'], properties: { accountId: { type: 'string' }, comment: { type: 'object', description: 'Thingtime /api/v1/things/comment payload.' } } },
+    description: 'Add a comment. Follow the selected account’s comment confirmation setting.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['comment'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, comment: { type: 'object', description: 'Thingtime /api/v1/things/comment payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedThingtimeTool({
     name: 'react_to_thingtime_thing',
     title: 'React to Thingtime Thing',
-    description: 'Toggle a reaction on a Thing after the user confirms it.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['reaction'], properties: { accountId: { type: 'string' }, reaction: { type: 'object', description: 'Thingtime /api/v1/things/react payload.' } } },
+    description: 'Toggle a reaction. Follow the selected account’s reaction confirmation setting.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['reaction'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, reaction: { type: 'object', description: 'Thingtime /api/v1/things/react payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
   }),
   protectedThingtimeTool({
     name: 'save_thingtime_thing',
     title: 'Save Thingtime Thing',
-    description: 'Toggle a Thing in the selected account’s saved library.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
+    description: 'Toggle a Thing in the saved library. Follow the selected account’s save confirmation setting.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, id: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
   }),
   protectedThingtimeTool({
     name: 'share_thingtime_thing',
     title: 'Share Thingtime Thing',
-    description: 'Share a post through the selected Thingtime account after user confirmation.',
-    inputSchema: { type: 'object', additionalProperties: false, required: ['share'], properties: { accountId: { type: 'string' }, share: { type: 'object', description: 'Thingtime /api/v1/things/share payload.' } } },
+    description: 'Share a Thing. Follow the selected account’s sharing confirmation setting.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['share'], properties: { confirmed: confirmationArgument, accountId: { type: 'string' }, share: { type: 'object', description: 'Thingtime /api/v1/things/share payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   })
 ];
 
 const mcpToolResult = (value: unknown, isError = false) => ({
-  content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+  content: [{ type: 'text', text: JSON.stringify(value) }],
   structuredContent: value,
   ...(isError ? { isError: true } : {})
 });
 
+const readRequiredScopes = (value: unknown): ChatGptOAuthPermissionScope[] | null => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.length || value.length > CHATGPT_OAUTH_PERMISSION_SCOPES.length) return null;
+  const permissions = requestedOAuthPermissions(value);
+  return permissions.length === value.length ? permissions : null;
+};
+
+const missingOAuthPermissions = (account: ChatGptConnection, required: readonly ChatGptOAuthPermissionScope[], context: McpSession, explicitAccount: boolean) => {
+  const missingScopes = required.filter((scope) => !account.scopes.includes(scope));
+  if (!missingScopes.length) return null;
+  const explanation = `The selected Thingtime token needs the independent ${missingScopes.join(', ')} scope${missingScopes.length === 1 ? '' : 's'}.`;
+  const sameOrigin = typeof context.session.meta?.resource === 'string' && context.session.meta.resource === `${account.endpoint}${CHATGPT_MCP_PATH}`;
+  if (!sameOrigin) return { error: `${explanation} The authorization server cannot grant new permissions on a different account origin.`, status: 403 };
+  if (!explicitAccount) return { error: `${explanation} Select the exact connected account ID before requesting additional access.`, status: 403 };
+  return {
+    error: `${explanation} Use the host’s authorization prompt, then verify the same account and origin before retrying with the newly connected account ID.`,
+    status: 403,
+    authorization: { requiredScopes: [...required], accountId: account.id }
+  };
+};
+
 export const callThingtimeTool = async (name: string, args: Record<string, unknown>, context: McpSession): Promise<unknown> => {
   if (name === 'login_thingtime') {
+    const permissions = readRequiredScopes(args.requiredScopes);
+    if (!permissions) return { error: 'requiredScopes must contain supported independent OAuth permissions', status: 400 };
+    if (args.accountId !== undefined || permissions.length) {
+      if (args.accountId !== undefined && !stringValue(args.accountId)) return { error: 'accountId must be an exact connected account ID', status: 400 };
+      const account = accountFor(context.bundle, args.accountId);
+      if (!account) return { error: 'Unknown Thingtime account id', status: 404 };
+      const permission = missingOAuthPermissions(account, permissions, context, typeof args.accountId === 'string' && !!args.accountId);
+      if (permission) return permission;
+    }
     return {
       authenticated: true,
       defaultAccountId: context.bundle.defaultConnectionId,
@@ -1451,6 +1880,9 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
     const accountId = stringValue(args.accountId);
     const connections = context.bundle.connections.filter((connection) => connection.id !== accountId);
     if (connections.length === context.bundle.connections.length) return { error: 'Unknown Thingtime account id' };
+    const removing = context.bundle.connections.find(connection => connection.id === accountId)!;
+    const gate = await requireConnectorConfirmation(removing, args.confirmed, ['disconnect']);
+    if (gate) return gate;
     if (!connections.length) {
       await revokeMcpConnection(context);
       return { ok: true, disconnected: true, message: 'All accounts removed; this ChatGPT connection is now revoked.' };
@@ -1464,14 +1896,28 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
 
   const account = accountFor(context.bundle, args.accountId);
   if (!account) return { error: 'Unknown Thingtime account id' };
+  if (Object.prototype.hasOwnProperty.call(directConfirmationActions, name)) {
+    const gate = await requireConnectorConfirmation(account, args.confirmed, [directConfirmationActions[name as keyof typeof directConfirmationActions]]);
+    if (gate) return gate;
+  }
   let upstream: Result<unknown>;
   switch (name) {
+    case 'get_thingtime_confirmation_requirements': {
+      const policy = await readConnectorPolicy(account);
+      return { account: publicConnection(account), ...policy };
+    }
     case 'prepare_thingtime_agent_task':
     case 'get_thingtime_agent_task':
     case 'report_thingtime_agent_task':
     case 'coordinate_thingtime_agent_task': {
       const externalTaskId = stringValue(args.externalTaskId);
       if (!externalTaskId) return { error: 'externalTaskId is required', status: 400 };
+      const explicitAccount = !!stringValue(args.accountId);
+      if ((args.accountId !== undefined || (name !== 'get_thingtime_agent_task' && readOAuthGrantScopes(context.session.meta?.scope)?.includes('agents.report'))) && !explicitAccount) {
+        return { error: 'Provide the verified connected accountId before using private reporting.', status: 400 };
+      }
+      const permission = missingOAuthPermissions(account, ['agents.report'], context, explicitAccount);
+      if (permission) return permission;
       const ready = await requireAgentReporting(account);
       if (ready.ok === false) return { error: ready.error, status: ready.status };
       const operation = name === 'prepare_thingtime_agent_task' ? 'prepare' : name === 'get_thingtime_agent_task' ? 'get' : name === 'coordinate_thingtime_agent_task' ? 'coordinate' : 'report';
@@ -1686,29 +2132,70 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
       });
       break;
     }
+    case 'stage_thingtime_mutation_plan':
+      return stageMutationPlan(context, account, args);
+    case 'get_thingtime_mutation_preview': {
+      const decoded = await previewFromReceipt(context, account, args.receipt);
+      if (decoded.ok === false) return { error: decoded.error, status: decoded.status };
+      if (!nonnegativeInteger(args.cursor) || args.cursor >= decoded.value.operations.length) return { error: 'Invalid preview cursor', status: 400 };
+      const page = reviewPage(decoded.value, args.cursor);
+      // The receipt locates immutable data; it does not replace the selected
+      // token's current permission to read a private Thing.
+      for (const operation of page.operations) {
+        const current = await readExactThing(account, operation.id);
+        if (current.ok === false && (operation.action !== 'create' || current.status !== 404)) {
+          return { error: 'A Thing in this review is no longer accessible on the selected account', status: current.status };
+        }
+      }
+      return { account: publicConnection(account), preview: page,
+        ...await describeConnectorConfirmation(account, previewConfirmationActions(decoded.value)) };
+    }
     case 'preview_thingtime_mutation': {
-      const previewed = await previewMutations(account, args.operations);
+      if (args.operations !== undefined && args.stagedPlan !== undefined) return { error: 'Supply operations or stagedPlan, not both', status: 400 };
+      const staged = args.stagedPlan === undefined ? null : await readStagedOperations(context, account, args.stagedPlan);
+      if (staged?.ok === false) return { error: staged.error, status: staged.status };
+      const previewed = await previewMutations(context, account, staged?.value ?? args.operations);
       if (previewed.ok === false) return { error: previewed.error, status: previewed.status };
-      return { account: publicConnection(account), ...previewed.value, confirmationRequired: true };
+      return { account: publicConnection(account), receipt: previewed.value.receipt, preview: reviewPage(previewed.value.preview),
+        ...await describeConnectorConfirmation(account, previewConfirmationActions(previewed.value.preview)) };
     }
     case 'apply_thingtime_mutation': {
-      if (args.confirmed !== true) return { error: 'confirmed must be true after the user explicitly confirms the reviewed plan', status: 400 };
-      const decoded = await previewFromReceipt(args.receipt);
+      const decoded = await previewFromReceipt(context, account, args.receipt);
       if (decoded.ok === false) return { error: decoded.error, status: decoded.status };
       if (decoded.value.accountId !== account.id) return { error: 'The preview receipt belongs to a different Thingtime account', status: 409 };
-      const runId = stringValue(args.runId, 128);
-      const run = runId
-        ? (context.bundle.runs || []).find((entry) => entry.id === runId && entry.accountId === account.id)
-        : null;
+      const requestedRunId = stringValue(args.runId, 128);
+      const boundRunId = decoded.value.source?.kind === 'workflow' ? decoded.value.source.runId : null;
+      const runs = (context.bundle.runs || []).filter(entry => entry.accountId === account.id);
+      const runId = boundRunId || requestedRunId || runs.find(entry => entry.previewId === decoded.value.previewId)?.id;
+      const run = runId ? runs.find(entry => entry.id === runId) : null;
+      if (boundRunId && requestedRunId && boundRunId !== requestedRunId) return { error: 'The signed preview belongs to a different workflow run', status: 409 };
       if (runId && !run) return { error: 'Unknown Thingtime workflow run', status: 404 };
-      if (run && run.status !== 'awaiting_confirmation') return { error: `Workflow run is ${run.status}`, status: 409 };
-      if (run?.previewId && run.previewId !== decoded.value.previewId) {
+      if (run && run.status !== 'awaiting_confirmation' && run.status !== 'previewed') return { error: `Workflow run is ${run.status}`, status: 409 };
+      if (run && run.previewId !== decoded.value.previewId) {
         return { error: 'The signed preview does not belong to this workflow run', status: 409 };
       }
+      const gate = await requireConnectorConfirmation(account, args.confirmed, previewConfirmationActions(decoded.value, Boolean(run)));
+      if (gate) return gate;
       const preflight = await preflightPreview(account, decoded.value);
       if (preflight.ok === false) return { error: preflight.error, status: preflight.status };
+      const storage = mutationStorage(context, account);
+      if (!storage) return storageFailure();
+      try {
+        if (!await storage.store.claim(storage.scope, decoded.value.previewId, mutationDigest(decoded.value))) {
+          return { error: 'This preview was already submitted or expired. Inspect the exact Things and mutation history before retrying.', status: 409 };
+        }
+      } catch {
+        return storageFailure();
+      }
       const applied = await applyMutationPreview(account, decoded.value);
-      appendHistory(context.bundle, applied.history);
+      try {
+        if (await storage.store.put(storage.scope, 'history', applied.history.id, applied.history) === 'conflict') throw new Error();
+      } catch {
+        return {
+          error: 'The Thingtime mutations ran, but their encrypted MCP history could not be persisted',
+          status: 503, mutationApplied: applied.applied > 0, history: historyView(applied.history)
+        };
+      }
       if (run) {
         upsertWorkflowRun(context.bundle, {
           ...run,
@@ -1718,18 +2205,16 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
           ...(applied.history.status === 'failed' ? { error: applied.history.results.find((entry) => entry.error)?.error || 'Mutation failed' } : {})
         });
       }
-      const persisted = await persistMcpBundle(context);
-      if (persisted.ok === false) {
-        return {
-          error: `The Thingtime mutations ran, but their encrypted MCP history could not be persisted: ${persisted.error}`,
-          status: persisted.status,
-          mutationApplied: applied.applied > 0,
-          history: applied.history
+      if (run) {
+        const persisted = await persistMcpBundle(context);
+        if (persisted.ok === false) return {
+          error: 'The mutation history was saved, but the workflow status could not be updated',
+          status: persisted.status, mutationApplied: applied.applied > 0, history: historyView(applied.history)
         };
       }
       return {
         account: publicConnection(account),
-        history: applied.history,
+        history: historyView(applied.history),
         applied: applied.applied,
         total: decoded.value.operations.length,
         undoAvailable: Boolean(applied.history.inverseOperations?.length)
@@ -1737,22 +2222,53 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
     }
     case 'list_thingtime_history': {
       const limit = Math.min(boundedLimit(args.limit) || 20, 50);
-      const history = (context.bundle.history || []).filter((entry) => entry.accountId === account.id).slice(-limit).reverse();
-      return { account: publicConnection(account), history };
+      const cursor = stringValue(args.cursor, 128);
+      const storage = mutationStorage(context, account);
+      try {
+        const ids = !cursor?.startsWith('legacy:') && storage
+          ? await storage.store.historyIds(storage.scope, cursor, limit + 1)
+          : [];
+        const history: ReturnType<typeof historySummary>[] = [];
+        for (const id of ids.slice(0, limit)) {
+          const entry = await storedHistory(context, account, id);
+          if (entry) history.push(historySummary(entry));
+        }
+        const legacy = (context.bundle.history || []).filter((entry) => entry.accountId === account.id).slice().reverse();
+        const legacyStart = cursor?.startsWith('legacy:') ? Number(cursor.slice(7)) : 0;
+        if (!nonnegativeInteger(legacyStart)) return { error: 'Invalid history cursor', status: 400 };
+        const legacyEnd = legacyStart + Math.max(0, limit - history.length);
+        if (ids.length <= limit) history.push(...legacy.slice(legacyStart, legacyEnd).map(historySummary));
+        const nextCursor = ids.length > limit ? ids[limit - 1] : legacyEnd < legacy.length ? `legacy:${legacyEnd}` : null;
+        return { account: publicConnection(account), history, nextCursor };
+      } catch {
+        return storageFailure();
+      }
     }
     case 'get_thingtime_history': {
       const historyId = stringValue(args.historyId, 128);
-      const history = (context.bundle.history || []).find((entry) => entry.id === historyId && entry.accountId === account.id);
-      return history ? { account: publicConnection(account), history } : { error: 'history_not_found', status: 404 };
+      const start = args.cursor ?? 0;
+      if (!nonnegativeInteger(start)) return { error: 'Invalid history cursor', status: 400 };
+      try {
+        const history = historyId && await storedHistory(context, account, historyId);
+        return history ? { account: publicConnection(account), history: historyView(history, start) } : { error: 'history_not_found', status: 404 };
+      } catch {
+        return storageFailure();
+      }
     }
     case 'undo_thingtime_mutation': {
       const historyId = stringValue(args.historyId, 128);
-      const history = (context.bundle.history || []).find((entry) => entry.id === historyId && entry.accountId === account.id);
+      let history: ThingtimeMcpHistoryEntry | null = null;
+      try {
+        if (historyId) history = await storedHistory(context, account, historyId);
+      } catch {
+        return storageFailure();
+      }
       if (!history) return { error: 'history_not_found', status: 404 };
-      if (!history.inverseOperations?.length) return { error: 'This history entry has no bounded undo plan', status: 409 };
-      const previewed = await previewMutations(account, history.inverseOperations, { kind: 'undo', historyId: history.id });
+      if (!history.inverseOperations?.length) return { error: 'This history entry has no undo plan', status: 409 };
+      const previewed = await previewMutations(context, account, history.inverseOperations, { kind: 'undo', historyId: history.id });
       if (previewed.ok === false) return { error: previewed.error, status: previewed.status };
-      return { account: publicConnection(account), undoOf: history.id, ...previewed.value, confirmationRequired: true };
+      return { account: publicConnection(account), undoOf: history.id, receipt: previewed.value.receipt, preview: reviewPage(previewed.value.preview),
+        ...await describeConnectorConfirmation(account, previewConfirmationActions(previewed.value.preview)) };
     }
     case 'list_thingtime_capabilities':
       upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/things/search', {
@@ -1778,24 +2294,26 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
       if (capability.ok === false) return { error: capability.status === 404 ? 'capability_not_found' : capability.error, status: capability.status };
       const compiled = compileThingtimeCapability({ thing: capability.value, inputs: asRecord(args.inputs) || {} });
       if (compiled.ok === false) return { error: compiled.error, status: 400 };
-      const previewed = await previewMutations(account, compiled.value.operations);
+      const runId = randomBytes(16).toString('hex');
+      const previewed = await previewMutations(context, account, compiled.value.operations, { kind: 'workflow', runId });
       if (previewed.ok === false) return { error: previewed.error, status: previewed.status };
       const now = new Date().toISOString();
+      const confirmation = await describeConnectorConfirmation(account, previewConfirmationActions(previewed.value.preview));
       const run: ThingtimeMcpWorkflowRun = {
-        id: randomBytes(16).toString('hex'),
+        id: runId,
         accountId: account.id,
         capabilityThingId,
         capabilityName: compiled.value.name,
         createdAt: now,
         updatedAt: now,
-        status: 'awaiting_confirmation',
+        status: confirmation.confirmationRequired ? 'awaiting_confirmation' : 'previewed',
         previewId: previewed.value.preview.previewId,
-        summaries: previewed.value.preview.operations.map((entry) => entry.summary)
+        summaries: [`${previewed.value.preview.operations.length} planned operation(s)`]
       };
       upsertWorkflowRun(context.bundle, run);
       const persisted = await persistMcpBundle(context);
       if (persisted.ok === false) return { error: persisted.error, status: persisted.status };
-      return { account: publicConnection(account), run, ...previewed.value, confirmationRequired: true };
+      return { account: publicConnection(account), run, receipt: previewed.value.receipt, preview: reviewPage(previewed.value.preview), ...confirmation };
     }
     case 'get_thingtime_workflow': {
       const runId = stringValue(args.runId, 128);
@@ -1807,6 +2325,10 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
       const run = (context.bundle.runs || []).find((entry) => entry.id === runId && entry.accountId === account.id);
       if (!run) return { error: 'workflow_not_found', status: 404 };
       if (run.status === 'applied') return { error: 'Applied workflow runs are immutable history', status: 409 };
+      if (run.status !== 'cancelled') {
+        const gate = await requireConnectorConfirmation(account, args.confirmed, ['workflow']);
+        if (gate) return gate;
+      }
       if (run.status !== 'cancelled') upsertWorkflowRun(context.bundle, { ...run, status: 'cancelled', updatedAt: new Date().toISOString() });
       const persisted = await persistMcpBundle(context);
       if (persisted.ok === false) return { error: persisted.error, status: persisted.status };
@@ -1814,16 +2336,29 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
     }
     case 'create_thingtime_thing': {
       const thing = asRecord(args.thing);
-      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things', { method: 'POST', body: thing }) : { ok: false, status: 400, error: 'thing must be an object' };
+      if (thing) {
+        const gate = await requireConnectorConfirmation(account, args.confirmed, connectorConfirmationsForMutation('create', thing));
+        if (gate) return gate;
+      }
+      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things', { method: 'POST', body: thing, wholeThing: true }) : { ok: false, status: 400, error: 'thing must be an object' };
       break;
     }
     case 'update_thingtime_thing': {
       const thing = asRecord(args.thing);
-      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/update', { method: 'POST', body: thing }) : { ok: false, status: 400, error: 'thing must be an object' };
+      const targetId = stringValue(thing?.id);
+      if (targetId) {
+        const gate = await requireDirectChangeConfirmation(account, args.confirmed, 'update', targetId, thing);
+        if (gate) return gate;
+      }
+      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/update', { method: 'POST', body: thing, wholeThing: true }) : { ok: false, status: 400, error: 'thing must be an object' };
       break;
     }
     case 'delete_thingtime_thing': {
       const id = stringValue(args.id);
+      if (id) {
+        const gate = await requireDirectChangeConfirmation(account, args.confirmed, 'delete', id);
+        if (gate) return gate;
+      }
       upstream = id ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/delete', { method: 'POST', body: { id } }) : { ok: false, status: 400, error: 'id is required' };
       break;
     }
@@ -1860,8 +2395,8 @@ const jsonRpcResponse = (id: unknown, result?: unknown, error?: { code: number; 
   ...(error ? { error } : { result })
 });
 
-const authChallenge = (origin: string) =>
-  `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}", error="invalid_token", error_description="A Thingtime connection is required"`;
+const authChallenge = (origin: string, scope: readonly string[] = [], error: 'invalid_token' | 'insufficient_scope' = 'invalid_token') =>
+  `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}", error="${error}", error_description="${error === 'insufficient_scope' ? 'Additional Thingtime permission requires your approval' : 'A Thingtime connection is required'}"${scope.length ? `, scope="${scope.join(' ')}"` : ''}`;
 
 const thingtimeResourceTemplates = [
   {
@@ -1905,7 +2440,7 @@ const staticResourceRead = (uri: string): { contents: unknown[] } | null => {
         text: renderThingtimeMcpUi(),
         _meta: {
           ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } },
-          'openai/widgetDescription': 'Review Thingtime results, before/after diffs, and explicitly confirmed signed mutation plans.',
+          'openai/widgetDescription': 'Review Thingtime results, before/after diffs, and signed mutation plans with the account’s confirmation requirements.',
           'openai/widgetPrefersBorder': true,
           'openai/widgetCSP': { connect_domains: [], resource_domains: [] }
         }
@@ -1971,9 +2506,9 @@ const promptResult = (name: unknown, args: unknown): Result<unknown> => {
     : definition.name === 'thingtime_design_schema'
       ? 'Discover existing schemas first. Design the smallest reusable schema Thing, validate an example, then preview creation only if no equivalent exists.'
       : definition.name === 'thingtime_safe_change'
-        ? 'Translate the goal into bounded operations, call preview_thingtime_mutation, explain the complete diff, and stop for confirmation before apply.'
+        ? 'Translate the goal into registered operations, call preview_thingtime_mutation, explain the complete diff, and follow the selected account’s confirmationRequired result before apply.'
         : definition.name === 'thingtime_restore_history'
-          ? 'Inspect bounded MCP history, select the exact entry, call undo_thingtime_mutation to produce a fresh preview, and stop for confirmation before apply.'
+          ? 'Inspect MCP history, select the exact entry, call undo_thingtime_mutation for a fresh preview, and follow the selected account’s confirmationRequired result before apply.'
           : 'Model the workflow as a Thingtime Capability v1 data Thing. Use only create/update/delete operations and exact {$input:"path"} placeholders; validate and preview it.';
   return {
     ok: true,
@@ -1993,23 +2528,25 @@ const mcpAuthorizationDenied = (id: unknown, request: Request, context: Failure)
   return json(jsonRpcResponse(id, denied), { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } });
 };
 
-const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: Failure) => {
-  const challenge = authChallenge(requestOrigin(request));
+const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: { error: string; status?: number; authorization?: Record<string, unknown> }, scope: readonly string[] = [], error?: 'invalid_token' | 'insufficient_scope') => {
+  const challenge = authChallenge(requestOrigin(request), scope, error);
   const denied = {
-    ...mcpToolResult({ error: context.error }, true),
+    ...mcpToolResult(context, true),
     _meta: { 'mcp/www_authenticate': [challenge] }
   };
-  // A login bootstrap is an MCP tool result, not a failed HTTP transport.
+  // A login or step-up challenge is an MCP tool result, not a failed HTTP transport.
   // Returning 200 lets the invoking host read mcp/www_authenticate and own
   // the PKCE browser/callback lifecycle for this exact MCP session.
   return json(jsonRpcResponse(id, denied), { headers: noStoreHeaders });
 };
 
-export const handleChatGptMcp = async ({ request }: { request: Request }) => {
+export const handleChatGptMcp = async ({ request }: { request: Request }, resolveSession = resolveMcpSession) => {
   if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
   }
-  const body = await limitRequestBody(request, MAX_REQUEST_BYTES);
+  let contextPromise: Promise<Result<McpSession>> | undefined;
+  const getContext = () => contextPromise ??= resolveSession(request);
+  const body = await limitRequestBody(request, MAX_REQUEST_BYTES, async () => (await getContext()).ok);
   if (body.ok === false) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: body.error } }, { status: body.status });
   let message: any;
   try {
@@ -2070,7 +2607,7 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
     if (!uri) return json(jsonRpcResponse(id, undefined, { code: -32602, message: 'uri is required' }), { status: 400 });
     const staticResource = staticResourceRead(uri);
     if (staticResource) return json(jsonRpcResponse(id, staticResource));
-    const context = await resolveMcpSession(request);
+    const context = await getContext();
     if (context.ok === false) return mcpAuthorizationDenied(id, request, context);
     const resource = await readAccountResource(uri, context.value);
     if (resource.ok === false) {
@@ -2083,15 +2620,26 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
   if (!thingtimeToolDefinitions.some((tool) => tool.name === name)) {
     return json(jsonRpcResponse(id, mcpToolResult({ error: 'Unknown Thingtime tool' }, true)));
   }
-  const context = await resolveMcpSession(request);
+  const context = await getContext();
   if (context.ok === false) {
-    return name === 'login_thingtime'
-      ? mcpToolAuthorizationChallenge(id, request, context)
-      : mcpAuthorizationDenied(id, request, context);
+    if (name === 'login_thingtime' && context.status === 401) {
+      const permissions = readRequiredScopes(args.requiredScopes);
+      if (!permissions) return json(jsonRpcResponse(id, mcpToolResult({ error: 'requiredScopes must contain supported independent OAuth permissions', status: 400 }, true)));
+      return mcpToolAuthorizationChallenge(id, request, { error: context.error }, permissions.length ? ['thingtime', ...permissions] : []);
+    }
+    return mcpAuthorizationDenied(id, request, context);
   }
   const result = await callThingtimeTool(name, args, context.value);
+  if (notification) return new Response(null, { status: 202 });
+  const resultError = asRecord(result);
+  const authorization = asRecord(resultError?.authorization);
+  const permissions = authorization ? readRequiredScopes(authorization.requiredScopes) : null;
+  if (resultError?.status === 403 && typeof resultError.error === 'string' && permissions?.length) {
+    const scope = [...new Set([...(readOAuthGrantScopes(context.value.session.meta?.scope) || ['thingtime']), ...permissions])];
+    return mcpToolAuthorizationChallenge(id, request, { error: resultError.error, status: 403, authorization: authorization ?? undefined }, scope, 'insufficient_scope');
+  }
   const isError = Boolean(result && typeof result === 'object' && 'error' in result);
-  return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, mcpToolResult(result, isError)));
+  return json(jsonRpcResponse(id, mcpToolResult(result, isError)));
 };
 
 export const chatGptPluginDiscoveryResponse = ({ request }: { request: Request }) => pluginDiscovery(requestOrigin(request));

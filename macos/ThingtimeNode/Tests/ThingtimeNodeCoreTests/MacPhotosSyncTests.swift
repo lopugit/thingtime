@@ -44,7 +44,8 @@ private final class MacPhotoBytes: @unchecked Sendable { var value = Data() }
             store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
             staging: MobileSyncStaging(directory: directory.appendingPathComponent("stage")), verify: verify,
             choose: { XCTFail("Legacy folder picker must not run"); return nil }, approve: { _ in XCTFail("Photos must never request write approval"); return true },
-            chooseSource: choose, photos: PhotoLibraryReader(provider: provider))
+            chooseSource: choose, photos: PhotoLibraryReader(provider: provider,
+                transport: try NativeRustFixture.transport(directory: directory)))
     }
     private func root(_ service: MacFolderSync) async throws -> String {
         let response = try await service.handle(request("choose")).decode([String: JSONValue].self)

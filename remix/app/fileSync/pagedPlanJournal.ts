@@ -4,6 +4,7 @@ import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata
 import { MAX_SYNC_EXCLUSIONS } from './configuration';
 import { inventoryIdentity, inventoryJournal, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE,
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
+import type { ConfirmedSyncOperation } from './pagedRunJournal';
 import { journalScope, type JournalAccess } from './journalScope';
 import { decideSyncPath, sameSyncContent, sameSyncScope, sameSyncStamp, syncPathKey, validSyncEntry, validSyncPath, validSyncPathKey,
 	type SyncDecision, type SyncPathObservation, type SyncPolicy, type SyncScope } from './reconcile';
@@ -13,10 +14,14 @@ export type PagedPlanSpec = {
 	local: InventoryIdentity;
 	remote: InventoryIdentity;
 	baseline: { local: InventoryIdentity; remote: InventoryIdentity };
+	photoBaselineInstance?: string;
 	policy: SyncPolicy;
 	excludedPaths: string[];
 	ignoreRules?: string;
+	earlyRunId?: string;
 };
+type ReadEarlyReceipts = (paths: readonly string[]) => Promise<(ConfirmedSyncOperation | null)[]>;
+type IncludePlacement = (row: SyncPathObservation) => boolean;
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
 type Position = { after: string | null; read: number };
@@ -36,11 +41,14 @@ const nonnegative = (n: number) => Number.isSafeInteger(n) && n >= 0;
 // Sealing has already validated this one populated stream's paths and parents.
 // With no destination or baseline, descendant changes cannot affect a decision.
 const initialUpload = (spec: PagedPlanSpec, totals: readonly number[]) =>
-	['backup', 'upload'].includes(spec.policy.mode) && !spec.policy.propagateDeletes && totals[0] > 0 && totals.slice(1).every(n => n === 0);
+	!spec.earlyRunId && ['backup', 'upload'].includes(spec.policy.mode) && !spec.policy.propagateDeletes && totals[0] > 0 && totals.slice(1).every(n => n === 0);
 
 export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	if (!value || !identifier(value.id) || !value.baseline || !value.policy ||
 		!['two-way', 'upload', 'download', 'backup'].includes(value.policy.mode) || typeof value.policy.propagateDeletes !== 'boolean' ||
+		(value.earlyRunId !== undefined && (!identifier(value.earlyRunId) || value.earlyRunId === value.id)) ||
+		(value.photoBaselineInstance !== undefined && (!identifier(value.photoBaselineInstance) || value.earlyRunId ||
+			value.policy.mode !== 'backup' || value.policy.propagateDeletes)) ||
 		!Array.isArray(value.excludedPaths) || value.excludedPaths.length > MAX_SYNC_EXCLUSIONS || value.excludedPaths.some(p => !validSyncPath(p)) ||
 		value.excludedPaths.reduce((n, p) => n + encoder.encode(p).length, 0) > 16_384) throw Error('Invalid paged sync plan.');
 	const ignoreRules = canonicalIgnoreRules(value.ignoreRules);
@@ -49,7 +57,8 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	const exclusions = value.excludedPaths.map(syncPathKey);
 	if (new Set(exclusions).size !== exclusions.length) throw Error('Duplicate sync exclusion.');
 	return { id: value.id, local: inputs[0], remote: inputs[1], baseline: { local: inputs[2], remote: inputs[3] },
-		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}) };
+		...(value.photoBaselineInstance ? { photoBaselineInstance: value.photoBaselineInstance } : {}),
+		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(value.earlyRunId ? { earlyRunId: value.earlyRunId } : {}) };
 }
 
 export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec, key: string) => {
@@ -163,13 +172,14 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			} catch (error) { fail(error); } };
 		});
 	};
-	const step = async (value: PagedPlanSpec): Promise<PagedPlanProgress> => {
+	const step = async (value: PagedPlanSpec, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> => {
 		const spec = parsePagedPlanSpec(value), header = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
 		if (header.phase === 'indexing' && header.inputInstances && initialUpload(spec, header.totals)) return begin(spec);
-		return advance(spec, header);
+		return advance(spec, header, readEarly, includePlacement);
 	};
-	async function advance(spec: PagedPlanSpec, header: Header): Promise<PagedPlanProgress> {
+	async function advance(spec: PagedPlanSpec, header: Header, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> {
 		if (header.phase === 'complete') return progress(header);
+		if (!!spec.earlyRunId !== !!readEarly) throw Error('Early sync receipts are required to reconcile these inventories.');
 		const firstUpload = !!header.inputInstances && initialUpload(spec, header.totals);
 		// Each stream contributes at most one bounded page. Persist only consumed
 		// positions; unused suffixes are read again after restart, never skipped.
@@ -185,7 +195,20 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		const rows: SyncPathObservation[] = [], includedRows: boolean[] = [], flags: [string, number][] = [];
 		const exclusions = spec.excludedPaths.map(syncPathKey);
 		const ignore = ignorePolicy(spec);
-		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind);
+		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind) &&
+			(includePlacement?.(row) ?? true);
+		const ancestorFlags = (row: SyncPathObservation, include: boolean, possible = false): [string, number][] => {
+			const flags: [string, number][] = [], parts = row.path.split('/');
+			const add = (side: number) => {
+				for (let n = 1; n < parts.length; n++) flags.push([syncPathKey(parts.slice(0, n).join('/')), side]);
+			};
+			if ((header.phase === 'indexing' || firstUpload) && !include) add(2);
+			if (header.phase === 'indexing' && include) {
+				if (row.local && (possible || !sameSyncStamp(row.local, row.beforeLocal))) add(0);
+				if (row.remote && (possible || !sameSyncStamp(row.remote, row.beforeRemote))) add(1);
+			}
+			return flags;
+		};
 		let usedBytes = 0;
 		while (rows.length < INVENTORY_PAGE_ENTRIES) {
 			// A consumed page might have an unseen next key, so stop before choosing
@@ -199,23 +222,31 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			if (entries.some(e => e && e.path !== path)) throw Error('Case or Unicode filename collision requires review.');
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Sync baseline must contain confirmed matching content.');
 			const row: SyncPathObservation = { path, local: entries[0], remote: entries[1], beforeLocal: entries[2], beforeRemote: entries[3] };
-			const rowFlags: [string, number][] = [], include = included(row);
-			if ((header.phase === 'indexing' || firstUpload) && !include) {
-				const parts = path.split('/');
-				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), 2]);
-			}
-			if (header.phase === 'indexing' && include) for (let side = 0; side < 2; side++) {
-				if (!entries[side] || sameSyncStamp(entries[side], entries[side + 2])) continue;
-				const parts = path.split('/');
-				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), side]);
-			}
-			const size = bytes(row) + bytes(rowFlags);
+			// Budget for two receipt stamps even when neither old stamp was present.
+			const size = bytes(row) + bytes(ancestorFlags(row, included(row), !!readEarly)) +
+				(readEarly ? 2 * bytes(path) + 8192 : 0);
 			if (usedBytes + size > INVENTORY_PAGE_BYTES) {
 				if (!rows.length) throw Error('Sync plan row exceeds its byte bound.');
 				break;
 			}
-			rows.push(row); includedRows.push(include); flags.push(...rowFlags); usedBytes += size;
+			rows.push(row); usedBytes += size;
 			entries.forEach((entry, i) => { if (entry) { offsets[i]++; positions[i] = { after: pathKey, read: positions[i].read + 1 }; } });
+		}
+		if (readEarly && rows.length) {
+			const early = await readEarly(rows.map(row => row.path)); check();
+			if (early.length !== rows.length) throw Error('Early sync reconciliation page changed.');
+			early.forEach((effect, i) => {
+				if (!effect) return;
+				const { mutation: m } = effect.operation, target = effect.receipt.entry, row = rows[i];
+				if (m.kind !== 'copy' || !target || m.path !== row.path || !sameSyncContent(m.source, target))
+					throw Error('Early sync receipt does not match the reconciliation path.');
+				row.beforeLocal = m.from === 'local' ? m.source : target;
+				row.beforeRemote = m.from === 'local' ? target : m.source;
+			});
+		}
+		for (const row of rows) {
+			const include = included(row);
+			includedRows.push(include); flags.push(...ancestorFlags(row, include));
 		}
 		const finished = positions.every((p, i) => p.read === header.totals[i]);
 		if (!rows.length && !finished) throw Error('Sync plan made no bounded progress.');
@@ -287,9 +318,9 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				});
 			});
 		},
-		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void): Promise<PagedPlanProgress> {
+		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> {
 			const spec = parsePagedPlanSpec(value); let state = await begin(spec);
-			while (state.phase !== 'complete') { state = await step(spec); changed?.(state); }
+			while (state.phase !== 'complete') { state = await step(spec, readEarly, includePlacement); changed?.(state); }
 			return state;
 		},
 		async read(value: PagedPlanSpec, continuation?: PagedPlanCursor): Promise<{ decisions: SyncDecision[]; next: PagedPlanCursor | null; totalDecisions: number }> {

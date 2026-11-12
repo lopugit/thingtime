@@ -56,6 +56,8 @@ public struct CommanderResourceUsage: Decodable, Sendable {
     public let cpuMeasurementAvailable: Bool
     public let cpuTimeNanoseconds: UInt64
     public let wallTimeNanoseconds: UInt64
+    public let scanBytes: UInt64?
+    public let residentMemoryBytes: UInt64?
     public var attributedCpuPercent: Double? {
         guard cpuMeasurementAvailable, wallTimeNanoseconds > 0, effective.logicalCpuCount > 0 else { return nil }
         return min(100, Double(cpuTimeNanoseconds) / Double(wallTimeNanoseconds) / Double(effective.logicalCpuCount) * 100)
@@ -71,10 +73,11 @@ public final class SyncSourceCpuMeter: @unchecked Sendable {
     private var cpuSeconds = 0.0
     private var threadScopes: [UInt32: (depth: Int, recorded: Double)] = [:]
     private var feedbackAt = 0.0
-    private let target: Double?
+    private var target: Double?
     private let ceiling: Int
     private var active = 0, effective = 1
     public init(cpuPercent: Int?, concurrency: Int = 16) { target = cpuPercent.map { Double($0) / 3 }; ceiling = max(1, min(16, concurrency)); effective = ceiling }
+    public func setCpuTarget(_ percent: Int) { lock.lock(); target = Double(percent) / 3; lock.unlock() }
     public var effectiveConcurrency: Int { lock.lock(); defer { lock.unlock() }; return effective }
     private func threadTime() -> Double? {
         var time = timespec()
@@ -83,7 +86,8 @@ public final class SyncSourceCpuMeter: @unchecked Sendable {
     }
     public func measure<T>(_ work: () throws -> T, admit: Bool = true) throws -> T {
         let before = threadTime()
-        if target != nil && before == nil { throw MobileFolderStore.Failure.unavailable }
+        lock.lock(); let requiresMeasurement = target != nil; lock.unlock()
+        if requiresMeasurement && before == nil { throw MobileFolderStore.Failure.unavailable }
         let thread = pthread_mach_thread_np(pthread_self())
         lock.lock(); var scope = threadScopes[thread] ?? (depth: 0, recorded: 0)
         let recordedBefore = scope.recorded; scope.depth += 1; threadScopes[thread] = scope; lock.unlock()
@@ -124,10 +128,10 @@ public final class SyncSourceCpuMeter: @unchecked Sendable {
         return min(100, cpuSeconds / max(0.001, ProcessInfo.processInfo.systemUptime - started) / Double(ProcessInfo.processInfo.activeProcessorCount) * 100)
     }
     public func checkpoint() throws {
-        guard let target else { return }
         while true {
             try Task.checkCancellation()
-            lock.lock(); let cpu = cpuSeconds; lock.unlock()
+            lock.lock(); let cpu = cpuSeconds, currentTarget = target; lock.unlock()
+            guard let target = currentTarget else { return }
             let debt = cpu / (Double(ProcessInfo.processInfo.activeProcessorCount) * target / 100) - (ProcessInfo.processInfo.systemUptime - started)
             if debt <= 0 { return }
             Thread.sleep(forTimeInterval: min(0.025, debt))
@@ -142,4 +146,54 @@ public enum SyncResourceCpuContext {
         guard let meter = current else { return try work() }
         try meter.checkpoint(); let value = try meter.measure(work, admit: false); try meter.checkpoint(); return value
     }
+}
+
+/// Device-local policy is independent of signed saved-connection descriptors.
+public struct DeviceSyncResourcePolicy: Codable, Equatable, Sendable {
+    public var transferBytesPerSecond: Double = 625000
+    public var scanBytesPerSecond: Double = 625000
+    public var cpuPercent: Int = 15
+    public init() {}
+    public func validate() throws {
+        guard transferBytesPerSecond.isFinite, transferBytesPerSecond > 0, scanBytesPerSecond.isFinite, scanBytesPerSecond > 0, (1...100).contains(cpuPercent) else { throw MobileFolderStore.Failure.invalid }
+    }
+}
+/// Short reservations bound bursts and keep cancellation responsive. One native
+/// budget is shared across every connection for the selected device/account.
+public final class SyncScanBudget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var next = ProcessInfo.processInfo.systemUptime
+    private var rate: Double
+    private var samples: [(at: Double, bytes: Int)] = []
+    private var pending = 0
+    public init(bytesPerSecond: Double) { rate = bytesPerSecond }
+    public func setRate(_ value: Double) { lock.lock(); rate = value; lock.unlock() }
+    public func pace(_ bytes: Int) throws {
+        lock.lock(); pending += 1; lock.unlock()
+        defer { lock.lock(); pending -= 1; if pending == 0 { next = ProcessInfo.processInfo.systemUptime }; lock.unlock() }
+        var remaining = bytes
+        while remaining > 0 {
+            try Task.checkCancellation()
+            lock.lock()
+            let part = rate / 10 >= Double(Int.max) ? remaining : min(remaining, max(1, Int(rate / 10)))
+            let deadline = max(next, ProcessInfo.processInfo.systemUptime) + Double(part) / rate
+            next = deadline; lock.unlock()
+            while ProcessInfo.processInfo.systemUptime < deadline { try Task.checkCancellation(); Thread.sleep(forTimeInterval: min(0.025, deadline - ProcessInfo.processInfo.systemUptime)) }
+            remaining -= part
+        }
+    }
+    public func record(_ bytes: Int) {
+        lock.lock(); defer { lock.unlock() }
+        samples.append((ProcessInfo.processInfo.systemUptime, bytes)); samples.removeAll { $0.at < ProcessInfo.processInfo.systemUptime - 1 }
+    }
+    public var currentBytesPerSecond: Double? {
+        lock.lock(); defer { lock.unlock() }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard let first = samples.first, now - first.at <= 2 else { return nil }
+        return Double(samples.filter { now - $0.at <= 1 }.reduce(0) { $0 + $1.bytes })
+    }
+}
+public enum SyncScanContext {
+    @TaskLocal public static var current: SyncScanBudget?
+    @TaskLocal public static var helperBytesPerSecond: Double?
 }

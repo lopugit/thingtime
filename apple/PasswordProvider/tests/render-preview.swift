@@ -46,7 +46,7 @@
         }
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
-        let host = NSHostingController(rootView: ProviderView(model: model))
+        let host = NSHostingController(rootView: ProviderView(model: model).background(Color(nsColor: .windowBackgroundColor)))
         let window = NSWindow(contentViewController: host)
         window.setContentSize(NSSize(width: width, height: height))
         window.title = "Thingtime · synthetic provider preview"
@@ -54,11 +54,14 @@
         app.activate(ignoringOtherApps: true)
         if args.contains("--snapshot") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let renderer = ImageRenderer(content: ProviderView(model: model).frame(width: width, height: height).background(Color(nsColor: .windowBackgroundColor)))
-                renderer.scale = 2
-                if let image = renderer.cgImage,
-                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+                // ImageRenderer omits native-backed ScrollView contents. Capture
+                // the laid-out hosting view used by this actual preview window.
+                host.view.layoutSubtreeIfNeeded()
+                if let bitmap = host.view.bitmapImageRepForCachingDisplay(in: host.view.bounds) {
+                    host.view.cacheDisplay(in: host.view.bounds, to: bitmap)
+                    if let png = bitmap.representation(using: .png, properties: [:]) {
                     try? png.write(to: URL(fileURLWithPath: value("--snapshot", "/tmp/thingtime-provider-preview.png")))
+                    }
                 }
                 app.terminate(nil)
             }

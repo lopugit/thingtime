@@ -418,6 +418,22 @@ async function browserAcceptance() {
     await page.goto(fixture.origin + '/s/' + space.slug, { waitUntil: 'domcontentloaded' });
     await viewGroup().waitFor({ timeout: 60000 });
   };
+  const pageBuilder = page.getByRole('button', { name: 'Builder on current page', exact: true });
+  const togglePageBuilder = async active => {
+    await page.getByRole('button', { name: 'Open menu', exact: true }).click();
+    await pageBuilder.waitFor();
+    assert.equal(await pageBuilder.getAttribute('aria-pressed'), String(!active));
+    await pageBuilder.press('Enter');
+    await page.getByRole('button', { name: 'Open menu', exact: true }).waitFor();
+  };
+  const assertLayoutControls = async active => {
+    for (const key of ['subspace-view-controls', 'subspace-display-feed', 'subspace-display-sidebar']) {
+      const host = page.locator(`[data-settings-document="${key}"]`);
+      await host.waitFor();
+      const control = host.getByRole('button', { name: 'Edit layout', exact: true });
+      await control.waitFor({ state: active ? 'visible' : 'detached' });
+    }
+  };
   const assertMode = async name => { assert.equal(await mode(name).getAttribute('aria-pressed'), 'true', `${name} must be selected`); };
   const measure = async label => {
     const sidebar = page.getByTestId('subspace-sidebar-embeds');
@@ -501,12 +517,19 @@ async function browserAcceptance() {
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       await assertTextEmbeds();
+      await assertLayoutControls(false);
+      await togglePageBuilder(true);
+      await assertLayoutControls(true);
+      await measure(`layout-builder-${viewport.width}`);
+      await togglePageBuilder(false);
+      await assertLayoutControls(false);
       await measure(`plain-text-embeds-${viewport.width}`);
     }
     await page.reload({ waitUntil: 'domcontentloaded' });
     await viewGroup().waitFor({ timeout: 30000 });
     await assertTextEmbeds();
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await note('Layout controls default off and follow the accessible page Builder toggle at desktop/mobile widths');
     await note('Data, typed Posts, rich Comments and repaired existing Posts retain explicit saved/embedded Components; both regions render, toggle and reload at desktop/mobile widths');
     const savedRendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
     const changedTemplate = { ...fixture.savedRendererCrystal, render: { ...fixture.savedRendererCrystal.render, tag: 'blockquote' } };
@@ -640,30 +663,79 @@ async function browserAcceptance() {
     assert.equal(removeResponse.status(), 200);
     const remaining = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=feed')).json(), fixture.space.id);
     assert(!remaining.embeds.some(row => row.id === added.embed.id), 'UI removal must persist via the real API');
+    const modLayout = page.locator('[data-settings-document="subspace-embed-feed"]');
+    await modLayout.getByRole('button', { name: 'Edit layout', exact: true }).waitFor({ state: 'detached' });
+    await togglePageBuilder(true);
     await editNestedText('subspace-embed-feed', 'embed-add', 'Add selected Thing');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Add selected Thing', exact: true }).waitFor({ timeout: 30000 });
     await note('Search picker and independent editable control persisted');
     await openSpace(fixture.space);
     await mode('Posts').click();
+    await togglePageBuilder(true);
     await editNestedText('subspace-display-feed', 'embed-card-title', '{item.name} · editable');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('link', { name: 'Embedded acceptance component · editable', exact: true }).waitFor({ timeout: 30000 });
+    await assertLayoutControls(false);
     await note('Repeated embedded Thing title independently edited, saved and reloaded');
     const controlsDocument = page.locator('[data-settings-document="subspace-view-controls"]');
+    await togglePageBuilder(true);
     await controlsDocument.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await controlsDocument.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
     await page.getByRole('combobox', { name: 'Select block', exact: true }).selectOption('subspace-expand-label');
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Expand comments automatically');
     await page.screenshot({ path: join(out, 'subspace-editable-view-blocks.png'), fullPage: true });
     await page.getByRole('button', { name: 'Close builder', exact: true }).click();
-    await controlsDocument.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await togglePageBuilder(false);
+    await controlsDocument.getByText('Expand all comments', { exact: true }).waitFor();
+    await controlsDocument.getByText('Expand comments automatically', { exact: true }).waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
+    await togglePageBuilder(true);
+    await controlsDocument.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    await controlsDocument.getByText('Expand comments automatically', { exact: true }).waitFor();
+    await controlsDocument.getByRole('button', { name: 'Save layout', exact: true }).press('Enter');
     await controlsDocument.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-    await controlsDocument.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+    await togglePageBuilder(false);
+    await controlsDocument.getByRole('button', { name: 'Done editing layout', exact: true }).waitFor({ state: 'detached' });
+    await controlsDocument.getByRole('button', { name: 'Open Builder inspector', exact: true }).waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByText('Expand comments automatically', { exact: true }).waitFor({ timeout: 30000 });
     assert.equal(await commentsToggle().isChecked(), true, 'Nested Builder label edit must preserve its independent checkbox action');
     await note('Nested view control edited, saved and reloaded');
+    await togglePageBuilder(true);
+    await page.getByTestId('subspace-mod-tools').click();
+    // The back link only exists after the router commits the intermediate page.
+    await page.getByRole('link', { name: `← Back to s/${fixture.space.slug}`, exact: true }).click();
+    await assertLayoutControls(false);
+    await note('Client navigation clears Builder mode on returning to the page');
+    await togglePageBuilder(true);
+    await setSession(fixture.memberCookie);
+    await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+    await page.getByTestId('subspace-mod-tools').waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
+    await note('Account transition on the same URL clears Builder mode and moderator controls');
+    for (const [path, key, label] of [
+      ['/settings/connections#connector-confirmations', 'connector-confirmations', 'Edit layout'],
+      ['/connections', 'connections-provider-catalog', 'Edit provider cards']
+    ]) {
+      await page.goto(fixture.origin + path, { waitUntil: 'domcontentloaded' });
+      const host = page.locator(`[data-settings-document="${key}"]`);
+      await host.waitFor({ timeout: 60000 });
+      const edit = host.getByRole('button', { name: label, exact: true });
+      for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        await edit.waitFor({ state: 'detached' });
+        await togglePageBuilder(true);
+        await edit.waitFor();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${key}: horizontal overflow`);
+        await page.screenshot({ path: join(out, `${key}-builder-${viewport.width}.png`), fullPage: true });
+        await togglePageBuilder(false);
+        await edit.waitFor({ state: 'detached' });
+      }
+    }
+    await note('Settings and Connections layout controls use the same gate on desktop and mobile');
     assert.deepEqual(errors, [], 'Browser runtime errors');
     await writeFile(join(out, 'browser-result.json'), JSON.stringify({ ok: true, desktopAndMobile: true, persistedViews: true, scopedComments: true, draftSwitching: true, realMessageSendRead: true, realEmbedAddRemove: true, explicitComponentEmbedRendering: true, explicitComponentDataToggle: true, browserNetworkDenied: true, errors }, null, 2));
     console.log(JSON.stringify({ ok: true, browser: true, evidenceDir: out, errors }));

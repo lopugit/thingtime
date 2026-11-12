@@ -1,5 +1,29 @@
 # Editable Builder definitions and browser Actions
 
+Saved Component instances can bind scalar arguments from their parent data
+scope with an explicit `argBindings` map. For example,
+`{ type: 'component', component: 'record-editor', argBindings: { recordId: '{item.id}' } }`
+passes the current collection row ID into that Component's source and controls.
+An exact token preserves strings, booleans and finite numbers. Missing or
+non-scalar values become an empty string and replace the preceding row value.
+Interpolated text remains text, and inserted values are never reinterpreted
+as template syntax.
+
+Literal `args`, saved arguments and defaults keep their existing behavior.
+Bindings merge after those literal values. The argument inspector exposes
+**Use parent data** for each declared argument. Expanding a Component into
+editable blocks carries its literal arguments and binding map separately.
+Each nested live Component owns its Actions, local field changes and Enter
+submissions, including when a parent source surrounds it.
+Changing a Component's bound identity retires its earlier Action completion and
+pending state, so an older save cannot close or overwrite the new row's editor.
+
+Create/update clients require `api.things` 1.62.0 or
+`api.things-update` 1.27.0, and resolve/preview clients require
+`api.webpages-resolve` 1.19.0. Bindings supply data and never establish access
+to an Action, Component, attachment or other dependency. Stored references and
+the normal viewer authorization remain authoritative.
+
 Components, pages and Actions remain ordinary Things. Owners can use **Edit
 definition** in a Component/page menu or the Action inspector to edit every
 stored definition field. Fields mode supports nested objects and arrays,
@@ -141,3 +165,209 @@ This addition requires `api.things` 1.33.0 for creation, `api.things-update`
 1.10.0 for updates, and `api.actions-run` 1.12.0 for preparation/execution.
 The browser execution grammar remains 1.11.0; JSON data adds no executable node.
 The Web standards draft-saving suite uses `api.webpages-suites-install` 1.3.0.
+
+## Run an Action when a private page opens
+
+An owner can add an optional `activationAction` to the saved standalone
+Webpage definition. It stays separate from read sources, whose normal
+refresh rules still apply. For example:
+
+```json
+{
+  "action": "owner-saved-action-id",
+  "cadence": "day",
+  "timeZone": "Australia/Melbourne",
+  "dayInput": "day",
+  "inputs": { "collection": "my-daily-records" },
+  "queryResult": { "selectedId": "record.id" }
+}
+```
+
+Use the exact owner-private saved Action ID. `cadence: "open"` runs once per opening;
+`"day"` also runs when the configured civil date changes while the page is
+open. Day cadence requires a valid IANA timezone. Optional `dayInput` names
+a declared string input; the server supplies the stable `YYYY-MM-DD` value.
+An optional `cutoffTime` of `"HH:mm"` advances that date to tomorrow at the
+configured local time. Omit it or use `"00:00"` to follow the ordinary local
+calendar date. A skipped wall time takes effect at the clock jump. A repeated
+wall time takes effect at its first occurrence.
+
+To use a saved preference, set `cutoffTime` to
+`{ "thingId": "settings-id", "schemaId": "settings-schema-id", "field": "cutoffTime" }`.
+The source must be the owner's exact readable private Data Thing with that
+schema. An absent field defaults to midnight. An invalid field or unavailable
+source prevents activation. The viewer re-resolves this setting after a
+successful authored Action, when the tab becomes visible, and on reopening.
+A stale schedule revision returns a conflict before execution. The viewer
+checks the current schedule once and re-arms when it receives a new revision.
+
+Other inputs are literal saved scalars. Write Actions may ensure a stable
+Thing identity so a second opening, tab or explicit retry can reuse it.
+An ensure key must be literal, the bound civil-date input, or `$item` in an
+ordered ensure batch whose `civilDateRange` starts at that input. Arbitrary
+writes and composed child Actions are refused.
+
+Only the full owning account viewing its saved private standalone page can
+run the binding. Builder previews, shared readers, historical branches and
+held content do not start it. Page copies and portable imports leave the
+activation opt-in unset. Remove the
+descriptor in **Edit definition** to disable it. A saved Action can also
+read an ordinary private setting and return without creating or selecting
+anything. No refresh or retry bypasses the server's live page, actor,
+revision and date checks.
+
+The optional `queryResult` maps named page-local query keys to result
+paths. Returned scalar values fill the mapped keys that the reader has not
+selected manually or set in a deep link. A result with no mapped values
+leaves selection unchanged. A page switch invalidates a late result.
+
+Authoring a cutoff or batch requires `api.things` 1.57.0 or
+`api.things-update` 1.23.0. The live viewer negotiates `api.webpages-resolve`
+1.15.0 and `api.actions-run` 1.45.0 before activation. The canonical Actions endpoint
+accepts `source: "activation"`, `action`, `activationPageId`,
+`activationPageRevision` and `activationOnceKey` ("open" or the civil date),
+plus `activationScheduleRevision` from the owner-only resolve response for a
+sourced cutoff. The request takes its Action inputs from the saved binding.
+
+## Create or reuse an owned Data Thing
+
+In a server Action, add a `things.ensure` step through the full program
+editor. Give it a literal schema reference, a non-empty text `key`, and
+creation `values`. The key can resolve from an input or expression. An
+optional `folderId` assigns a newly created Thing to an owned folder.
+Declare `things.read` and `things.create` for the selected schema.
+
+The invoker, saved Action ID, key and selected data plane identify the
+Thing. Concurrent runs return the same private creation. Later runs return
+the readable current `{ id, crystal, schema, schemaId }` and preserve edits,
+folder moves and explicit audience changes. A mismatched schema or refused
+read fails the run. Deleting the Data Thing frees the key.
+
+Use `each` to ensure an ordered list in the same saved Action and key
+namespace. `key`, `values` and `folderId` can read `$item` or `$index`.
+For example, `{ "ttExpr": ["civilDateRange", "$input.day", 7] }` in `each`
+with `"key": "$item"` addresses seven consecutive dates. The step returns
+an array of ordinary ensure results. An empty list returns an empty array.
+Every item consumes the existing Action operation budget. An oversized batch
+fails before it writes, and a later per-item failure can leave completed keys
+in place. Retrying with the same keys reuses those Things.
+
+Set `matchFields` to plain crystal field names to reuse an existing owned
+Thing when the intent has no protected key yet. Each field must have a scalar
+creation value. Matching checks the exact schema and current access, and
+prefers the oldest matching record. It leaves that record and its identity
+as saved. Only newly created records carry the Action's protected key.
+
+## Bind data without a local form boundary
+
+An ordinary webpage block can opt in to `source.passive: true`. Its source
+uses the existing Action access checks, inputs, effects and refresh behavior.
+The block and its children receive the bound `result` in their data scope.
+Their existing DOM, click, form and event boundaries handle interaction.
+
+The setting requires `api.things` 1.57.0 or `api.things-update` 1.23.0 for
+saving and `api.webpages-resolve` 1.15.0 for loading. Component sources use
+their existing control surface.
+
+## Exclude a map point from viewport fitting
+
+Map source points may set `fitBounds: false` to keep their marker and normal
+selection behavior while excluding its coordinates from automatic viewport
+fitting. Omit it to include a point when the map fits its points and route.
+This requires `api.things` 1.56.0.
+
+## Load an independent map points layer
+
+A saved `tt-mapbox` can add points from a literal Action reference in
+`pointsSource`. The existing static points, favourites and selected-route
+layers keep their own source and refresh behavior.
+
+```json
+{
+  "action": "saved-map-points-action",
+  "itemsPath": "points",
+  "refresh": "interval",
+  "intervalMs": 30000,
+  "showError": false
+}
+```
+
+Optional `inputs` can bind ordinary scalars from the current map scope.
+Use the same cursor fields as a collection source. `itemsPath`,
+`cursorPath`, `cursorInput` and `itemKey` default to `items`,
+`nextCursor`, `cursor` and `id`. The source validates and combines
+all cursor pages before publishing them. A failed read removes this layer
+and leaves the rest of the map usable. If an editable status block already
+reports the same read, set `showError: false` to suppress the map’s
+additional source warning.
+
+Authoring uses `api.things` 1.56.0 and `api.things-update` 1.22.0.
+The live map negotiates `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0. Shared composition and private copies follow
+the stored literal Action reference and apply their existing access rules.
+
+## Share a selection across a live page
+
+An authored `$ui` button can toggle one selected string or number with
+`{ "op": "toggle-member", "scope": "page", "key": "picked", "value": "{item.id}" }`.
+Use `clear-selection` with the same scope and key to clear it. The current
+`page.selection.picked` exposes `items` and `count`. Optional scalar
+`context` separates uses of the same key. Toggling in a new context starts a
+fresh list, and a context-scoped clear affects only that context. An explicit
+`$ui` page query can set `clearSelection: "picked"`. Selection clears on real
+navigation or a change of account, database or access. Page source refreshes
+preserve it.
+
+A `button type="button"` with an existing authored Action can also set
+`data-tt-modifier-action-inputs` to the same toggle object. Ctrl/Cmd primary
+activation runs the toggle once, including macOS Ctrl-primary context events.
+Ordinary click and secondary menus retain their own actions. Provide an
+ordinary `$ui` control for touch and keyboard users, and bind the selected state
+to `aria-pressed`. For a condition, `valueArg` can read an operand from the
+current scope, for example `{ "arg": "page.selection.picked.items", "op":
+"includes", "valueArg": "item.id" }`.
+
+## Process a page selection in Action batches
+
+An ordinary Action button on the owner's live page can set
+`data-tt-action-batch` to `{ "input": "ids", "size": 20, "selectionKey": "picked" }`.
+Supply the matching `context` when using a context-scoped selection. The click
+captures the complete current selection and supplies one slice at a time under
+the named Action input. Keep other inputs, such as the destination, in
+ordinary `data-tt-action-inputs`. One pending control covers the whole run.
+The handler checks identity before each slice, stops at the first uncertain
+or refused result, and reports the confirmed item count. The selection remains
+available after the result. Inspect run history before retrying and use
+idempotent writes with stable per-item keys.
+
+## Provide a keyed collection to descendants
+
+A passive ordinary block source can drain cursor pages and publish an index
+under `page.collections.<as>`. For example:
+
+```json
+{
+  "action": "read-annotations",
+  "passive": true,
+  "collection": { "as": "annotations", "groupBy": "targetId" }
+}
+```
+
+Optional `itemsPath`, `cursorPath`, `cursorInput` and `itemKey` default to
+`items`, `nextCursor`, `cursor` and `id`. Group keys are nonempty strings
+or finite numbers. The complete cursor result becomes visible together,
+and failed reads keep the collection unavailable. The saved Action and
+existing source permission checks authorize the rows.
+
+A descendant `ttEach` can set `arg: "page.collections.annotations"` and
+`keyArg: "item.id"` to repeat only the matching list. Expanded collections
+preserve this binding as `itemsPath` and `itemsKeyArg`. A keyed repeat also
+binds `total` and `remaining` for a summary when an authored `max` is used.
+
+These composition bindings use `api.things` 1.58.0, `api.things-update`
+1.24.0 and `api.webpages-resolve` 1.16.0. For Actions that must read a Data
+Thing in an exact folder owned by the invoker, set `things.get.ownedFolderId`
+to a literal ID or a reference. Require `ownedFolderVerified: true` from the
+read before dependent writes. Older executors omit the marker. Authoring
+uses the same Things versions and execution requires
+`api.actions-run` 1.46.0.

@@ -1,9 +1,17 @@
 import { createCanViewHomeAttachmentTarget } from './attachmentAccess';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createLocalAttachmentStorage } from './localAttachmentStorage';
 
 import {
 	ATTACHMENT_MIN_PART_BYTES,
+  ATTACHMENT_MAX_OBJECT_BYTES,
+  ATTACHMENT_MAX_PART_BYTES,
+  attachmentPartPlan,
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
@@ -82,6 +90,31 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	isNoSuchUpload: () => false,
 	isNotFound: () => false,
 	...overrides
+});
+
+test('revocation during exact-version HEAD withholds a delegated completion receipt', async () => {
+	const doc = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', objectVersionId: 'version-1', uploadId: undefined });
+	const composite = createHash('sha256').update(Buffer.concat([Buffer.alloc(32, 1), Buffer.alloc(32, 2)])).digest();
+	let revoked = false;
+	let tags = 0;
+	const service = createAttachmentService({
+		store: { getOwned: async () => doc, claimFinalizing: async () => ({ doc, acquired: false }) } as any,
+		getS3: () => noopS3({
+			headObject: async () => {
+				revoked = true;
+				return { sizeBytes: doc.objectSizeBytes, checksumType: 'COMPOSITE', checksumSha256: composite.toString('base64') + '-2', attachmentId: doc.shareId, versionId: 'version-1' };
+			},
+			markObjectReady: async () => { tags++; }
+		})
+	});
+	const result = await service.complete(doc.ownerId, { uploadId: doc.shareId }, {
+		expiresAt: new Date(now.getTime() + 60_000),
+		expectedFingerprint: { algorithm: 'sha256-parts-v1', ...attachmentPartPlan(doc.objectSizeBytes), sha256: composite.toString('hex') },
+		check: async () => revoked ? { ok: false, status: 410, error: 'Revoked while awaiting storage' } : null
+	});
+	assert.equal(result.ok, false);
+	if (!result.ok) assert.equal(result.status, 410);
+	assert.equal(tags, 0);
 });
 
 test('excluded export bytes skip storage without bypassing live authorization', async () => {
@@ -278,7 +311,7 @@ test('start reserves billed pending metadata before creating the S3 MPU', async 
 	}
 });
 
-test('non-file starts reject zero bytes before reserving quota or creating an MPU', async () => {
+test('image-only starts reject zero bytes before reserving quota or creating an MPU', async () => {
 	let touched = false;
 	const service = createAttachmentService({
 		store: {
@@ -295,13 +328,14 @@ test('non-file starts reject zero bytes before reserving quota or creating an MP
 	assert.deepEqual(
 		await service.start('user-1', {
 			filename: 'empty.bin',
+      purpose: 'profile-avatar',
 			contentType: 'application/octet-stream',
 			sizeBytes: 0
 		}),
 		{
 			ok: false,
 			status: 400,
-			error: 'Attachment size must be between 1 byte and 5 TiB'
+			error: 'Attachment size must be between 1 byte and the S3 multipart ceiling of 53687091200000 bytes (10000 parts of at most 5 GiB)'
 		}
 	);
 	assert.equal(touched, false);
@@ -1040,6 +1074,39 @@ test('part signing passes the server-derived exact length for every checksum-loc
 	assert.equal(partsIssuedAt, now);
 });
 
+test('native background byte grants are bounded by admission and reservation expiry and cannot be requested in a client body', async () => {
+	const calls: { seconds?: number; background?: boolean }[] = [];
+	const fingerprint = { algorithm: 'sha256-parts-v1' as const, partCount: 2, partSizeBytes: 8 * 1024 * 1024,
+		sha256: createHash('sha256').update(Buffer.concat([Buffer.alloc(32, 1), Buffer.alloc(32, 2)])).digest('hex') };
+	let reservationSeconds = 900, refused = false, checks = 0;
+	const service = createAttachmentService({
+		now: () => now,
+		store: { getOwned: async () => attachmentDoc({ attachmentPurpose: 'file',
+			attachmentExpiresAt: new Date(now.getTime() + reservationSeconds * 1000) }), markPartsIssued: async () => {} } as any,
+		getS3: () => noopS3({ signUploadPart: async ({ expiresInSeconds, backgroundFileTransport, checksumSha256 }) => {
+			calls.push({ seconds: expiresInSeconds, background: backgroundFileTransport });
+			return { url: 'https://s3.example/part', headers: { 'x-amz-checksum-sha256': checksumSha256 },
+				expiresAt: new Date(now.getTime() + (expiresInSeconds || 0) * 1000).toISOString() };
+		} })
+	});
+	const body = { uploadId: 'attachment-1', parts: [{ partNumber: 1, checksumSha256: checksum(1) }] };
+	const authority = { expiresAt: new Date(now.getTime() + 1200_000), expectedFingerprint: fingerprint,
+		check: async () => { checks++; return refused ? { ok: false as const, status: 410, error: 'Revoked' } : null; } };
+	assert.equal((await service.signParts('user-1', body, authority)).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true,
+		expiresAt: new Date(now.getTime() + 300_000) })).ok, true);
+	reservationSeconds = 60;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.deepEqual(calls, [{ seconds: 120, background: undefined }, { seconds: 600, background: true },
+		{ seconds: 300, background: true }, { seconds: 60, background: true }]);
+	assert.equal(checks, 8, 'legacy authority checked before signing and before returning grants');
+	assert.equal((await service.signParts('user-1', { ...body, backgroundFileTransport: true }, authority)).ok, false);
+	refused = true;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, false);
+	assert.equal(calls.length, 4, 'no byte grants after refusal or client-supplied override');
+});
+
 test('post preflight is owner-bound, ready, unexpired and unattached, then atomic bind remains separate', async () => {
 	const visual = attachmentDoc({
 		attachmentState: 'ready',
@@ -1170,7 +1237,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		now: () => now,
 		customMongoActive: () => false,
 		store: {
-			listUnboundOwned: async (...args: unknown[]) => {
+			listBrowserDrafts: async (...args: unknown[]) => {
 				listArgs = args;
 				return [pending, ready];
 			},
@@ -1200,7 +1267,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		hasMore: false
 	});
 	assert.deepEqual(listArgs, ['user-1', 26]);
-	assert.deepEqual(scopes, [{ kind: 'draft' }, { kind: 'draft' }]);
+	assert.deepEqual(scopes, [{ kind: 'draft', browserOnly: true }, { kind: 'draft', browserOnly: true }]);
 	assert.deepEqual(deleted, ['objects/attachment-2']);
 });
 
@@ -1448,6 +1515,9 @@ test('explicit edit deletion requires and claims the exact bound target', async 
 
 test('delete claim fences distinguish unattached drafts, expired drafts, and one exact target', () => {
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft' }), { targetId: { $exists: false } });
+	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', browserOnly: true }), {
+		targetId: { $exists: false }, attachmentFileSyncOrigin: { $exists: false }
+	});
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', expiredAtOrBefore: now }), {
 		targetId: { $exists: false },
 		attachmentExpiresAt: { $lte: now }
@@ -2387,7 +2457,7 @@ test('subspace uploads stamp slot-specific purposes and bound raster limits befo
 });
 
 
-test('posts accept more than 25 owned ready attachments without relaxing other purposes or identity validation', async () => {
+test('posts and messages accept large owned selections without relaxing comment or identity validation', async () => {
 	let purpose: 'post' | 'comment' | 'message' = 'post';
 	const ids = Array.from({ length: 80 }, (_, index) => `large-gallery-${index}`);
 	const service = createAttachmentService({
@@ -2401,7 +2471,7 @@ test('posts accept more than 25 owned ready attachments without relaxing other p
 	purpose = 'comment';
 	assert.equal((await service.inspectForComment('user-1', ids)).ok, false);
 	purpose = 'message';
-	assert.equal((await service.inspectForMessage('user-1', ids)).ok, false);
+	assert.equal((await service.inspectForMessage('user-1', ids)).ok, true);
 	assert.equal((await service.inspectForPost('user-1', ids)).ok, false);
 });
 
@@ -2505,7 +2575,18 @@ test('bound Messenger media rechecks target membership even for its uploader', a
   }
 });
 
-test('zero-byte file starts finalize a real stored object and replay the same request without MPU or duplicate quota', async () => {
+test('empty social uploads require an exact numeric zero before storage reservation', async () => {
+    let reserves = 0;
+    const service = createAttachmentService({ store: { reservePending: async () => { reserves++; throw Error('must not reserve'); } } as any });
+    for (const purpose of ['post', 'comment', 'message']) for (const sizeBytes of ['0', null, false, -1]) {
+        const result = await service.start('user-1', { purpose, filename: 'empty.custom', contentType: 'application/octet-stream', sizeBytes });
+        assert.equal(result.ok, false);
+        if (!result.ok) assert.equal(result.status, 400);
+    }
+    assert.equal(reserves, 0);
+});
+
+for (const purpose of ['file', 'post', 'comment', 'message']) test(`zero-byte ${purpose} starts finalize a real stored object and replay without MPU or duplicate quota`, async () => {
     const { mkdtemp, rm } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
     const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
@@ -2530,19 +2611,19 @@ test('zero-byte file starts finalize a real stored object and replay the same re
                 doc.attachmentState = 'finalizing'; doc.attachmentFinalizationLeaseId = lease; return { doc, acquired: true };
             },
             renewFinalizing: async (_owner: string, id: string, lease: string) => stored.get(id)?.attachmentFinalizationLeaseId === lease ? stored.get(id)! : null,
-            markReady: async (_owner: string, id: string, crystal: any, version: string, _expires: Date, lease: string) => {
+            markReady: async (_owner: string, id: string, crystal: any, version: string, expires: Date, lease: string) => {
                 const doc = stored.get(id)!; assert.equal(doc.attachmentFinalizationLeaseId, lease);
                 Object.assign(doc, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
-                delete doc.attachmentExpiresAt; delete doc.attachmentFinalizationLeaseId; return doc;
+                if (purpose === 'file') delete doc.attachmentExpiresAt; else doc.attachmentExpiresAt = expires; delete doc.attachmentFinalizationLeaseId; return doc;
             }
         };
         const service = createAttachmentService({ store, getS3: () => s3, customMongoActive: () => false, now: () => now });
-        const input = { requestId: 'empty-backup-1', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const input = { requestId: 'empty-backup-1', purpose, filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
         const first = await service.start('user-1', input); assert.ok(first.ok);
         if (!first.ok) return;
         assert.equal(first.upload.state, 'ready'); assert.equal(first.upload.partCount, 0);
         const id = first.upload.id as string, doc = stored.get(id)!;
-        assert.equal(doc.objectSizeBytes, 0); assert.ok(doc.objectVersionId); assert.equal(doc.attachmentExpiresAt, undefined);
+        assert.equal(doc.objectSizeBytes, 0); assert.ok(doc.objectVersionId); if (purpose === 'file') assert.equal(doc.attachmentExpiresAt, undefined); else assert.ok(doc.attachmentExpiresAt instanceof Date);
         const receipt = await service.fingerprint({ id: 'user-1' }, id); assert.ok(receipt.ok);
         if (receipt.ok) { assert.equal(receipt.size, 0); assert.equal(receipt.fingerprint.partCount, 0);
             assert.equal(receipt.fingerprint.sha256, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'); }
@@ -2553,6 +2634,12 @@ test('zero-byte file starts finalize a real stored object and replay the same re
         assert.equal((await service.complete('user-1', { uploadId: id })).ok, true);
         assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
         assert.equal((await service.fingerprint({ id: 'other' }, id)).ok, false);
+        if (purpose !== 'file') {
+            doc.targetId = 'already-bound';
+            assert.equal((await service.start('user-1', input)).ok, false);
+            delete doc.targetId; doc.attachmentExpiresAt = now;
+            assert.equal((await service.start('user-1', input)).ok, false);
+        }
         assert.equal(reserves, 1); assert.equal(emptyPuts, 1); assert.equal(multipart, 0);
     } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -2740,7 +2827,7 @@ test('same nonempty file start resumes interrupted completion through the origin
     assert.equal((await service.start('user-1', { ...input, sizeBytes: 4 })).ok, false);
 });
 
-test('same empty start resumes a failed finalization only through active and expired lease fences', async () => {
+for (const purpose of ['file', 'post', 'message']) test(`same empty ${purpose} start resumes failed finalization only through active and expired lease fences`, async () => {
     const { mkdtemp, rm, readdir } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
     const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
@@ -2768,17 +2855,17 @@ test('same empty start resumes a failed finalization only through active and exp
                 return { doc, acquired: true };
             },
             renewFinalizing: async (_owner: string, _id: string, lease: string) => doc?.attachmentFinalizationLeaseId === lease ? doc : null,
-            markReady: async (_owner: string, _id: string, crystal: any, version: string, _expiry: Date, lease: string) => {
+            markReady: async (_owner: string, _id: string, crystal: any, version: string, expiry: Date, lease: string) => {
                 marks++; assert.equal(doc!.attachmentFinalizationLeaseId, lease);
                 if (marks === 1) throw Error('transient ready persistence failure after stored empty PUT');
                 Object.assign(doc!, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
-                delete doc!.attachmentExpiresAt; delete doc!.attachmentFinalizationLeaseId; return doc;
+                if (purpose === 'file') delete doc!.attachmentExpiresAt; else doc!.attachmentExpiresAt = expiry; delete doc!.attachmentFinalizationLeaseId; return doc;
             }
         };
         const service = createAttachmentService({ store, now: () => clock, customMongoActive: () => false,
             getS3: () => ({ ...local, putEmptyObject: async input => { puts++; return local.putEmptyObject(input); },
                 headObject: async input => { heads++; return local.headObject(input); } }) });
-        const input = { requestId: 'empty-recovery-request', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const input = { requestId: 'empty-recovery-request', purpose, filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
         const failed = await service.start('user-1', input);
         assert.equal(failed.ok, false); if (!failed.ok) assert.equal(failed.status, 503);
         const reserved = doc! as AttachmentDoc, identity = reserved.shareId, key = reserved.objectKey;
@@ -2849,4 +2936,170 @@ test('sync upload origin is saved before byte authority and exact legacy retries
   assert.equal((await service.start('other-owner', input)).ok, false);
   assert.equal((await service.start('user-1', input)).ok, true);
   assert.equal(stamps, 1); assert.equal(creates, 1);
+});
+
+test('message shares preserve more than 25 opaque attachments while rejecting duplicates and wrong purpose', async () => {
+ const docs = Array.from({ length: 41 }, (_, index) => attachmentDoc({
+  shareId: `shared-file-${index}`, attachmentState: 'ready', attachmentPurpose: 'message', uploadId: undefined,
+  crystal: { name: `${index}.custom`, size: 10, contentType: 'application/x-custom', mediaKind: 'file' }
+ }));
+ const service = createAttachmentService({ store: { getOwnedMany: async () => docs } as any, now: () => now, customMongoActive: () => false });
+ const ids = docs.map(doc => doc.shareId);
+ const result = await service.inspectForMessage('user-1', ids, 'message-1');
+ assert.equal(result.ok, true);
+ if (result.ok) assert.deepEqual(result.attachments.map(file => file.id), ids);
+ assert.equal((await service.inspectForMessage('user-1', [...ids, ids[0]], 'message-1')).ok, false);
+ docs[40].attachmentPurpose = 'post';
+ assert.equal((await service.inspectForMessage('user-1', ids, 'message-1')).ok, false);
+});
+
+test('multipart planning accepts files beyond the old5TiB product cap and reports only the current S3 part ceiling', async () => {
+ const beyondOldCap = 5 * 1024 ** 4 + 1;
+ const plan = attachmentPartPlan(beyondOldCap);
+ assert.ok(plan.partCount <= 10000); assert.ok(plan.partSizeBytes <= ATTACHMENT_MAX_PART_BYTES);
+ const maximum = attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES);
+ assert.equal(maximum.partCount, 10000); assert.equal(maximum.partSizeBytes, ATTACHMENT_MAX_PART_BYTES);
+ assert.throws(() => attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES + 1), /too large/);
+ let reserved = false;
+ const service = createAttachmentService({ store: { reservePending: async () => { reserved = true; throw Error('must not reserve'); } } as any });
+ const overProtocol = await service.start('user-1', { purpose: 'post', filename: 'large.custom', contentType: 'application/octet-stream', sizeBytes: ATTACHMENT_MAX_OBJECT_BYTES + 1 });
+ assert.equal(overProtocol.ok, false); assert.equal(reserved, false);
+ if (!overProtocol.ok) assert.match(overProtocol.error, /S3 multipart ceiling/);
+});
+
+test('local provider mints HTTPS native targets only after exact owner and version verification', async () => {
+	const { mkdtemp, rm } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { createHash } = await import('node:crypto');
+	const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
+	const { attachmentContentVersion } = await import('./contentFingerprint');
+	const directory = await mkdtemp(join(tmpdir(), 'tt-local-native-target-'));
+	try {
+		const clock = new Date();
+		const local = createLocalAttachmentStorage({ directory, origin: 'https://localhost:28471' }, () => clock.getTime());
+		const bytes = Buffer.from('exact local range bytes');
+		const objectKey = 'objects/attachment-1';
+		const { uploadId } = await local.createMultipartUpload({ objectKey, attachmentId: 'attachment-1' });
+		const signed = await local.signUploadPart({ objectKey, uploadId, partNumber: 1, checksumSha256: createHash('sha256').update(bytes).digest('base64'), contentLength: bytes.length });
+		assert.equal((await local.handleRequest(new Request(signed.url, { method: 'PUT', body: bytes, headers: signed.headers }))).status, 200);
+		const { versionId } = await local.completeMultipartUpload({ objectKey, uploadId, parts: await local.listParts({ objectKey, uploadId }) });
+		const doc = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: versionId, objectSizeBytes: bytes.length });
+		const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => clock, customMongoActive: () => false, getS3: () => local });
+		const range = { version: attachmentContentVersion(doc.shareId, objectKey, versionId), offset: 2, length: 7 };
+		for (const viewer of [null, { id: 'other-account' }]) {
+			const denied = await service.downloadTarget(viewer, doc.shareId, range);
+			assert.equal(denied.ok, false);
+			if (!denied.ok) assert.equal(denied.status, viewer ? 404 : 400);
+		}
+		const result = await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range);
+		assert.equal(result.ok, true);
+		if (result.ok) {
+			assert.equal(new URL(result.target.url).protocol, 'https:');
+			const response = await local.handleRequest(new Request(result.target.url, { headers: result.target.headers }));
+			assert.equal(response.status, 206);
+			assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes.subarray(2, 9));
+			assert.equal((await local.handleRequest(new Request(result.target.url))).status, 403);
+		}
+	} finally { await rm(directory, { recursive: true, force: true }); }
+
+});
+
+test('a legacy file finalizer cannot delete a version that consolidation moved behind another logical reference', async () => {
+  for (const deletingOrigin of [false, true]) {
+    const original = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'finalizing' });
+    const retiringOrigin = { ...original, attachmentState: 'deleting' as const, objectVersionId: 'stored-version', uploadId: undefined,
+      attachmentBlob: { id: 'blob-' + 'a'.repeat(64), objectAttachmentId: original.shareId, objectVersionId: 'stored-version' } };
+    let reads = 0, renewals = 0, deletions = 0;
+    const service = createAttachmentService({
+      store: {
+        getOwned: async () => ++reads === 1 ? original : deletingOrigin ? retiringOrigin : null,
+        claimFinalizing: async () => ({ doc: original, acquired: true }),
+        renewFinalizing: async () => ++renewals === 1 ? original : null,
+        removeDeleting: async () => { throw Error('stale finalizer cannot remove a logical reference'); }
+      } as any,
+      getS3: () => noopS3({
+        listParts: async () => [
+          { partNumber: 1, etag: 'one', sizeBytes: 8 * 1024 * 1024, checksumSha256: checksum(1) },
+          { partNumber: 2, etag: 'two', sizeBytes: 2 * 1024 * 1024, checksumSha256: checksum(2) }
+        ],
+        completeMultipartUpload: async () => ({ versionId: 'stored-version' }),
+        deleteObject: async () => { deletions++; }
+      })
+    });
+    const result = await service.complete(original.ownerId, { uploadId: original.shareId });
+    assert.ok(result.ok === false && result.code === 'finalization_lease_lost');
+    assert.equal(deletions, 0);
+  }
+});
+
+test('provider-confirmed parts survive budget rounds and host reconstruction using real stored bytes', async () => {
+ const directory = await mkdtemp(join(tmpdir(), 'tt-resume-parts-'));
+ try {
+  let storage = createLocalAttachmentStorage({directory},()=>now.getTime()); const objectKey='objects/attachment-1';
+  const {uploadId}=await storage.createMultipartUpload({objectKey,attachmentId:'attachment-1'});
+  const chunks=[Buffer.alloc(8*1024*1024,17),Buffer.alloc(8*1024*1024,29),Buffer.alloc(71,43)];
+  const doc=attachmentDoc({uploadId,objectSizeBytes:chunks.reduce((n,b)=>n+b.length,0)}),sent:number[]=[],charged:number[]=[];
+  for(let round=0;round<3;round++) {
+   storage=createLocalAttachmentStorage({directory},()=>now.getTime());
+   const service=createAttachmentService({now:()=>now,getS3:()=>storage,store:{getOwned:async(owner:string,id:string)=>owner==='user-1'&&id===doc.shareId?doc:null,markPartsIssued:async()=>attachmentDoc()} as any});
+   let remaining=8*1024*1024;
+   for(const [i,bytes] of chunks.entries()) {
+    const r=await service.signParts('user-1',{uploadId:doc.shareId,reconcileAcceptedParts:true,parts:[{partNumber:i+1,checksumSha256:createHash('sha256').update(bytes).digest('base64')}]});
+    assert.equal(r.ok,true);if(!r.ok)throw Error('Reconciliation failed');const p=r.parts[0];
+    if(p.alreadyUploaded===true)continue;
+    if(bytes.length>remaining)break;
+    const response=await storage.handleRequest(new Request(new URL(p.url as string,'http://storage.test'),{method:'PUT',headers:{...(p.headers as Record<string,string>),'content-length':String(bytes.length)},body:bytes}));
+    assert.equal(response.status,200);sent.push(i+1);charged.push(bytes.length);remaining-=bytes.length;
+   }
+  }
+  assert.deepEqual(sent,[1,2,3],'no accepted part is retransmitted across allowance waits or reconstructed hosts');
+  assert.deepEqual(charged,chunks.map(b=>b.length),'verified skips add zero payload bytes');
+  const legacyService=createAttachmentService({now:()=>now,getS3:()=>storage,store:{getOwned:async()=>doc,markPartsIssued:async()=>doc} as any});
+  const legacy=await legacyService.signParts('user-1',{uploadId:doc.shareId,parts:[{partNumber:1,checksumSha256:createHash('sha256').update(chunks[0]).digest('base64')}]});
+  assert.equal(legacy.ok,true);if(!legacy.ok)throw Error('Legacy signing refused');
+  assert.equal(legacy.parts[0].alreadyUploaded,undefined);
+  // A pre-upgrade caller ignores the additive flag. Its unchanged full-size
+  // signed grant still accepts the full PUT; no zero-byte admission was issued.
+  const oldPut=await storage.handleRequest(new Request(new URL(legacy.parts[0].url as string,'http://storage.test'),{method:'PUT',headers:{...(legacy.parts[0].headers as Record<string,string>),'content-length':String(chunks[0].length)},body:chunks[0]}));
+  assert.equal(oldPut.status,200);
+  const parts=await storage.listParts({objectKey,uploadId});const completed=await storage.completeMultipartUpload({objectKey,uploadId,parts});
+  const signed=await storage.signDownload({objectKey,versionId:completed.versionId,contentType:'application/octet-stream',contentDisposition:'attachment'});
+  const result=await storage.handleRequest(new Request(new URL(signed.url,'http://storage.test')));assert.equal(result.status,200);
+  assert.equal(createHash('sha256').update(Buffer.from(await result.arrayBuffer())).digest('hex'),createHash('sha256').update(Buffer.concat(chunks)).digest('hex'));
+ } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+test('reconciliation fails closed for malformed or unavailable proof and reservation changes', async()=>{
+ const row={partNumber:1,sizeBytes:8*1024*1024,checksumSha256:checksum(1),etag:'one'},body={uploadId:'attachment-1',reconcileAcceptedParts:true,parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ for(const rows of [[row,row],[{...row,sizeBytes:1}],[{...row,checksumSha256:''}]]){
+  let signed=0;const service=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>rows,signUploadPart:async()=>{signed++;throw Error('must not sign');}})});
+  assert.equal((await service.signParts('user-1',body)).ok,false);assert.equal(signed,0);
+ }
+ let live=true,signed=0;
+ const service=createAttachmentService({now:()=>now,store:{getOwned:async()=>live?attachmentDoc():null,markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{live=false;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign');}})});
+ assert.equal((await service.signParts('user-1',body)).ok,false);assert.equal(signed,0);
+ const unavailable=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{throw Error('provider unavailable')}})});
+ const result=await unavailable.signParts('user-1',body);assert.equal(result.ok,false);if(!result.ok)assert.equal(result.status,503);
+});
+
+test('legacy signing remains available without provider proof while opt-in lookup failures are retryable',async()=>{
+ let lookups=0;const service=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{lookups++;throw Error('ListParts unavailable')}})});
+ const body={uploadId:'attachment-1',parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ const legacy=await service.signParts('user-1',body);assert.equal(legacy.ok,true);assert.equal(lookups,0);
+ if(legacy.ok){assert.equal(legacy.parts[0].alreadyUploaded,undefined);assert.equal(typeof legacy.parts[0].url,'string');}
+ const guarded=await service.signParts('user-1',{...body,reconcileAcceptedParts:true});assert.equal(guarded.ok,false);assert.equal(lookups,1);if(!guarded.ok)assert.equal(guarded.status,503);
+ for(const flag of [null,'true',1])assert.equal((await service.signParts('user-1',{...body,reconcileAcceptedParts:flag})).ok,false);
+});
+
+test('opted-in acceptance refuses expiry and revoked authority after provider awaits',async()=>{
+ const row={partNumber:1,sizeBytes:8*1024*1024,checksumSha256:checksum(1),etag:'one'};
+ const body={uploadId:'attachment-1',reconcileAcceptedParts:true,parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ let clock=now.getTime(),signed=0;
+ const expired=createAttachmentService({now:()=>new Date(clock),store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{clock=now.getTime()+60001;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign')}})});
+ const expiry=await expired.signParts('user-1',body);assert.equal(expiry.ok,false);if(!expiry.ok)assert.equal(expiry.status,410);assert.equal(signed,0);
+ let revoked=false;
+ const denied=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{revoked=true;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign')}})});
+ const authority={expiresAt:new Date(now.getTime()+60000),expectedFingerprint:{algorithm:'sha256-parts-v1' as const,partSizeBytes:8*1024*1024,partCount:2,sha256:'a'.repeat(64)},check:async()=>revoked?{ok:false as const,status:403,error:'revoked'}:undefined};
+ const result=await denied.signParts('user-1',body,authority);assert.equal(result.ok,false);if(!result.ok)assert.equal(result.status,403);assert.equal(signed,0);
 });

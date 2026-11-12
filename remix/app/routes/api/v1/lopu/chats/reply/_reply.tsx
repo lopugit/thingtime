@@ -230,6 +230,7 @@ export const action = async ({ request }: { request: Request }) => {
 // public action always authenticates above; no caller-supplied user is accepted.
 export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean; resolveActionActor?: ResolveActionActor } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
+  if (request.headers.get('X-Thingtime-Device-Inference') === '1') return json({ ok: false, error: 'Open this conversation on the device that owns its connection.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
   const unsupported = requireJsonContentType(request);
@@ -369,8 +370,8 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       }
     }
     if (vaultProvider) {
-      // the chat's effort travels to the user's provider (the decorated → bare
-      // retry ladder covers an endpoint that rejects it); the model is the
+      // Keep the chat preference; the provider boundary normalizes effective
+      // effort against the resolved saved model's catalog. The model is the
       // connection's own, or the requested one for a connection saved without
       vaultProvider.effort = isAiModelEffort(requested.effort) ? requested.effort : (choice?.effort ?? null);
       vaultProvider.requestedModel = requested.model;

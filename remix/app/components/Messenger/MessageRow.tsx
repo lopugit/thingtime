@@ -1,3 +1,4 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
 import { Box, Button, Flex, Image } from '@chakra-ui/react';
 import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
@@ -61,7 +62,7 @@ const Avatar = ({
   const letter = (profile ? getUserDisplayName(profile) : '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
 		return (
-			<Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />
+			<Box width={`${size}px`} height={`${size}px`} borderRadius="full" overflow="hidden" flexShrink={0}><PresentedImage src={profile.avatarUrl} presentation={profile.avatarPresentation} alt={letter} /></Box>
 		);
   }
   return (
@@ -245,7 +246,7 @@ export const MessageRow = (props: MessageRowProps) => {
       ) : null}
       {!sourceLocked && (canEdit || props.onDelete) ? (
         <ThingActionMenuButton identity={message.id} label="Message actions"
-          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete })}
+          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete }, [], message.id)}
           onAction={({ action }) => {
             if (action.command === 'edit' && canEdit) props.onEdit?.(message);
             else if (action.command === 'delete') props.onDelete?.(message);

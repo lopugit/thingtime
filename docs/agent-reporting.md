@@ -15,10 +15,32 @@ incompatible manifest. A failed check can be retried after the origin is fixed.
 
 Reporting requires the independent `agents.report` PAT permission. Existing
 `things` or `things.read` grants do not include it and are never upgraded
-silently. In the normal Thingtime connection authorization, select this
-permission in Advanced settings and reconnect once. A reporting-only connection
-can omit the general Things permissions. Keep the resulting credential within
-the host's OAuth connection; never paste it into a chat or a source file.
+silently. In the current host, list accounts and verify the connected profile.
+Call `login_thingtime` with the exact `accountId` and
+`requiredScopes: ["agents.report"]`, or call a reporting tool with the exact
+account ID. For the same Thingtime origin, an account missing the permission
+returns an `insufficient_scope` tool challenge. The host opens its registered
+OAuth flow; authorize **Private agent reporting** for the verified signed-in
+Thingtime account. Additional Things access is optional and explicit. Cancel
+leaves the existing grant unchanged and creates no reporting credential.
+Reopening the same scoped OAuth attempt after approval or cancellation is
+refused during its replay retention window; start a fresh host authorization.
+
+OAuth approval can return a new named account ID in the host. Previous grants
+are not changed or copied to that connection. After approval, list accounts and
+verify the owner, origin and live `agents.report` scope with
+`get_thingtime_profile`. Use that exact account ID before resuming any reporting
+write. The stable reporting identity stays bound to its owner, origin and
+`externalTaskId`; a new named account ID for the same owner and origin does not
+require a new task. Keep credentials within the host's connection. Existing
+grants that already explicitly included the reporting PAT permission still work.
+
+The upgrade contract requires `api.chatgpt-mcp` 2.2.0,
+`api.chatgpt-oauth-authorize` 1.3.0 and `api.chatgpt-oauth-token` 1.1.0, or
+compatible versions at the exact host origin. For a host that does not act on
+the challenge, use its supported OAuth connection controls and the existing
+Advanced connection settings permission selector; verify the resulting profile
+before doing any reporting.
 
 The permission delegates only the closed private reporting workflow. Public-only
 and creation-only sandbox tokens cannot use it. The account must own the exact
@@ -58,7 +80,10 @@ access are checked again on later work.
 Coordination uses the existing private-subspace audience rules. The gateway
 never changes subspace visibility and refuses further work if it is no longer
 private. An owner deliberately changing visibility later retains the normal
-product behavior; reporting does not add a separate visibility lock.
+product behavior; reporting does not add a separate visibility lock. A
+private-only reporting token can read this exact bound post through reporting
+even though its base audience is `tt:all` within the private subspace. This
+does not grant access through the general Things API.
 
 Each report requires a UUID-v4 `requestId`. Retrying an uncertain response must
 reuse both that ID and the immutable inputs. A different payload with the same
@@ -83,15 +108,33 @@ specific dependency is unavailable.
 Readback exposes safe operation state when a request was interrupted. A failure
 proved to precede any data mutation releases its task lock; an ambiguous write
 retains its receipt and lock. Do not change its request ID to retry or directly
-delete protected records. Inspect the exact candidate records and report the
-remaining recovery requirement before continuing dependent writes.
+delete protected records.
+
+With compatible `api.agent-reporting` 1.1.0 or later, a coordination receipt can
+reconcile a saved post after text moderation releases it. Inspect `activeOperation`
+and retry the original `coordinate_thingtime_agent_task` arguments, including the
+same request ID, title, text and renderer. The server does not create or update
+the post on this retry. It checks the saved post's exact Character, normalized
+content and private subspace projection, confirms authorized reads and anonymous
+refusal, and releases the task lock only when the binding and receipt are complete.
+A still-pending, blocked, changed, or unverifiable post leaves the operation
+unresolved. Readback still reports the active operation even if moderation
+temporarily makes a previously bound post unreadable. An interrupted update
+without a saved write confirmation stays pending even if the previous post
+has the same content. Older initial creates lack that confirmation; only the
+deterministic first post created at or after the receipt can qualify, while
+the task still holds that request's lock and has no bound post. Saved Action
+mutations do not use this coordination recovery path.
 
 ## Verification
 
 Run `test:chatgpt`, `test:agent-reporting`, `test:characters`, `test:pat-scopes`
 and `test:api-capabilities` from `remix`. The HTTP acceptance runner is
-`node remix/scripts/agent-reporting-acceptance.mjs` after a Node-server build.
-Supply `AGENT_REPORTING_AUTHORED_THINGS` as an external synthetic saved-workspace
+`node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect` after a
+Node-server build. It verifies actual reporting through the upgraded MCP grant
+using synthetic workspace Things created through the API. To test the broader
+reporting lifecycle, omit `--scoped-reconnect` and supply
+`AGENT_REPORTING_AUTHORED_THINGS` as an external synthetic saved-workspace
 fixture. It uses a disposable replica set, synthetic accounts, normal API
 fixture writes and a real OAuth/MCP exchange; no production credential or
 personal browser profile belongs in this test.

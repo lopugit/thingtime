@@ -71,3 +71,20 @@ export function updateSpeedTracker(blocks: WebpageBlock[], tracker: SpeedTracker
  if (input) input.props = { ...input.props, min: 1 / seconds, max: 86400 / seconds };
  return copy;
 }
+
+export type TransferSpeedDraftState = {
+ blocks?: WebpageBlock[];
+ fields?: Record<string, Partial<Record<'window' | 'time' | 'unit', string>>>;
+ error?: string;
+};
+/** Restore raw edits without treating an incomplete timeframe as valid prefs. */
+export function speedDraftBlocks(blocks: WebpageBlock[], fields: TransferSpeedDraftState['fields']): WebpageBlock[] {
+ const result = structuredClone(blocks);
+ for (const tracker of readSpeedTrackers(result)) for (const field of ['window', 'time', 'unit'] as const) {
+  const input = findBlock(result, `${tracker.id}-${field}`); if (!input) continue;
+  const value = fields?.[tracker.id]?.[field];
+  input.props = { ...input.props, ...(value !== undefined ? { value } : {}), 'data-tt-action': '$transient',
+   'data-tt-action-inputs': { operation: 'edit', id: tracker.id, field } };
+ }
+ return result;
+}

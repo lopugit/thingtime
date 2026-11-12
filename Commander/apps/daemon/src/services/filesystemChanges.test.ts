@@ -134,6 +134,71 @@ describe('background filesystem notification delivery', () => {
     }
   });
 
+  it.each([
+    ['an unnamed event', "recordChange('change', null, '/outside')", false],
+    ['a volume mount', "recordChange('rename', 'External', '/Volumes')", true],
+  ])(
+    'requests full reconciliation for %s without relying on path deltas',
+    async (_reason, event, volumesChanged) => {
+      const changed = vi.fn();
+      const observer = new FileChangeObserver(
+        options,
+        changed,
+        () => undefined,
+        (source, workerOptions) => new Worker(`${source}\n${event};`, workerOptions),
+      );
+      try {
+        await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+        expect(await observer.take()).toMatchObject({ paths: [], fullReconciliation: true, volumesChanged });
+      } finally {
+        await observer.close();
+      }
+    },
+  );
+
+  it('forwards authorized filesystem events without collapsing inventory paths into application bundles', async () => {
+    const changed = vi.fn();
+    let worker!: Worker;
+    const observer = new FileChangeObserver(
+      { ...options, inventoryEnabled: true },
+      changed,
+      () => undefined,
+      (source, workerOptions) => {
+        worker = new Worker(
+          `${source}
+          parentPort.on('message', message => {
+            if (message.type === 'inventory-change')
+              {
+                recordChange('change', 'content.txt', '/fixture/Inside.app');
+                recordChange('change', 'external.txt', '/not-a-search-root');
+              }
+          });
+        `,
+          workerOptions,
+        );
+        return worker;
+      },
+    );
+    try {
+      await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+      expect(await observer.take()).toMatchObject({
+        paths: [],
+        inventoryPaths: [],
+        inventoryLostEvents: true,
+        fullReconciliation: false,
+      });
+      worker.postMessage({ type: 'inventory-change' });
+      await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(2), { timeout: 2500 });
+      expect(await observer.take()).toMatchObject({
+        paths: ['/fixture/Inside.app'],
+        inventoryPaths: ['/fixture/Inside.app/content.txt'],
+        inventoryLostEvents: false,
+      });
+    } finally {
+      await observer.close();
+    }
+  });
+
   it('contains a worker failure, rejects pending/future batches and never enters a restart loop', async () => {
     let starts = 0;
     const unavailable = vi.fn();

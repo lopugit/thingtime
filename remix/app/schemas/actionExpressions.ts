@@ -21,6 +21,8 @@
 // run-time refusal. Pack calls count against the operation budget because
 // they are the only functions with non-trivial cost.
 
+import { CIVIL_DATE, civilDateEpoch, offsetCivilDate } from './civilDates';
+
 export const MAX_EXPRESSION_ARGS = 24;
 export const MAX_EXPRESSION_NODES_PER_RUN = 20_000;
 export const MAX_EXPRESSION_LIST_LENGTH = 1000;
@@ -90,6 +92,7 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	startsWith: sig(2, 2, 'Text starts with prefix.'),
 	endsWith: sig(2, 2, 'Text ends with suffix.'),
 	replace: sig(3, 3, 'Replace every occurrence of a substring.'),
+	encodeURIComponent: sig(1, 1, 'UTF-8 URI-component encoding of text; null/undefined become empty text. Other types and unpaired UTF-16 surrogates are refused.'),
 	padStart: sig(2, 3, 'Pad text on the left to a length (fill defaults to " ").'),
 	toNumber: sig(1, 1, 'Coerce to a number (null when not numeric).'),
 	toString: sig(1, 1, 'Coerce to text.'),
@@ -132,6 +135,7 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	dateDiff: sig(3, 3, 'Difference b − a in unit (second/minute/hour/day/week).'),
 	dayOfYear: sig(1, 1, '1-based day of the (UTC) year.'),
 	isoDate: sig(1, 1, 'Calendar date "YYYY-MM-DD" of an ISO timestamp (UTC).'),
+	civilDateRange: sig(2, 2, 'Consecutive civil dates beginning with YYYY-MM-DD for the specified count.'),
 	formatDate: sig(2, 3, 'Format an ISO timestamp: kind "date" | "time" | "datetime" | "weekday" | "month", optional time zone.'),
 	// ── domain packs (implementations bind server-side; arities mirror
 	// api/utils/actions/packs/<pack>/index.ts *_PACK_ARITIES) ──
@@ -673,6 +677,15 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			capProjectedText(source.length + (parts.length - 1) * (replacement.length - needle.length), ctx);
 			return capText(parts.join(replacement), ctx);
 		}
+		case 'encodeURIComponent': {
+			const value = args[0];
+			if (value !== null && value !== undefined && typeof value !== 'string') return ctx.fail('encodeURIComponent expected text or null');
+			const source = capText((value ?? '') as string, ctx);
+			let encoded: string;
+			try { encoded = encodeURIComponent(source); }
+			catch { return ctx.fail('encodeURIComponent requires well-formed UTF-16 text'); }
+			return capText(encoded, ctx);
+		}
 		case 'padStart':
 			return capText(
 				text(0).padStart(Math.max(0, Math.min(MAX_EXPRESSION_STRING_CHARS, Math.trunc(num(1)))), args.length > 2 ? text(2) || ' ' : ' '),
@@ -883,6 +896,14 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return partsIn(parseDate(args[0], ctx, 'dayOfYear'), undefined).dayOfYear;
 		case 'isoDate':
 			return parseDate(args[0], ctx, 'isoDate').toISOString().slice(0, 10);
+		case 'civilDateRange': {
+			const epoch = civilDateEpoch(args[0]);
+			const count = num(1);
+			if (epoch === null) return ctx.fail('civilDateRange needs a valid YYYY-MM-DD date');
+			if (!Number.isInteger(count) || count < 0 || count > MAX_EXPRESSION_RANGE) return ctx.fail('civilDateRange count is outside the expression range budget');
+			if (count && !CIVIL_DATE.test(offsetCivilDate(epoch, count - 1))) return ctx.fail('civilDateRange extends beyond the supported calendar');
+			return Array.from({ length: count }, (_value, index) => offsetCivilDate(epoch, index));
+		}
 		case 'formatDate': {
 			const date = parseDate(args[0], ctx, 'formatDate');
 			const kind = text(1).toLowerCase();

@@ -7,6 +7,8 @@ import type { PagedRunSpec } from './pagedRunJournal';
 import type { SyncOperation } from './execute';
 import type { SyncEntry } from './reconcile';
 import { folderBatchDigest } from './folderBatch';
+import { PAGED_RUN_STORES, REVIEW_STORE } from './pagedRunJournal';
+import { syncScopeKey } from './reconcile';
 const sourceFile = JSON.parse(readFileSync(new URL('./fixtures/uploadBatchDigest.v1.json', import.meta.url), 'utf8')).vectors[0].descriptor.members[0]
 	.write.operation.mutation.source;
 const identity = (source: 'local' | 'remote') => ({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source });
@@ -27,7 +29,7 @@ const receipt = (operation: SyncOperation) => {
 	assert.equal(operation.mutation.kind, 'copy');
 	return { operationId: operation.id, scope, entry: { ...(operation.mutation as any).source, id: operation.id, version: 'r1' } };
 };
-async function fixture(paths: { path: string; file?: boolean }[]) {
+async function fixture(paths: { path: string; file?: boolean }[], knownParent?: string) {
 	const f = await foregroundFixture(),
 		s = spec(),
 		access = { scope, currentScope: () => scope };
@@ -54,7 +56,7 @@ async function fixture(paths: { path: string; file?: boolean }[]) {
 					scope,
 					saved.configuration.remoteFolderId,
 					null,
-					parent ? parents.get(parent)! : saved.configuration.remoteFolderId
+					parent ? parents.get(parent) ?? knownParent! : saved.configuration.remoteFolderId
 				)
 			}
 		);
@@ -72,6 +74,44 @@ async function fixture(paths: { path: string; file?: boolean }[]) {
 			runs = f.journal().pagedRuns(access);
 		}
 	};
+}
+// Model a persisted old file reservation whose parent was subsequently
+// proven unpublished by a separate stream revision. The production writer
+// creates this marker only while retiring that original folder operation.
+async function seedParentSupersession(f: Awaited<ReturnType<typeof fixture>>, parent: SyncOperation) {
+	const key = syncScopeKey(scope);
+	await new Promise<void>((resolve, reject) => {
+		const open = f.f.factory.open('thingtime-file-sync-v1');
+		open.onerror = () => reject(open.error);
+		open.onsuccess = () => {
+			const db = open.result, tx = db.transaction([PAGED_RUN_STORES[0], REVIEW_STORE], 'readwrite');
+			tx.oncomplete = () => { db.close(); resolve(); };
+			tx.onerror = () => { db.close(); reject(tx.error); };
+			const head = tx.objectStore(PAGED_RUN_STORES[0]).get([key, f.s.id]);
+			head.onsuccess = () => tx.objectStore(REVIEW_STORE).add({ scope: key, run: f.s.id, instance: head.result.instance, operation: parent, cause: 'source-supersession' },
+				[key, f.s.id, 'folder-supersession', parent.id]);
+		};
+	});
+}
+async function setBatchMemberDispatch(f: Awaited<ReturnType<typeof fixture>>, batchId: string, ordinal: number, value: boolean | undefined) {
+	const key = syncScopeKey(scope);
+	await new Promise<void>((resolve, reject) => {
+		const open = f.f.factory.open('thingtime-file-sync-v1');
+		open.onerror = () => reject(open.error);
+		open.onsuccess = () => {
+			const db = open.result, tx = db.transaction(REVIEW_STORE, 'readwrite');
+			tx.oncomplete = () => { db.close(); resolve(); };
+			tx.onerror = () => { db.close(); reject(tx.error); };
+			const store = tx.objectStore(REVIEW_STORE), token = [key, f.s.id, 'batch-member', batchId, ordinal], get = store.get(token);
+			get.onsuccess = () => {
+				if (!get.result) { reject(Error('Missing synthetic batch member')); return; }
+				const member = get.result;
+				if (value === undefined) delete member.canonicalDispatched;
+				else member.canonicalDispatched = value;
+				store.put(member, token);
+			};
+		};
+	});
 }
 test('representative512queue reserves117folders topologically then releases395files in bounded batches', async () => {
 	const dirs = ['Root', ...Array.from({ length: 116 }, (_, i) => `Root/d${String(i).padStart(3, '0')}`)];
@@ -222,6 +262,92 @@ test('forced folder-child recovery can park without changing its ID while a legi
 	assert.equal((await f.runs().targetRebind(f.s, file.id))!.undispatched, false);
 	await assert.rejects(f.runs().deferTargetRebind(f.s, file.id), /unresolved/);
 	assert.equal((await f.runs().claimNext(f.s))!.id, file.id);
+	f.f.journal().close();
+});
+
+test('saved file-batch children defer in original order until a replacement parent is confirmed', async () => {
+	const oldParentId = crypto.randomUUID();
+	const f = await fixture([{ path: 'A/a', file: true }, { path: 'A/b', file: true }], oldParentId);
+	const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	assert.equal(batch.members.length, 2);
+	await f.runs().recoverUploadBatch(f.s);
+	const parentSource: SyncEntry = { path: 'A', id: 'old-inode', version: 'v1', kind: 'folder', size: 0, sha256: null };
+	const oldParent: SyncOperation = { id: oldParentId, confirmed: false, mutation: { kind: 'copy', from: 'local', path: 'A', source: parentSource, expectedTarget: null } };
+	await seedParentSupersession(f, oldParent);
+	await f.reopen();
+	for (const original of f.operations) {
+		const selected = (await f.runs().claimNext(f.s))!;
+		assert.equal(selected.id, original.id);
+		assert.equal((await f.runs().targetRebind(f.s, selected.id))!.parentId, null);
+		await f.runs().deferTargetRebind(f.s, selected.id);
+		await f.reopen();
+	}
+	assert.equal((await f.runs().streamPriorityReadiness(f.s, true)).reservationKind, 'none');
+	const replacementSource = { ...parentSource, id: 'new-inode', version: 'v2' };
+	const replacement: SyncOperation = { id: crypto.randomUUID(), confirmed: false, mutation: { kind: 'copy', from: 'local', path: 'A', source: replacementSource, expectedTarget: null } };
+	await f.runs().appendStream(f.s, { sequence: 3, generation: f.s.streaming!.captureId, revision: replacementSource.version, entry: replacementSource },
+		{ write: prepareCloudInventoryWrite(replacement, scope, saved.configuration.remoteFolderId, null, saved.configuration.remoteFolderId) });
+	assert.equal((await f.runs().claimNext(f.s))!.id, replacement.id);
+	await f.runs().confirm(f.s, receipt(replacement));
+	for (const original of f.operations) {
+		const selected = (await f.runs().claimNext(f.s))!;
+		assert.equal(selected.id, original.id);
+		assert.equal((await f.runs().targetRebind(f.s, selected.id))!.parentId, replacement.id);
+		const rebound = await f.runs().rebindStreamTarget(f.s, original.id, (original.mutation as any).source, replacement.id);
+		await f.reopen();
+		assert.notEqual(rebound.id, original.id);
+		assert.equal((await f.runs().claimNext(f.s))!.id, rebound.id);
+		assert.equal((await f.runs().cloudBinding(f.s, saved.configuration, { id: rebound.id }))!.write.folderId, replacement.id);
+		await f.runs().confirm(f.s, receipt(rebound));
+	}
+	assert.equal((await f.runs().active())!.progress.confirmed, 3);
+	f.f.journal().close();
+});
+
+test('terminal dependent batch recovery refuses an unknown member dispatch even when its row is false', async () => {
+	const oldParentId = crypto.randomUUID();
+	const f = await fixture([{ path: 'A/a', file: true }], oldParentId);
+	const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	assert.equal(batch.members.length, 1);
+	await f.runs().recoverUploadBatch(f.s);
+	const parentSource: SyncEntry = { path: 'A', id: 'old-inode', version: 'v1', kind: 'folder', size: 0, sha256: null };
+	const oldParent: SyncOperation = { id: oldParentId, confirmed: false,
+		mutation: { kind: 'copy', from: 'local', path: 'A', source: parentSource, expectedTarget: null } };
+	await seedParentSupersession(f, oldParent);
+	await f.runs().endRemountedLocalFeed(f.s);
+	await f.runs().sealStream(f.s, f.s.streaming!.captureId, 1);
+	await setBatchMemberDispatch(f, batch.batchId, 0, undefined);
+	const selected = (await f.runs().claimNext(f.s, true, 128, false, false, false))!;
+	assert.equal(selected.id, f.operations[0].id);
+	assert.equal((await f.runs().targetRebind(f.s, selected.id))!.undispatched, true, 'row alone is insufficient proof');
+	await assert.rejects(f.runs().skipUnpublishedStreamOperation(f.s, selected.id, false), /canonical write may still be in flight/i);
+	await f.reopen();
+	assert.equal((await f.runs().claimNext(f.s, true, 128, false, false, false))!.id, selected.id);
+	assert.deepEqual([(await f.runs().active())!.progress.operations, (await f.runs().active())!.progress.confirmed], [1, 0]);
+	await setBatchMemberDispatch(f, batch.batchId, 0, true);
+	await assert.rejects(f.runs().skipUnpublishedStreamOperation(f.s, selected.id, false), /canonical write may still be in flight/i);
+	const fence = { kind: 'terminal-no-effect' as const, id: selected.id, operationId: selected.id, expectedRevision: null };
+	await assert.rejects(f.runs().skipUnpublishedStreamOperation(f.s, selected.id, false, false, false,
+		{ ...fence, operationId: crypto.randomUUID() }), /does not bind/i);
+	assert.equal((await f.runs().skipUnpublishedStreamOperation(f.s, selected.id, false, false, false, fence)).operations, 0);
+	f.f.journal().close();
+});
+
+test('file-batch deferral refuses a member with possible canonical dispatch', async () => {
+	const oldParentId = crypto.randomUUID();
+	const f = await fixture([{ path: 'A/a', file: true }], oldParentId);
+	const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	await f.runs().markUploadBatchCommit(f.s, batch.batchId, [0]);
+	await f.runs().recoverUploadBatch(f.s);
+	const parentSource: SyncEntry = { path: 'A', id: 'old-inode', version: 'v1', kind: 'folder', size: 0, sha256: null };
+	await seedParentSupersession(f, { id: oldParentId, confirmed: false, mutation: { kind: 'copy', from: 'local', path: 'A', source: parentSource, expectedTarget: null } });
+	await f.reopen();
+	const selected = (await f.runs().claimNext(f.s))!;
+	assert.equal(selected.id, f.operations[0].id);
+	await assert.rejects(f.runs().deferTargetRebind(f.s, selected.id), /uncertain/);
+	await f.reopen();
+	assert.equal((await f.runs().claimNext(f.s))!.id, selected.id);
+	assert.equal((await f.runs().streamPriorityReadiness(f.s, true)).reservationRemaining, 1);
 	f.f.journal().close();
 });
 

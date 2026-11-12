@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -14,8 +15,10 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 	const dir = await mkdtemp(join(tmpdir(), 'thingtime-device-sync-ui-'));
 	try {
 		let source = await readFile(join(root, 'scripts/mobile-sync-editor.browser.tsx'), 'utf8');
-		source = `import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingParentPaths';\nimport {ThingFileLocation} from '../app/components/Things/ThingFileLocation';\nimport {UnfiledAttachmentsPage} from '../app/components/Things/UnfiledAttachmentsPage';\nimport {DeviceSyncPanel,DeviceSyncBrowser} from '../app/components/Devices/DeviceSyncBrowser';\nimport {DeviceCard} from '../app/components/Devices/DeviceCard';\nimport {DeviceDetailsDrawer} from '../app/components/Devices/DeviceDetailsDrawer';\n${source}`;
-		source = source.replace('element: <Fixture />', 'element: <DeviceBrowserFixture />');
+		source = `import { useLocation } from 'react-router';
+import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingParentPaths';\nimport {ThingFileLocation} from '../app/components/Things/ThingFileLocation';\nimport {UnfiledAttachmentsPage} from '../app/components/Things/UnfiledAttachmentsPage';\nimport {DeviceSyncPanel,DeviceSyncBrowser} from '../app/components/Devices/DeviceSyncBrowser';\nimport {DeviceCard} from '../app/components/Devices/DeviceCard';\nimport {DeviceDetailsDrawer} from '../app/components/Devices/DeviceDetailsDrawer';\n${source}`;
+		source = source.replace('<Fixture />', '<DeviceBrowserFixture />');
+		source = source.replace("id: 'root', path: '/'", "id: 'root', path: '*'");
 		source = source
 			.replace(
 				"if (desktop && (taskQA || homeQA) && url.pathname === '/api/v1/webpages/resolve') {",
@@ -35,7 +38,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
               return fixtureJson({ok:true,things:url.searchParams.get('cursor')?matches.slice(1):matches.slice(0,1),nextCursor:url.searchParams.get('cursor')?null:'unfiled-second-page'});
             }
           }`);
-		source += `\nfunction DeviceBrowserFixture(){parentPathBlocks[0].children.find(b=>b.id==='parent-path-actions').children.find(b=>b.id==='parent-path-scan').props['data-tt-action-inputs']=JSON.stringify({operation:'scan'});if(!rows.some(r=>r.id==='fixture-extra-attachment'))rows.push({id:'fixture-extra-attachment',thingtime:['attachment'],crystal:{name:'extra-file.txt'}});if(!rows.some(r=>r.id==='fixture-file-2'))rows.push({id:'fixture-file-2',thingtime:['file'],folderId:'cloud-backups',crystal:{name:'saved-search.svg',content:{attachmentId:'fixture-attachment'}}},{id:'cloud-backups',thingtime:['folder'],crystal:{name:'Backups'}});if(!rows.some(r=>r.id==='fixture-file'))rows.push({id:'fixture-file',thingtime:['file'],folderId:'cloud-documents',crystal:{name:'search.svg',trashed:false,content:{attachmentId:'fixture-attachment'}}},{id:'fixture-attachment',thingtime:['attachment'],folderId:null,targetId:null,crystal:{name:'search.svg',contentType:'application/octet-stream',mediaKind:'file',size:494}});const [mode,setMode]=useState('root');const [selected,setSelected]=useState(false);const summary:any={id:deviceId,name:'Test Mac',platform:'macos',serviceStatus:'stopped',pairingStatus:'paired',transportStatus:'offline',revision:1,lastSeenAt:null,capabilities:[],permissionMode:'ask'};const state:any={deviceId,summary,snapshot:null,commands:[],approvals:[],sessions:[],screenSessions:[]};return <ChakraProvider><Box maxWidth="1100px" mx="auto" p={4}><Button onClick={()=>setMode('root')}>All Things test entry</Button><Button onClick={()=>setMode('drawer')}>Open quick settings</Button><Button onClick={()=>setMode('page')}>Open settings page</Button><Button onClick={()=>setMode('sync')}>Open dedicated sync page</Button><Button onClick={()=>setMode('location')}>Open file location</Button><Button onClick={()=>setMode('origin')}>Open unpublished sync source</Button><Button onClick={()=>setMode('bound-location')}>Open recorded location</Button><Button onClick={()=>setMode('unfiled')}>Open unfiled files</Button><Button onClick={()=>setMode('parents')}>Open parent paths</Button><Text role="status">Selection: {selected?'device':'none'}</Text>{mode==='parents'?<ThingParentPaths thing={{id:'fixture-attachment',thingtime:['attachment'],crystal:{name:'search.svg'}}}/>:null}{mode==='origin'?<ThingFileLocation thing={{id:'unpublished-blob',thingtime:['attachment'],fileSyncOrigin:{version:1,deviceId,localRootId:'local-root',cloudRootId:'cloud-documents',fileId:'fixture-file',folderId:'cloud-documents',path:'Icons/search.svg'}}}/>:null}{mode==='bound-location'?<ThingFileLocation thing={{id:'bound-blob',thingtime:['attachment'],targetId:'fixture-file'}}/>:null}{mode==='sync'?<DeviceSyncPanel deviceId={deviceId} ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]}/>:mode==='location'?<ThingFileLocation thing={{id:'unbound-blob',thingtime:['attachment'],folderId:null,targetId:null,crystal:{name:'search.svg',size:494}}}/>:mode==='unfiled'?<UnfiledAttachmentsPage/>:null}{mode==='root'?<DeviceCard device={summary} selected={selected} onSelect={()=>setSelected(true)} onOpen={()=>setMode('files')} />:mode==='files'?<DeviceSyncBrowser deviceId={deviceId}/>:null}<DeviceDetailsDrawer isOpen={mode==='drawer'||mode==='page'} presentation={mode==='page'?'page':'drawer'} ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]} state={state} onClose={()=>setMode('root')}/></Box></ChakraProvider>;}\n`;
+		source += `\nfunction DeviceBrowserFixture(){parentPathBlocks[0].children.find(b=>b.id==='parent-path-actions').children.find(b=>b.id==='parent-path-scan').props['data-tt-action-inputs']=JSON.stringify({operation:'scan'});if(!rows.some(r=>r.id==='fixture-extra-attachment'))rows.push({id:'fixture-extra-attachment',thingtime:['attachment'],crystal:{name:'extra-file.txt'}});if(!rows.some(r=>r.id==='fixture-file-2'))rows.push({id:'fixture-file-2',thingtime:['file'],folderId:'cloud-backups',crystal:{name:'saved-search.svg',content:{attachmentId:'fixture-attachment'}}},{id:'cloud-backups',thingtime:['folder'],crystal:{name:'Backups'}});if(!rows.some(r=>r.id==='fixture-file'))rows.push({id:'fixture-file',thingtime:['file'],folderId:'cloud-documents',crystal:{name:'search.svg',trashed:false,content:{attachmentId:'fixture-attachment'}}},{id:'fixture-attachment',thingtime:['attachment'],folderId:null,targetId:null,crystal:{name:'search.svg',contentType:'application/octet-stream',mediaKind:'file',size:494}});const location=useLocation();const [mode,setMode]=useState(location.pathname==='/things'&&new URLSearchParams(location.search).get('deviceView')==='page'?'page':'root');React.useEffect(()=>{if(location.pathname==='/things'&&new URLSearchParams(location.search).get('deviceView')==='page')setMode('page')},[location]);const [selected,setSelected]=useState(false);const summary:any={id:deviceId,name:'Test Mac',platform:'macos',serviceStatus:'stopped',pairingStatus:'paired',transportStatus:'offline',revision:1,lastSeenAt:null,capabilities:[],permissionMode:'ask'};const state:any={deviceId,summary,snapshot:null,commands:[],approvals:[],sessions:[],screenSessions:[]};return <ChakraProvider><Box maxWidth="1100px" mx="auto" p={4}><Button onClick={()=>setMode('root')}>All Things test entry</Button><Button onClick={()=>setMode('drawer')}>Open quick settings</Button><Button onClick={()=>setMode('page')}>Open settings page</Button><Button onClick={()=>setMode('sync')}>Open dedicated sync page</Button><Button onClick={()=>setMode('files')}>Browse synced files test entry</Button><Button onClick={()=>setMode('location')}>Open file location</Button><Button onClick={()=>setMode('origin')}>Open unpublished sync source</Button><Button onClick={()=>setMode('bound-location')}>Open recorded location</Button><Button onClick={()=>setMode('unfiled')}>Open unfiled files</Button><Button onClick={()=>setMode('parents')}>Open parent paths</Button><Text role="status">Selection: {selected?'device':'none'}</Text>{mode==='parents'?<ThingParentPaths thing={{id:'fixture-attachment',thingtime:['attachment'],crystal:{name:'search.svg'}}}/>:null}{mode==='origin'?<ThingFileLocation thing={{id:'unpublished-blob',thingtime:['attachment'],fileSyncOrigin:{version:1,deviceId,localRootId:'local-root',cloudRootId:'cloud-documents',fileId:'fixture-file',folderId:'cloud-documents',path:'Icons/search.svg'}}}/>:null}{mode==='bound-location'?<ThingFileLocation thing={{id:'bound-blob',thingtime:['attachment'],targetId:'fixture-file'}}/>:null}{mode==='sync'?<DeviceSyncPanel deviceId={deviceId} ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]}/>:mode==='location'?<ThingFileLocation thing={{id:'unbound-blob',thingtime:['attachment'],folderId:null,targetId:null,crystal:{name:'search.svg',size:494}}}/>:mode==='unfiled'?<UnfiledAttachmentsPage/>:null}{mode==='root'?<DeviceCard device={summary} selected={selected} onSelect={()=>setSelected(true)} />:mode==='files'?<DeviceSyncBrowser deviceId={deviceId}/>:null}<DeviceDetailsDrawer isOpen={mode==='drawer'||mode==='page'} presentation={mode==='page'?'page':'drawer'} ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]} state={state} onClose={()=>setMode('root')}/></Box></ChakraProvider>;}\n`;
 		await require('esbuild').build({
 			stdin: { contents: source, loader: 'tsx', resolveDir: join(root, 'scripts') },
 			bundle: true,
@@ -98,12 +101,14 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			if (page.url().startsWith('http://127.0.0.1:')) await page.evaluate(() => localStorage.removeItem('tt-device-drawer-layout:v1:sync-ui-device'));
 			await page.setViewportSize({ width, height });
 			await page.goto(`http://127.0.0.1:${port}/?home`);
-			const device = page.getByRole('button', { name: 'Open Test Mac', exact: true });
+			const device = page.getByRole('link', { name: 'Open Test Mac', exact: true });
 			await device.waitFor();
-			await device.click();
+			await device.click({ modifiers: ['Meta'] });
 			await page.getByText('Selection: device', { exact: true }).waitFor();
 			assert.equal(await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).count(), 0);
-			await device.dblclick();
+			await device.click();
+			await page.getByRole('heading', { name: 'Device dashboard', exact: true }).waitFor();
+			await page.getByRole('button', { name: 'Browse synced files test entry', exact: true }).click();
 			await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
 			const expected = await page.evaluate(
 				() => window.syncInspectionFixture.savedRows().find((row) => row.thingtime?.includes('file-sync')).crystal
@@ -123,7 +128,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			await page.getByRole('button', { name: 'All Things test entry', exact: true }).click();
 			await device.focus();
 			await page.keyboard.press('Enter');
-			await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
+			await page.getByRole('heading', { name: 'Device dashboard', exact: true }).waitFor();
 			await page.getByRole('button', { name: 'Open settings page', exact: true }).click();
 			await page.getByRole('button', { name: 'Expand File sync & backup', exact: true }).waitFor();
 			const sections = page.locator('button[aria-expanded]');
@@ -131,13 +136,13 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			const expanded = await sections.evaluateAll((elements) => elements.filter((e) => e.getAttribute('aria-expanded') === 'true').length);
 			assert.equal(expanded, 0);
 			await page.getByRole('button', { name: 'Expand File sync & backup', exact: true }).click();
-			const syncLink = page.getByRole('link', { name: 'Open device sync & backup', exact: true });
+			const syncLink = page.getByRole('link', { name: 'Manage folders & sync configs', exact: true });
 			assert.equal(new URL(await syncLink.getAttribute('href'), 'http://fixture').searchParams.get('deviceView'), 'sync');
 			await page.getByRole('button', { name: 'All Things test entry', exact: true }).click();
 			await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
 			await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
 			await page.getByRole('link', { name: 'Activity manager', exact: true }).waitFor();
-			const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
+			const manage = page.locator('summary').filter({ hasText: 'Manage folders & sync configs' });
 			assert.equal(await manage.locator('..').evaluate((el) => el.open), false);
 			await manage.click();
 			assert.equal(await manage.locator('..').evaluate((el) => el.open), true);
@@ -193,7 +198,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			await page.getByRole('button', { name: 'Close device details', exact: true }).click();
 			results.push({
 				label,
-				doubleClick: true,
+				devicePageSingleClick: true,
 				keyboard: true,
 				offlineSavedFolders: true,
 				noTransferStarted: true,
@@ -211,6 +216,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 		}
 		await page.setViewportSize({ width: 1440, height: 1000 });
 		await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
+		await enableCurrentPageBuilder(page);
 		await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).click();
 		await page.getByLabel('Block text', { exact: true }).fill('My device files');
@@ -218,6 +224,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 		await page.reload();
 		await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
 		await page.getByRole('heading', { name: 'My device files', exact: true }).waitFor();
+		await enableCurrentPageBuilder(page);
 		await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.getByText('{item.name}', { exact: true }).click();
 		await page.getByLabel('Block text', { exact: true }).fill('{item.name} · saved');
@@ -229,6 +236,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 		results.push({ builderHeadingSaveReload: true, builderRepeatedFieldSaveReload: true });
         await page.getByRole('button', { name: 'Open recorded location', exact: true }).click();
         await page.getByRole('link', { name: 'Cloud documents', exact: true }).waitFor();
+        await enableCurrentPageBuilder(page);
         await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await page.getByText('{item.name}', { exact: true }).click();
         await page.getByLabel('Block text', { exact: true }).fill('{item.name} · location');
@@ -241,6 +249,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
         await page.getByRole('button', { name: 'Open parent paths', exact: true }).click();
         await page.getByRole('button', { name: 'Scan / continue parent references', exact: true }).click();
         await page.getByRole('link', { name: 'Backups', exact: true }).waitFor();
+        await enableCurrentPageBuilder(page);
         await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await page.getByText('{item.name}', { exact: true }).click();
         await page.getByLabel('Block text', { exact: true }).fill('{item.name} · linked');

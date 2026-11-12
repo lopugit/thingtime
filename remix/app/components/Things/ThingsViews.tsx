@@ -1,4 +1,5 @@
 import React from 'react';
+import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 
 import { Box, Button, Checkbox, Flex, Grid, IconButton, Image, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
@@ -77,7 +78,7 @@ const ThingPreviewBox = ({
   fallback: React.ReactNode;
   schemaRender?: Record<string, unknown> | null;
 }) => {
-  if (isFolder(thing)) return <>{fallback}</>;
+  if (isFolder(thing) || thing.libraryArchivePresentation === 'metadata') return <>{fallback}</>;
   let body: React.ReactNode;
   if (schemaRender) {
     body = <SchemaTemplateRender crystal={thing.crystal || {}} template={schemaRender} />;
@@ -106,7 +107,7 @@ const ThingPreviewBox = ({
       }}
       width="100%"
     >
-      {body}
+      <ContentExecutionBoundary held={thing.executionHeld}>{body}</ContentExecutionBoundary>
     </Box>
   );
 };
@@ -116,6 +117,7 @@ const ThingPreviewBox = ({
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
+  | 'share-preview'
   | 'history'
   | 'send-to-lopu'
   | 'open'
@@ -123,11 +125,14 @@ export type ThingsItemAction =
   | 'open-live'
   | 'preview'
   | 'inspect'
+  | 'storage-placement'
   | 'paste-into'
   | 'rename'
   | 'edit'
   | 'edit-definition'
   | 'move'
+  | 'archive'
+  | 'restore'
   | 'share'
   | 'copy'
   | 'download'
@@ -140,6 +145,8 @@ export type ThingsItemAction =
 
 export type ThingsItemHandlers = {
   compact?: boolean;
+  itemActions?: (thing: ThingsThing) => React.ReactNode;
+  builderMode?: boolean;
   menuZIndex?: number;
   itemHref?: (thing: ThingsThing) => string;
   itemMenuFor?: (thing: ThingsThing) => import('../Thingtime/ContextMenu/contextMenuModel').ThingContextMenuModel;
@@ -172,8 +179,9 @@ export type ThingsDevicePresentation = {
 	deviceCounts?: Record<string, { commands: number; approvals: number }>;
 	selectedDeviceId?: string | null;
 	deviceMenuId?: string | null;
+	deviceFooter?: (state: DeviceRuntimeState) => React.ReactNode;
+	deviceSetup?: React.ReactNode;
 	onDeviceSelect?: (deviceId: string) => void;
-	onDeviceOpen?: (deviceId: string) => void;
 	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
@@ -238,7 +246,9 @@ const TitleLink = ({
   thing: ThingsThing;
   handlers: ThingsItemHandlers;
   onOpen?: () => void;
-} & TextProps) => (
+} & TextProps) => thing.libraryArchivePresentation === 'metadata' ? (
+  <Text {...textProps}>{thingDisplayName(thing)}</Text>
+) : (
   <Text
     as={Link}
     _focusVisible={{ outline: '2px solid var(--tt-accent, #f472b6)', outlineOffset: '2px', borderRadius: '4px' }}
@@ -329,8 +339,9 @@ export const ThingsGridView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -340,20 +351,22 @@ export const ThingsGridView = ({
 	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
 		{devices.map((state) =>
 			state.summary ? (
-				<DeviceCard
+				<Box key={`device:${state.deviceId}`} minWidth={0}>
+					<DeviceCard
 					device={state.summary}
 					controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 					selected={selectedDeviceId === state.deviceId}
 					snapshot={state.snapshot}
 				/>
+					{deviceFooter?.(state)}
+				</Box>
 			) : null
 		)}
+    {deviceSetup}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
       const iconBlock = <ThingIconDisplay thing={thing} />;
@@ -404,7 +417,12 @@ export const ThingsGridView = ({
               {formatWhen(thing.updatedAt)}
             </Text>
           </Flex>
+          {handlers.builderMode && isBuilderApp(thing) && <Flex gap={2} wrap="wrap" justifyContent="center" onClick={event => event.stopPropagation()}>
+            <Button as={Link} to={thingBuilderHref(thing, handlers.ownerId) || `/builder?folder=${encodeURIComponent(thing.id)}&kind=all`} size="sm" variant="outline">Browse</Button>
+            {thing.author?.id === handlers.ownerId && <Button size="sm" variant="ghost" onClick={() => handlers.onItemAction(thing, 'edit')}>Edit app</Button>}
+          </Flex>}
           <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
     })}
@@ -426,8 +444,9 @@ export const ThingsListView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -441,22 +460,24 @@ export const ThingsListView = ({
 			<Box {...CARD_STYLES} overflow="hidden" padding={0}>
 				{devices.map((state) =>
 					state.summary ? (
-						<DeviceListRow
+						<Box key={`device:${state.deviceId}`} minWidth={0}>
+							<DeviceListRow
 							device={state.summary}
 							controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 							selected={selectedDeviceId === state.deviceId}
 							snapshot={state.snapshot}
 						/>
+							{deviceFooter?.(state)}
+						</Box>
 					) : null
 				)}
 			</Box>
 		) : null}
+		{deviceSetup}
 		{items.length ? (
   <Box {...CARD_STYLES} overflow="hidden">
     <Flex
@@ -553,6 +574,7 @@ export const ThingsListView = ({
           </Box>
         )}
         <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
     })}
@@ -579,8 +601,9 @@ export const ThingsColumnsView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -611,21 +634,23 @@ export const ThingsColumnsView = ({
 					{depth === 0
 						? devices.map((state) =>
 								state.summary ? (
-									<DeviceListRow
+									<Box key={`device:${state.deviceId}`} minWidth={0}>
+										<DeviceListRow
 										device={state.summary}
 										controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 										selected={selectedDeviceId === state.deviceId}
 										snapshot={state.snapshot}
 									/>
+										{deviceFooter?.(state)}
+									</Box>
 								) : null
 						  )
 						: null}
+          {depth === 0 ? deviceSetup : null}
           {(items || []).map((thing) => {
             const selected = handlers.selected.has(thing.id);
             const folder = isFolder(thing);
@@ -669,6 +694,7 @@ export const ThingsColumnsView = ({
                   </Box>
                 )}
                 <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
               </Flex>
             );
           })}

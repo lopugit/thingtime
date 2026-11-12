@@ -17,10 +17,10 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
     ...(otherwise === undefined ? [] : [{ id: id('otherwise'), type: 'condition' as const, condition: { ...condition, negate: true }, children: visit(otherwise) }])];
   }
   if (node.ttEach) {
-   const { arg, node: row, empty, max } = node.ttEach;
+   const { arg, node: row, empty, max, keyArg } = node.ttEach;
    if (typeof arg !== 'string' || row === undefined) throw new Error('This repeated template cannot be expanded into blocks.');
    if (empty !== undefined && typeof empty !== 'string') throw new Error('This repeated template has an empty branch that cannot yet be expanded into editable blocks.');
-   return [{ id: id('collection'), type: 'collection', props: { itemsPath: arg, transparent: true, templateEach: true, ...(empty === undefined ? {} : { empty }), ...(max === undefined ? {} : { maxItems: max }) }, children: visit(row) }];
+   return [{ id: id('collection'), type: 'collection', props: { itemsPath: arg, ...(typeof keyArg === 'string' ? { itemsKeyArg: keyArg } : {}), transparent: true, templateEach: true, ...(empty === undefined ? {} : { empty }), ...(max === undefined ? {} : { maxItems: max }) }, children: visit(row) }];
   }
   if (node.ttFormat) return [{ id: id('value'), type: 'element', tag: 'span', format: node.ttFormat }];
   if (!node.tag || Object.keys(node).some(key => key.startsWith('tt') && !['ttAction', 'ttActionInputs'].includes(key))) throw new Error('This template operator cannot yet be expanded into blocks.');
@@ -30,7 +30,7 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
   if (node.tag === 'tt-collection') return [{ id: id('collection'), type: 'collection', props, children: visit(itemTemplate) }];
   // These are existing guarded Builder primitives. Keep the intrinsic node as
   // an editable boundary and expand its authored children independently.
-  if (node.tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change'].includes(node.tag))
+  if (node.tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(node.tag))
    throw new Error(`The ${node.tag} control cannot yet be expanded into blocks.`);
   const children = Array.isArray(node.children) ? node.children : node.children == null ? [] : [node.children];
   const textOnly = children.every((child: unknown) => typeof child === 'string' || typeof child === 'number');
@@ -49,8 +49,8 @@ export function templateEachRows(raw: unknown, maximum: unknown): unknown[] {
  return list.slice(0, requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP);
 }
 
-export function templateEachRowScope(scope: Record<string, unknown>, item: unknown, index: number, count: number): Record<string, unknown> {
- return { ...scope, item, index, n: index + 1, count, first: index === 0, last: index === count - 1, collection: { index, count } };
+export function templateEachRowScope(scope: Record<string, unknown>, item: unknown, index: number, count: number, total?: number): Record<string, unknown> {
+ return { ...scope, item, index, n: index + 1, count, first: index === 0, last: index === count - 1, collection: { index, count }, ...(total === undefined ? {} : { total, remaining: total - count }) };
 }
 
 /** Build the JSON-only replacement for an expanded Component block. Timeline
@@ -63,8 +63,18 @@ export function expandedComponentBlock(entry: WebpageBlock, componentCrystal: Re
   ...(entry.css ? { css: entry.css } : {}),
   ...(source ? { source } : {}),
   args: Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined)) as WebpageBlock['args'],
+  ...(entry.argBindings ? { argBindings: entry.argBindings } : {}),
   children
  };
+}
+
+/** Instance bindings read parent data once; literal/default arguments stay data. */
+export function resolveBlockArguments(block: WebpageBlock, scope: Record<string, unknown>, markerInstance = false): Record<string, unknown> {
+ const args = markerInstance ? resolveTemplate(block.args || {}, scope) as Record<string, unknown> : block.args || {};
+ const resolved = resolveBlockProps(block.argBindings || {}, scope);
+ const bindings = Object.fromEntries(Object.entries(resolved).map(([key, value]) => [key,
+  typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? value : '']));
+ return { ...args, ...bindings };
 }
 
 /** DOM properties preserve scalar types for exact bindings; interpolated text stays text. */

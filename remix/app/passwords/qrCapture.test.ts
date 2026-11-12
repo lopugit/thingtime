@@ -39,3 +39,25 @@ test('capture denial does not create a video or mask the browser error', async t
   replaceGlobal(t, 'navigator', { mediaDevices: { getDisplayMedia: async () => { throw new DOMException('Denied', 'NotAllowedError'); } } });
   await assert.rejects(scanQrScreen(), { name: 'NotAllowedError' });
 });
+
+test('abort between display acquisition and promise forwarding disposes the late stream', async t => {
+ let accept!: (value: MediaStream) => void, stops=0;
+ const controller=new AbortController();
+ replaceGlobal(t,'navigator',{mediaDevices:{getDisplayMedia:()=>new Promise<MediaStream>(resolve=>{accept=resolve;})}});
+ const capture=scanQrScreen(controller.signal);
+ accept({getTracks:()=>[{stop:()=>stops++}]} as unknown as MediaStream);
+ queueMicrotask(()=>controller.abort());
+ await assert.rejects(capture,{name:'AbortError'});await new Promise(resolve=>setImmediate(resolve));assert.equal(stops,1);
+});
+
+test('abort between bitmap acquisition and forwarding closes pixels and stops capture', async t => {
+ let accept!: (value: ImageBitmap) => void, closes=0, stops=0;
+ const controller=new AbortController();
+ const video={srcObject:null,muted:false,play:async()=>{},pause(){},requestVideoFrameCallback(fn:()=>void){queueMicrotask(fn);return 1;},cancelVideoFrameCallback(){}};
+ replaceGlobal(t,'navigator',{mediaDevices:{getDisplayMedia:async()=>({getTracks:()=>[{stop:()=>stops++}]})}});
+ replaceGlobal(t,'document',{createElement:()=>video});
+ replaceGlobal(t,'createImageBitmap',()=>new Promise<ImageBitmap>(resolve=>{accept=resolve;}));
+ const capture=scanQrScreen(controller.signal);await new Promise(resolve=>setImmediate(resolve));
+ accept({close:()=>closes++} as unknown as ImageBitmap);queueMicrotask(()=>controller.abort());
+ await assert.rejects(capture,{name:'AbortError'});await new Promise(resolve=>setImmediate(resolve));assert.equal(stops,1);assert.equal(closes,1);
+});

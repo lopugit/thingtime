@@ -1,4 +1,4 @@
-import type { MongoConnectionInventory, MongoConnectionSource, MongoConnectionPool } from '../../../mongodb/connectionInventory';
+import { MONGO_CONNECTION_FEATURES, type MongoConnectionInventory, type MongoConnectionSource, type MongoConnectionPool } from '../../../mongodb/connectionInventory';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
 import { getExistingHomeMongoDb, getExistingHomeConnectionSnapshotCollection, getHomeThingsCollection } from './collections';
 import { THINGS_CREATED_ORDER } from './thingIndexContracts';
@@ -23,12 +23,23 @@ export const projectConnectionSource = (input: any, now: number, runtimeId: stri
   const pools: MongoConnectionPool[] = (Array.isArray(input.pools) ? input.pools : []).map((pool: any, index: number) => ({
     id: `${input.id}:pool-${index + 1}`, address: purpose === 'home' ? safeConnectionAddress(pool?.address) : null,
     status: selected(pool?.status, ['ready', 'paused', 'closed'], 'paused'), open: count(pool?.open), pending: count(pool?.pending), checkedOut: Math.min(count(pool?.checkedOut), count(pool?.open)),
-    created: count(pool?.created), closed: count(pool?.closed), cleared: count(pool?.cleared), maxPoolSize: nullableCount(pool?.maxPoolSize)
+    created: count(pool?.created), closed: count(pool?.closed), cleared: count(pool?.cleared), maxPoolSize: nullableCount(pool?.maxPoolSize), minPoolSize: nullableCount(pool?.minPoolSize), maxIdleTimeMS: nullableCount(pool?.maxIdleTimeMS), maxConnecting: nullableCount(pool?.maxConnecting), waitQueueTimeoutMS: nullableCount(pool?.waitQueueTimeoutMS)
   }));
+  const status = selected(input.status, ['connecting', 'ready', 'closed', 'failed'], 'failed');
+  const monitoringMode = selected(input.monitoring?.mode, ['poll', 'stream', 'auto', 'load-balanced', 'unknown'], 'unknown');
+  const rawServers = nullableCount(input.monitoring?.servers);
+  const servers = rawServers !== null && rawServers <= Number.MAX_SAFE_INTEGER / 2 ? rawServers : null;
+  const monitoring = input.monitoring && servers !== null ? { mode: monitoringMode, servers,
+    socketsUpperBound: status === 'ready' && monitoringMode !== 'unknown' && servers > 0 ? servers * (monitoringMode === 'load-balanced' ? 0 : monitoringMode === 'poll' ? 1 : 2) : null, basis: 'topology-model' as const } : undefined;
+  const featureUsage = Array.isArray(input.featureUsage) ? MONGO_CONNECTION_FEATURES.flatMap(feature => {
+    const row = input.featureUsage.find((row: any) => row?.feature === feature);
+    const lastUsedAt = date(row?.lastUsedAt);
+    return row && validCount(row.accesses) && lastUsedAt ? [{ feature, accesses: row.accesses, lastUsedAt }] : [];
+  }) : undefined;
   return {
     id: input.id, runtimeId: input.runtimeId, startedAt, observedAt,
     freshness: input.runtimeId === runtimeId ? 'current' : now - Date.parse(observedAt) <= CONNECTION_SNAPSHOT_FRESH_MS ? 'recent' : 'stale',
-    purpose, status: selected(input.status, ['connecting', 'ready', 'closed', 'failed'], 'failed'), appName: purpose === 'home' ? 'thingtime-api' : 'thingtime-api-custom',
+    purpose, status, monitoring, featureUsage, appName: purpose === 'home' ? 'thingtime-api' : 'thingtime-api-custom',
     reason: purpose === 'home' ? 'Shared home client for API identity, control and default content operations.' : 'Bounded cached client for a request-selected custom data plane; private endpoint details are withheld.',
     createdBy: 'Thingtime API runtime', deployment: connectionDeployment({ VERCEL_ENV: input.deployment?.environment, VERCEL_GIT_COMMIT_REF: input.deployment?.branch, VERCEL_GIT_COMMIT_SHA: input.deployment?.commit, VERCEL_URL: input.deployment?.url, VERCEL_REGION: input.deployment?.region, VERCEL_DEPLOYMENT_ID: input.deployment?.deploymentId }),
     pools, totals: pools.reduce((sum, pool) => ({ open: sum.open + pool.open, checkedOut: sum.checkedOut + pool.checkedOut, created: sum.created + pool.created, closed: sum.closed + pool.closed }), { open: 0, checkedOut: 0, created: 0, closed: 0 })
@@ -111,7 +122,8 @@ export const createConnectionInventoryReader = (dependencies = {
   const now = dependencies.now(), checkedAt = new Date(now).toISOString();
   const notes = [
     'Counts below sum the sources on this page at their observation times, including stale snapshots; they are not a live database or deployment total.',
-    'CMAP covers application pool sockets. Driver monitoring sockets, external tools, uninstrumented clients and older deployments are not enumerated.',
+    'CMAP measures application pool sockets. Monitoring sockets are not measured: the optional topology model is an upper bound based on current server count and configured driver monitoring mode; auto/stream allows up to two per server, poll up to one, load-balanced zero. It is not a MongoDB total.',
+    'Feature usage counts requests acquiring each shared client, once per source per request, grouped by canonical API registry domain. Features share pools: sockets cannot be exclusively assigned to a feature. Legacy snapshots have no usage/model evidence.',
     'Snapshots publish on ordinary API requests at most once per minute and expire after 24 hours. Recent means observed within two minutes; frozen or terminated workers may leave stale counts.',
     'Runtime means a warm process, not a user. The creator is the Thingtime API runtime; request user identities, commands and custom endpoint addresses are never collected.'
   ];

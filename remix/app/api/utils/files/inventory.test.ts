@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudInventoryService, createCloudPathService } from './inventory';
+import { getEventListeners } from 'node:events';
+import { ExactCloudSyncDestinationChanged } from '../../../fileSync/cloudSyncDestination';
+import { assertCloudSyncDestination, createCloudInventoryService, createCloudPathService } from './inventory';
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 const date = new Date('2026-10-17T00:00:00Z');
 const folder = (id: string, parent: string | null, name = id) => ({
@@ -29,26 +31,26 @@ const file = (id: string, parent: string, name = id) => ({
 });
 function fixture(input = [folder('root', null), folder('nested', 'root'), file('file', 'nested')], maxEntries = 10_000) {
 	const docs: any[] = structuredClone(input);
-	let session: any,
-		reads = 0,
+	const sessions = new Set<any>();
+	let reads = 0,
 		closed = 0,
 		afterRead = () => {},
 		time = 0;
 	const check = (options: any) => {
-		assert.equal(options.session, session);
+		assert.ok(sessions.has(options.session));
 		assert.ok(options.maxTimeMS > 0 && options.maxTimeMS <= 5000);
 		assert.equal(options.projection._id, 0);
 	};
 	const collection = {
 		async findOne(filter: any, options: any) {
 			check(options);
-			return session.docs.find((d: any) => d.shareId === filter.shareId && d.ownerId === filter.ownerId);
+			return options.session.docs.find((d: any) => d.shareId === filter.shareId && d.ownerId === filter.ownerId);
 		},
 		find(filter: any, options: any) {
 			check(options);
 			reads++;
 			let count = Infinity;
-			const matches = session.docs.filter(
+			const matches = options.session.docs.filter(
 				(d: any) =>
 					d.ownerId === filter.ownerId &&
 					filter.folderId.$in.includes(d.folderId) &&
@@ -82,14 +84,18 @@ function fixture(input = [folder('root', null), folder('nested', 'root'), file('
 		collection: async () => collection,
 		customPlane: () => false,
 		transaction: async (work: (session: any) => Promise<any>) => {
-			session = { docs: structuredClone(docs) };
-			return work(session);
+			const session = { docs: structuredClone(docs) };
+			sessions.add(session);
+			try { return await work(session); } finally { sessions.delete(session); }
 		},
 		now: () => time,
 		maxEntries
 	};
 	return {
+		guard: (path: string, parent: string, expected: {id: string; revision: string} | null) => dependencies.transaction(session =>
+			assertCloudSyncDestination(collection, session, 'owner', { rootId: 'root', path }, parent, expected)),
 		read: createCloudInventoryService(dependencies),
+		transaction: dependencies.transaction,
 		bounded: (overrides: Parameters<typeof createCloudPathService>[0] = {}) => createCloudPathService({ ...dependencies, ...overrides }),
 		docs,
 		stats: () => ({ reads, closed }),
@@ -378,10 +384,10 @@ test('path scan admission and workspace close are part of completion', async () 
  const read = f.bounded({ collection: async () => collection, workspace: async () => {
   opened++; await gate; return { add: async () => true, close: async () => { closed++; } };
  } });
- const first = read('owner', 'root', 'absent'), second = read('owner', 'root', 'absent');
- assert.equal((await read('owner', 'root', 'absent')).status, 503);
- release(); assert.equal((await first).ok, true); assert.equal((await second).ok, true);
- assert.deepEqual({ opened, closed }, { opened: 2, closed: 2 });
+ const first = read('owner', 'root', 'absent'), second = read('owner', 'root', 'absent'), third = read('owner', 'root', 'absent');
+ await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(opened, 2);
+ release(); assert.equal((await first).ok, true); assert.equal((await second).ok, true); assert.equal((await third).ok, true);
+ assert.deepEqual({ opened, closed }, { opened: 3, closed: 3 });
  assert.equal((await read('owner', 'root', 'absent')).ok, true);
  const brokenClose = f.bounded({ collection: async () => collection, workspace: async () => ({ add: async () => true, close: async () => { throw Error('private scratch path'); } }) });
  const result = await brokenClose('owner', 'root', 'absent');
@@ -391,4 +397,98 @@ test('path scan admission and workspace close are part of completion', async () 
   await work({}); attempts++; f.clock(20_001); return work({});
  } });
  f.clock(0); assert.equal((await timed('owner', 'root', 'absent')).status, 503); assert.equal(attempts, 1);
+});
+
+test('guarded publication rejects a late sibling alias, a moved parent, and stale revisions inside the write snapshot', async () => {
+	const f = fixture();
+	await f.guard('nested/file', 'nested', { id: 'file', revision: 'revision-file' });
+	await f.guard('nested/new', 'nested', null);
+	f.docs.push(file('racer', 'nested', 'NEW'));
+	await assert.rejects(f.guard('nested/new', 'nested', null), ExactCloudSyncDestinationChanged);
+	f.docs.pop();
+	f.docs[2].timelineHeadId = 'new-revision';
+	await assert.rejects(f.guard('nested/file', 'nested', { id: 'file', revision: 'revision-file' }), ExactCloudSyncDestinationChanged);
+	f.docs.push(folder('elsewhere', null));
+	f.docs[1].folderId = 'elsewhere';
+	await assert.rejects(f.guard('nested/new', 'nested', null), ExactCloudSyncDestinationChanged);
+});
+
+const gate = () => {
+	let resolve!: () => void;
+	const promise = new Promise<void>(done => { resolve = done; });
+	return { promise, resolve };
+};
+
+test('five concurrent exact-path requests wait FIFO and finish with at most two active snapshots', { timeout: 5000 }, async () => {
+	const f = fixture(), gates = Array.from({ length: 5 }, gate), starts = Array.from({ length: 5 }, gate);
+	let entered = 0, active = 0, maximum = 0;
+	const read = f.bounded({ transaction: async work => {
+		const index = entered++; active++; maximum = Math.max(maximum, active); starts[index].resolve();
+		try { await gates[index].promise; return await f.transaction(work); } finally { active--; }
+	} });
+	const pending = Array.from({ length: 5 }, (_, index) => read('owner', 'root', 'missing-' + index));
+	try {
+		await starts[1].promise; assert.equal(entered, 2);
+		gates[0].resolve(); assert.equal((await pending[0]).ok, true); await starts[2].promise;
+		gates[2].resolve(); assert.equal((await pending[2]).observation?.path, 'missing-2'); await starts[3].promise;
+		gates[3].resolve(); assert.equal((await pending[3]).observation?.path, 'missing-3'); await starts[4].promise;
+	} finally { for (const item of gates) item.resolve(); }
+	const results = await Promise.all(pending);
+	assert.equal(results.every(result => result.ok && result.observation?.entry === null), true);
+	assert.equal(maximum, 2); assert.equal(active, 0); assert.equal(entered, 5);
+});
+
+test('queued and running cancellation remove their listeners and release the next path snapshot', { timeout: 5000 }, async () => {
+	const f = fixture(), gates = Array.from({ length: 3 }, gate), starts = Array.from({ length: 3 }, gate);
+	const running = new AbortController(), queued = new AbortController(); let entered = 0;
+	const read = f.bounded({ transaction: async work => {
+		const index = entered++; starts[index].resolve();
+		if (index === 0) await new Promise<void>((resolve, reject) => {
+			const abort = () => { running.signal.removeEventListener('abort', abort); reject(running.signal.reason); };
+			running.signal.addEventListener('abort', abort, { once: true });
+			gates[0].promise.then(() => { running.signal.removeEventListener('abort', abort); resolve(); });
+		}); else await gates[index].promise;
+		return f.transaction(work);
+	} });
+	const pending = [read('owner', 'root', 'running', running.signal), read('owner', 'root', 'held'),
+		read('owner', 'root', 'cancelled', queued.signal), read('owner', 'root', 'next')];
+	try {
+		await starts[1].promise; queued.abort(); assert.equal((await pending[2]).ok, false); assert.equal(entered, 2);
+		assert.equal(getEventListeners(queued.signal, 'abort').length, 0);
+		running.abort(); assert.equal((await pending[0]).ok, false); await starts[2].promise;
+		gates[2].resolve(); assert.equal((await pending[3]).ok, true);
+		assert.equal(getEventListeners(running.signal, 'abort').length, 0);
+	} finally { for (const item of gates) item.resolve(); await Promise.all(pending); }
+	assert.equal(entered, 3);
+});
+
+test('a failed observation releases its slot and queued foreign roots still fail authorization', { timeout: 5000 }, async () => {
+	const f = fixture(), held = gate(), started = gate(); let entered = 0;
+	const read = f.bounded({ transaction: async work => {
+		const index = entered++;
+		if (index < 2) { if (index === 1) started.resolve(); await held.promise; }
+		if (index === 0) throw Error('Controlled observation failure');
+		return f.transaction(work);
+	} });
+	const pending = [read('owner', 'root', 'failed'), read('owner', 'root', 'held'),
+		read('outsider', 'root', 'foreign'), read('owner', 'root', 'next')];
+	await started.promise; assert.equal(entered, 2); held.resolve();
+	const results = await Promise.all(pending);
+	assert.equal(results[0].ok, false); assert.equal(results[0].observation, undefined);
+	assert.equal(results[2].ok, false); assert.equal(results[2].observation, undefined);
+	assert.equal(results[1].ok, true); assert.equal(results[3].ok, true); assert.equal(entered, 4);
+});
+
+test('a queued observation retains its original deadline and leaves no slot or abort listener behind', { timeout: 5000 }, async () => {
+	const f = fixture(), held = gate(), started = gate(), queued = new AbortController(); let entered = 0;
+	const read = f.bounded({ transaction: async work => {
+		if (++entered === 2) started.resolve();
+		await held.promise; return f.transaction(work);
+	} });
+	const pending = [read('owner', 'root', 'one'), read('owner', 'root', 'two'), read('owner', 'root', 'queued', queued.signal)];
+	await started.promise; f.clock(20_001); held.resolve();
+	const results = await Promise.all(pending);
+	assert.equal(results.every(result => result.ok === false && result.status === 503 && result.observation === undefined), true);
+	assert.equal(entered, 2); assert.equal(getEventListeners(queued.signal, 'abort').length, 0);
+	f.clock(0); assert.equal((await read('owner', 'root', 'fresh')).ok, true); assert.equal(entered, 3);
 });

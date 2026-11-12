@@ -32,6 +32,10 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
 	</dict>
+	<key>ThingtimeAPNSEnvironment</key>
+	<string>$(APS_ENVIRONMENT)</string>
+	<key>ThingtimeWebURL</key>
+	<string>$(THINGTIME_WEB_URL)</string>
 	<key>ThingtimeWidgetGroup</key>
 	<string>$(THINGTIME_WIDGET_GROUP)</string>
 </dict>

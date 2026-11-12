@@ -86,7 +86,10 @@ final class FileVersionExportTests: XCTestCase {
     func testInvalidNamesFingerprintAndRangeFramingRefuse() throws {
         let bytes = Data([1]), valid = try request(bytes)
         for name in ["../escape", "a/b", "a\\b", "\u{0}bad", ".", "..", " "] { XCTAssertThrowsError(try request(bytes, name: name).validate()) }
-        XCTAssertThrowsError(try request(Data()).validate())
+        XCTAssertNoThrow(try request(Data()).validate())
+        let invalidEmpty = FileVersionExport.Content(attachmentId: valid.content.attachmentId, version: valid.content.version,
+            size: 0, fingerprint: valid.content.fingerprint)
+        XCTAssertThrowsError(try FileVersionExport.Request(name: valid.name, content: invalidEmpty).validate())
         let url = URL(string: "https://example.com/api/v1/attachments/content")!
         let headers = ["ETag": "\"" + valid.content.version + "\"", "Content-Range": "bytes 0-0/1", "Content-Length": "1"]
         try valid.validateRange(HTTPURLResponse(url: url, statusCode: 206, httpVersion: nil, headerFields: headers)!, offset: 0, length: 1)

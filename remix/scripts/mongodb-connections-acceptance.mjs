@@ -2,6 +2,7 @@
 // Real API/browser acceptance against a task-owned disposable replica and two runtimes.
 // No user env files, credentials, profiles, PM2 entries or production data are loaded.
 // Mongo driver use is limited to replica initialization; all product data uses APIs.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -68,13 +69,17 @@ try {
  const admin = await api('/api/v1/auth/register', { body: { username: 'connections-admin', email: 'connections-admin@example.invalid', password, displayName: 'Connections Admin' } });
  const other = await api('/api/v1/auth/register', { body: { username: 'connections-other', email: 'connections-other@example.invalid', password, displayName: 'Connections Other' } });
  await stop(server);
- const deployment = { THINGTIME_MONGODB_CONNECTION_MODE: 'dedicated', ADMIN_USERNAMES: 'connections-admin', VERCEL_GIT_COMMIT_REF: 'acceptance-connections-primary', VERCEL_GIT_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678', VERCEL_URL: 'connections-primary.example.invalid', VERCEL_REGION: 'syd1' };
+ const deployment = { THINGTIME_MONGODB_CONNECTION_MODE: 'dedicated', ADMIN_USERNAMES: 'connections-admin', VERCEL_DEPLOYMENT_ID: 'dpl_acceptance_primary', VERCEL_GIT_COMMIT_REF: 'acceptance-connections-primary', VERCEL_GIT_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678', VERCEL_URL: 'connections-primary.example.invalid', VERCEL_REGION: 'syd1' };
  server = start(process.execPath, ['.output/server/index.mjs'], deployment); await ready(server);
- second = start(process.execPath, ['.output/server/index.mjs'], { ...deployment, PORT: String(ports.second), VERCEL_GIT_COMMIT_REF: 'acceptance-connections-secondary', VERCEL_URL: 'connections-secondary.example.invalid' }); await ready(second, secondOrigin);
+ second = start(process.execPath, ['.output/server/index.mjs'], { ...deployment, PORT: String(ports.second), VERCEL_DEPLOYMENT_ID: 'dpl_acceptance_secondary', VERCEL_GIT_COMMIT_REF: 'acceptance-connections-secondary', VERCEL_URL: 'connections-secondary.example.invalid' }); await ready(second, secondOrigin);
  await api('/api/v1/auth/me', { cookie: admin.cookie });
  await api('/api/v1/auth/me', { cookie: admin.cookie, selectedOrigin: secondOrigin });
+ for (const selectedOrigin of [origin, secondOrigin]) {
+  await api('/api/v1/things?limit=1', { cookie: admin.cookie, selectedOrigin });
+  await api('/api/v1/admin/mongodb/connections?limit=100', { cookie: admin.cookie, selectedOrigin });
+ }
  const manifest = await api('/.well-known/thingtime-capabilities.json');
- assert.equal(manifest.data.origin, origin); assert.equal(manifest.data.features['api.admin-mongodb-connections'].version, '1.0.0');
+ assert.equal(manifest.data.origin, origin); assert.equal(manifest.data.features['api.admin-mongodb-connections'].version, '1.1.0');
  const anonymous = await api('/api/v1/admin/mongodb/connections', { status: null }); assert([401, 403].includes(anonymous.status), 'Anonymous access denied');
  await api('/api/v1/admin/mongodb/connections', { cookie: other.cookie, status: 403 });
  const mismatch = await api('/api/v1/admin/mongodb/connections', { cookie: admin.cookie, headers: { 'X-Thingtime-Expected-Actor': 'wrong-actor' }, status: null }); assert(mismatch.status >= 400, 'HTTP actor fence');
@@ -85,9 +90,13 @@ try {
   const result = await api('/api/v1/admin/mongodb/connections?limit=100', { cookie: admin.cookie });
   assert.match(result.response.headers.get('cache-control') || '', /no-store/); snapshot = result.data.inventory;
   const branches = new Set(snapshot.sources.map(source => source.deployment.branch));
-  if (branches.has('acceptance-connections-primary') && branches.has('acceptance-connections-secondary')) break;
-  if (attempt === 11) throw Error('Both task-owned runtimes were not observed within the bounded window');
-  await delay(1500); await api('/api/v1/auth/me', { cookie: admin.cookie, selectedOrigin: secondOrigin });
+  const attributed = ['dpl_acceptance_primary', 'dpl_acceptance_secondary'].every(id => {
+   const features = new Set(snapshot.sources.filter(source => source.deployment.deploymentId === id).flatMap(source => (source.featureUsage || []).filter(usage => usage.accesses > 0 && Number.isFinite(new Date(usage.lastUsedAt).getTime())).map(usage => usage.feature)));
+   return ['auth', 'admin', 'things'].every(feature => features.has(feature));
+  });
+  if (branches.has('acceptance-connections-primary') && branches.has('acceptance-connections-secondary') && attributed) break;
+  if (attempt === 11) throw Error('Both task-owned runtimes and auth/admin/things shared-client accesses were not observed within the bounded window');
+  await delay(1500);
  }
  assert.equal(snapshot.coverage.complete, false); assert(snapshot.sources.every(source => source.createdBy === 'Thingtime API runtime'));
  assert(snapshot.sources.some(source => source.pools.some(pool => pool.open > 0)), 'Actual CMAP pool sockets observed');
@@ -95,7 +104,7 @@ try {
  assert.equal(firstPage.data.inventory.sources.length, 1); assert(firstPage.data.inventory.nextCursor, 'Pagination cursor');
  const nextPage = await api('/api/v1/admin/mongodb/connections?limit=1&cursor=' + encodeURIComponent(firstPage.data.inventory.nextCursor), { cookie: admin.cookie });
  assert.notEqual(firstPage.data.inventory.sources[0].id, nextPage.data.inventory.sources[0].id);
- await writeFile(join(out, 'api-readback.json'), JSON.stringify({ checks: ['manifest version and origin', 'anonymous/non-admin refusal', 'actor/origin fences', 'no-store', 'two real runtimes', 'CMAP sockets', 'cursor pagination'], snapshot }, null, 2));
+ await writeFile(join(out, 'api-readback.json'), JSON.stringify({ checks: ['manifest version and origin', 'anonymous/non-admin refusal', 'actor/origin fences', 'no-store', 'two real runtimes', 'CMAP sockets', 'auth/admin/things shared-client attribution on both runtimes', 'cursor pagination'], snapshot }, null, 2));
  const vite = start(process.execPath, ['--input-type=module', '-e', `import {createServer} from 'vite';const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${ports.web},strictPort:true}});await server.listen();`], { NODE_ENV: 'development' });
  const web = `http://127.0.0.1:${ports.web}`; await ready(vite, web);
  const fixture = join(dir, 'browser-fixture.json'); await writeFile(fixture, JSON.stringify({ origin: web, cookie: admin.cookie, otherCookie: other.cookie, snapshot }), { mode: 0o600 });
@@ -127,13 +136,22 @@ async function browserAcceptance() {
    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
    await page.goto(fixture.origin + '/admin/mongodb-connections', { waitUntil: 'domcontentloaded' });
    await host.getByRole('heading', { name: 'MongoDB connections', exact: true }).waitFor({ timeout: 90000 });
-   await host.getByText('Coverage is partial', { exact: true }).waitFor();
-   await host.locator('[data-block-id="mongo-source-card"]').first().waitFor();
+   await host.getByText('What MongoDB reports', { exact: true }).waitFor();
+   await host.locator('[data-block-id="mongo-deployment-card"]').first().waitFor();
    const inventory = await page.evaluate(async () => (await (await fetch('/api/v1/admin/mongodb/connections?limit=100')).json()).inventory);
-   const cards = host.locator('[data-block-id="mongo-source-card"]'); assert.equal(await cards.count(), inventory.sources.length, 'Actual API source count rendered');
+   const cards = host.locator('[data-block-id="mongo-deployment-card"]'); assert.equal(await cards.count(), new Set(inventory.sources.map(source => source.deployment.deploymentId || source.id)).size, 'Actual API deployment count rendered');
    await host.getByRole('searchbox', { name: 'Search loaded connection sources' }).fill('acceptance-connections-secondary');
-   await host.getByText(/1 matching sources/).waitFor(); assert.equal(await cards.count(), 1);
-   const summary = cards.first().getByText('Source and pool details', { exact: true }); await summary.focus(); await page.keyboard.press('Enter');
+   await host.getByText(/1 matching deployments/).waitFor(); assert.equal(await cards.count(), 1);
+   const selectedSources = inventory.sources.filter(source => source.deployment.deploymentId === 'dpl_acceptance_secondary' && source.status === 'ready' && source.freshness !== 'stale');
+   const observed = selectedSources.reduce((sum, source) => sum + source.totals.open, 0);
+   assert.equal(await cards.first().locator('[data-block-id="mongo-open-value"]').innerText(), String(observed), 'Deployment count agrees with real API observations');
+   const summary = cards.first().getByText('Why these connections?', { exact: true }); await summary.focus(); await page.keyboard.press('Enter');
+   await cards.first().getByText('Runtime and pool details', { exact: true }).first().click();
+   await cards.first().getByText(/Recorded accesses accumulate since each runtime started/).waitFor();
+   for (const label of ['Accounts and sign-in', 'Administration', 'Things and data']) await cards.first().locator('[data-block-id="mongo-feature-name"]').filter({ hasText: label }).waitFor();
+   const usageRows = await cards.first().locator('[data-block-id="mongo-feature-accesses"]').allTextContents();
+   assert(usageRows.length >= 3 && usageRows.every(value => /[1-9][0-9]* recorded shared-client access(?:es)? · last used/.test(value) && !value.includes('Unknown time')), 'Rendered positive attributed counts and last-use times');
+   await cards.first().locator('[data-block-id="mongo-pool-card"]').first().waitFor();
    await cards.first().getByText('Created by', { exact: true }).waitFor(); await cards.first().getByText('Thingtime API runtime', { exact: true }).waitFor();
    await measure('connections-' + width + '-expanded');
    await host.getByRole('searchbox', { name: 'Search loaded connection sources' }).fill('no-match-synthetic-connection');
@@ -160,6 +178,7 @@ async function browserAcceptance() {
    await measure('connections-' + width + '-cards'); checks.push(width + ': actual API cards, search, empty, freshness, keyboard details, refresh, full scroll');
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await enableCurrentPageBuilder(page);
   await host.getByRole('button', { name: 'Edit layout', exact: true }).click(); await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
   const drawer = page.getByTestId('builder-drawer');
   for (const [id, label, value] of [['mongo-intro', 'Block text', 'Connection sources reviewed independently'], ['mongo-source-counts', 'Block text', '{item.counts} · reviewed'], ['mongo-search', 'Element placeholder', 'Find a runtime']]) {
@@ -172,7 +191,7 @@ async function browserAcceptance() {
   const readback = await page.evaluate(async id => (await (await fetch('/api/v1/things?id=' + encodeURIComponent(id))).json()).thing, result.thing.id);
   const saved = flatten(readback.crystal.blocks); assert.equal(saved.find(block => block.id === 'mongo-source-counts').text, '{item.counts} · reviewed'); assert.equal(saved.find(block => block.id === 'mongo-search').props.placeholder, 'Find a runtime');
   assert.deepEqual(readback.acl, ['tt:user']);
-  await page.reload(); await host.getByText('Connection sources reviewed independently', { exact: true }).waitFor({ timeout: 90000 }); await host.getByText(/observed pool sockets.*reviewed/).first().waitFor();
+  await page.reload(); await host.getByText('Connection sources reviewed independently', { exact: true }).waitFor({ timeout: 90000 }); await host.getByText('Why these connections?', { exact: true }).first().click(); await host.getByText(/observed pool sockets.*reviewed/).first().waitFor();
   assert.equal(await host.getByRole('searchbox', { name: 'Search loaded connection sources' }).getAttribute('placeholder'), 'Find a runtime'); checks.push('Builder edits nested text, control, repeated-card field; private exact readback and reload');
   await page.goto(fixture.origin + '/settings/admin', { waitUntil: 'domcontentloaded' }); await page.getByText('Global controls — AI conflict resolution, rate limits, and admin access.', { exact: true }).click(); await host.getByRole('heading', { name: 'MongoDB connections', exact: true }).waitFor({ timeout: 90000 }); await host.getByText('Connection sources reviewed independently', { exact: true }).waitFor(); checks.push('Settings Admin reuses same saved editable layout');
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,3 +1,5 @@
+import { isPrivateActivationPage, stableActivationEnsureBatch, stableActivationEnsureKey } from '~/schemas/webpageActivation';
+import { contentExecutionHeld, type ContentExecutionHold } from '../things/contentExecutionGate';
 import { validateRunInputs } from './actionInputs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { capabilitySatisfies } from '../capabilities/capabilityContract';
@@ -21,6 +23,7 @@ import {
 	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
 	MAX_ACTION_SEARCH_MATCH_CHARS,
+	MAX_ACTION_STEP_STRING_CHARS,
 	MAX_ACTION_TRACE_ENTRIES,
 	deriveActionEffects,
 	parseActionRef,
@@ -37,6 +40,7 @@ import {
 	createThing,
 	canViewInherited,
 	deleteThing,
+	ensureOwnedDataThing,
 	fail,
 	getThing,
 	isFail,
@@ -192,30 +196,38 @@ const capabilityOf = (capabilities: ActionCapabilityEntry[], capability: string)
 const resolveActionProgram = async (
 	viewer: Viewer,
 	reference: string,
-	options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
+	options?: { ownedOnly?: boolean; privateRevision?: string; shared?: SharedComposition; parentId?: string }
 ): Promise<Fail | ActionProgram> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown>; executionHold?: ContentExecutionHold; executionHeld?: boolean } | null = null;
 	if (options?.shared) {
 		const included = options.parentId
 			? options.shared.children.get(`${options.parentId}:${trimmed}`)
 			: options.shared.actions.get(trimmed);
 		if (!included) return fail(404, 'This action is not included in the shared app');
-		doc = { id: included.shareId, crystal: included.crystal || {} };
+		doc = { id: included.shareId, ownerId: included.ownerId, crystal: included.crystal || {}, executionHold: (included as any).executionHold };
+	} else if (options?.privateRevision) {
+		const result = await getThing(viewer, trimmed);
+		if (result.ok && result.thing.id === trimmed && result.thing.author?.id === viewer.id &&
+			result.thing.thingtime.includes('action') && isPrivateActivationPage(result.thing.acl) &&
+			result.thing.updatedAt === options.privateRevision) {
+			const action = result.thing;
+			doc = { id: action.id, ownerId: viewer.id, crystal: action.crystal, executionHeld: action.executionHeld };
+		}
 	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown>, executionHeld: byId.thing.executionHeld };
 		}
 	}
-	if (!doc) {
+	if (!doc && !options?.privateRevision) {
 		const things = await getThingsCollection();
 		// Deterministic under duplicate keys: nothing index-enforces per-owner
 		// actionKey uniqueness yet, so resolve to the LATEST revision (highest
@@ -231,7 +243,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	}
 	if (!doc) {
 		return fail(
@@ -241,6 +253,11 @@ const resolveActionProgram = async (
 				: `No runnable action matches "${trimmed.slice(0, 80)}"`
 		);
 	}
+
+	// Every ID/key/shared/child path and browser preparation reaches this
+	// resolver. Current ACL resolution above remains mandatory; a held graph
+	// never lends its invoker authority before durable completion.
+	if (doc.executionHeld === true || await contentExecutionHeld(doc)) return fail(409, 'This content is still restoring; actions are unavailable until verification completes');
 
 	// Re-sanitize so run-time enforces the exact save-time contract (steps
 	// grammar, capability coverage, ref validity) even for legacy documents.
@@ -538,6 +555,66 @@ const executeProgram = async (
 			} else if (step.op === 'fail') {
 				const message = resolveValue(step.message, scope);
 				runError(typeof message === 'string' && message.trim() ? message.slice(0, MAX_ACTION_RUN_ERROR_CHARS) : `Step ${label} refused the run`);
+			} else if (step.op === 'things.ensure') {
+				if (budget.operationPolicy) runError(`Step ${label} cannot ensure Things in a restricted Action run`);
+				const schema = await resolveSchemaRef(viewer, String(step.schema));
+				for (const capability of ['things.create', 'things.read']) {
+					const entry = capabilityOf(effective, capability);
+					if (!entry || !schemaScopeAllows(entry, [schema.name, schema.id])) {
+						runError(`Step ${label} ensures "${schema.name}" outside the declared ${capability} schema scope`);
+					}
+				}
+				const prepare = (itemLabel: string, lambda?: ExpressionLambdaScope) => {
+					const key = resolveValue(step.key, scope, lambda);
+					if (typeof key !== 'string' || !key.trim() || key.length > MAX_ACTION_STEP_STRING_CHARS) {
+						return runError(`Step ${itemLabel} key must resolve to non-empty text within the Action value budget`);
+					}
+					const resolved = resolveValue(step.values, scope, lambda);
+					if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
+						return runError(`Step ${itemLabel} values resolved to non-object data`);
+					}
+					const values = resolved as Record<string, unknown>;
+					const folderId = resolveValue(step.folderId, scope, lambda);
+					if (step.folderId !== undefined && (typeof folderId !== 'string' || !folderId.trim())) {
+						return runError(`Step ${itemLabel} folderId resolved to a non-string or empty id`);
+					}
+					const match = Array.isArray(step.matchFields) ? Object.fromEntries(step.matchFields.map(field => {
+						const value = Object.prototype.hasOwnProperty.call(values, field) ? values[field] : undefined;
+						if (typeof value !== 'string' && typeof value !== 'boolean' && (typeof value !== 'number' || !Number.isFinite(value))) {
+							return runError(`Step ${itemLabel} matching field ${field} needs a scalar creation value`);
+						}
+						return [field, value];
+					})) as Record<string, string | number | boolean> : undefined;
+					return { label: itemLabel, key: key.trim(), values, folderId: typeof folderId === 'string' ? folderId.trim() : undefined, match };
+				};
+				const ensure = async (entry: ReturnType<typeof prepare>) => {
+					const ensured = await ensureOwnedDataThing(
+						viewer!, { actionId: program.id, key: entry.key }, schema, entry.values, entry.folderId, entry.match
+					);
+					if (ensured.ok === false) return runError(`Step ${entry.label} ensure failed: ${ensured.error}`);
+					const doc = ensured.doc;
+					return { id: doc.shareId, crystal: doc.crystal, schema: schema.name, schemaId: schema.id };
+				};
+				if (step.each === undefined) {
+					const result = await ensure(prepare(label));
+					target = result.id;
+					scope.steps[index] = result;
+				} else {
+					const items = resolveValue(step.each, scope);
+					if (!Array.isArray(items)) return runError(`Step ${label} each must resolve to a list`);
+					if (items.length > budget.opsRemaining) return runError(`Step ${label} exceeds the remaining operation budget; use smaller batches`);
+					const entries = items.map((item, position) => prepare(`${label}[${position}]`, { item, index: position }));
+					if (new Set(entries.map(entry => entry.key)).size !== entries.length) return runError(`Step ${label} has duplicate ensure keys`);
+					const results = [];
+					for (const entry of entries) {
+						await budget.assertAuthorized?.();
+						consumeOp(budget);
+						results.push(await ensure(entry));
+						if (jsonBytes(results) > budget.maxResultBytes) return runError(`Step ${entry.label} batch result exceeds the Action result budget`);
+					}
+					scope.steps[index] = results;
+					note = `${results.length} items`;
+				}
 			} else if (step.op === 'things.create') {
 				const schema = await resolveSchemaRef(viewer, String(step.schema));
 				// Save-time coverage proves the program's OWN declaration; this
@@ -579,12 +656,13 @@ const executeProgram = async (
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
 				await budget.operationPolicy?.access(String(id), 'read');
+				if (step.ownedFolderId !== undefined && budget.shared) runError(`Step ${label} owned-folder reads require the owning session`);
 				const included = budget.shared?.data.get(String(id));
 				const got = included
 					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
 					: await getThing(viewer, String(id));
 				if (got.ok === false) runError(`Step ${label} get failed: ${got.error}`);
-				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown } }).thing;
+				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown; author?: { id?: string } | null; folderId?: string | null } }).thing;
 				if (!isDataThing(thing.thingtime)) {
 					runError(`Step ${label} read "${thing.id}" is not a data thing — actions read and write Data Things only`);
 				}
@@ -592,8 +670,14 @@ const executeProgram = async (
 				if (!schemaScopeAllows(readScope, schemaIdentityOf(thing.crystal))) {
 					runError(`Step ${label} read "${thing.id}" outside the declared things.read schema scope`);
 				}
+				if (step.ownedFolderId !== undefined) {
+					const folder = resolveValue(step.ownedFolderId, scope);
+					if (typeof folder !== 'string' || !folder.trim() || !viewer?.id || thing.author?.id !== viewer?.id || thing.folderId !== folder) {
+						runError(`Step ${label} requires an owned Data Thing in the selected folder`);
+					}
+				}
 				target = thing.id;
-				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
+				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal, ...(step.ownedFolderId !== undefined ? { ownedFolderVerified: true } : {}) };
 			} else if (step.op === 'things.search') {
 				await budget.operationPolicy?.search(step.schema, step.scope);
 				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all
@@ -898,7 +982,7 @@ const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
+	context?: { firstPartyActorId?: string; activation?: { actionRevision: string; dayInput?: string }; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -908,9 +992,23 @@ const executeActionRun = async (
 	// flag only ever NARROWS resolution, so honouring a client-supplied value
 	// is safe: the viewer's own client always sends it, and a caller who omits
 	// it is acting as themselves on their own behalf.
-	const ownedOnly = request.source === 'component';
-	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, shared });
+	const activation = request.source === 'activation';
+	if (activation && (shared || viewer.pat || context?.firstPartyActorId !== viewer.id || !context.activation?.actionRevision))
+		return fail(403, 'Page activation requires the current owning account and saved opt-in');
+	const ownedOnly = request.source === 'component' || activation;
+	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, privateRevision: activation ? context?.activation?.actionRevision : undefined, shared });
 	if (isFail(program)) return program;
+
+	// Automatic and retried runs may read and ensure a stable identity, never
+	// invoke an arbitrary child program or repeat a non-idempotent effect.
+	if (activation && program.steps.some(step => !['compute', 'fail', 'return', 'things.get', 'things.search', 'things.ensure'].includes(step.op) &&
+		!(step.op === 'http.request' && step.method === 'GET')))
+		return fail(403, 'Page activation can only read or ensure saved data');
+	if (activation && program.steps.some(step => step.op === 'things.ensure' &&
+		!(step.each === undefined
+			? stableActivationEnsureKey(step.key, context?.activation?.dayInput)
+			: stableActivationEnsureBatch(step.key, step.each, context?.activation?.dayInput))))
+		return fail(403, 'Page activation ensure needs a literal key, the saved civil-date input, or keys from its civil-date range');
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
 	// Walk the CEILINGS, never the merged object: an unrecognised declared key

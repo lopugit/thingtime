@@ -150,6 +150,7 @@ export const router = createBrowserRouter([
       { path: 'pages/:slug/:version', lazy: lazyRoute(() => import('./routes/legal')) },
       { path: 'privacy', loader: () => redirect('/pages/privacy-policy') },
       { path: 'terms', loader: () => redirect('/pages/terms-of-service') },
+      { path: 'share', lazy: lazyRoute(() => import('./routes/share')) },
       { path: 'support', lazy: lazyRoute(() => import('./routes/support')) },
 
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
@@ -189,6 +190,7 @@ export const router = createBrowserRouter([
       { path: 'email', lazy: lazyRoute(() => import('./routes/mail')) },
       { path: 'passwords/provider', lazy: lazyRoute(() => import('./routes/passwords.provider')) },
       { path: 'passwords', lazy: lazyRoute(() => import('./routes/passwords')) },
+      { path: 'credentials/import', lazy: lazyRoute(() => import('./routes/credential-import')) },
       { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
       { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },

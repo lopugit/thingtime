@@ -1,3 +1,5 @@
+import { ConnectorProtectionsSettings } from './ConnectorProtectionsSettings';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import { CharactersSettings } from '~/components/Characters/CharactersSettings';
 import { EmailSettings } from '~/components/Mail/EmailSettings';
 import { LopuPromptSettings } from './LopuPromptSettings';
@@ -140,8 +142,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 
 	const [displayName, setDisplayName] = React.useState(user.displayName || '');
 	const [bio, setBio] = React.useState(user.bio || '');
-	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.avatarUrl));
-	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.bannerUrl));
+	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.avatarUrl, user.avatarPresentation));
+	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.bannerUrl, user.bannerPresentation));
 	const [birthday, setBirthday] = React.useState(user.birthday || '');
 	const [saving, setSaving] = React.useState(false);
 	const avatarMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
@@ -169,13 +171,13 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 			const response = await api.v1.profile.update({
 				displayName: displayName.trim() || null,
 				bio: bio.trim() || null,
-				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
-				...profileMediaUpdateFields('banner', bannerMedia.mutation),
+				...profileMediaUpdateFields('avatar', avatarMedia.mutation, avatarMedia.presentationUpdate, avatarMedia.presentationSource),
+				...profileMediaUpdateFields('banner', bannerMedia.mutation, bannerMedia.presentationUpdate, bannerMedia.presentationSource),
 				birthday: birthday.trim() || null
 			});
 			if (!response?.user) throw new Error('invalid profile response');
-			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
-			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null);
+			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null, response.user.avatarPresentation);
+			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null, response.user.bannerPresentation);
 			lopu({ title: 'Profile saved ✨', status: 'success', duration: 4000 });
 		} catch (error: unknown) {
 			lopu({
@@ -225,6 +227,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 				ownerId={user.id}
 				savedUrl={user.avatarUrl}
 				savedLinkedUrl={user.avatarLinkedUrl}
+				savedPresentation={user.avatarPresentation}
+				privateUploadsEnabled={user.privateUploadsEnabled}
 				disabled={saving}
 				remainingBytes={user.storage.remainingBytes}
 				storageStatus={user.storage.status}
@@ -237,6 +241,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 				ownerId={user.id}
 				savedUrl={user.bannerUrl}
 				savedLinkedUrl={user.bannerLinkedUrl}
+				savedPresentation={user.bannerPresentation}
+				privateUploadsEnabled={user.privateUploadsEnabled}
 				disabled={saving}
 				remainingBytes={user.storage.remainingBytes}
 				storageStatus={user.storage.status}
@@ -279,6 +285,7 @@ export const SettingsContent = ({
 }) => {
 	const contentRef = React.useRef<HTMLDivElement>(null);
 	const user = useCurrentUser();
+	const dataPlane = useDataPlane();
 	const api = useApi();
 	const lopu = useLopu();
 	const routerNavigate = useNavigate();
@@ -856,6 +863,7 @@ export const SettingsContent = ({
 					<Flex direction="column" gap={4} minW={0}>
 						{/* connected apps — grants + everything each app stores */}
 						{user && <ConnectedAppsSection userId={user.id} />}
+						{user && !user.temporary && user.accountKind !== 'service' && <ConnectorProtectionsSettings key={`${user.id}:${dataPlane}`} accountId={user.id} />}
 						{/* 3b · linked deployments (auth only) */}
 						{user && (
 							<SettingsSection

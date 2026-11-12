@@ -2,12 +2,15 @@ import AppKit
 import ApplicationServices
 
 private final class CommanderPanel: NSPanel {
-  var resizeSurfaceInset = CommanderWebView.launcherSurfaceInset
   var usesCustomWindowResizeHandling = true {
     didSet {
-      if !usesCustomWindowResizeHandling { cancelResizeSession() }
+      if !usesCustomWindowResizeHandling {
+        cancelResizeSession()
+        releaseHoverResizeCursor()
+      }
     }
   }
+  private var hoverResizeCursor: NSCursor?
   private var resizeSession: (
     edges: CommanderResizeEdges,
     frame: NSRect,
@@ -29,9 +32,28 @@ private final class CommanderPanel: NSPanel {
   }
 
   override func sendEvent(_ event: NSEvent) {
+    // Resolve the current point after AppKit dispatches overlapping tracking
+    // areas. Entry/exit order is not guaranteed, and continued motion must also
+    // select the border cursor when a pinned panel is not the key window.
+    defer {
+      switch event.type {
+      case .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate:
+        updateHoverResizeCursor(at: event.locationInWindow)
+      default: break
+      }
+    }
+    if !isVisible {
+      switch event.type {
+      case .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate:
+        // Queued tracking callbacks must not change another window's cursor
+        // after this panel has been hidden or closed.
+        return
+      default: break
+      }
+    }
     if resizeSession != nil {
       switch event.type {
-      case .leftMouseDragged, .cursorUpdate, .mouseEntered, .mouseExited,
+      case .leftMouseDragged, .mouseMoved, .cursorUpdate, .mouseEntered, .mouseExited,
            .appKitDefined, .systemDefined, .applicationDefined, .periodic, .flagsChanged:
         // Tracking and framework notifications can arrive between drag steps,
         // including after setFrame moves a tracking boundary. A modifier change
@@ -50,15 +72,11 @@ private final class CommanderPanel: NSPanel {
     switch event.type {
     case .leftMouseDown:
       cancelResizeSession()
-      guard usesCustomWindowResizeHandling, styleMask.contains(.resizable) else { break }
+      guard usesCustomWindowResizeHandling, styleMask.contains(.resizable),
+            let contentView = contentView as? CommanderLauncherContentView else { break }
       let mouseLocation = convertPoint(toScreen: event.locationInWindow)
-      let edges = CommanderWebView.resizeEdges(
-        at: mouseLocation,
-        frame: frame.insetBy(
-          dx: resizeSurfaceInset,
-          dy: resizeSurfaceInset
-        ),
-        handleWidth: CommanderWebView.resizeHandleWidth
+      let edges = contentView.resizeEdges(
+        at: contentView.convert(event.locationInWindow, from: nil)
       )
       if !edges.isEmpty {
         resizeSession = (edges, frame, mouseLocation)
@@ -85,6 +103,31 @@ private final class CommanderPanel: NSPanel {
     super.sendEvent(event)
   }
 
+  private func updateHoverResizeCursor(at point: NSPoint) {
+    guard isVisible, usesCustomWindowResizeHandling, styleMask.contains(.resizable),
+          let content = contentView as? CommanderLauncherContentView else {
+      releaseHoverResizeCursor()
+      return
+    }
+    let localPoint = content.convert(point, from: nil)
+    let handle = content.resizeHandles.first { handle in
+      guard !handle.isHidden else { return false }
+      if let resizeSession { return handle.edges == resizeSession.edges }
+      return handle.frame.contains(localPoint)
+    }
+    guard let handle else {
+      releaseHoverResizeCursor()
+      return
+    }
+    hoverResizeCursor = handle.resizeCursor
+    handle.resizeCursor.set()
+  }
+
+  private func releaseHoverResizeCursor() {
+    if let hoverResizeCursor, NSCursor.current === hoverResizeCursor { NSCursor.arrow.set() }
+    hoverResizeCursor = nil
+  }
+
   override func performDrag(with event: NSEvent) {
     // The web UI's draggable regions use AppKit's drag loop. It must never
     // inherit an earlier edge-resize session.
@@ -94,6 +137,7 @@ private final class CommanderPanel: NSPanel {
 
   override func resignKey() {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.resignKey()
   }
 
@@ -104,11 +148,13 @@ private final class CommanderPanel: NSPanel {
 
   override func orderOut(_ sender: Any?) {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.orderOut(sender)
   }
 
   override func close() {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.close()
   }
 }
@@ -138,6 +184,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     "window.dispatchEvent(new CustomEvent('commander:launcher-opened'))"
   private let panel: CommanderPanel
   private let webView: CommanderWebView
+  private let launcherContentView: CommanderLauncherContentView
   let id: UUID
   var didBecomeKey: ((UUID) -> Void)?
   private var contentReady = false
@@ -172,7 +219,11 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     )
     self.id = id
     self.panel = panel
-    self.webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
+    let webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
+    self.webView = webView
+    self.launcherContentView = CommanderLauncherContentView(
+      webView: webView, frame: NSRect(origin: .zero, size: LauncherWindowMode.standard.size)
+    )
     self.isPinned = pinningEnabled && pinned
     self.pinningEnabled = pinningEnabled
     self.isAccessibilityTrusted = isAccessibilityTrusted
@@ -187,9 +238,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     // A nonactivating panel can be automatically hidden while AppKit still reports
     // it as visible. Commander owns dismissal through windowDidResignKey instead.
     panel.hidesOnDeactivate = false
+    panel.acceptsMouseMovedEvents = true
     panel.animationBehavior = .utilityWindow
     panel.minSize = LauncherWindowMode.standard.minimumSize
-    panel.contentView = webView
+    panel.contentView = launcherContentView
     panel.contentView?.wantsLayer = true
     panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     panel.contentView?.superview?.wantsLayer = true
@@ -408,7 +460,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     windowMode = mode
     panel.minSize = mode.minimumSize
     let surfaceInset: CGFloat = mode == .compact ? 12 : CommanderWebView.launcherSurfaceInset
-    panel.resizeSurfaceInset = surfaceInset
+    launcherContentView.surfaceInset = surfaceInset
     webView.maskToSurface(inset: surfaceInset, cornerRadius: 19)
     let size = mode.size
     guard panel.isVisible else {
@@ -429,7 +481,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func setCustomWindowResizeHandling(_ enabled: Bool) {
     panel.usesCustomWindowResizeHandling = enabled
-    webView.usesCustomWindowResizeHandling = enabled
+    launcherContentView.usesCustomWindowResizeHandling = enabled
   }
 
   func shutdown() {
@@ -510,7 +562,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   var panelForTesting: NSPanel { panel }
   var customWindowResizeHandlingEnabledForTesting: Bool {
-    panel.usesCustomWindowResizeHandling && webView.usesCustomWindowResizeHandling
+    panel.usesCustomWindowResizeHandling && launcherContentView.usesCustomWindowResizeHandling
   }
   var resizeSessionActiveForTesting: Bool { panel.hasResizeSession }
   static var launcherOpenedScriptForTesting: String { launcherOpenedScript }

@@ -22,7 +22,7 @@ if (!process.argv.includes('--child')) {
   const probe = socketServer(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening');
   const port = (probe.address() as any).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   await mkdir(join(dir, 'db'));
-  const env = { PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
+  const env = { ...(process.env.THINGTIME_EXTENSION_ACCOUNTS_UI?{THINGTIME_EXTENSION_ACCOUNTS_UI:process.env.THINGTIME_EXTENSION_ACCOUNTS_UI}:{}), ...(process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE?{THINGTIME_TEST_PLAYWRIGHT_MODULE:process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE}:{}), ...(process.env.PLAYWRIGHT_BROWSERS_PATH?{PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH}:{}), PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${port}/thingtime?replicaSet=storage_recovery`, JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_USER_VAULT_KEY: randomBytes(32).toString('base64url') };
   const containerName = `tt-storage-recovery-${randomUUID()}`;
   const mongoArgs = ['--port', String(port), '--bind_ip', '127.0.0.1', '--replSet', 'storage_recovery', '--nounixsocket', '--wiredTigerCacheSizeGB', '0.25'];
@@ -44,11 +44,11 @@ if (!process.argv.includes('--child')) {
     await admin.db('admin').command({ replSetInitiate: { _id: 'storage_recovery', members: [{ _id: 0, host: `127.0.0.1:${port}` }] } });
     for (let n = 0; !(await admin.db('admin').command({ hello: 1 })).isWritablePrimary; n++) { if (n > 100) throw new Error('Replica primary timeout'); await delay(100); }
     await admin.close();
-    child = spawn(process.execPath, ['--import', 'tsx', script, '--child', ...(process.argv.includes('--password-records') ? ['--password-records'] : [])], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['--import', 'tsx', script, '--child', ...process.argv.filter(arg=>['--password-records','--password-verification','--verification-ui','--native-approval-ui'].includes(arg))], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout!.on('data', data => output += data); child.stderr!.on('data', data => output += data);
     const timeout = setTimeout(() => child?.kill('SIGTERM'), 180_000);
     const [code] = await once(child, 'exit'); clearTimeout(timeout);
-    if (code !== 0) throw new Error(`Integration failed:\n${output.slice(-10000)}`);
+    if (code !== 0) throw new Error(`Integration failed:\n${output.split('\n').filter(line=>!/(?:verify-email\?token=|^subject:|^to:|^Welcome to Thingtime)/i.test(line)).join('\n').slice(-10000)}`);
     console.log(output.split('\n').filter(line => line.startsWith('PASS:')).join('\n'));
   } finally {
     await admin.close().catch(() => {}); child?.kill('SIGTERM');
@@ -59,22 +59,25 @@ if (!process.argv.includes('--child')) {
 } else {
   assert.match(process.env.MONGODB_CONNECTION_STRING || '', /^mongodb:\/\/127\.0\.0\.1:\d+\/thingtime\?replicaSet=storage_recovery$/);
   const { createServer } = await import('vite');
-  const vite = await createServer({ root, configFile: false, envDir: false, appType: 'custom', server: { middlewareMode: true, hmr: false, ws: false, watch: null }, resolve: { alias: { '~': join(root, 'app') } } });
+  const vite = await createServer({ root, configFile: false, envDir: false, appType: 'custom', server: { middlewareMode: true, hmr: process.argv.includes('--verification-ui')?{host:'127.0.0.1',port:18091}:false, ...(process.argv.includes('--verification-ui')?{}:{ws:false}), watch: null }, resolve: { alias: { '~': join(root, 'app') } } });
   const load = (path: string) => vite.ssrLoadModule('/app/' + path);
   try {
     const register = await load('routes/api/v1/auth/register/_register.tsx'), route = await load('routes/api/v1/things/_things.tsx');
     const plans = await load('api/utils/subscriptions/subscriptions.ts'), storage = await load('api/utils/storage/userStorage.ts');
     const accounted = await load('api/utils/storage/accountedThings.ts'), core = await load('api/utils/storage/storageCore.ts');
     const db = await load('api/utils/mongodb/collections.ts'), recovery = await load('api/utils/storage/userStorageRecovery.ts'), registry = await load('schemas/registry.ts');
-    const origin = 'http://127.0.0.1:19897', username = `storage-${randomUUID().slice(0, 8)}`;
-    const response = await register.action({ request: new Request(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username, email: username + '@example.invalid', password: randomBytes(32).toString('hex') }) }) });
+    const origin = process.argv.includes('--password-verification') ? 'https://verification-api.test' : 'http://127.0.0.1:19897', username = `storage-${randomUUID().slice(0, 8)}`;
+    const fixturePassword = randomBytes(32).toString('hex');
+    const response = await register.action({ request: new Request(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username, email: username + '@example.invalid', password: fixturePassword }) }) });
     const registered = await response.json(); assert.equal(registered.ok, true, registered.error);
     const ownerId = registered.user.id, cookie = response.headers.getSetCookie().map((value: string) => value.split(';')[0]).join('; ');
     const call = async (method: string, body?: any, id?: string) => {
       const request = new Request(origin + '/api/v1/things' + (id ? '?id=' + encodeURIComponent(id) : ''), { method, headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
       const result = await (method === 'GET' ? route.loader : route.action)({ request }); return { status: result.status, body: await result.json() };
     };
-    if (process.argv.includes('--password-records')) {
+    if (process.argv.includes('--password-verification')) {
+      await (await import('./password-verification.integration')).runPasswordVerificationIntegration({load,vite,origin,ownerId,cookie,password:fixturePassword,username});
+    } else if (process.argv.includes('--password-records')) {
       const passwords = await load('routes/api/v1/passwords/_passwords.tsx');
       const material = await load('passwords/browserPasskey.ts');
       const model = await load('passwords/model.ts');

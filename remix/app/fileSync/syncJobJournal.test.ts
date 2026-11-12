@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, syncJobCanPause, syncJobDue } from './syncJobJournal';
+import { SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -69,14 +69,37 @@ test('identity changes and cancellation fence admission and discovery', async ()
  assert.throws(() => jobs.read(), { name: 'AbortError' }); journal.close();
 });
 
-test('concurrent admissions enforce the account cap without blocking existing connections', async () => {
- const journal = await open();
- const results = await Promise.allSettled(Array.from({ length: MAX_SYNC_JOBS_PER_ACCOUNT + 1 }, (_, i) => {
+test('more than 256 independent configs admit, pause, and remain discoverable across reopen', async () => {
+ const factory = new IDBFactory(); const journal = await open(factory);
+ const results = await Promise.allSettled(Array.from({ length: 257 }, (_, i) => {
   const binding = { ...scope, rootId: 'connection-' + i }; return jobsFor(journal, binding).admit(saved(binding), 'job-' + i);
  }));
- assert.equal(results.filter(result => result.status === 'fulfilled').length, MAX_SYNC_JOBS_PER_ACCOUNT);
- assert.equal(results.filter(result => result.status === 'rejected').length, 1);
- const binding = { ...scope, rootId: 'connection-0' }; assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0'); journal.close();
+ assert.equal(results.filter(result => result.status === 'fulfilled').length, 257);
+ const folder = { ...scope, rootId: 'paused-folder' };
+ assert.equal((await jobsFor(journal, folder).pauseFolderSetup(saved(folder), 'folder-denial'))?.state, 'paused');
+ const photo = { ...scope, rootId: 'paused-photo' };
+ const photoSaved = { ...saved(photo), configuration: { ...saved(photo).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, photo).pausePhoto(photoSaved, 'photo-denial')).state, 'paused');
+ const automatic = { ...scope, rootId: 'automatic-photo' };
+ const automaticSaved = { ...saved(automatic), configuration: { ...saved(automatic).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, automatic).admit(automaticSaved, 'auto', 300_000, undefined, { previous: null })).id, 'auto');
+ const binding = { ...scope, rootId: 'connection-0' };
+ assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0');
+ journal.close();
+ const reopened = await open(factory);
+ try {
+  const jobs = jobsFor(reopened); let after: string | undefined; const keys = new Set<string>();
+  do {
+   const page = await jobs.list(after);
+   assert.ok(page.jobs.length <= SYNC_JOB_PAGE_SIZE);
+   for (const job of page.jobs) keys.add(job.key);
+   after = page.next;
+  } while (after);
+  assert.equal(keys.size, 260);
+  assert.equal((await jobsFor(reopened, folder).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, photo).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, automatic).read())?.id, 'auto');
+ } finally { reopened.close(); }
 });
 
 test('version-10 upgrade preserves existing records and admits no jobs', async () => {
@@ -253,5 +276,234 @@ test('transient retry deadlines survive restart, reject noisy early wakes, and p
  assert.equal(await jobs.defer(stopped, 120_103), null);
  await assert.rejects(jobs.defer(manual, 0, Infinity), /deadline/);
  const bounded = (await jobs.defer(manual, 100, 999999999))!; assert.equal(bounded.retryAt, 300_100);
+ journal.close();
+});
+
+test('app opening wakes the saved local cadence without bypassing retry backoff, Pause or attention', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'cycle', 300_000);
+ const scheduled = (await jobs.finish(first, 100))!;
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const restored = (await jobs.read())!;
+ assert.equal(syncJobDue(restored, 200, true), false);
+ assert.equal(syncJobDue(restored, 200, true, true), true);
+ const begun = (await jobs.begin(restored, 200, 'next-cycle', undefined, true, true))!;
+ assert.equal(begun.state, 'runnable');
+ const backoff = (await jobs.defer(begun, 200, 120_000))!;
+ assert.equal(syncJobDue(backoff, 201, true, true), false, 'ambiguous/server retry deadlines remain binding');
+ assert.equal(await jobs.begin(backoff, 201, 'not-admitted', undefined, true, true), null);
+ const paused = (await jobs.pause(backoff))!;
+ assert.equal(syncJobDue(paused, 999_999, true, true), false);
+ assert.equal(syncJobDue({ ...scheduled, state: 'attention' }, 999_999, true, true), false);
+ journal.close();
+});
+
+test('strict native capture survives a lost reply and a failed cleanup across a reopen', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const initial = saved(), captureId = crypto.randomUUID(), replacement = crypto.randomUUID();
+ const admitted = await jobs.admit(initial, 'strict');
+ const scanning = (await jobs.strictCapture(admitted, captureId))!;
+ const attempts: string[] = [];
+ const lostReply = async (job: typeof scanning) => {
+  attempts.push(job.strictCaptureId!);
+  assert.deepEqual(job.scope, scanning.scope);
+  assert.deepEqual(job.reviewed, initial);
+  throw Error('Cancel reply lost');
+ };
+ await assert.rejects(retireStrictCapture(jobs, scanning, lostReply), /Cancel reply lost/);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const retained = (await jobs.read())!;
+ assert.equal(retained.strictCaptureId, captureId);
+ assert.equal(await jobs.strictCapture(retained, replacement), null);
+ await assert.rejects(jobs.admit(initial, 'new-cycle'), /previous strict inventory cleanup/);
+ const paused = (await jobs.pause(retained))!;
+ await assert.rejects(retireStrictCapture(jobs, paused, lostReply), /Cancel reply lost/);
+ assert.equal((await jobs.read())?.strictCaptureId, captureId);
+ const cleaned = await retireStrictCapture(jobs, paused, async job => {
+  attempts.push(job.strictCaptureId!);
+  assert.deepEqual(job.reviewed.configuration, initial.configuration);
+ });
+ assert.equal(cleaned?.strictCaptureId, undefined);
+ assert.deepEqual(attempts, [captureId, captureId, captureId]);
+ const resumed = await jobs.admit(initial, 'new-cycle');
+ assert.equal((await jobs.strictCapture(resumed, replacement))?.strictCaptureId, replacement);
+ assert.equal(await jobs.strictCapture(paused, null), null);
+ journal.close();
+});
+
+test('attention retains only an allowlisted failure across reopen; pause wins stale failures and retry clears it', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const admitted = await jobs.admit(saved(), 'job-diagnostics', 300_000);
+ const attention = await jobs.attention(admitted, Error('Cloud sync request failed (403); retain this run for retry or reconciliation.'));
+ assert.equal(attention?.failureReason, 'cloud-authorization'); assert.equal(syncJobDue(attention!, Date.now()), false);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.equal((await jobs.read())?.failureReason, 'cloud-authorization');
+ const paused = await jobs.pause(attention!); assert.equal(paused?.intervalMs, 300_000);
+ assert.equal(await jobs.attention(attention!, Error('secret')), null);
+ assert.equal((await jobs.read())?.state, 'paused');
+ const retry = await jobs.admit(saved(), 'ignored', 300_000);
+ assert.equal(retry.failureReason, undefined); assert.equal(retry.id, admitted.id); journal.close();
+});
+
+test('legacy attention remains reason-unavailable and arbitrary failure text is never retained', async () => {
+ const journal = await open(), jobs = jobsFor(journal);
+ const admitted = await jobs.admit(saved(), 'job-legacy');
+ const legacy = await jobs.transition(admitted, 'attention');
+ assert.equal(legacy?.failureReason, undefined);
+ const retried = await jobs.admit(saved(), 'ignored');
+ const failed = await jobs.attention(retried, Error('private token=secret /Users/private/file'));
+ assert.equal(failed?.failureReason, 'unknown'); assert.doesNotMatch(JSON.stringify(failed), /secret|\/Users/);
+ await assert.rejects(jobs.pause({ ...failed!, failureReason: 'private' as any }), /Invalid saved sync job/);
+ journal.close();
+});
+
+test('only the actual journal policy guard supplies the typed configuration diagnostic', async () => {
+ const { syncJobFailure } = await import('./syncJobFailure');
+ const journal = await open(), jobs = jobsFor(journal), original = saved();
+ await jobs.admit(original, 'guard-proof');
+ await assert.rejects(jobs.admit({ ...original, configuration: { ...original.configuration, propagateDeletes: true } }, 'new'), cause => {
+  assert.equal(syncJobFailure(cause), 'configuration-changed'); return true;
+ });
+ journal.close();
+});
+
+test('reopen preserves serialized Photos reviews from v1–v3 and only recovers the exact legacy inactive wait', async () => {
+ const { shouldRunAutomaticPhoto } = await import('./photoAutomationScheduler');
+ const { syncScopeKey } = await import('./reconcile');
+ const factory = new IDBFactory(); let journal = await open(factory);
+ journal.close();
+ const db = await new Promise<IDBDatabase>(resolve => { const request = factory.open('jobs'); request.onsuccess = () => resolve(request.result); });
+ const reviews = [
+  '{"configurationVersion":1,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[]}',
+  '{"configurationVersion":2,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[],"ignoreRules":"private/"}',
+  '{"configurationVersion":3,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[],"resourceLimits":{"uploadBytesPerSecond":12345}}'
+ ];
+ const rows = reviews.map((raw, index) => {
+  const binding = { ...scope, rootId: 'photos-' + index };
+  const reviewed = { id: binding.rootId, updatedAt: saved().updatedAt, configuration: JSON.parse(raw) };
+  return { version: 1, key: syncScopeKey(binding), id: 'old-' + index, revision: 7, scope: binding, reviewed,
+   state: index === 0 ? 'attention' : 'paused', ...(index === 0 ? { failureReason: 'unknown' } : {}),
+   photoQueueEpoch: 'a3e487e9-8aa9-4eca-8129-7a78fbc57c2c' };
+ });
+ await new Promise<void>((resolve, reject) => {
+  const tx = db.transaction('sync-admitted-jobs', 'readwrite');
+  for (const row of rows) tx.objectStore('sync-admitted-jobs').put(row);
+  tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+ });
+ db.close(); journal = await open(factory);
+ try {
+  for (let index = 0; index < rows.length; index++) {
+   const row = rows[index], actual = await jobsFor(journal, row.scope).read();
+   assert.deepEqual(actual, row);
+   assert.equal(JSON.stringify(actual!.reviewed.configuration), reviews[index]);
+   assert.equal(shouldRunAutomaticPhoto(actual!.reviewed, actual!, 1000, true), false);
+   assert.equal(shouldRunAutomaticPhoto(actual!.reviewed, actual!, 1000, true, true), index === 0);
+  }
+ } finally { journal.close(); }
+});
+
+test('Photos retry persists the typed wait, keeps the allowance deadline, and fences pause before admission', async () => {
+ const { PHOTO_AUTOMATION_INTERVAL_MS } = await import('./configuration');
+ const { shouldRunAutomaticPhoto } = await import('./photoAutomationScheduler');
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const photo = { ...saved(), configuration: { ...saved().configuration, sourceKind: 'photos' as const, mode: 'backup' as const, network: 'any' as const } };
+ const denial = await jobs.pausePhoto(photo, 'offline-pause');
+ await assert.rejects(jobs.admit(photo, 'stale', PHOTO_AUTOMATION_INTERVAL_MS, undefined, { previous: null }), /changed while preparing/);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.deepEqual(await jobs.read(), denial);
+ assert.equal(shouldRunAutomaticPhoto(photo, denial, 1000, true), false);
+ const resumedDenial = (await jobs.resumePhotoPause(denial))!;
+ assert.deepEqual(resumedDenial.reviewed, denial.reviewed);
+ assert.equal(resumedDenial.id, denial.id);
+ assert.equal(await jobs.resumePhotoPause(denial), null);
+ const explicit = await jobs.admit(photo, 'explicit', PHOTO_AUTOMATION_INTERVAL_MS);
+ const inactive = (await jobs.defer(explicit, 1000, undefined, { reason: 'inactive' }, true))!;
+ assert.equal(inactive.retryAt, 301_000);
+ assert.equal(shouldRunAutomaticPhoto(photo, inactive, 300_999, false), false);
+ assert.equal(shouldRunAutomaticPhoto(photo, inactive, 300_999, true), true);
+ const resumed = (await jobs.begin(inactive, 4000, 'same-attempt', { wakeConditions: true }))!;
+ assert.equal(resumed.id, explicit.id);
+ const budget = (await jobs.defer(resumed, 4000, undefined, { reason: 'data-budget', retryAt: 600_000 }, true))!;
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.deepEqual(await jobs.read(), budget);
+ assert.equal(await jobs.begin(budget, 599_999, 'too-early', { wakeConditions: true }), null);
+ const due = (await jobs.begin(budget, 600_000, 'same-attempt', { wakeConditions: false }))!;
+ assert.equal(due.waitReason, undefined);
+ const scheduled = (await jobs.finish(due, 610_000))!;
+ assert.equal(scheduled.nextRunAt, 910_000);
+ const stopped = await jobs.pausePhoto(photo, 'ignored');
+ assert.equal(stopped.state, 'paused');
+ assert.equal(await jobs.begin(scheduled, 910_000, 'stale-scheduled', { wakeConditions: true }), null);
+ journal.close();
+});
+
+test('scheduled preflight waits retain cadence and explicit Stop wins after a restart', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'scheduled-first', 60_000);
+ const next = (await jobs.finish(first, 1))!;
+ const waiting = (await jobs.defer(next, 60_002, 120_000))!;
+ assert.equal(waiting.state, 'scheduled');
+ assert.equal(waiting.nextRunAt, next.nextRunAt);
+ assert.equal(waiting.retryAt, 180_002);
+ assert.equal(syncJobDue(waiting, 180_001, true), false);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.equal((await jobs.read())!.retryAt, waiting.retryAt);
+ const stopped = (await jobs.pause(waiting))!;
+ assert.equal(await jobs.begin(waiting, 180_002, 'stale-wake'), null);
+ assert.equal(syncJobDue(stopped, 999_999, true), false);
+ await assert.rejects(jobs.admit(saved(), 'stale-enrollment', 60_000, undefined, undefined, { previous: waiting }), /changed/);
+ journal.close();
+});
+
+test('strict scan interruption gets one durable verified retry before attention', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'strict-first', 60_000);
+ const waiting = (await jobs.retryStrictCapture(first, 100))!;
+ assert.equal(await jobs.begin(waiting, 30_099, 'too-soon', undefined, true), null);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const resumed = (await jobs.begin((await jobs.read())!, 30_100, 'not-a-new-cycle'))!;
+ assert.equal(resumed.id, first.id);
+ assert.equal(resumed.strictCaptureRetries, 1);
+ assert.equal(await jobs.retryStrictCapture(resumed, 30_101), null);
+ const attention = (await jobs.attention(resumed, Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.')))!;
+ assert.equal(attention.failureReason, 'indexing-incomplete');
+ assert.equal(syncJobDue(attention, 999_999, true), false);
+ journal.close();
+});
+
+test('verified folder/device policy edits wake only matching hourly jobs, preserving Pause, receipts and relaunch state', async () => {
+ const { wakeUploadPolicyJobs } = await import('./syncJobJournal');
+ const factory = new IDBFactory(); let journal = await open(factory);
+ const now = Date.now(), deadline = now + 3_600_000;
+ const rows = [];
+ for (const [id, grant, device, owner, origin, reason, state] of [
+  ['one', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['two', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['scheduled', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'scheduled'],
+  ['other-folder', 'other-grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-device', 'grant', 'other-device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-owner', 'grant', 'device', 'other-owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-origin', 'grant', 'device', 'owner', 'https://other.example', 'data-budget', 'runnable'],
+  ['charging', 'grant', 'device', 'owner', scope.origin, 'charging', 'runnable'],
+  ['paused', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'paused'],
+  ['review', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'attention']
+ ] as const) {
+  const binding = { ...scope, rootId: id, deviceId: device, ownerId: owner, origin };
+  const jobs = jobsFor(journal, binding), configuration = { ...saved(binding), configuration: { ...saved(binding).configuration, localRootId: grant } };
+  let job = await jobs.admit(configuration, 'job-' + id, state === 'scheduled' ? 60_000 : undefined);
+  if (state === 'scheduled') job = (await jobs.finish(job, now))!;
+  job = (await jobs.defer(job, now, 30_000, { reason, retryAt: deadline }))!;
+  if (state !== 'runnable' && state !== 'scheduled') job = (await jobs.transition(job, state))!;
+  rows.push({ binding, job });
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { ...scope, rootId: 'grant' }, () => {}), 3);
+ journal.close(); journal = await open(factory);
+ for (const { binding, job } of rows) {
+  const current = (await jobsFor(journal, binding).read())!;
+  assert.equal(current.id, job.id); assert.deepEqual(current.reviewed, job.reviewed);
+  if (['one', 'two', 'scheduled'].includes(binding.rootId)) { assert.equal(current.retryAt, undefined); assert.equal(syncJobDue(current, Date.now()), true); assert.equal(current.intervalMs, job.intervalMs); }
+  else assert.deepEqual(current, job, 'unrelated/pause/authority state stays exact: ' + binding.rootId);
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { origin: scope.origin, ownerId: scope.ownerId, deviceId: scope.deviceId }, () => {}), 1);
  journal.close();
 });

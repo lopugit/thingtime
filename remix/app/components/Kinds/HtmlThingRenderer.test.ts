@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRuntime';
-import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
+import { ALLOWED_PROPS, HtmlThingRenderer, HtmlBlockElement, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
 import { ChakraThingRenderer } from './ChakraThingRenderer';
 
 // The prop allowlist IS the trust boundary for component things: a component
@@ -23,6 +23,19 @@ test('the form-field props the ttAction click wrapper needs are allowed', () => 
 	}
 });
 
+test('authored multiple select preserves string array defaults and rejects non-string entries', () => {
+ const options = ['html', 'css', 'javascript'].map((value) => ({ tag: 'option', props: { value }, children: value }));
+ const select = (value: unknown) => renderToStaticMarkup(React.createElement(HtmlThingRenderer, {
+  node: { tag: 'select', props: { value, multiple: 'true' }, children: options }
+ }));
+ const markup = select(['html', 'css']);
+ assert.match(markup, /<select multiple=""/);
+ assert.match(markup, /<option value="html" selected="">/);
+ assert.match(markup, /<option value="css" selected="">/);
+ assert.doesNotMatch(markup, /<option value="javascript" selected="">/);
+ assert.doesNotMatch(select([{ content: 'html' }]), /selected=/);
+});
+
 test('no author-supplied regex reaches the browser through `pattern`', () => {
 	// Constraint validation compiles and runs `pattern` on the main thread,
 	// with no timeout, as soon as the field has a value — and a template can
@@ -37,6 +50,22 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	for (const prop of ['onClick', 'onclick', 'onError', 'dangerouslySetInnerHTML', 'srcDoc', 'srcdoc', 'formAction', 'xlinkHref']) {
 		assert.equal(ALLOWED_PROPS.has(prop), false, `${prop} must never render from untrusted markup`);
 	}
+});
+
+test('multiple selects render named fields and individually editable option labels', () => {
+	const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, {
+		tag: 'select', attributes: { name: 'levels', multiple: true, value: ['top-level', 'subtasks'], 'aria-label': 'Task level' },
+		editorProps: { 'data-block-id': 'filter', onClick: () => {} },
+		children: React.createElement(HtmlBlockElement, {
+			tag: 'option', attributes: { value: 'top-level', onClick: 'unsafe()' }, editorProps: { 'data-block-id': 'choice' }, children: 'Top level'
+		})
+	}));
+	assert.match(markup, /data-block-id="filter"/);
+	assert.match(markup, /<div data-block-id="choice"/);
+	assert.match(markup, /<select name="levels" multiple=""/);
+	assert.match(markup, /value="top-level" selected=""/);
+	assert.match(markup, /value="subtasks" selected=""/);
+	assert.doesNotMatch(markup, /unsafe|popover=/);
 });
 
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {
@@ -150,4 +179,21 @@ test('custom dialog close content uses the same sanitizing renderer', () => {
  assert.doesNotMatch(markup, /onclick/i);
  assert.match(markup, /<svg viewBox="0 0 24 24"><path d="M1 1L23 23"><\/path><\/svg>/);
  assert.doesNotMatch(markup, /onLoad|onload|alert\(1\)/);
+});
+
+test('editable images reuse bounded PNG thumbnails while arbitrary blob/data URLs remain inert',()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jEM8AAAAASUVORK5CYII=';
+ const image=(src:string)=>renderToStaticMarkup(React.createElement(HtmlBlockElement,{tag:'img',attributes:{src}}));
+ assert.match(image(png),/src="data:image\/png;base64,/);
+ for(const src of ['blob:https://thingtime.example/arbitrary','data:text/html;base64,PHNjcmlwdD4=',png.replace('image/png','image/svg+xml'),'data:image/png;base64,AQID'])assert.doesNotMatch(image(src),/ src=/);
+ assert.doesNotMatch(renderToStaticMarkup(React.createElement(HtmlBlockElement,{tag:'a',attributes:{href:png},children:'Link'})),/ href=/);
+ const bytes=Buffer.from(png.slice(22),'base64');bytes.writeUInt32BE(65,16);assert.doesNotMatch(image('data:image/png;base64,'+bytes.toString('base64')),/ src=/);
+});
+
+test('private hydration markers are inert names and cannot introduce an image source', () => {
+  for (const prop of ['data-tt-private-control', 'data-tt-private-text']) assert.ok(ALLOWED_PROPS.has(prop));
+  assert.equal(ALLOWED_PROPS.has('data-tt-private-image'), false);
+  const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, { tag: 'input', attributes: { name: 'private-field', 'data-tt-private-control': '' }, editorProps: {}, children: null }));
+  assert.match(markup, /data-tt-private-control=""/);
+  assert.doesNotMatch(markup, /value=/);
 });

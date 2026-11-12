@@ -6,6 +6,7 @@ import { TransientBlockHost } from './TransientBlockHost';
 import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
 import { findBlock, type WebpageBlock } from './webpageBlocks';
 import { blockStructureBlocks, blockStructureData, type BlockStructureScope } from './blockStructure';
+import { CurrentPageBuilderToggle } from './CurrentPageBuilder';
 import { BuilderOverlayHost } from './BuilderOverlayHost';
 
 export function BlockStructureModal({ blocks, anchorId, initialScope, selectedId, pageId, onSelect, onClose }: {
@@ -25,6 +26,7 @@ export function BlockStructureModal({ blocks, anchorId, initialScope, selectedId
     '#block-structure-component button:hover': { boxShadow: '0 0 0 1px var(--tt-accent, #e84c9e)' },
     '#block-structure-component nav button[aria-pressed="true"]': { background: 'var(--tt-accent-tint, #fff5fa)', borderColor: 'var(--tt-accent, #e84c9e)' }
    }}>
+    <CurrentPageBuilderToggle />
     <SettingsDocumentHost documentKey="builder-block-structure" defaultDocument={blockStructureBlocks} scopeKey={pageId} title="Block structure layout">
      {({ blocks: layout, chrome, editing }) => <TransientBlockHost enabled={!editing} scopeKey={pageId} scope={{ structure }} actions={{
       scope: ({ inputs }) => { if (['page', 'parent', 'block'].includes(String(inputs.scope))) setScope(inputs.scope as BlockStructureScope); },

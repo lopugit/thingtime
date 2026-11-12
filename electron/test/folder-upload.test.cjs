@@ -72,7 +72,7 @@ function fixture() {
             headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }] }; },
         fetchUpload: async (target, options) => {
             events.push('put'); assert.equal(target.protocol, 'https:'); assert.equal(options.credentials, 'omit');
-            assert.equal(options.redirect, 'error'); assert.deepEqual(Buffer.from(options.body), bytes);
+            assert.equal(options.redirect, 'error'); assert.deepEqual(Buffer.from(await new Response(options.body).arrayBuffer()), bytes);
             assert.deepEqual(Object.keys(options.headers), ['x-amz-checksum-sha256']); return new Response(null, { status: 200 });
         }
     };

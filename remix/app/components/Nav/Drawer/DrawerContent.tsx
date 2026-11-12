@@ -1,5 +1,6 @@
+import { PresentedImage } from '~/components/Media/PresentedImage';
 import React from 'react';
-import { Box, Center, Flex, Image, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Text } from '@chakra-ui/react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 import { isPlainLinkClick } from '~/utils/linkNavigation';
 import { ChevronDown, Search } from 'lucide-react';
@@ -18,6 +19,7 @@ import { applyDrawerOrdering, drawerBuiltinNodes, buildDrawerSubSections, drawer
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
+import { CurrentPageBuilderToggle } from '../../Builder/CurrentPageBuilder';
 import { LopuActivityBadge } from '../../Lopu/LopuActivityBadge';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
@@ -38,16 +40,9 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 	// a set avatar always wins — the rainbow initial is only the fallback
 	if (user?.avatarUrl) {
 		return (
-			<Image
-				src={user.avatarUrl}
-				alt={getUserDisplayName(user)}
-				width={props?.size || '28px'}
-				height={props?.size || '28px'}
-				borderRadius="999px"
-				objectFit="cover"
-				flexShrink={0}
-				border="1px solid var(--tt-border, #ececef)"
-			/>
+			<Box width={props?.size || '28px'} height={props?.size || '28px'} borderRadius="999px" overflow="hidden" flexShrink={0} border="1px solid var(--tt-border, #ececef)">
+				<PresentedImage src={user.avatarUrl} alt={getUserDisplayName(user)} presentation={user.avatarPresentation} />
+			</Box>
 		);
 	}
 
@@ -671,6 +666,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					</Text>
 				)}
 				</Flex>
+				{variant === 'panel' && <CurrentPageBuilderToggle onToggle={dismissAfterNavigate} />}
 				<Center
 					as="a"
 					href="/settings"

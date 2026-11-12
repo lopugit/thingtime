@@ -36,13 +36,14 @@ final class ProcessUsageHistoryTests: XCTestCase {
 
 @MainActor
 final class CommanderUtilityWindowTests: XCTestCase {
-  func testNativeFullscreenActionStaysOnDesktop() {
+  func testNativeFullscreenActionStaysOnDesktop() throws {
     _ = NSApplication.shared
     let window = CommanderUtilityWindow(contentRect: NSRect(x: 120, y: 140, width: 800, height: 500), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    let targetFrame = try XCTUnwrap(window.screen ?? NSScreen.main).visibleFrame
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenNone))
     window.toggleFullScreen(nil)
     XCTAssertFalse(window.styleMask.contains(.fullScreen))
-    XCTAssertEqual(window.frame, NSScreen.main!.visibleFrame)
+    XCTAssertEqual(window.frame, targetFrame)
     window.orderOut(nil)
   }
 

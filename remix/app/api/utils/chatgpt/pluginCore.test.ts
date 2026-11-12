@@ -15,11 +15,23 @@ import {
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
-  renderConnectionPage
+  renderConnectionPage,
+  renderScopedConnectionPage
 } from './pluginCore';
 
 const validPkceChallenge = 'A'.repeat(43);
 const validState = 'state-which-is-long-enough-to-be-safe';
+
+test('the scoped consent page separates requested access from optional Things and never includes a token field', () => {
+  const page = renderScopedConnectionPage('signed-proof', [
+    { id: 'things', title: 'Full Things access', description: 'Read and write Things', emoji: '' },
+    { id: 'agents.report', title: 'Private agent reporting', description: 'Report through the private workspace', emoji: '' }
+  ], ['agents.report']);
+  assert.match(page, /Requested permissions[\s\S]*Private agent reporting[\s\S]*Optional access rules/);
+  assert.match(page, /value="things"><span>/);
+  assert.doesNotMatch(page, /type="password"|name="token"/);
+  assert.match(page, /id="connect" type="submit" value="complete" disabled/);
+});
 
 test('ChatGPT OAuth request is tightly bound to this MCP resource and callback', () => {
   const params = new URLSearchParams({
@@ -50,6 +62,10 @@ test('ChatGPT OAuth request is tightly bound to this MCP resource and callback',
   if (offlineAccess.ok) assert.deepEqual(offlineAccess.request.scope, ['thingtime', 'offline_access']);
   params.set('scope', 'thingtime unsupported');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+  params.set('scope', 'thingtime offline_access agents.report');
+  const stepUp = parseChatGptAuthorizationRequest(params, 'https://thingtime.com');
+  assert.ok(stepUp.ok);
+  assert.deepEqual(stepUp.request.scope, ['thingtime', 'offline_access', 'agents.report']);
   params.set('scope', 'thingtime');
   params.set('resource', 'https://attacker.invalid/api/v1/integrations/chatgpt/mcp');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
@@ -80,6 +96,49 @@ test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () 
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
   params.set('redirect_uri', `http://127.0.0.1:49152/callback/${callbackId}?next=https://attacker.invalid`);
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+});
+
+test('the shared Codex CIMD accepts only its exact issuer-bound loopback callbacks', () => {
+  const clientId = 'https://chatgpt.com/oauth/codex/client.json';
+  const origin = 'https://thingtime.com';
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: 'http://127.0.0.1:49152/callback',
+    resource: `${origin}${CHATGPT_MCP_PATH}`,
+    code_challenge: validPkceChallenge,
+    code_challenge_method: 'S256',
+    state: validState
+  });
+
+  for (const redirectUri of ['http://127.0.0.1:49152/callback', 'http://localhost:49152/callback']) {
+    params.set('redirect_uri', redirectUri);
+    const parsed = parseChatGptAuthorizationRequest(params, origin);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) assert.equal(parsed.request.redirectUri, redirectUri);
+  }
+
+  for (const redirectUri of [
+    'http://127.0.0.1/callback',
+    'http://127.0.0.1:0/callback',
+    'http://127.0.0.1:65536/callback',
+    'http://127.1:49152/callback',
+    'https://127.0.0.1:49152/callback',
+    'http://localhost.attacker.invalid:49152/callback',
+    'http://localhost:49152/callback/other',
+    'http://localhost:49152/other/../callback',
+    'http://localhost:49152/callback?next=x',
+    'http://localhost:49152/callback#x',
+    'http://user@localhost:49152/callback',
+    'https://chatgpt.com/connector_platform_oauth_redirect'
+  ]) {
+    params.set('redirect_uri', redirectUri);
+    assert.equal(parseChatGptAuthorizationRequest(params, origin).ok, false, redirectUri);
+  }
+
+  params.set('redirect_uri', 'http://127.0.0.1:49152/callback');
+  params.set('client_id', `${clientId}?unknown`);
+  assert.deepEqual(parseChatGptAuthorizationRequest(params, origin), { ok: false, error: 'Unknown OAuth client' });
 });
 
 test('dynamic OAuth clients are bound to registered loopback or exact ChatGPT callbacks only', () => {
@@ -197,7 +256,8 @@ test('capability discovery is origin scoped and every registered route has a sem
   assert.equal(discovery.protectedResource.resource, `https://thingtime.com${CHATGPT_MCP_PATH}`);
   assert.equal(discovery.authorizationServer.issuer, 'https://thingtime.com');
   assert.deepEqual(discovery.authorizationServer.grant_types_supported, ['authorization_code', 'refresh_token']);
-  assert.deepEqual(discovery.authorizationServer.scopes_supported, ['thingtime', 'offline_access']);
+  assert.deepEqual(discovery.protectedResource.scopes_supported, ['thingtime', 'offline_access']);
+  assert.deepEqual(discovery.authorizationServer.scopes_supported, ['thingtime', 'offline_access', 'agents.report']);
   assert.equal(discovery.authorizationServer.client_id_metadata_document_supported, true);
   assert.equal(discovery.authorizationServer.registration_endpoint, 'https://thingtime.com/api/v1/integrations/chatgpt/oauth/register');
   assert.deepEqual(discovery.capabilityManifest.features, CHATGPT_PLUGIN_FEATURES);

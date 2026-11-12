@@ -3,6 +3,8 @@
 // PublicConnection projection, one card style, so the sibling pages can never
 // drift apart.
 
+import type { NamedOperation } from '~/connections/namedAccess';
+
 export type ChannelRef = { id: string; title: string; thumbnail: string | null };
 
 export type Connection = {
@@ -17,6 +19,7 @@ export type Connection = {
   // no-overlap error against a value the server really does send
   auth?: 'none' | 'oauth2' | 'credential';
   account: { id: string; handle: string; displayName: string; avatarUrl: string | null; profileUrl: string | null };
+  named?: { name: string; requestedScopes: string[]; grantedScopes: string[] | null; allowedOperations: NamedOperation[] };
   channels?: ChannelRef[];
   lastSyncedAt: string | null;
   lastSyncError: string | null;
@@ -60,6 +63,7 @@ export const OAUTH_ERROR_COPY = new Map<string, string>([
   ['session', 'That sign-in was started from a different Thingtime session 🔐'],
   ['provider', 'That app is not set up on this deployment yet 🔧'],
   ['exchange', 'Could not finish the sign-in with that app 😞'],
+  ['permissions', 'The provider did not confirm all selected permissions. Review access and try again.'],
   ['rateLimited', 'Finishing sign-ins very enthusiastically — take a breather and try connecting again 🌸'],
   ['failed', OAUTH_ERROR_GENERIC]
 ]);

@@ -6,10 +6,11 @@ import type { PagedRunSpec } from './pagedRunJournal';
 import { syncScopeKey, type SyncEntry } from './reconcile';
 import { executeSyncOperation, type SyncExecutionPort, type SyncReceipt } from './execute';
 import { openSyncJournal } from './journal.client';
-import { REVIEW_STORE } from './pagedRunJournal';
+import { PAGED_RUN_STORES, REVIEW_STORE } from './pagedRunJournal';
 import { IDBFactory, IDBIndex, IDBKeyRange } from 'fake-indexeddb';
 import { streamOneWayForegroundSync } from './streamingForegroundSync';
 import type { ForegroundSyncInput } from './foregroundSync';
+import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import type { NativeIndexChangesPage } from './streamingIndex';
 const identity = (source: 'local' | 'remote') => ({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source });
 const spec = (): PagedRunSpec => ({
@@ -26,6 +27,7 @@ const spec = (): PagedRunSpec => ({
 	}
 });
 const folder = (path: string): SyncEntry => ({ path, id: 'native-' + path, version: '1', kind: 'folder', size: 0, sha256: null });
+const emptyFile = (path: string): SyncEntry => ({ path, id: 'native-' + path, version: '1', kind: 'file', size: 0, sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' });
 test('late priority ancestry prepares ahead of durable ordinary input behind a full ready queue', async () => {
 	const f = await foregroundFixture(),
 		access = { scope, currentScope: () => scope },
@@ -68,6 +70,24 @@ const binding = (s: PagedRunSpec, input: { entry: SyncEntry }, parent = 'cloud-r
 		confirmed: false
 	};
 	return { write: prepareCloudInventoryWrite(operation, scope, s.configuration!.remoteFolderId, null, parent) };
+};
+const legacyUnknownDispatch = async (factory: IDBFactory, id: string) => {
+	await new Promise<void>((resolve, reject) => {
+		const open = factory.open('thingtime-file-sync-v1');
+		open.onerror = () => reject(open.error);
+		open.onsuccess = () => {
+			const db = open.result, tx = db.transaction(PAGED_RUN_STORES[1], 'readwrite');
+			tx.oncomplete = () => { db.close(); resolve(); };
+			tx.onerror = () => { db.close(); reject(tx.error); };
+			const cursor = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').openCursor(IDBKeyRange.only([syncScopeKey(scope), id]));
+			cursor.onsuccess = () => {
+				if (!cursor.result) { reject(Error('Missing synthetic operation')); return; }
+				const row = cursor.result.value;
+				delete row.canonicalDispatched;
+				cursor.result.update(row);
+			};
+		};
+	});
 };
 const acknowledge = async (
 	runs: ReturnType<ReturnType<Awaited<ReturnType<typeof foregroundFixture>>['journal']>['pagedRuns']>,
@@ -212,6 +232,288 @@ test('absent or blocked priorities cannot deadlock ordinary work; reserved IDs s
 	f.journal().close();
 });
 
+test('a sealed interrupted local feed resumes its pending original receipt without enabling priority preparation again', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	let runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await f.journal().priorities(access).save(['still-not-indexed'], 0);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())!.progress.phase, 'running');
+	await f.reload();
+	runs = f.journal().pagedRuns(access);
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(f.creates(), 1);
+	assert.equal(await runs.active(), null, 'the original receipt must drain before sealed reconciliation');
+	f.journal().close();
+});
+
+test('a terminal stream drains a pending eligible member when one batch admission is withheld', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('A withheld batch must drain under the original scalar ID.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let withheld = false;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, claimTransferBatch: async (...values) => {
+			if (!withheld) { withheld = true; return null; }
+			return journal.claimTransferBatch(...values);
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(withheld, true);
+	assert.equal(f.creates(), 1);
+	f.journal().close();
+});
+
+test('a terminal feed refuses to seal when both bulk and original claims remain unavailable', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	const write = binding(s, change);
+	await runs.appendStream(s, change, write);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('No batch may execute while its admission is unavailable.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let ordinaryAttempts = 0;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal,
+			claimTransferBatch: async () => null,
+			claimNext: async () => { ordinaryAttempts++; return null; }
+		};
+	} };
+	await assert.rejects(streamOneWayForegroundSync(saved, scope, input, new AbortController().signal), /Preserve pending stream receipts/);
+	assert.equal(ordinaryAttempts, 2, 'one normal and one bounded terminal fallback claim');
+	assert.equal(f.creates(), 0);
+	assert.equal((await runs.find(s, change.entry.path))!.id, write.write.operation.id);
+	assert.deepEqual([(await runs.active())!.progress.operations, (await runs.active())!.progress.confirmed], [1, 0]);
+	f.journal().close();
+});
+
+test('a terminal feed retires proven undispatched folder descendants of a superseded parent', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const parent = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('Parent') };
+	const parentWrite = binding(s, parent);
+	const child = { generation: s.streaming!.captureId, sequence: 2, revision: '1', entry: folder('Parent/child') };
+	const childWrite = binding(s, child, parentWrite.write.operation.id);
+	const grandchild = { generation: s.streaming!.captureId, sequence: 3, revision: '1', entry: emptyFile('Parent/child/grandchild') };
+	const grandchildWrite = binding(s, grandchild, childWrite.write.operation.id);
+	await runs.appendStream(s, parent, parentWrite);
+	await runs.appendStream(s, child, childWrite);
+	await runs.appendStream(s, grandchild, grandchildWrite);
+	const selectedParent = await runs.claimNext(s);
+	assert.equal(selectedParent?.id, parentWrite.write.operation.id);
+	await runs.skipUnpublishedStreamOperation(s, selectedParent!.id, false);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 3);
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => [child, parent, grandchild].find((value) => value.entry.path === path)?.entry ?? null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('A child with an unpublished parent cannot enter a cloud folder batch.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	input.journal = { ...input.journal, pagedRuns: (...args) => ({ ...original(...args), claimTransferBatch: async () => null }) };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(f.creates(), 0, 'the superseded parent and its descendants were not published');
+	assert.equal(await runs.active(), null, 'proven unpublished descendants drain the sealed old run');
+	const current = [{ ...folder('Parent'), id: 'fresh-Parent', version: '2' }];
+	await runPagedForegroundCloudSync(saved, scope, { ...f.input(), scanLocal: async () => current }, new AbortController().signal);
+	assert.equal(f.creates(), 1, 'only a fresh complete scan publishes the current parent identity');
+	f.journal().close();
+});
+
+test('terminal parent recovery keeps unknown and marked child publication identities across reopen', async () => {
+	for (const dispatch of ['unknown', 'marked'] as const) {
+		const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+		let runs = f.journal().pagedRuns(access);
+		await runs.begin(s);
+		const parent = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('Parent') };
+		const parentWrite = binding(s, parent);
+		const child = { generation: s.streaming!.captureId, sequence: 2, revision: '1', entry: folder('Parent/child') };
+		const childWrite = binding(s, child, parentWrite.write.operation.id);
+		await runs.appendStream(s, parent, parentWrite);
+		await runs.appendStream(s, child, childWrite);
+		await runs.skipUnpublishedStreamOperation(s, (await runs.claimNext(s))!.id, false);
+		await runs.endRemountedLocalFeed(s);
+		await runs.sealStream(s, s.streaming!.captureId, 2);
+		if (dispatch === 'unknown') await legacyUnknownDispatch(f.factory, childWrite.write.operation.id);
+		const selected = (await runs.claimNext(s, true, 128, false, false, false))!;
+		assert.equal(selected.id, childWrite.write.operation.id);
+		if (dispatch === 'marked') await runs.markStreamCanonicalDispatch(s, selected.id);
+		assert.equal((await runs.targetRebind(s, selected.id))!.undispatched, false);
+		await assert.rejects(runs.skipUnpublishedStreamOperation(s, selected.id, false), /uncertain|publication/i);
+		await f.reload(); runs = f.journal().pagedRuns(access);
+		assert.equal((await runs.claimNext(s, true, 128, false, false, false))!.id, selected.id);
+		assert.equal((await runs.targetRebind(s, selected.id))!.undispatched, false);
+		assert.deepEqual([(await runs.active())!.progress.operations, (await runs.active())!.progress.confirmed], [1, 0]);
+		const input: ForegroundSyncInput = {
+			...f.input(), nativeOperationGuards: true,
+			inspectLocal: async (path) => path === child.entry.path ? child.entry : path === parent.entry.path ? parent.entry : null,
+			streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+		};
+		const original = input.journal.pagedRuns.bind(input.journal);
+		input.journal = { ...input.journal, pagedRuns: (...args) => ({ ...original(...args), claimTransferBatch: async () => null }) };
+		await assert.rejects(streamOneWayForegroundSync(saved, scope, input, new AbortController().signal), /publication may still be in flight/);
+		assert.equal(f.creates(), 0);
+		assert.equal((await runs.claimNext(s, true, 128, false, false, false))!.id, selected.id);
+		f.journal().close();
+	}
+});
+
+test('terminal parent recovery confirms an accepted original child before any replacement intent', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	const parent = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('Parent') };
+	const parentWrite = binding(s, parent);
+	const child = { generation: s.streaming!.captureId, sequence: 2, revision: '1', entry: folder('Parent/child') };
+	const childWrite = binding(s, child, parentWrite.write.operation.id);
+	await runs.appendStream(s, parent, parentWrite);
+	await runs.appendStream(s, child, childWrite);
+	await runs.skipUnpublishedStreamOperation(s, (await runs.claimNext(s))!.id, false);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 2);
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === child.entry.path ? child.entry : path === parent.entry.path ? parent.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	const published = { id: childWrite.write.operation.id, revision: 'created', folderId: parentWrite.write.operation.id, name: 'child' };
+	const baseFetch = input.runtime.fetch;
+	let receiptReads = 0, exactReplays = 0;
+	input.runtime.fetch = async (url, init) => {
+		const target = new URL(String(url));
+		if (target.pathname === '/api/v1/files' && target.searchParams.get('operationId') === published.id) {
+			receiptReads++; return Response.json({ ok: true, receipt: published });
+		}
+		if (target.pathname === '/api/v1/files' && init.method === 'POST') {
+			const request = JSON.parse(String(init.body));
+			assert.equal(request.id, published.id);
+			assert.equal(request.folderId, published.folderId);
+			exactReplays++; return Response.json({ ok: true, folder: published, replayed: true });
+		}
+		return baseFetch(url, init);
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	input.journal = { ...input.journal, pagedRuns: (...args) => ({ ...original(...args), claimTransferBatch: async () => null }) };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.deepEqual([receiptReads, exactReplays, f.creates()], [1, 1, 0]);
+	assert.equal(await runs.active(), null, 'accepted original receipt drains the sealed run');
+	f.journal().close();
+});
+
+test('terminal parent recovery retires a marked original file only with its exact terminal receipt', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	const parent = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('Parent') };
+	const parentWrite = binding(s, parent);
+	const child = { generation: s.streaming!.captureId, sequence: 2, revision: '1', entry: emptyFile('Parent/file') };
+	const childWrite = binding(s, child, parentWrite.write.operation.id);
+	await runs.appendStream(s, parent, parentWrite);
+	await runs.appendStream(s, child, childWrite);
+	await runs.skipUnpublishedStreamOperation(s, (await runs.claimNext(s))!.id, false);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 2);
+	assert.equal((await runs.claimNext(s, true, 128, false, false, false))!.id, childWrite.write.operation.id);
+	await runs.markStreamCanonicalDispatch(s, childWrite.write.operation.id);
+	const fence = { kind: 'terminal-no-effect' as const, id: childWrite.write.operation.id,
+		operationId: childWrite.write.operation.id, expectedRevision: null };
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === child.entry.path ? child.entry : path === parent.entry.path ? parent.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	const baseFetch = input.runtime.fetch;
+	let receiptReads = 0;
+	input.runtime.fetch = async (url, init) => {
+		const target = new URL(String(url));
+		if (target.pathname === '/api/v1/files' && target.searchParams.get('operationId') === fence.operationId) {
+			receiptReads++; return Response.json({ ok: true, receipt: null, terminal: fence });
+		}
+		return baseFetch(url, init);
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	input.journal = { ...input.journal, pagedRuns: (...args) => ({ ...original(...args), claimTransferBatch: async () => null }) };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(receiptReads, 1);
+	assert.equal(f.creates(), 0);
+	assert.equal(await runs.active(), null);
+	f.journal().close();
+});
+
+test('a terminal feed uses durable completion after its final original operation retires', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let retired = false;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, begin: async (...values) => {
+			const stale = await journal.begin(...values);
+			if (!retired) {
+				retired = true;
+				const operation = await journal.claimNext(s);
+				assert.ok(operation);
+				await journal.skipUnpublishedStreamOperation(s, operation.id, true);
+			}
+			return stale;
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(retired, true);
+	assert.equal(f.creates(), 0);
+	assert.equal(await runs.active(), null);
+	f.journal().close();
+});
+
 test('generic local and remote sources keep FIFO despite saved priorities', async () => {
 	for (const source of ['local', 'remote'] as const) {
 		const f = await foregroundFixture(),
@@ -308,7 +610,7 @@ test('v12 retained inputs gain a scoped path index and resumable folded backfill
 	journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 	runs = journal.pagedRuns(access);
 	await database(factory, async (db) => {
-		assert.equal(db.version, 15);
+		assert.equal(db.version, 16);
 		assert.equal(db.transaction(REVIEW_STORE).objectStore(REVIEW_STORE).indexNames.length, 1);
 	});
 	await runs.enableStreamPriorities(s);

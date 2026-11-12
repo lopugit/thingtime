@@ -1,13 +1,16 @@
 import { prepareProfileThumbnail, PROFILE_THUMBNAIL_CONTENT_TYPES } from './profileThumbnail';
 import { uploadFileTypes } from '../Attachments/attachmentFileTypes';
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
-import { ImagePlus, Link2, RotateCcw, Trash2, X } from 'lucide-react';
+import { Box, Button, Flex, IconButton, Input, Progress, Text } from '@chakra-ui/react';
+import { ImagePlus, Link2, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 
 import { formatAttachmentBytes } from '~/components/Attachments/attachmentUiCore';
 import type { ComposerAttachmentUpload } from '~/components/Attachments/attachmentTypes';
 import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUploads';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ImagePresentationDialog } from '~/components/Media/ImagePresentationDialog';
+import { PresentedImage } from '~/components/Media/PresentedImage';
+import type { ImagePresentation } from '~/components/Media/imagePresentation';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import {
 	PROFILE_MEDIA_CONTENT_TYPES,
@@ -33,6 +36,7 @@ export type ProfileMediaFieldProps = {
 	ownerId: string;
 	savedUrl: string | null;
 	savedLinkedUrl: string | null;
+	savedPresentation?: ImagePresentation | null;
 	privateUploadsEnabled?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
@@ -41,7 +45,7 @@ export type ProfileMediaFieldProps = {
 };
 
 export type ProfileMediaFieldHandle = {
-	commit: (savedUrl: string | null, savedLinkedUrl: string | null) => void;
+	commit: (savedUrl: string | null, savedLinkedUrl: string | null, presentation?: ImagePresentation | null) => void;
 };
 
 const statusText = (upload: ComposerAttachmentUpload | undefined): string | null => {
@@ -55,7 +59,7 @@ const statusText = (upload: ComposerAttachmentUpload | undefined): string | null
 };
 
 const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, ProfileMediaFieldProps>((props, ref) => {
-	const { slot, ownerId, savedUrl, savedLinkedUrl, privateUploadsEnabled, disabled, remainingBytes, storageStatus, onChange } = props;
+	const { slot, ownerId, savedUrl, savedLinkedUrl, savedPresentation, privateUploadsEnabled, disabled, remainingBytes, storageStatus, onChange } = props;
 	const lopu = useLopu();
 	const label = props.label || (slot === 'avatar' ? 'Avatar' : 'Banner');
 	const purpose = props.purpose || (slot === 'avatar' ? 'profile-avatar' : 'profile-banner');
@@ -64,6 +68,10 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	const uploadsNotGranted = !inlineThumbnail && privateUploadsEnabled === false;
 	const pickerDisabled = disabled || uploadsNotGranted;
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
+	const editTriggerRef = React.useRef<HTMLButtonElement>(null);
+	const [editingSource, setEditingSource] = React.useState<string | null>(null);
+	const [baselinePresentation, setBaselinePresentation] = React.useState<ImagePresentation | null>(savedPresentation ?? null);
+	const [presentationEdit, setPresentationEdit] = React.useState<{ source: string; value: ImagePresentation | null } | null>(null);
 	const [baselineUrl, setBaselineUrl] = React.useState<string | null>(savedUrl);
 	const [baselineLinkedUrl, setBaselineLinkedUrl] = React.useState<string | null>(savedLinkedUrl);
 	const [externalInput, setExternalInput] = React.useState(() => initialExternalProfileImageUrl(savedLinkedUrl));
@@ -108,6 +116,9 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	React.useEffect(() => {
 		setBaselineUrl(savedUrl);
 		setBaselineLinkedUrl(savedLinkedUrl);
+		setBaselinePresentation(savedPresentation ?? null);
+		setPresentationEdit(null);
+		setEditingSource(null);
 		setExternalInput(initialExternalProfileImageUrl(savedLinkedUrl));
 		setShowExternal(false);
 		setIntent('preserve');
@@ -169,10 +180,10 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	const readyAttachmentId = upload?.status === 'ready' ? upload.attachment?.id || null : null;
 	const mutation = React.useMemo<ProfileMediaMutation>(() => {
 		if (intent === 'clear') return { kind: 'clear' };
-		if (intent === 'external' && externalValid) return { kind: 'external', url: externalUrl };
+		if (intent === 'external' && externalValid && externalUrl !== baselineUrl) return { kind: 'external', url: externalUrl };
 		if (intent === 'attachment' && readyAttachmentId) return { kind: 'attachment', attachmentId: readyAttachmentId };
 		return { kind: 'preserve' };
-	}, [externalUrl, externalValid, intent, readyAttachmentId]);
+	}, [baselineUrl, externalUrl, externalValid, intent, readyAttachmentId]);
 	const blocking = (intent === 'attachment' && (!upload || upload.status !== 'ready')) || (intent === 'external' && !externalValid);
 	const previewUrl =
 		intent === 'clear'
@@ -185,9 +196,17 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 
 	React.useEffect(() => setBrokenPreview(false), [previewUrl]);
 
+	const source = previewUrl && !blocking ? previewUrl : null;
+	const editing = editingSource !== null && editingSource === source;
+	const presentationUpdate = source && presentationEdit?.source === source ? presentationEdit.value : undefined;
+	const presentationSource = presentationUpdate !== undefined && mutation.kind === 'preserve' && source ? source : undefined;
+	const previewPresentation = presentationUpdate !== undefined
+		? presentationUpdate
+		: previewUrl === baselineUrl && intent !== 'attachment' ? baselinePresentation : null;
+
 	const snapshot = React.useMemo<ProfileMediaFieldSnapshot>(
-		() => ({ mutation, previewUrl: previewUrl || null, blocking }),
-		[blocking, mutation, previewUrl]
+		() => ({ mutation, previewUrl: previewUrl || null, previewPresentation, presentationUpdate, presentationSource, blocking }),
+		[blocking, mutation, presentationSource, presentationUpdate, previewPresentation, previewUrl]
 	);
 	const emittedRef = React.useRef('');
 	React.useEffect(() => {
@@ -200,12 +219,15 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	React.useImperativeHandle(
 		ref,
 		() => ({
-			commit: (nextSavedUrl, nextSavedLinkedUrl) => {
+			commit: (nextSavedUrl, nextSavedLinkedUrl, nextPresentation) => {
 				const committedIds = uploads.flatMap((selected) => (selected.attachment ? [selected.attachment.id] : []));
 				markCommitted(committedIds);
 				for (const selected of uploads) remove(selected.localId);
 				setBaselineUrl(nextSavedUrl);
 				setBaselineLinkedUrl(nextSavedLinkedUrl);
+				setBaselinePresentation(nextPresentation ?? null);
+				setPresentationEdit(null);
+				setEditingSource(null);
 				setExternalInput(initialExternalProfileImageUrl(nextSavedLinkedUrl));
 				setShowExternal(false);
 				setIntent('preserve');
@@ -240,26 +262,12 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		previewUrl && !brokenPreview ? (
 			slot === 'avatar' ? (
 				<Flex width="100%" height="100%" alignItems="center" justifyContent="center" padding={3}>
-					<Image
-						src={previewUrl}
-						alt={`${label} preview`}
-						boxSize="82%"
-						borderRadius="999px"
-						objectFit="cover"
-						referrerPolicy="no-referrer"
-						onError={() => setBrokenPreview(true)}
-					/>
+					<Box boxSize="82%" borderRadius="999px" overflow="hidden">
+						<PresentedImage src={previewUrl} presentation={previewPresentation} alt={label + ' preview'} onError={() => setBrokenPreview(true)} />
+					</Box>
 				</Flex>
 			) : (
-				<Image
-					src={previewUrl}
-					alt={`${label} preview`}
-					width="100%"
-					height="100%"
-					objectFit="cover"
-					referrerPolicy="no-referrer"
-					onError={() => setBrokenPreview(true)}
-				/>
+				<PresentedImage src={previewUrl} presentation={previewPresentation} alt={label + ' preview'} onError={() => setBrokenPreview(true)} />
 			)
 		) : (
 			<Flex width="100%" height="100%" alignItems="center" justifyContent="center" padding={3} textAlign="center">
@@ -413,6 +421,12 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 				>
 					{showExternal ? 'Cancel URL' : 'Use URL instead'}
 				</Button>}
+				{!inlineThumbnail && previewUrl && (
+					<Button ref={editTriggerRef} type="button" size="sm" minHeight="44px" variant="outline" leftIcon={<Pencil size={14} />} isDisabled={disabled || !source}
+						aria-label={'Edit ' + label.toLowerCase() + ' image'} aria-haspopup="dialog" onClick={() => setEditingSource(source)}>
+						Edit image
+					</Button>
+				)}
 				{(baselineUrl || upload || intent === 'external') && intent !== 'clear' ? (
 					<Button type="button" size="sm" minHeight="44px" variant="ghost" leftIcon={<Trash2 size={14} />} isDisabled={disabled} onClick={clearMedia}>
 						Remove {label.toLowerCase()}
@@ -461,6 +475,13 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					</Text>
 				</Flex>
 			) : null}
+			{editing && source && (
+				<ImagePresentationDialog
+					key={source} src={source} label={label} round={slot === 'avatar'} value={previewPresentation}
+					triggerRef={editTriggerRef} onClose={() => setEditingSource(null)}
+					onApply={(value) => { setPresentationEdit({ source, value }); setEditingSource(null); }}
+				/>
+			)}
 		</Flex>
 	);
 });

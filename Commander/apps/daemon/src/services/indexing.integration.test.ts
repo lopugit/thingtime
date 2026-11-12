@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rename, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rename, rm, realpath, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -15,7 +15,7 @@ describe('background filesystem inventory', () => {
       'build',
       '--locked',
       '--manifest-path',
-      '../../crates/commander-indexer/Cargo.toml',
+      '../../../filesystem-indexer/crates/indexer/Cargo.toml',
     ]);
   }, 120_000);
   it('updates created, renamed and deleted files/folders/apps without searching initiating a scan', async () => {
@@ -24,7 +24,7 @@ describe('background filesystem inventory', () => {
     await mkdir(root);
     const apps: { items: { path?: string }[] } = { items: [] };
     const service = new IndexingService({
-      binaryPath: path.resolve('../../crates/commander-indexer/target/debug/commander-indexer'),
+      binaryPath: path.resolve('../../../filesystem-indexer/target/debug/commander-indexer'),
       databasePath: path.join(temporary, 'state', 'index.sqlite3'),
       applicationRoots: [root],
       platform: process.platform === 'darwin' ? 'macos' : 'linux',
@@ -88,6 +88,73 @@ describe('background filesystem inventory', () => {
     }
   }, 35_000);
 
+  it.skipIf(process.platform !== 'darwin')(
+    'forwards an authorized Mac watcher event into a private Rust inventory generation',
+    async () => {
+      const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), 'commander-watch-scope-')));
+      const root = path.join(temporary, 'files');
+      const databasePath = path.join(temporary, 'state', 'index.sqlite3');
+      const binaryPath = path.resolve('../../../filesystem-indexer/target/debug/commander-indexer');
+      const scope = {
+        origin: 'https://fixture.invalid',
+        accountId: 'account',
+        deviceId: 'device',
+        rootId: 'root',
+      };
+      await mkdir(root);
+      const identity = await stat(root, { bigint: true });
+      const inventory = (operation: string, extra = {}) =>
+        new Promise<string>((resolve, reject) => {
+          const helper = execFile(
+            binaryPath,
+            ['inventory', '--database', databasePath],
+            {
+              timeout: 10_000,
+              maxBuffer: 65_536,
+            },
+            (error, stdout) => (error ? reject(error) : resolve(stdout)),
+          );
+          helper.stdin?.on('error', () => undefined);
+          helper.stdin?.end(JSON.stringify({ version: 1, operation, scope, ...extra }) + '\n');
+        });
+      const service = new IndexingService({
+        binaryPath,
+        databasePath,
+        applicationRoots: [root],
+        platform: 'macos',
+        settings: { ...DEFAULT_SETTINGS, indexing: { ...DEFAULT_SETTINGS.indexing, roots: [root] } },
+        callbacks: { applications: () => undefined, commands: () => 0 },
+      });
+      try {
+        // The watcher cannot see this scope until it has connected to the same
+        // database. A startup checkpoint marker invalidates this generation.
+        const scan = { mode: 'strict', root, rootIdentity: `${identity.dev}:${identity.ino}` };
+        await inventory('scan', { ...scan, generation: 'before-watcher' });
+        await service.initialize();
+        await vi.waitFor(
+          async () => {
+            const status = JSON.parse(await inventory('status', { generation: 'before-watcher' }));
+            expect(status.coverage).toBe('invalidated');
+          },
+          { timeout: 7_000, interval: 100 },
+        );
+
+        await inventory('scan', { ...scan, generation: 'active-watcher' });
+        const status = async () => JSON.parse(await inventory('status', { generation: 'active-watcher' }));
+        expect((await status()).coverage).toBe('prepared');
+        await writeFile(path.join(root, 'changed.txt'), 'watched');
+        await vi.waitFor(async () => expect((await status()).coverage).toBe('invalidated'), {
+          timeout: 7_000,
+          interval: 100,
+        });
+      } finally {
+        await service.close();
+        await rm(temporary, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+
   it.skipIf(process.platform === 'win32')(
     'retains measured counts through live file, child directory and app events while the full writer is stopped',
     async () => {
@@ -103,7 +170,7 @@ describe('background filesystem inventory', () => {
       }
       await writeFile(path.join(root, 'baseline-anchor.txt'), 'keep visible');
       const databasePath = path.join(temporary, 'state', 'index.sqlite3');
-      const binaryPath = path.resolve('../../crates/commander-indexer/target/debug/commander-indexer');
+      const binaryPath = path.resolve('../../../filesystem-indexer/target/debug/commander-indexer');
       const apps: { items: { path?: string }[] } = { items: [] };
       let armed = false;
       let stopped = false;
@@ -125,7 +192,9 @@ describe('background filesystem inventory', () => {
           commands: () => 7,
         },
         onProgress(progress) {
-          if (!armed || stopped || !progress.sourceId.startsWith('filesystem:')) return;
+          if (!armed || stopped || !progress.sourceId.startsWith('filesystem:') || progress.processed < 500) {
+            return;
+          }
           process.kill(writerPid, 'SIGSTOP');
           stopped = true;
           held();
@@ -158,13 +227,50 @@ describe('background filesystem inventory', () => {
         writerPid = Number(writer.trim().split(/\s+/u)[0]);
         armed = true;
         const fullRun = service.start('all');
+        void fullRun.catch(() => undefined); // The finally path can close the writer after an assertion fails.
         await Promise.race([
           heldPromise,
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Writer did not enter filesystem transaction')), 10_000),
+            setTimeout(() => reject(new Error('Writer did not stage filesystem rows')), 10_000),
           ),
         ]);
         expect((await service.status()).running).toContain('all');
+        const backup = path.join(temporary, 'approved-backup');
+        await mkdir(backup);
+        await writeFile(path.join(backup, 'independent.txt'), 'shared database, independent write');
+        const identity = await stat(backup, { bigint: true });
+        const backupResult = await new Promise<string>((resolve, reject) => {
+          const helper = execFile(
+            binaryPath,
+            ['inventory', '--database', databasePath],
+            { timeout: 8_000, maxBuffer: 65_536 },
+            (error, stdout) => (error ? reject(error) : resolve(stdout)),
+          );
+          helper.stdin?.on('error', () => undefined);
+          helper.stdin?.end(
+            JSON.stringify({
+              version: 1,
+              operation: 'scan',
+              scope: {
+                origin: 'https://fixture.invalid',
+                accountId: 'account',
+                deviceId: 'device',
+                rootId: 'backup',
+              },
+              mode: 'backup',
+              generation: 'during-search-walk',
+              root: backup,
+              rootIdentity: `${identity.dev}:${identity.ino}`,
+            }) + '\n',
+          );
+        });
+        expect(backupResult.trim().split('\n').map((line) => JSON.parse(line))).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ event: 'complete', coverage: 'provisional', entryCount: 1 }),
+          ]),
+        );
+        expect(stopped).toBe(true);
+
         const visible = async (query: string, title: string) =>
           (await service.queryItems(query)).some((item) => item.title === title);
         const observe = async (label: string, check: () => Promise<boolean>) => {
@@ -183,8 +289,11 @@ describe('background filesystem inventory', () => {
             );
           }
           expect(status.searchableRecords).toBe(
-            snapshot.kinds.filter((entry) => entry.kind !== 'application').reduce((total, entry) => total + entry.count, 0)
-              + apps.items.length + 7,
+            snapshot.kinds
+              .filter((entry) => entry.kind !== 'application')
+              .reduce((total, entry) => total + entry.count, 0) +
+              apps.items.length +
+              7,
           );
         };
         await writeFile(path.join(root, 'live-created.txt'), 'new');

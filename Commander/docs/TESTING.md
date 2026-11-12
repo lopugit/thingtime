@@ -126,6 +126,18 @@
       change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
       passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
       steps; endpoint-only automated drags do not establish that interleaved-event behavior.
+- [ ] Hover without clicking along both sides of each visible launcher border and all four corners. Pause, move along
+      the border, and cross a corner: the resize cursor must remain stable and match the direction available on drag.
+      Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
+      header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
+      its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
+      for sibling hit ownership, system cursor selection and relayout/invalidation. Run
+      `swift test --package-path hosts/macos --filter CommanderWebViewTests/testResizeBorderWindowServerTargetingAndMotionDispatch`
+      from `Commander/`: the shown, non-key fixture must pass WindowServer targeting on the inner and outer halves
+      of every edge/corner in both modes at normal/minimum sizes, plus continued motion, central cursor restoration
+      and removal of the exterior input surface when disabled. An unavailable/occluded WindowServer fixture skips
+      that integration check explicitly. Dispatched events and endpoint drags do not substitute for physical hover
+      when automation lacks pointer movement; inspect the barely painted native band for unwanted visible edges.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In
@@ -144,6 +156,9 @@
       The local picker must open immediately; a disabled extension/command must remain disabled. Navigate away
       before completing the old request and verify its late view response cannot reopen or replace the current view.
 - [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
+      At the minimum 480 × 240 compact size, open Command-K Actions and wheel to the final action without moving
+      the picker or its toolbar. Move the active action down and back up with the arrow keys and verify it stays
+      visible within the menu at every step.
 - [ ] Type `ear` and verify macOS does not show a spelling/correction pill over the picker; while the search field remains focused, arrow keys must move the selected emoji instead of entering correction UI. Search misspellings such as `haert` and `hert` and verify relevant heart emoji still appear.
 - [ ] Search `heart`, arrow to a non-leading heart, and choose it twice. Reopen the picker and search `heart` again; verify that emoji is promoted. Quit/relaunch Commander and repeat the query to verify the bounded device-local query/emoji counts persist.
 - [ ] Bind Search Emoji & Symbols to Command-E. With another app active, press Command-E and immediately type `heart`; the picker must remain visible and focused. Dismiss it, then press Command-Space once and verify the normal launcher reappears. Repeat after hiding Commander with Command-H to confirm the global shortcut restores the app in one press.
@@ -153,7 +168,7 @@
       clipboard with unique text, paste an emoji into TextEdit, then verify the unique clipboard content is restored.
 - [ ] With Accessibility denied (or a stale enabled grant), select a non-leading emoji and repeatedly press Return or double-click it. The native window, font size, eight-column grid width, selected emoji, recents and learned ranking must remain stable. The complete explanation, Open Accessibility Settings and Copy Emoji controls must fit at standard, minimum, compact and large-text sizes; scroll to the final emoji and open Actions without clipping. The keep-clipboard action must not change the pasteboard change count even transiently. Only an explicit Copy Emoji action may replace it.
 - [ ] For a signing-identity migration, compare the installed app's designated requirement with its prior build. If macOS still shows the old grant enabled but rejects paste, refresh only Commander's Accessibility toggle after explicit user approval, relaunch the same installed bundle, and verify Return and double-click paste into a disposable TextEdit document while retaining the previous clipboard.
-- [ ] Reopen Commander after leaving the emoji picker and verify the normal launcher returns with an empty query. Reopen the picker and verify its Recently Used ordering and selected skin tone persist locally.
+- [ ] With a nonempty emoji search, dismiss the window and immediately reopen the picker with its shortcut in the same launcher. Verify the focused search is empty and only the unfiltered grid appears. Repeat via Back and the Search Emoji & Symbols result. Verify Recently Used ordering and the selected skin tone persist, and the normal launcher returns with an empty query when opened separately.
 
 ## Settings
 

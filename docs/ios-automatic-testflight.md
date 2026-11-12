@@ -15,6 +15,12 @@ signatures and shared App Group entitlements. It then waits up to ten minutes fo
 that exact build to reach `VALID` and `IN_BETA_TESTING`. A timeout means inspect
 Apple processing before rerunning; it does not mean the upload failed.
 
+Run the read-only `status` operation with `expected_build_number` to inspect a
+specific delivery. When the build is absent from Builds, the same lane checks
+the exact iOS Build Uploads records. Its `TESTFLIGHT_BUILD_UPLOAD_STATUS` lines
+report the upload state, available timestamps and diagnostic codes. Internal
+tester availability still comes from the ordinary build record.
+
 Internal tester groups must have automatic build distribution enabled in App Store
 Connect. External testers may still need Apple's Beta App Review. Real-device
 widget placement and microphone acceptance remain separate checks.

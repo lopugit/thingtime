@@ -16,21 +16,22 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.5.0',
-  'chatgpt.oauth': '1.10.0',
-  'chatgpt.agent-reporting': '1.0.0',
-  'chatgpt.connections': '1.3.0',
-  'chatgpt.things.read': '1.3.0',
-  'chatgpt.things.write': '1.1.0',
+  'chatgpt.mcp': '2.1.0',
+  'chatgpt.oauth': '1.12.0',
+  'chatgpt.confirmations': '1.0.0',
+  'chatgpt.agent-reporting': '1.1.0',
+  'chatgpt.connections': '2.1.0',
+  'chatgpt.things.read': '1.4.0',
+  'chatgpt.things.write': '2.0.0',
   'chatgpt.schemas': '1.0.0',
   'chatgpt.relationships': '1.0.0',
-  'chatgpt.mutations.preview': '1.0.0',
+  'chatgpt.mutations.preview': '2.0.0',
   'chatgpt.resources': '1.0.0',
-  'chatgpt.history': '1.0.0',
-  'chatgpt.workflows': '1.0.0',
-  'chatgpt.ui': '1.0.0',
+  'chatgpt.history': '2.0.0',
+  'chatgpt.workflows': '2.0.0',
+  'chatgpt.ui': '1.1.0',
   'chatgpt.changes': '1.0.0',
-  'chatgpt.capabilities': '1.0.0'
+  'chatgpt.capabilities': '2.0.0'
 } as const;
 
 export const CHATGPT_MCP_TOOL_FEATURES = {
@@ -38,6 +39,7 @@ export const CHATGPT_MCP_TOOL_FEATURES = {
   list_thingtime_accounts: 'chatgpt.connections',
   select_thingtime_account: 'chatgpt.connections',
   remove_thingtime_account: 'chatgpt.connections',
+  get_thingtime_confirmation_requirements: 'chatgpt.confirmations',
   get_thingtime_profile: 'chatgpt.connections',
   prepare_thingtime_agent_task: 'chatgpt.agent-reporting',
   get_thingtime_agent_task: 'chatgpt.agent-reporting',
@@ -53,6 +55,8 @@ export const CHATGPT_MCP_TOOL_FEATURES = {
   validate_thingtime_thing: 'chatgpt.schemas',
   list_thingtime_related: 'chatgpt.relationships',
   list_thingtime_changes: 'chatgpt.changes',
+  stage_thingtime_mutation_plan: 'chatgpt.mutations.preview',
+  get_thingtime_mutation_preview: 'chatgpt.mutations.preview',
   preview_thingtime_mutation: 'chatgpt.mutations.preview',
   apply_thingtime_mutation: 'chatgpt.mutations.preview',
   list_thingtime_history: 'chatgpt.history',
@@ -81,7 +85,7 @@ export const CHATGPT_MCP_METHOD_FEATURES = {
 } as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
 
 export const CHATGPT_MCP_INSTRUCTIONS =
-  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Authorized private task lifecycle reporting uses prepare_thingtime_agent_task, get_thingtime_agent_task, report_thingtime_agent_task and coordinate_thingtime_agent_task with a stable task identity and the independent agents.report grant; things does not include that grant. Reuse the returned distinct Character and private task records. Standing task-reporting authorization permits these bounded private lifecycle updates without repeat confirmation; never fall back to public owner identity or generic writes when reporting access is unavailable. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. Every composed workflow and multi-Thing mutation must be previewed first; apply or undo only after stating the selected account, targets, effects, and obtaining clear confirmation. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
+  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Authorized private task lifecycle reporting uses prepare_thingtime_agent_task, get_thingtime_agent_task, report_thingtime_agent_task and coordinate_thingtime_agent_task with a stable task identity and the independent agents.report grant; things does not include that grant. Reuse the returned distinct Character and private task records. Standing task-reporting authorization permits these bounded private lifecycle updates without repeat confirmation; never fall back to public owner identity or generic writes when reporting access is unavailable. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. For direct mutations, use get_thingtime_confirmation_requirements for the selected account. Every composed workflow, undo and multi-Thing mutation still requires a signed preview. Use stage_thingtime_mutation_plan for requests too large for one transport call and follow preview.nextCursor using get_thingtime_mutation_preview to review the complete plan. Review the exact account, targets and effects and follow confirmationRequired. Set confirmed=true only after the user explicitly confirms; omit it when confirmation is disabled. Treat confirmation_required as a request to obtain approval, and never invent it. Connected AI app approvals and Thingtime permissions still apply. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
@@ -122,6 +126,8 @@ export type ChatGptOAuthRequest = {
   codeChallenge: string;
   resource: string;
   scope: string[];
+  requestId?: string;
+  browserSessionJti?: string;
 };
 
 export type ChatGptDynamicOAuthClient = {
@@ -147,7 +153,16 @@ export type ChatGptCredentialBundle = {
   runs?: ThingtimeMcpWorkflowRun[];
 };
 
-export const CHATGPT_OAUTH_SCOPES = ['thingtime', 'offline_access'] as const;
+// The resource advertises its minimum scopes for clients that request all of
+// them automatically. Independent permissions are advertised by the OAuth
+// server and the specific tool that needs them, then requested at step-up.
+export const CHATGPT_BASE_OAUTH_SCOPES = ['thingtime', 'offline_access'] as const;
+export const CHATGPT_OAUTH_PERMISSION_SCOPES = ['agents.report'] as const;
+export const CHATGPT_OAUTH_SCOPES = [...CHATGPT_BASE_OAUTH_SCOPES, ...CHATGPT_OAUTH_PERMISSION_SCOPES] as const;
+export type ChatGptOAuthPermissionScope = typeof CHATGPT_OAUTH_PERMISSION_SCOPES[number];
+
+export const requestedOAuthPermissions = (scopes: readonly string[]) =>
+  CHATGPT_OAUTH_PERMISSION_SCOPES.filter((scope) => scopes.includes(scope));
 
 export const normalizeChatGptOAuthScopes = (values: string[]): string[] | null => {
   const scope = [...new Set(values.filter(Boolean))];
@@ -164,6 +179,7 @@ const CHATGPT_REDIRECT_URIS = new Set([
 ]);
 const CODEX_CIMD_CLIENT_PREFIX = 'https://chatgpt.com/oauth/codex/';
 const CODEX_CIMD_CLIENT_SUFFIX = '/client.json';
+const CODEX_SHARED_CIMD_CLIENT_ID = 'https://chatgpt.com/oauth/codex/client.json';
 
 const cleanOrigin = (value: unknown): string | null => {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
@@ -241,6 +257,14 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
   }
 };
 
+// Codex uses the shared CIMD with an issuer-bound callback. Match only the
+// two loopback hosts published by that client and its exact callback path.
+const normalizeCodexSharedCimdRedirectUri = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const match = /^http:\/\/(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})\/callback$/.exec(value);
+  return match?.[0] === value && Number(match[1]) <= 65535 ? value : null;
+};
+
 // Dynamic Client Registration is a compatibility path for Codex clients that
 // cannot use CIMD yet, and for ChatGPT developer apps. A registration may use
 // only a native loopback callback or ChatGPT's exact connector callback; no
@@ -316,15 +340,20 @@ export const parseChatGptAuthorizationRequest = (
   if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
 
   const clientId = params.get('client_id')?.trim() || '';
+  const isCodexSharedClient = clientId === CODEX_SHARED_CIMD_CLIENT_ID;
   const codexCallbackId = codexCallbackIdFromClientId(clientId);
   const registeredDynamicClient = dynamicClient?.clientId === clientId ? dynamicClient : null;
-  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
+  if (!isCodexSharedClient && !codexCallbackId && !registeredDynamicClient && !allowedChatGptClientIds().includes(clientId)) {
+    return { ok: false, error: 'Unknown OAuth client' };
+  }
 
   const redirectUri = registeredDynamicClient
     ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'), origin)
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
-      : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+      : isCodexSharedClient
+        ? normalizeCodexSharedCimdRedirectUri(params.get('redirect_uri'))
+        : normalizeChatGptRedirectUri(params.get('redirect_uri'));
   if (registeredDynamicClient && (!redirectUri || !registeredDynamicClient.redirectUris.includes(redirectUri))) {
     return { ok: false, error: 'redirect_uri is not registered for this OAuth client' };
   }
@@ -416,11 +445,46 @@ export const parseCredentialBundle = (value: unknown): ChatGptCredentialBundle |
 export const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 
+const renderOAuthSsoScript = `const continueWithSso=()=>{const popup=window.open('/authorize?self=1&origin='+encodeURIComponent(location.origin),'thingtime-sso','width=480,height=640,popup=1');if(!popup){setStatus('Allow popups for Thingtime, then try again.','error');return}setStatus('Finish signing in with Thingtime in the popup…');const closed=setInterval(()=>{if(popup.closed){clearInterval(closed);window.removeEventListener('message',onMessage);continueButton.hidden=false;setStatus('Sign-in was closed. Continue with Thingtime to try again.','error')}},500);const onMessage=async event=>{if(event.origin!==location.origin||event.source!==popup||event.data?.type!=='thingtime:sso'){return}window.removeEventListener('message',onMessage);clearInterval(closed);if(!event.data.ok||typeof event.data.code!=='string'){setStatus('Sign-in was cancelled.');continueButton.hidden=false;return}try{const response=await fetch('/api/v1/auth/sso-session',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({code:event.data.code})});if(!response.ok)throw new Error();prepare()}catch{setStatus('Thingtime sign-in could not finish. Please try again.','error');continueButton.hidden=false}};window.addEventListener('message',onMessage)};`;
+
+const connectionStyles = `<style>body{margin:0;background:#f5f5f5;color:#161616;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{box-sizing:border-box;max-width:680px;margin:32px auto;padding:30px;background:#fff;border:1px solid #ddd;border-radius:16px}h1{margin:0 0 8px;font-size:27px}p{color:#545454}.eyebrow{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#686868}.status{margin:20px 0;padding:14px 16px;border-left:3px solid #111;background:#fafafa}.status[data-kind="error"]{border-color:#b42318;color:#7a271a}.access{display:flex;gap:12px;align-items:flex-start;margin:20px 0;padding:16px;border:1px solid #d8d8d8;border-radius:12px}.access b{display:block}.access p{margin:3px 0 0}.dot{width:11px;height:11px;border-radius:99px;background:#111;margin-top:6px;flex:0 0 auto}details{border:1px solid #d8d8d8;border-radius:12px;padding:0 16px;margin:18px 0}summary{padding:15px 0;cursor:pointer;font-weight:650}fieldset{border:1px solid #d8d8d8;border-radius:12px;padding:16px;margin:12px 0}legend{padding:0 6px;font-weight:600}label{display:block;font-weight:600;margin-top:12px}input,select,button{font:inherit;box-sizing:border-box;width:100%;padding:10px;margin-top:5px;border:1px solid #aaa;border-radius:8px}button{cursor:pointer;background:#111;color:#fff;border-color:#111;font-weight:650;margin-top:14px}button:disabled{cursor:not-allowed;opacity:.55}.secondary{background:#fff;color:#111}.hint{font-size:14px}.scope{display:flex;gap:9px;align-items:flex-start;font-weight:400;padding:9px 0;border-bottom:1px solid #eee}.scope:last-child{border-bottom:0}.scope input{width:auto;margin:4px 0 0}.scope small{display:block;color:#666;margin-top:2px}.token-note{font-size:13px;color:#666;margin:8px 0 0}.warn{border-left:3px solid #111;padding-left:12px}@media(max-width:720px){.card{margin:0;border:0;border-radius:0;min-height:100vh;padding:22px}}</style>`;
+
+type ConnectionScope = { id: string; title: string; description: string; emoji: string };
+
+const renderScopeChoices = (scopeCatalog: ConnectionScope[], defaultScopes: readonly string[]) => scopeCatalog
+  .map((scope) => `<label class="scope"><input name="scope" type="checkbox" data-scope value="${escapeHtml(scope.id)}"${defaultScopes.includes(scope.id) ? ' checked' : ''}><span><strong>${escapeHtml(scope.title)}</strong><small>${escapeHtml(scope.description)}</small></span></label>`)
+  .join('');
+
+export const renderScopedConnectionPage = (requestToken: string, scopeCatalog: ConnectionScope[], requestedPermissions: readonly ChatGptOAuthPermissionScope[]) => {
+  const required = scopeCatalog.filter((scope) => requestedPermissions.some((permission) => permission === scope.id));
+  const optional = scopeCatalog.filter((scope) => !required.includes(scope));
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Approve Thingtime access</title>${connectionStyles}
+<style>.identity{margin:18px 0 4px;overflow-wrap:anywhere}.consent-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.consent-actions button{width:auto;min-height:44px;margin:0}.consent-actions button[hidden]{display:none}.scope{cursor:pointer}button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid #365cc7;outline-offset:3px}.status:not(:empty){min-height:1.5em}.status:empty{margin:0;padding:0;border:0;background:transparent;min-height:0}.card{margin-inline:auto}@media(max-width:720px){.card{margin:16px;padding:20px}}</style></head>
+<body><main class="card"><div class="eyebrow">Thingtime</div><h1>Approve Thingtime access</h1><p>Review the permissions for this new connection. Access from a previous connection does not carry over automatically.</p>
+<form id="connect-form" method="post"><input type="hidden" name="request" value="${escapeHtml(requestToken)}"><fieldset><legend>Requested permissions</legend>
+${required.map((scope) => `<div class="access"><span class="dot" aria-hidden="true"></span><div><b>${escapeHtml(scope.title)}</b><p>${escapeHtml(scope.description)}</p></div></div>`).join('')}</fieldset>
+<details id="advanced"><summary>Optional access rules</summary><p class="hint">Choose any additional access this connection should have.</p><div class="scopes">${renderScopeChoices(optional, [])}</div></details>
+<p class="identity" id="account" hidden></p><p class="status" id="status" role="status">Checking your Thingtime sign-in…</p>
+<div class="consent-actions"><button id="continue" class="secondary" type="button" hidden>Continue with Thingtime</button><button id="connect" type="submit" value="complete" disabled>Connect Thingtime</button><button class="secondary" type="submit" value="cancel">Cancel</button></div></form></main>
+<script>(()=>{
+  const form=document.getElementById('connect-form'),status=document.getElementById('status'),account=document.getElementById('account'),continueButton=document.getElementById('continue'),connect=document.getElementById('connect');
+  let busy=false;
+  const setStatus=(message,kind='')=>{status.textContent=message;status.dataset.kind=kind};
+  const post=async intent=>{const data=new URLSearchParams(new FormData(form));data.set('intent',intent);const response=await fetch(location.pathname,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:data.toString()});return {response,body:await response.json().catch(()=>null)}};
+  const prepare=async()=>{if(busy)return;busy=true;connect.disabled=true;continueButton.hidden=true;account.hidden=true;setStatus('Checking your Thingtime sign-in…');try{const {response,body}=await post('prepare');if(response.status===401){continueButton.hidden=false;setStatus('Sign in with your Thingtime account to review access.');return}if(!response.ok||!body?.ok)throw new Error(body?.error||'Could not check your account.');form.elements.request.value=body.request;account.textContent='Signed in as @'+body.username+' on '+location.host;account.hidden=false;connect.disabled=false;setStatus('')}catch(error){setStatus(error.message,'error');continueButton.hidden=false}finally{busy=false}};
+  ${renderOAuthSsoScript}
+  continueButton.addEventListener('click',continueWithSso);
+  form.addEventListener('submit',async event=>{event.preventDefault();if(busy)return;busy=true;connect.disabled=true;const intent=event.submitter?.value==='cancel'?'cancel':'complete';setStatus(intent==='cancel'?'Cancelling…':'Authorizing this connection…');try{const {response,body}=await post(intent);if(!response.ok||!body?.ok)throw new Error(body?.error||'Could not finish.');window.location.assign(body.redirectUri)}catch(error){setStatus(error.message,'error');connect.disabled=account.hidden}finally{busy=false}});
+  prepare();
+})();</script></body></html>`;
+};
+
 export const renderConnectionPage = (
   requestToken: string,
   allowedEndpoints: string[],
   defaultEndpoint: string,
-  scopeCatalog: Array<{ id: string; title: string; description: string; emoji: string }>
+  scopeCatalog: ConnectionScope[]
 ) => {
   const options = allowedEndpoints
     .map((endpoint) => `<option value="${escapeHtml(endpoint)}"${endpoint === defaultEndpoint ? ' selected' : ''}>${escapeHtml(endpoint)}</option>`)
@@ -430,8 +494,8 @@ export const renderConnectionPage = (
     .join('');
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect Thingtime</title>
-<style>body{margin:0;background:#f5f5f5;color:#161616;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{box-sizing:border-box;max-width:680px;margin:32px auto;padding:30px;background:#fff;border:1px solid #ddd;border-radius:16px}h1{margin:0 0 8px;font-size:27px}p{color:#545454}.eyebrow{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#686868}.status{margin:20px 0;padding:14px 16px;border-left:3px solid #111;background:#fafafa}.status[data-kind="error"]{border-color:#b42318;color:#7a271a}.access{display:flex;gap:12px;align-items:flex-start;margin:20px 0;padding:16px;border:1px solid #d8d8d8;border-radius:12px}.access b{display:block}.access p{margin:3px 0 0}.dot{width:11px;height:11px;border-radius:99px;background:#111;margin-top:6px;flex:0 0 auto}details{border:1px solid #d8d8d8;border-radius:12px;padding:0 16px;margin:18px 0}summary{padding:15px 0;cursor:pointer;font-weight:650}fieldset{border:1px solid #d8d8d8;border-radius:12px;padding:16px;margin:12px 0}legend{padding:0 6px;font-weight:600}label{display:block;font-weight:600;margin-top:12px}input,select,button{font:inherit;box-sizing:border-box;width:100%;padding:10px;margin-top:5px;border:1px solid #aaa;border-radius:8px}button{cursor:pointer;background:#111;color:#fff;border-color:#111;font-weight:650;margin-top:14px}button:disabled{cursor:not-allowed;opacity:.55}.secondary{background:#fff;color:#111}.hint{font-size:14px}.scope{display:flex;gap:9px;align-items:flex-start;font-weight:400;padding:9px 0;border-bottom:1px solid #eee}.scope:last-child{border-bottom:0}.scope input{width:auto;margin:4px 0 0}.scope small{display:block;color:#666;margin-top:2px}.token-note{font-size:13px;color:#666;margin:8px 0 0}.warn{border-left:3px solid #111;padding-left:12px}@media(max-width:720px){.card{margin:0;border:0;border-radius:0;min-height:100vh;padding:22px}}</style></head>
-<body><main class="card"><div class="eyebrow">Thingtime</div><h1>Connect your account</h1><p>Sign in with Thingtime to give this connection secure, revocable access. Full read/write access to your Things is selected by default.</p><p class="warn">Thingtime generates and stores the connection token securely. It is never shown in ChatGPT, Codex, or a chat.</p><form id="connect-form" method="post" autocomplete="off" novalidate><input type="hidden" name="request" value="${escapeHtml(requestToken)}"><div class="access"><span class="dot"></span><div><b>Read/write all Things</b><p>Includes reading, creating, updating, deleting, comments, reactions, saves, shares, and votes.</p></div></div><div class="status" id="status" aria-live="polite">Preparing your secure Thingtime connection…</div><button id="continue" class="secondary" type="button" hidden>Continue with Thingtime</button><button id="connect" type="submit" disabled>Connect Thingtime</button><details id="advanced"><summary>Advanced connection settings</summary><p class="hint">Change the generated token’s scopes, regenerate it, or connect another endpoint with your own token.</p><div id="accounts"><fieldset class="account"><legend>Primary Thingtime account</legend><label>Account label<input name="label" maxlength="80" placeholder="Personal" required></label><label>Thingtime API endpoint<select name="endpoint" required>${options}</select></label><label>Generated personal access token<input class="token" type="password" name="token" minlength="24" maxlength="8192" spellcheck="false" required></label><p class="token-note">Generated in your signed-in Thingtime session. It is non-expiring, revocable, and hidden until you open Advanced settings.</p><fieldset><legend>Access rules</legend><p class="hint">The default <strong>Full things access</strong> is read/write all. Remove it and choose individual capabilities to narrow access.</p><div class="scopes">${scopes}</div><button class="secondary regenerate" type="button">Generate a new token with these rules</button></fieldset></fieldset></div><button class="secondary" type="button" id="add">Add another account manually</button></details></form></main><script>(()=>{const form=document.getElementById('connect-form'),status=document.getElementById('status'),continueButton=document.getElementById('continue'),connect=document.getElementById('connect'),accounts=document.getElementById('accounts'),request=form.elements.request.value,primary=accounts.firstElementChild;let busy=false;const setStatus=(message,kind='')=>{status.textContent=message;status.dataset.kind=kind};const selectedScopes=()=>[...primary.querySelectorAll('[data-scope]:checked')].map(input=>input.value);const asForm=extra=>{const data=new URLSearchParams({request,intent:'prepare',endpoint:primary.querySelector('[name=endpoint]').value});selectedScopes().forEach(scope=>data.append('scope',scope));Object.entries(extra||{}).forEach(([key,value])=>data.set(key,value));return data};const prepare=async(extra)=>{if(busy)return;busy=true;continueButton.hidden=true;connect.disabled=true;setStatus('Preparing your secure Thingtime connection…');try{const response=await fetch(location.pathname+location.search,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},credentials:'same-origin',body:asForm(extra).toString()});const body=await response.json().catch(()=>null);if(response.status===401){setStatus('Sign in with your Thingtime account to continue.');continueButton.hidden=false;return}if(!response.ok||!body?.ok)throw new Error(body?.error||'Could not prepare your connection.');primary.querySelector('[name=label]').value=body.account.label;primary.querySelector('[name=endpoint]').value=body.account.endpoint;primary.querySelector('[name=token]').value=body.token;primary.dataset.generatedTokenId=body.tokenId;setStatus('Ready as @'+body.account.username+'. You can connect now.');connect.disabled=false}catch(error){setStatus(error instanceof Error?error.message:'Could not prepare your connection.','error')}finally{busy=false}};const complete=async()=>{if(busy)return;busy=true;connect.disabled=true;setStatus('Completing your secure Thingtime connection…');try{const data=new URLSearchParams(new FormData(form));data.set('intent','complete');const response=await fetch(location.pathname+location.search,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},credentials:'same-origin',body:data.toString()});const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok||typeof body.redirectUri!=='string')throw new Error(body?.error||'Could not complete your connection.');window.location.assign(body.redirectUri)}catch(error){setStatus(error instanceof Error?error.message:'Could not complete your connection.','error');connect.disabled=false}finally{busy=false}};const continueWithSso=()=>{const popup=window.open('/authorize?self=1&origin='+encodeURIComponent(location.origin),'thingtime-sso','width=480,height=640,popup=1');if(!popup){setStatus('Allow popups for Thingtime, then try again.','error');return}setStatus('Finish signing in with Thingtime in the popup…');const closed=setInterval(()=>{if(popup.closed){clearInterval(closed);window.removeEventListener('message',onMessage)}},500);const onMessage=async event=>{if(event.origin!==location.origin||event.data?.type!=='thingtime:sso'){return}window.removeEventListener('message',onMessage);clearInterval(closed);if(!event.data.ok||typeof event.data.code!=='string'){setStatus('Sign-in was cancelled.');continueButton.hidden=false;return}const response=await fetch('/api/v1/auth/sso-session',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({code:event.data.code})});if(!response.ok){setStatus('Thingtime sign-in could not finish. Please try again.','error');continueButton.hidden=false;return}prepare()};window.addEventListener('message',onMessage)};form.addEventListener('submit',event=>{event.preventDefault();void complete()});continueButton.addEventListener('click',continueWithSso);primary.querySelector('[name=endpoint]').addEventListener('change',()=>{primary.querySelector('[name=token]').value='';primary.dataset.generatedTokenId='';connect.disabled=true;setStatus('Choose access rules and generate a token for this endpoint.');document.getElementById('advanced').open=true});primary.querySelector('.regenerate').addEventListener('click',async()=>{if(!selectedScopes().length){setStatus('Choose at least one access rule before generating a token.','error');return}await prepare(primary.dataset.generatedTokenId?{replaceTokenId:primary.dataset.generatedTokenId}:undefined)});document.getElementById('add').addEventListener('click',()=>{const clone=primary.cloneNode(true);clone.dataset.generatedTokenId='';clone.querySelector('legend').textContent='Additional Thingtime account';clone.querySelectorAll('input').forEach(input=>{if(input.matches('[data-scope]'))return;input.value=''});clone.querySelector('.token-note').textContent='For another account or endpoint, paste a scoped personal access token here.';clone.querySelector('.regenerate').remove();clone.querySelector('.scopes').closest('fieldset').remove();accounts.appendChild(clone);document.getElementById('advanced').open=true});prepare()})();</script></body></html>`;
+${connectionStyles}</head>
+<body><main class="card"><div class="eyebrow">Thingtime</div><h1>Connect your account</h1><p>Sign in with Thingtime to give this connection secure, revocable access. Full read/write access to your Things is selected by default.</p><p class="warn">Thingtime generates and stores the connection token securely. It is never shown in ChatGPT, Codex, or a chat.</p><form id="connect-form" method="post" autocomplete="off" novalidate><input type="hidden" name="request" value="${escapeHtml(requestToken)}"><div class="access"><span class="dot"></span><div><b>Read/write all Things</b><p>Includes reading, creating, updating, deleting, comments, reactions, saves, shares, and votes.</p></div></div><div class="status" id="status" aria-live="polite">Preparing your secure Thingtime connection…</div><button id="continue" class="secondary" type="button" hidden>Continue with Thingtime</button><button id="connect" type="submit" disabled>Connect Thingtime</button><details id="advanced"><summary>Advanced connection settings</summary><p class="hint">Change the generated token’s scopes, regenerate it, or connect another endpoint with your own token.</p><div id="accounts"><fieldset class="account"><legend>Primary Thingtime account</legend><label>Account label<input name="label" maxlength="80" placeholder="Personal" required></label><label>Thingtime API endpoint<select name="endpoint" required>${options}</select></label><label>Generated personal access token<input class="token" type="password" name="token" minlength="24" maxlength="8192" spellcheck="false" required></label><p class="token-note">Generated in your signed-in Thingtime session. It is non-expiring, revocable, and hidden until you open Advanced settings.</p><fieldset><legend>Access rules</legend><p class="hint">The default <strong>Full things access</strong> is read/write all. Remove it and choose individual capabilities to narrow access.</p><div class="scopes">${scopes}</div><button class="secondary regenerate" type="button">Generate a new token with these rules</button></fieldset></fieldset></div><button class="secondary" type="button" id="add">Add another account manually</button></details></form></main><script>(()=>{const form=document.getElementById('connect-form'),status=document.getElementById('status'),continueButton=document.getElementById('continue'),connect=document.getElementById('connect'),accounts=document.getElementById('accounts'),request=form.elements.request.value,primary=accounts.firstElementChild;let busy=false;const setStatus=(message,kind='')=>{status.textContent=message;status.dataset.kind=kind};const selectedScopes=()=>[...primary.querySelectorAll('[data-scope]:checked')].map(input=>input.value);const asForm=extra=>{const data=new URLSearchParams({request,intent:'prepare',endpoint:primary.querySelector('[name=endpoint]').value});selectedScopes().forEach(scope=>data.append('scope',scope));Object.entries(extra||{}).forEach(([key,value])=>data.set(key,value));return data};const prepare=async(extra)=>{if(busy)return;busy=true;continueButton.hidden=true;connect.disabled=true;setStatus('Preparing your secure Thingtime connection…');try{const response=await fetch(location.pathname+location.search,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},credentials:'same-origin',body:asForm(extra).toString()});const body=await response.json().catch(()=>null);if(response.status===401){setStatus('Sign in with your Thingtime account to continue.');continueButton.hidden=false;return}if(!response.ok||!body?.ok)throw new Error(body?.error||'Could not prepare your connection.');primary.querySelector('[name=label]').value=body.account.label;primary.querySelector('[name=endpoint]').value=body.account.endpoint;primary.querySelector('[name=token]').value=body.token;primary.dataset.generatedTokenId=body.tokenId;setStatus('Ready as @'+body.account.username+'. You can connect now.');connect.disabled=false}catch(error){setStatus(error instanceof Error?error.message:'Could not prepare your connection.','error')}finally{busy=false}};const complete=async()=>{if(busy)return;busy=true;connect.disabled=true;setStatus('Completing your secure Thingtime connection…');try{const data=new URLSearchParams(new FormData(form));data.set('intent','complete');const response=await fetch(location.pathname+location.search,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},credentials:'same-origin',body:data.toString()});const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok||typeof body.redirectUri!=='string')throw new Error(body?.error||'Could not complete your connection.');window.location.assign(body.redirectUri)}catch(error){setStatus(error instanceof Error?error.message:'Could not complete your connection.','error');connect.disabled=false}finally{busy=false}};${renderOAuthSsoScript}form.addEventListener('submit',event=>{event.preventDefault();void complete()});continueButton.addEventListener('click',continueWithSso);primary.querySelector('[name=endpoint]').addEventListener('change',()=>{primary.querySelector('[name=token]').value='';primary.dataset.generatedTokenId='';connect.disabled=true;setStatus('Choose access rules and generate a token for this endpoint.');document.getElementById('advanced').open=true});primary.querySelector('.regenerate').addEventListener('click',async()=>{if(!selectedScopes().length){setStatus('Choose at least one access rule before generating a token.','error');return}await prepare(primary.dataset.generatedTokenId?{replaceTokenId:primary.dataset.generatedTokenId}:undefined)});document.getElementById('add').addEventListener('click',()=>{const clone=primary.cloneNode(true);clone.dataset.generatedTokenId='';clone.querySelector('legend').textContent='Additional Thingtime account';clone.querySelectorAll('input').forEach(input=>{if(input.matches('[data-scope]'))return;input.value=''});clone.querySelector('.token-note').textContent='For another account or endpoint, paste a scoped personal access token here.';clone.querySelector('.regenerate').remove();clone.querySelector('.scopes').closest('fieldset').remove();accounts.appendChild(clone);document.getElementById('advanced').open=true});prepare()})();</script></body></html>`;
 };
 
 export const pluginDiscovery = (origin: string) => ({
@@ -439,7 +503,7 @@ export const pluginDiscovery = (origin: string) => ({
     resource: mcpResourceForOrigin(origin),
     authorization_servers: [origin],
     bearer_methods_supported: ['header'],
-    scopes_supported: CHATGPT_OAUTH_SCOPES
+    scopes_supported: CHATGPT_BASE_OAUTH_SCOPES
   },
   authorizationServer: {
     issuer: origin,

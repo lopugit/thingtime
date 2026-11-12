@@ -55,3 +55,34 @@ test('runtime packaging dereferences internal dependencies but refuses secrets a
     await assert.rejects(copyApplication(source, output), /unsafe build input/);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('image staging supplies every local Docker COPY input through its restrictive allowlist', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'tt-browser-stage-'));
+  const imageId = 'sha256:' + 'a'.repeat(64);
+  let checked = false;
+  const engine = { run: async args => {
+    if (args[0] === 'build') {
+      const context = args.at(-1);
+      const dockerfile = await fs.readFile(path.join(context, 'Dockerfile'), 'utf8');
+      const allow = new Set((await fs.readFile(path.join(context, '.dockerignore'), 'utf8')).split('\n').filter(line => line.startsWith('!')).map(line => line.slice(1).replace(/\/$/, '')));
+      for (const line of dockerfile.split('\n').filter(line => line.startsWith('COPY ') && !line.includes('--from='))) {
+        const sources = line.split(/\s+/).slice(1, -1).filter(value => !value.startsWith('--'));
+        for (const source of sources) {
+          await fs.access(path.join(context, source));
+          assert.ok(allow.has(source), `${source} must reach Docker through the context allowlist`);
+        }
+      }
+      assert.equal(await fs.readFile(path.join(context, 'renderer-server.cjs'), 'utf8'), await fs.readFile(path.join(__dirname, '../lib/renderer-server.cjs'), 'utf8'));
+      checked = true; return '';
+    }
+    assert.deepEqual(args.slice(0, 2), ['image', 'inspect']);
+    return JSON.stringify([{ Id: imageId, Architecture: 'arm64' }]);
+  } };
+  const images = await new BrowserImages({ stateRoot: root, engine }).initialize();
+  try {
+    const pending = await images.install({ taskId: 'own-task' });
+    const result = await images.jobs.get(pending.id).completion;
+    assert.equal(result.state, 'installed', images.jobs.get(pending.id).error?.message);
+    assert.equal(checked, true);
+  } finally { await images.close(); await fs.rm(root, { recursive: true, force: true }); }
+});

@@ -594,7 +594,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
             XCTAssertNotNil(body["revision"])
             XCTAssertEqual(Set(body.keys), Set(["revision", "state", "connectors", "capabilities"]))
             let capabilities = try XCTUnwrap(body["capabilities"] as? [String])
-            XCTAssertLessThanOrEqual(capabilities.count, 64)
+            XCTAssertLessThanOrEqual(capabilities.count, PairingManager.maximumCapabilityCount)
             XCTAssertEqual(Set(capabilities).count, capabilities.count)
             XCTAssertTrue(capabilities.contains("filesystem.v1"))
             XCTAssertTrue(capabilities.contains("system.brightness.write"))
@@ -864,4 +864,39 @@ private func XCTAssertThrowsErrorAsync<T>(
         _ = try await expression()
         XCTFail("Expected expression to throw", file: file, line: line)
     } catch {}
+}
+
+
+extension ThingtimeAPIClientTests {
+    func testLocationObservationRequiresOriginCapabilityAndExactPairing() async throws {
+        MockURLProtocol.featureOverrides = ["api.devices-node-observations": "1.0.0"]
+        let credential = DeviceCredential(deviceID: "device-location", refreshToken: "synthetic-location", signingPrivateKey: Data(), signingPublicKey: Data())
+        let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+        let collection = UUID().uuidString.lowercased()
+        var uploads = 0
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/devices/node/observations")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-location")
+            if request.httpMethod == "GET" {
+                return (200, try JSONSerialization.data(withJSONObject: ["ok": true, "settings": ["enabled": true, "retentionMs": NSNull(), "collectionId": collection]]))
+            }
+            uploads += 1
+            return (200, Data(#"{"ok":true}"#.utf8))
+        }
+        let policy = try await client.observationPolicy(deviceID: credential.deviceID)
+        XCTAssertEqual(policy.collectionId, collection); XCTAssertNil(policy.retentionMs)
+        try await client.sendObservation(.init(id: UUID().uuidString, type: "location", observedAt: ISO8601DateFormatter().string(from: Date()), collectionId: collection,
+            value: .init(latitude: 55, longitude: 12, accuracyMeters: 100, precision: "approximate", source: "core-location")), deviceID: credential.deviceID)
+        XCTAssertEqual(uploads, 1)
+        await XCTAssertThrowsErrorAsync(try await client.observationPolicy(deviceID: "other-device"))
+    }
+    func testLocationObservationRefusesMissingBreakingOrMalformedCapabilitiesBeforeBearerSend() async throws {
+        for version in [nil, "2.0.0", "1.x.0"] as [String?] {
+            MockURLProtocol.featureOverrides = version.map { ["api.devices-node-observations": $0] } ?? [:]
+            let credential = DeviceCredential(deviceID: "device-location", refreshToken: "synthetic-location", signingPrivateKey: Data(), signingPublicKey: Data())
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+            MockURLProtocol.handler = { _ in XCTFail("Unsupported origin must not receive a protected observation request"); return (500, Data()) }
+            await XCTAssertThrowsErrorAsync(try await client.observationPolicy(deviceID: credential.deviceID))
+        }
+    }
 }

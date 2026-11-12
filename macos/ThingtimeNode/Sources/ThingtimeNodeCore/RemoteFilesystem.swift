@@ -1,3 +1,4 @@
+import AppleFileSync
 import CryptoKit
 import Darwin
 import Foundation
@@ -8,7 +9,13 @@ public struct RemoteFilesystem {
     public static let chunkBytes = 65_536
     public static let maximumFileBytes = 32 * 1024 * 1024
     private let root: URL
-    public init(root: URL = FileManager.default.homeDirectoryForCurrentUser) { self.root = root }
+    private let listing: RustDirectoryListing?
+
+    public init(root: URL = FileManager.default.homeDirectoryForCurrentUser, transport: (any RustInventoryTransport)? = nil) {
+        self.root = root
+        let resolved = transport ?? RustProcessInventoryTransport.bundledHelper.map { RustProcessInventoryTransport(helper: $0) }
+        listing = resolved.map(RustDirectoryListing.init(transport:))
+    }
 
     static func components(_ path: String) throws -> [String] {
         guard path.utf8.count <= 1024, !path.hasPrefix("/"), !path.contains("\\"),
@@ -31,7 +38,7 @@ public struct RemoteFilesystem {
             switch op {
             case "list":
                 allowed = ["op", "path", "cursor", "hidden"]
-                if let cursor = input["cursor"] { guard let n = cursor.numberValue, n >= 0, n <= 10_000, n.rounded() == n else { return "Invalid directory cursor." } }
+                if let cursor = input["cursor"] { guard let n = cursor.numberValue, n >= 0, n <= 9_007_199_254_740_991, n.rounded() == n else { return "Invalid directory cursor." } }
                 if let hidden = input["hidden"], case .bool = hidden {} else if input["hidden"] != nil { return "Invalid hidden-file preference." }
             case "read":
                 allowed = ["op", "path", "version", "offset"]
@@ -129,7 +136,11 @@ public struct RemoteFilesystem {
     // remove an active/foreign file; mutation receipts remain in the journal.
     private func clearExpiredUploads(_ directory: Int32) {
         guard let children = try? names(directory, includeStaging: true) else { return }
-        for name in children where name.hasPrefix(".thingtime-upload-") {
+        clearExpiredUploads(directory, names: children)
+    }
+
+    private func clearExpiredUploads(_ directory: Int32, names: [String]) {
+        for name in names where name.hasPrefix(".thingtime-upload-") {
             let suffix = String(name.dropFirst(".thingtime-upload-".count))
             guard suffix.count == 101, UUID(uuidString: String(suffix.prefix(36))) != nil,
                   suffix.dropFirst(36).first == "-", suffix.suffix(64).allSatisfy({ $0.isHexDigit }) else { continue }
@@ -163,22 +174,26 @@ public struct RemoteFilesystem {
         let result: JSONValue
         switch op {
         case "list":
-            clearExpiredUploads(fd)
+            guard let listing else { throw RustInventoryTransportFailure.unavailable }
+            let rootFD = try openPath("", directory: true); defer { close(rootFD) }
             let showHidden = input["hidden"] == .bool(true)
-            let all = try names(fd).filter { showHidden || !$0.hasPrefix(".") }
             let offset = Int(input["cursor"]?.numberValue ?? 0)
-            guard offset <= all.count else { throw failure() }
-            let page = all.dropFirst(offset).prefix(25)
+            let page = try listing.page(rootFD: rootFD, path: path, offset: offset, hidden: showHidden, directoryVersion: version(before))
+            guard page.directoryVersion == version(before) else { throw failure() }
             var entries: [JSONValue] = []
-            for name in page {
-                guard (try? Self.components(path.isEmpty ? name : path + "/" + name)) != nil else {
+            for name in page.names {
+                let child = path.isEmpty ? name : path + "/" + name
+                guard (try? Self.components(child)) != nil else {
                     throw ThingtimeNodeError.policyDenied("This directory contains a filename that cannot be represented safely. Rename that item locally before browsing it.")
                 }
                 var value = stat()
-                guard fstatat(fd, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else { continue }
-                entries.append(entry(value, path: path.isEmpty ? name : path + "/" + name, name: name))
+                guard fstatat(fd, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else { throw failure() }
+                entries.append(entry(value, path: child, name: name))
             }
-            result = .object(["path": .string(path), "entries": .array(entries), "nextCursor": offset + page.count < all.count ? .number(Double(offset + page.count)) : .null])
+            let current = try openPath(path, directory: true); defer { close(current) }
+            guard version(try info(fd)) == version(before), version(try info(current)) == version(before) else { throw failure() }
+            clearExpiredUploads(fd, names: page.stagingNames)
+            result = .object(["path": .string(path), "entries": .array(entries), "nextCursor": page.nextOffset.map { .number(Double($0)) } ?? .null])
         case "read":
             guard before.st_mode & S_IFMT == S_IFREG, before.st_size <= Self.maximumFileBytes else { throw failure() }
             let offset = Int(input["offset"]!.numberValue!)

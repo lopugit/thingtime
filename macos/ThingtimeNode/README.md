@@ -12,6 +12,21 @@ XPC surface, and a supervised connector subprocess boundary.
   **preflight** state. Startup and status reads never prompt. A separate
   journaled `permissions.request` method is available only through the signed,
   presence-gated bridge after the user presses **Request access**.
+- Host resources: CPU percent from host tick deltas, physical memory used and
+  total, startup-volume capacity used and total, physical disk read/write bytes
+  per second, and received/transmitted bytes
+  per second across active physical Ethernet and Wi-Fi interfaces. Memory used
+  counts anonymous, wired, and compressed physical pages, excluding purgeable
+  memory and file cache. Startup-volume usage subtracts filesystem free space
+  from total capacity, including space allocated elsewhere in a shared APFS
+  container. The I/O rates cover block storage drivers with a known physical
+  interconnect, excluding virtual disk images. Rate fields are omitted on the
+  first sample or when their counters are unavailable. Topology changes and
+  counter resets omit the affected rates for that interval. Network link
+  capacity remains unavailable on macOS.
+  Resource fields contain no interface names, addresses, or volume paths.
+  Native publishing requires `api.devices-node-state` 1.14.0 at the paired
+  origin, and the owner's read projection is `api.devices` 1.14.0.
 - Safe actions: telemetry refresh, output volume, activate a running app, and
   launch an installed app. Remote mutations deny while locked and require an
   explicit approval bit.
@@ -283,3 +298,113 @@ it verifies real native streaming, API authentication, cloud hashes, retained
 versions, local-deletion retention, restart and repeat convergence. It does not
 prove actual PhotoKit permission, installed signed-app selection or personal
 library behavior. Those require a separate explicit live acceptance session.
+
+
+### Owner-private source locations (Mac fileAccessVersion 1.15.0)
+
+Authorized folder-root responses optionally include `sourcePath`, the absolute
+POSIX location resolved from that owner's exact existing native bookmark.
+Clients negotiate Mac `fileAccessVersion` 1.15.0 before relying on this field.
+Unavailable or stale grants and Photos omit it. This is display/placement
+metadata, never an executable relative file path or a grant to any ancestor.
+The bookmark and current owner verification remain authoritative; no public
+capability manifest contains a physical path. Existing cloud destinations are
+not renamed, moved or migrated by this additive native response.
+
+The folder context additionally advertises `fileSingleUploadVersion` 1.0.0.
+`upload-single` reuses the existing authenticated duplex callback channel for
+bounded regular files and performs fresh entry/exit identity checks and strong
+source reads around emission, PUT and stored verification. This transport never
+owns publication: it returns an exact attachment content proof to the original
+single-file executor. Other sources/hosts retain the existing path; see
+[the compound contract](../../docs/mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+The canonical bundle builder explicitly compiles only the shipped Swift products
+`ThingtimeNode`, `ThingtimeNodeBridge` and `ThingtimeSpeech` in Release, then checks
+and copies that same product set before signing. Test-only fixture executables
+can retain private `@testable` instrumentation in their separate debug lane.
+`electron/test/native-bundle-build.test.cjs` proves a failed required product and
+a missing executable both stop before any staged bundle replacement.
+
+## Device location and alerts
+
+Location uses Core Location, with no IP-derived substitute. Startup and telemetry
+never request location or notification authorization. Sharing defaults off locally
+and requires both the paired owner's server policy and explicit local enablement.
+The local OS permission request is separate. Each observation is bound to the
+server's current `collectionId`; policy is checked again after the asynchronous
+OS callback. Disablement, OS revocation, and local unpairing fence callbacks and
+remove pending coordinates. App shutdown suspends collection while preserving the
+user's saved choice. The origin-scoped, mode-0600 outbox keeps only the exact
+unacknowledged observation per pairing for idempotent retry, never a local history.
+Server history retention defaults to Never; native clients never substitute a TTL.
+
+The installed Electron bridge exposes `deviceLocationVersion: '1.0.0'` and
+`deviceLocationRequest({ action, ownerId, deviceId, enabled? })`. Supported actions:
+`status`, `set-enabled`, `request-permission`, `open-settings`, and
+`request-notification-permission`. Status returns `{ version, enabled,
+authorization, servicesEnabled }` without coordinates. The bridge verifies the
+current authenticated owner against the selected API origin, and the native
+adapter verifies the exact pairing's live owner through `api.devices-node-identity`.
+Mutation methods use the existing signed local presence gate. Location publishing
+requires origin-scoped `api.devices-node-observations` 1.x compatibility.
+
+Typed `notification.show`, `media.play`, and `media.prepare` commands use the
+normal leased-command journal. The node advertises their `.v1` capabilities.
+Notifications require an already-granted local notification permission. Media
+resolves only through the current command/lease's `api.devices-node-media` 1.x
+endpoint; download requests contain no node bearer and refuse redirects. Prepared
+sounds decode to CAF in the normal macOS `Library/Sounds` directory, register an
+installation cache UUID through `api.devices-node-alert-sounds` 1.x, and return a
+ready receipt only after saving. Apple's notification-sound limit is shorter than
+30 seconds; the separate Play audio command handles longer uploaded recordings.
+The native adapter reauthorizes the exact attachment/version after download and
+conversion, immediately before playback or prepared-sound persistence; lease
+renewal alone never substitutes for current media authorization. Audio plays
+once. Crashes or uncertain delivery remain review-only in the journal,
+and must never replay automatically. An accepted notification request is evidence
+of OS acceptance, not proof that a notification was displayed or a speaker sounded.
+
+Focused verification:
+
+```bash
+swift test --package-path macos/ThingtimeNode --filter 'DeviceAlertsTests|DeviceLocationTests|ThingtimeAPIClientTests|NodeControllerTests|CommandJournalTests|ControlPlaneSchedulerTests'
+node --test electron/test/thingtime-node-bridge.test.cjs
+```
+
+Signed-installed acceptance additionally requires OS permission and real Core
+Location fixes, exact-Thing readback of uploaded observations, notification display,
+and audible MP3/default-tone playback. Unit tests do not establish those outcomes.
+
+
+### Location eligibility in the signed helper
+
+The canonical `Resources/ThingtimeNode.entitlements` grants
+`com.apple.security.personal-information.location` as Boolean `true`. The
+standalone build checks the actual signed payload, and native staging plus final
+Electron local/production verification require that same enabled entitlement.
+All checks request XML explicitly from `codesign` and parse it as a plist; a
+modern display-only `[Dict]` rendering, false/string values, and stripped grants
+cannot pass. Electron's existing `signIgnore` preserves the separately signed
+Node and bridge bundles; final verification checks the nested helper again.
+The outer Electron process and IPC bridge do not receive the location grant.
+
+`node --test electron/test/node-location-signing.test.cjs` builds disposable
+Mach-O fixtures, signs a nested helper and outer bundle, then proves that a
+valid deep signature with a stripped Node location entitlement is still refused.
+These temporary ad-hoc fixtures are never installed or executed. Stable release
+signing, OS consent, owner pairing and explicit location opt-in remain separate
+requirements. Runtime recovery may validate older signed helpers without this
+optional grant; new local/production packages must include it.
+
+
+Mac file-access 1.21.0 adds `observe-path` for two-way preparation. The typed
+request carries the exact candidate, saved configuration identity/revision,
+network/charging policy and remaining operation deadline. The adapter observes
+only that candidate and its immediate parent through the shared reader, with
+metered CPU and current grant/policy/cancellation checks around each observation.
+Fresh identity is required at entry and reply, including after a queued wait;
+no identity result is cached or shared. The complete reply echoes the policy
+and returns ordered observations and current conditions. Older hosts retain
+separate requests. This contract does not authorize writes or relax later
+read/publication guards, and does not change byte, CPU or identity limits.

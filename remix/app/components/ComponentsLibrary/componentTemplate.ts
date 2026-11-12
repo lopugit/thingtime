@@ -1,3 +1,4 @@
+import { formatByteSize } from '../../utils/formatByteSize';
 import { formatElapsedTime } from './elapsedTime';
 import { copiedMediaRefs, mapResolvedCopiedMedia } from '../Sharing/copiedMediaRefs';
 
@@ -120,6 +121,16 @@ const argValue = (scope: ComponentScope, name: string): unknown => {
 
 export const componentScopeValue = argValue;
 
+export function keyedScopeValue(scope: ComponentScope, path: string, keyArg?: unknown): unknown {
+	const value = argValue(scope, path);
+	if (keyArg === undefined) return value;
+	if (!isPlainObject(value) || typeof keyArg !== 'string') return undefined;
+	const key = argValue(scope, keyArg);
+	if (!(typeof key === 'string' && key) && !(typeof key === 'number' && Number.isFinite(key))) return undefined;
+	const name = String(key);
+	return !BANNED_SEGMENTS.has(name) && Object.prototype.hasOwnProperty.call(value, name) ? value[name] : undefined;
+}
+
 const scalarText = (value: unknown): string => {
 	if (value === undefined || value === null) return '';
 	if (typeof value === 'string') return value;
@@ -170,10 +181,11 @@ const compareValues = (a: unknown, b: unknown): number => {
 };
 
 // ttIf conditions: `equals` (legacy, string equality) or `op` + `value`.
-const conditionHolds = (spec: Record<string, unknown>, value: unknown): boolean => {
+const conditionHolds = (spec: Record<string, unknown>, value: unknown, scope: ComponentScope): boolean => {
 	if (spec.equals !== undefined) return String(value) === String(spec.equals);
 	const op = typeof spec.op === 'string' ? spec.op : '';
-	const expected = spec.value;
+	const expected = typeof spec.valueArg === 'string' ? argValue(scope, spec.valueArg) : spec.value;
+	if (typeof spec.valueArg === 'string' && expected === undefined) return false;
 	switch (op) {
 		case 'eq':
 			return isNumeric(value) && isNumeric(expected) ? Number(value) === Number(expected) : String(value ?? '') === String(expected ?? '');
@@ -209,6 +221,7 @@ const ordinal = (n: number): string => {
 const formatValue = (spec: Record<string, unknown>, value: unknown): string => {
 	const kind = typeof spec.kind === 'string' ? spec.kind : 'text';
 	const digits = typeof spec.digits === 'number' ? Math.max(0, Math.min(6, Math.round(spec.digits))) : 0;
+	if (kind === 'bytes') return formatByteSize(value);
 	if (kind === 'upper') return scalarText(value).toUpperCase();
 	if (kind === 'lower') return scalarText(value).toLowerCase();
 	if (kind === 'capitalize') {
@@ -386,7 +399,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 	if ('ttIf' in template) {
 		const spec = isPlainObject(template.ttIf) ? template.ttIf : {};
 		const value = argValue(scope, String(spec.arg));
-		const hit = conditionHolds(spec, value);
+		const hit = conditionHolds(spec, value, scope);
 		const branch = hit ? spec.then : spec.else;
 		return branch === undefined ? undefined : resolveNode(branch, scope, budget);
 	}
@@ -429,7 +442,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		// (an object) iterates its own entries as { key, value } items. Falls
 		// back to `empty` when there is nothing to draw.
 		const spec = isPlainObject(template.ttEach) ? template.ttEach : {};
-		const raw = argValue(scope, String(spec.arg));
+		const raw = keyedScopeValue(scope, String(spec.arg), spec.keyArg);
 		const list: unknown[] = Array.isArray(raw) ? raw : isPlainObject(raw) ? Object.entries(raw).map(([key, value]) => ({ key, value })) : [];
 		// `max` is an optional author hint, and EACH_HARD_CAP is the bound that
 		// has to hold for markup nobody vetted. ttRepeat above floors its count
@@ -447,7 +460,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 			if (budget.left <= 0) break;
 			const resolved = resolveNode(
 				spec.node,
-				{ ...scope, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1 },
+				{ ...scope, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1, ...(spec.keyArg === undefined ? {} : { total: list.length, remaining: list.length - items.length }) },
 				budget
 			);
 			if (Array.isArray(resolved)) out.push(...resolved);
@@ -520,6 +533,12 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 			out.props = props;
 		}
 	}
+	if (out.tag === 'tt-mapbox' && isPlainObject(out.props) && 'pointsSource' in out.props) {
+		const authoredSource = isPlainObject(template.props) ? template.props.pointsSource : undefined;
+		// Only the persisted literal Action may be invoked. The map resolves
+		// its ordinary input values against its own live scope.
+		out.props = { ...out.props, pointsSource: literalMapSourceAction(authoredSource) ? authoredSource : undefined };
+	}
 	return out;
 };
 
@@ -541,6 +560,21 @@ export const createTemplateResolver = (options: { preserveUnboundTokens?: boolea
 };
 
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown => createTemplateResolver()(template, scope);
+
+// Stored map sources are executable references; map rows and source inputs are data.
+export const literalMapSourceAction = (source: unknown): string | undefined => {
+	if (!isPlainObject(source)) return undefined;
+	const action = source.action;
+	return typeof action === 'string' && action && action.length <= 128 && !/[{}$\s]/.test(action) ? action : undefined;
+};
+
+export const visitStoredMapSourceActions = (props: unknown, visit: (action: string, source: Record<string, unknown>) => void): void => {
+	if (!isPlainObject(props)) return;
+	for (const source of [props.favouritesSource, props.routeSource, props.pointsSource]) {
+		const action = literalMapSourceAction(source);
+		if (action && isPlainObject(source)) visit(action, source);
+	}
+};
 
 // Visit executable positions in every authored branch, using the same token,
 // repeat and own-property semantics as rendering. Arguments are data, never
@@ -622,6 +656,8 @@ export const visitStoredTemplateActions = (
 				});
 			return;
 		}
+		if (node.tag === 'tt-mapbox')
+			visitStoredMapSourceActions(node.props, action => visit(action, { ttAction: action }, action));
 		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && isPlainObject(node.props)) {
 			// Collection reads declare a literal saved Action, like a block source.
 			// Runtime rows/inputs cannot add authority or change this dependency.
@@ -642,6 +678,121 @@ export const visitStoredTemplateActions = (
 	};
 	walk(template, scope);
 };
+
+export class StoredReferenceUnsupportedError extends Error {
+	declare readonly reference?: string;
+	constructor(message: string, reference?: string) {
+		super(message); this.name = 'StoredReferenceUnsupportedError';
+		// Diagnostic input remains non-enumerable: callers must never log a
+		// potentially enormous/private stored value as an Error property.
+		Object.defineProperty(this, 'reference', { value: reference, enumerable: false });
+	}
+}
+export type StoredTemplateNode = { node: Record<string, any>; scope: ComponentScope; opaque: boolean };
+
+/** Worker traversal of the stored program, not a render/preview expansion.
+ * Iterator frames retain ancestry, not an array of expanded output. Null steps
+ * let a disk-backed consumer yield/check authority even in reference-free trees.
+ * Renderer limits above remain unchanged. Runtime values are never invented. */
+export function* iterateStoredTemplateNodes(template: unknown, scope: ComponentScope = {}, signal?: AbortSignal): Generator<StoredTemplateNode | null> {
+	type Frame = { values: Iterator<{ value: any; scope: ComponentScope; opaque: boolean }>; owner?: object };
+	const active = new WeakSet<object>();
+	const one = function* (value: unknown, scope: ComponentScope, opaque = false) { yield { value, scope, opaque }; };
+	const stack: Frame[] = [{ values: one(template, scope) }];
+	while (stack.length) {
+		signal?.throwIfAborted();
+		const frame = stack[stack.length - 1], next = frame.values.next();
+		if (next.done) { stack.pop(); if (frame.owner) active.delete(frame.owner); continue; }
+		const { value, scope: current, opaque } = next.value;
+		yield null;
+		if (!value || typeof value !== 'object') continue;
+		if (active.has(value)) throw new StoredReferenceUnsupportedError('Cyclic stored template value');
+		active.add(value);
+		const children = function* (): Generator<{ value: any; scope: ComponentScope; opaque: boolean }> {
+			if (Array.isArray(value)) { for (const child of value) yield* one(child, current, opaque); return; }
+			if (!opaque) {
+				if ('ttArg' in value) {
+					const selected = argValue(current, String(value.ttArg));
+					if (selected === undefined) throw new StoredReferenceUnsupportedError('Runtime-dependent stored render output');
+					yield* one(selected, current, true); return;
+				}
+				if ('ttMap' in value) {
+					yield* one(value.ttMap?.default, current);
+					if (isPlainObject(value.ttMap?.values)) for (const key of Object.keys(value.ttMap.values)) yield* one(value.ttMap.values[key], current);
+					return;
+				}
+				if ('ttIf' in value) { yield* one(value.ttIf?.then, current); yield* one(value.ttIf?.else, current); return; }
+				if ('ttFormat' in value) return;
+				if ('ttMerge' in value) throw new StoredReferenceUnsupportedError('Stored render merge needs an exact output adapter');
+				if ('ttRepeat' in value) {
+					const spec = value.ttRepeat ?? {}, raw = spec.arg !== undefined ? argValue(current, String(spec.arg)) : spec.count;
+					let count = Math.max(0, Math.round(Number(raw) || 0));
+					if (Number(spec.max) > 0) count = Math.min(count, Number(spec.max));
+					if (!Number.isSafeInteger(count)) throw new StoredReferenceUnsupportedError('Non-finite stored repeat');
+					if (!count) yield* one(spec.node, { ...current, index: undefined, n: undefined });
+					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, index, n: index + 1 });
+					return;
+				}
+				if ('ttEach' in value) {
+					const spec = value.ttEach ?? {}, raw = keyedScopeValue(current, String(spec.arg), spec.keyArg);
+					const keys = isPlainObject(raw) ? Object.keys(raw) : null;
+					const total = Array.isArray(raw) ? raw.length : keys?.length ?? 0;
+					let count = total;
+					if (Number(spec.max) > 0) count = Math.min(count, Math.trunc(Number(spec.max)));
+					yield* one(spec.empty, current);
+					if (!count) yield* one(spec.node, { ...current, item: undefined, index: undefined, collection: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
+					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, item: keys ? { key: keys[index], value: raw[keys[index]] } : raw[index], index, n: index + 1, count, first: index === 0, last: index === count - 1, ...(spec.keyArg === undefined ? {} : { total, remaining: total - count }) });
+					return;
+				}
+			}
+			if ((value.tag === 'tt-collection' || value.chakra === 'Collection') && isPlainObject(value.props)) {
+				const row = value.props.itemTemplate;
+				yield* one(isPlainObject(row) && 'ttTemplate' in row ? row.ttTemplate : row, { ...current, item: undefined, index: undefined, collection: undefined }, opaque);
+			}
+			yield* one(value.children, current, opaque); yield* one(value.rawChildren, current, opaque);
+		};
+		if (!Array.isArray(value)) yield { node: value, scope: current, opaque };
+		stack.push({ values: children(), owner: value });
+	}
+}
+
+/** Same own-property token rules as rendering. A reference is short; stop
+ * before building amplified text that cannot be a valid executable identity. */
+export function storedReferenceText(template: string, scope: ComponentScope, maximum = 128): string {
+	let text = '', offset = 0;
+	for (const match of template.matchAll(TOKEN_PATTERN)) {
+		text += template.slice(offset, match.index);
+		const value = argValue(scope, match[1]);
+		text += value == null ? match[0] : scalarText(value);
+		if (text.length > maximum) throw new StoredReferenceUnsupportedError('Stored reference text exceeds its protocol identity size');
+		offset = match.index! + match[0].length;
+	}
+	text += template.slice(offset);
+	if (text.length > maximum) throw new StoredReferenceUnsupportedError('Stored reference text exceeds its protocol identity size');
+	return text;
+}
+
+export function* iterateStoredTemplateActions(template: unknown, scope: ComponentScope, signal?: AbortSignal): Generator<{ action: string; node: Record<string, any>; raw: string } | null> {
+	for (const step of iterateStoredTemplateNodes(template, scope, signal)) {
+		if (!step) { yield null; continue; }
+		const { node, scope: current, opaque } = step;
+		if (opaque || ['ttArg', 'ttMap', 'ttIf', 'ttFormat', 'ttMerge', 'ttRepeat', 'ttEach'].some(key => key in node)) continue;
+		const actions: { action: string; node: Record<string, any>; raw: string }[] = [];
+		if (node.tag === 'tt-mapbox') visitStoredMapSourceActions(node.props, action => actions.push({ action, node: { ttAction: action }, raw: action }));
+		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && typeof node.props?.source?.action === 'string') {
+			const action = node.props.source.action;
+			if (!/[{}$\s]/.test(action) && action.length <= 128) actions.push({ action, node: { ttAction: action }, raw: action });
+		}
+		for (const action of actions) yield action;
+		if (typeof node.ttAction !== 'string') continue;
+		const raw = storedReferenceText(node.ttAction, current).trim();
+		if (!raw || /[{}$\s]/.test(raw)) throw new StoredReferenceUnsupportedError('Runtime-dependent executable Action reference');
+		// Same first-match mapping semantics, without the renderer's 512-pair cap.
+		const mapped = Array.isArray(node.ttActionRefs) ? node.ttActionRefs.find((pair: any) => Array.isArray(pair) && pair[0] === raw)?.[1] : undefined;
+		const action = typeof mapped === 'string' && mapped && mapped.length <= 128 && !/[{}$\s]/.test(mapped) ? mapped : raw;
+		yield { action, node, raw };
+	}
+}
 
 // ---------------------------------------------------------------------------
 

@@ -7,9 +7,19 @@ editor, with ordered fields, masked secrets and extensible custom fields. The
 ordinary Thing tree is unchanged; controlled field mods do not persist values
 through global Thing state, local caches, editor history or request diagnostics.
 
+Password fields in an open entry have an explicit **Copy** control. Copy writes
+that field's current draft value to the browser clipboard without revealing it,
+saving an edit, or recording a notification/history event. Empty values cannot
+be copied. Success and clipboard refusal use secret-free inline status. The
+control requires the ordinary authorized entry read; it adds no retrieval API
+or verification bypass. Native passkey entries do not enable copying signing
+fields. The shared fields renderer enables this only with `copyPasswords`.
+Clipboard contents are left to the user and operating system; the application
+never reads them or schedules a later clipboard overwrite.
+
 ## Storage and access
 
-`api.passwords` 1.4.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.8.0 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -18,9 +28,32 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 `read`, `save`, `delete`, `export`, `catalog`, `verify-passkey`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
-`catalog` returns names, usernames, exact HTTPS domains and public passkey
+`catalog` returns names, usernames, exact HTTPS origins, legacy domain hints and public passkey
 identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
 excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
+
+Opening a card by pointer or keyboard brings the entry editor into view, even
+when a long results list precedes it. Closing returns focus to the card when it
+is still present. A card's subtitle, catalog entry and verified fill share the
+saved login identifier. Descriptions, notes, hidden form inputs and concealed
+fields are excluded. A legacy import can use an explicit saved login email or
+username when the canonical field is missing or points at metadata. If the
+fallback is ambiguous, the subtitle stays empty. This does not rewrite imports.
+
+Autofill interprets a saved bare Website host such as `thingtime.com` as
+`https://thingtime.com`, through the same normalizer for catalog discovery and
+selected-entry verification. Explicit HTTPS URLs keep their exact origin,
+including non-default ports and subdomains. Catalog host matches are discovery
+hints; final fill still requires an authorized exact HTTPS origin, live session,
+selected entry and current verification grant. AWS logins saved for the exact
+default HTTPS origins `aws.amazon.com`, `console.aws.amazon.com`, or
+`portal.aws.amazon.com` can also be chosen on the AWS sign-in destination
+`https://signin.aws.amazon.com`. This is a one-way allowlist of exact origins;
+alternate ports, Amazon retail and other AWS hosts are not included. Wildcards, userinfo, whitespace,
+backslashes, scheme-relative values and non-HTTPS URLs cannot authorize fill.
+No records are rewritten and no browser credential or signing-key access is added.
+The browser fill client negotiates this compatible correction at `api.passwords`
+1.6.1 before using it.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -55,6 +88,78 @@ Images are decoded locally and discarded; streams stop after the capture.
 `otpauth://totp` imports generate SHA-1/256/512 codes with 6 or 8 digits. The
 screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
+
+### Native companion keyboard editing
+
+The accessory companion installs a standard AppKit Edit menu so Command-V,
+Command-A, Cut, Copy and Undo/Redo reach the focused WebKit responder. Menu
+items use standard selectors and nil targets; there is no custom clipboard
+reader, event monitor or JavaScript credential delivery.
+
+Installed acceptance on 1.0.9/build10 found that Command-V left the login
+password empty, while the password field's native context-menu Paste inserted
+masked text and normal login succeeded with the same saved credential. The
+login error handler does not itself clear the controlled password. The missing
+accessory-app Edit menu was the source defect; this does not establish a bad
+saved credential. The 1.0.10/build11 fix preserves the companion's identity,
+entitlements, destination/account checks and transient authenticator inbox.
+
+Run `swift test --package-path apple/Passwords` for the actual host menu's
+selectors, command modifiers and responder-chain targets. The macOS host compiles
+the same menu source; it is excluded from the production core library and iOS.
+After signed installation, verify Command-V into a focused synthetic password
+field, Command-A, Cut/Copy and Undo/Redo in ordinary editable text, and normal
+sign-in using supported credential delivery. Never read or log the clipboard to
+test shortcut delivery. Context-menu Paste remains a supported normal fallback.
+The native header shows only the configured destination during normal use;
+verified readiness clears stale native sign-in copy. Web review/save/cancel
+messages stay in the web surface. Native setup or authentication errors remain
+visible when the webpage cannot initialize, until verification succeeds.
+
+### Native authenticator setup links
+
+The macOS Passwords companion and iOS shell register `otpauth` and validate only
+`otpauth://totp` setup links. HOTP, migration payloads, malformed Base32 and
+unsupported/duplicate URI parameters are refused without logging the input.
+The pending URI is memory-only, expires after ten minutes and is consumed once.
+It is never put into navigation URLs, local storage, saved layouts or a generic
+Action. Opening another setup preserves the current pending request and draft.
+
+The companion uses a separate nonpersistent browser session: sign in normally
+to its displayed configured HTTPS origin and linked owning account. It never
+copies the native AutoFill session into that browser. A locked or unreadable
+linked destination cannot fall back to another origin. Destination/account
+changes cancel setup and replace that ephemeral browser session.
+
+The narrow `thingtimeAuthenticatorSetup` bridge is independently versioned at
+1.0.0. It verifies the exact main-frame `/passwords` document, origin, live
+account, home data plane and document nonce before one-use delivery. Existing
+`api.passwords` compatible 1.2+ is required; the current API remains 1.9.1.
+The web bundle must also contain the matching review bridge. No HTTP endpoint
+or server permission is added. Logout, navigation, cancellation and scope changes
+retire pending delivery. Setup enters the ordinary controlled draft only after
+**Create new entry** or **Add to current draft**; **Save entry** remains a separate
+explicit action through the existing encrypted vault API. Passkey entries cannot
+receive an authenticator field.
+
+Review status, labels and buttons are separate editable Password Workspace
+blocks. No seed is passed into their saved layout or binding scope. QR import
+and passkey device ceremonies retain their existing separate paths.
+
+Build the companion through the existing `build-native-passwords.mjs` tooling;
+use its complete isolated host/provider/Keychain/build/staging overrides for
+development. An isolated helper's optional `ThingtimeDesktopBundleIdentifier`
+metadata may select its corresponding development desktop app; it never opens
+the production app by default. Keep stable signed app replacement separate.
+
+Run `pnpm --dir remix run test:passwords`, `swift test --package-path apple/Passwords`
+and `node remix/scripts/test-authenticator-setup-ui.mjs` (optional absolute
+`TT_PLAYWRIGHT_MODULE` for an existing Playwright installation). The browser
+harness uses a disposable profile and synthetic in-memory API transport; it
+checks review, explicit save, draft preservation and desktop/mobile layout.
+It does not prove installed OS menu selection, real-account sign-in or provider
+acceptance. Complete those through the final signed app, compare a saved code
+with an independent authenticator and exercise cancel/reload/account changes.
 
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
 key. Importing its image does not register a passkey. Native passkey creation
@@ -152,20 +257,20 @@ Password AutoFill provider; Chrome can use it without a Thingtime browser extens
 The optional opt-in [Chromium extension](../browser-extension/README.md)
 relays that website's registration or sign-in to `/passwords/provider` at the
 user-selected trusted Thingtime origin. Each approval shows the website, RP domain
-and account, requires fresh Thingtime password verification, and uses encrypted
+and account, applies the current Thingtime password-confirmation preference, and uses encrypted
 vault storage. Registration completes only after exact saved-credential readback;
 assertions revalidate the session and unchanged credential before returning.
 Retries retain the same immutable request and write identity. Cancellation,
 navigation, account changes and expired requests discard pending authority.
 
 `verify-passkey` returns the request's UUID and a non-secret `sessionBinding`
-after fresh password verification. Every subsequent catalog, read and save in
-that ceremony sends `passkeySession: { requestId, binding: sessionBinding }`.
+after fresh password verification or an active server-validated device approval. New 1.5 clients send the exact purpose/RP/entry context, and every subsequent catalog, read and save in
+that ceremony sends `passkeySession: { requestId, binding: sessionBinding, context }`.
 The API binds this comparison value to the selected Thingtime origin, account,
 request and exact authenticated session, and rechecks live revocation before
 returning. Replacing a session for the same account invalidates the pending
 ceremony. An uncertain-write retry preserves its original binding, credential
-and write identity and requires fresh password verification again. The binding
+and write identity and rechecks the current verification policy. Legacy 1.4 clients still confirm freshly. The binding
 is not a bearer credential and reveals no authentication token or session ID.
 Readback compares complete entries through the canonical password-entry
 validator, preserving exact signing-key, user-handle, RP and credential values
@@ -173,8 +278,27 @@ while accepting the writer's normal field-property ordering.
 
 The extension is off by default and requires explicit installation and enablement.
 It is a Chromium MV3 integration, not a browser-store release or an OS provider.
-Basic ES256 registration/assertion and registration `credProps` are supported;
-conditional mediation, other WebAuthn extensions and unsupported options use the
+Basic ES256 registration/assertion and registration `credProps` are supported.
+Browser adapter 0.5.1 with both frontend and active same-origin `api.passwords`
+1.9.1 additionally supports assertion `appid` for an empty/default AppID or a
+credential-free HTTPS URL at the same requesting site (registrable domain, including private public suffixes). This implements the
+same-host/empty no-network [FIDO facet authorization](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-appid-and-facets-v2.0-id-20180227.html#determining-if-a-callers-facetid-is-authorized-for-an-appid).
+The WebAuthn specification documents the browser same-site relaxation of FIDO
+step 3; parent and sibling hosts with the same registrable domain are accepted
+without fetching. Same-host ports are insignificant to FIDO authorization.
+The shared PSL-aware validator is bundled lexically into the MAIN-world hook;
+invalid and outside-site AppIDs have fixed diagnostics with no request values.
+It signs only the existing RP-bound WebAuthn credential: RP-ID hashing, allowlist,
+verification and request/session binding remain unchanged, and the result reports
+`appid: false` per [WebAuthn 10.1.1](https://www.w3.org/TR/webauthn-3/#sctn-appid-extension).
+No legacy U2F credential is retargeted or claimed. Cross-site AppIDs, malformed
+values, unknown extensions and registration AppID requests remain native or
+unsupported; the adapter never fetches AppID URLs or trusted-facet lists.
+The [public AWS sign-in constructor](https://signin.aws.amazon.com/v2/assets/_next/static/chunks/4399.a1d04a6db629497a.js) conditionally requests AppID, but its dynamic value and
+account-specific RP/allowlist are not established by public source inspection.
+A successful synthetic fixture does not establish AWS sign-in acceptance.
+
+Conditional mediation and other unsupported options use the
 browser's native path. Returned credentials are compatible objects, so sites
 requiring native `PublicKeyCredential` internal slots may not interoperate.
 Firefox, Safari and mobile extension interoperability are unverified. A supported
@@ -190,6 +314,12 @@ account is required. Use a separate browser profile, account and replica databas
 for testing; never import personal browser sessions or production credentials.
 
 ## Native Password AutoFill
+
+Linux and Windows desktop bridge 1.3.0 provides scoped browser autofill and a
+private agent CLI with direct credential delivery, OS-encrypted state and the
+existing per-entry verification policy. It does not advertise system-wide
+AutoFill or passkeys. See [the native password agent contract](native-password-agent.md)
+for prerequisites, first-sign-in limits, supported consumers and packaging.
 
 Native provider code is present in `apple/Passwords` and
 `apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
@@ -229,8 +359,14 @@ link. Explicit Disconnect saves an account/origin opt-out until Connect; automat
 work never replaces a foreign or independently linked companion session. A local
 runtime returns `unsupportedOrigin` and directs macOS users to **Thingtime →
 API Endpoint → Production** in the menu bar, then account sign-in. It leaves an
-existing provider untouched. Canonical installation updates both the
-nested and standalone signed companion from the same verified source.
+existing provider untouched. Canonical installation verifies the nested and
+standalone signed companions. If the standalone companion has the same bundle,
+team, Keychain group, AutoFill entitlement and provisioning identity, and a
+strictly newer compatible app/build version, installation preserves that
+running standalone app without replacing it. Equal or older versions retain
+the normal quit-and-replace guard; incompatible or uncertain identity fails
+closed. This local no-downgrade rule does not establish native bridge API
+compatibility, which is negotiated at runtime.
 
 Only a matching connection shows Disconnect; disconnected or different-session
 states show Connect. Unavailable status shows Retry, and older app bridges show
@@ -379,3 +515,54 @@ their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
 1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
 System bundle icons are separate from website-controlled passkey/account artwork.
 The current iOS project has no shared PasswordProvider target/resource consumer.
+
+Password confirmation timing, durable account/origin/device Never trust,
+per-entry overrides, explicit forgetting, native reuse boundaries and the 1.5 API
+are documented in [Password confirmation preferences](password-verification-preferences.md).
+Existing entry reads retain their authenticated-session behavior. Private preview
+cards now expose only safe canonical username/email text, including old records,
+with individually editable title/subtitle/type/icon blocks. For native branding,
+verify the rendered signed OS picker: compiled icon resources are packaging
+checks, not evidence of the picker label/icon. The physical host filename and
+localized Thingtime display name remain stable.
+
+
+### Automatic Website preview icons
+
+Saved cards keep a manually selected/uploaded icon as the override. Without an
+explicit icon, the preview tries unconcealed HTTPS URL fields in saved order and
+uses the first usable site icon. An unavailable/broken first site does not block
+later Website fields. Existing records work without editing or resaving. Removing
+an override returns to automatic Website icons; when no usable image is found,
+the official Thingtime tree stays visible. The icon remains its own editable
+Builder block; deleting the preview icon block stops automatic lookups for that
+card layout. Custom icon help text and layouts survive the default-copy migration.
+The default editable image has a small white backplate inside its 32px footprint,
+so transparent dark marks remain visible in dark themes. Only the exact prior
+default icon style upgrades; authored backgrounds, styling and deletions survive.
+
+`api.passwords` 1.6 adds an optional `websiteIcon` boolean to preview metadata and
+`POST {operation:"website-icon",expectedOwnerId,id,revision}`. The response is a
+private/no-store sanitized PNG or 204; saved Website values never enter normal
+metadata, browser request URLs or logs. This operation rechecks the exact owner,
+live session and revision; it cannot reveal entry fields. Older password clients
+and ordinary 1.5 flows keep working; only automatic icon requests negotiate 1.6.
+
+Only public HTTPS origins participate: credentials, paths, queries and fragments
+are discarded (credential-bearing URLs are skipped). The server requests public
+site roots anonymously, follows only separately validated HTTPS redirects, and
+may use the public site's declared CDN icon or its `/favicon.ico`; it never sends
+vault domains to an unrelated favicon lookup service. DNS is resolved once,
+mixed/private/reserved answers fail closed, and each HTTPS socket pins that
+validated IP with normal hostname/TLS validation. Session checks fence every new
+lookup/dispatch and final response. A request already dispatched cannot be
+recalled after logout. Public sites can observe an anonymous server icon request.
+
+Raster signatures/decoders validate PNG/JPEG/GIF/WebP/ICO bytes. Self-contained
+SVG vector primitives are sanitized and rasterized without external images,
+fonts, scripts or file/network resource resolution; unrecognized/broken images
+fall back safely. Automatic probes use deadlines, bounded response/decode working
+sets and small thumbnails; these do not limit saved field lengths, entry counts
+or manually uploaded files. Visible-card requests share four worker slots and a
+short in-memory owner/API-origin/entry-revision cache, cleared when that account
+surface closes. No Website URL or image bytes are written into saved card layouts.

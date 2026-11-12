@@ -2,9 +2,9 @@ import React from 'react';
 import { SettingsDocumentHost } from '~/components/Settings/SettingsDocumentHost';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { TransientBlockHost, type TransientBlockActions } from '~/components/Builder/TransientBlockHost';
-import { MONGO_CONNECTION_INVENTORY_BLOCKS } from './mongoConnectionInventoryBlocks';
+import { MONGO_CONNECTION_INVENTORY_BLOCKS, migrateMongoInventoryBlocks } from './mongoConnectionInventoryBlocks';
 import type { MongoConnectionInventory as Inventory } from '~/mongodb/connectionInventory';
-import { presentMongoSources, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
+import { presentMongoSources, presentMongoDeployments, presentMongoCoverageNotes, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
 import { useApi } from '~/hooks/useApi';
 import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { useDataPlane } from '~/hooks/useDataPlane';
@@ -60,6 +60,7 @@ const InventoryView = ({ scope }: { scope: { expectedActor: string; expectedApiO
    .finally(() => { if (current === generation.current) setBusy(false); });
   return () => { controller.abort(); generation.current = current + 1; };
  }, [request, expectedActor, expectedApiOrigin, accountTransport]);
+ const deployments = React.useMemo(() => presentMongoDeployments(inventory?.sources || [], query, freshness), [inventory, query, freshness]);
  const rows = React.useMemo(() => presentMongoSources(inventory?.sources || [], query, freshness), [inventory, query, freshness]);
  const actions: TransientBlockActions = {
   'inventory.search': ({ value }) => setQuery(typeof value === 'string' ? value : ''),
@@ -68,16 +69,16 @@ const InventoryView = ({ scope }: { scope: { expectedActor: string; expectedApiO
   'inventory.more': () => { if (!busy && inventory?.nextCursor) setRequest(previous => ({ revision: previous.revision + 1, cursor: inventory.nextCursor! })); }
  };
  const totals = inventory?.totals;
- const display = { origin: expectedApiOrigin, query, freshness, busy, ready: Boolean(inventory), error, rows, empty: rows.length === 0, hasMore: Boolean(inventory?.nextCursor), refreshLabel: busy ? 'Refreshing…' : 'Refresh observations',
+ const display = { origin: expectedApiOrigin, query, freshness, busy, ready: Boolean(inventory), error, rows, deployments, empty: deployments.length === 0, hasMore: Boolean(inventory?.nextCursor), refreshLabel: busy ? 'Refreshing…' : 'Refresh observations',
   status: inventory ? `${busy ? 'Refreshing; showing last successful observation. ' : error ? 'Refresh failed; showing last successful observation. ' : ''}Latest observation fetched ${new Date(inventory.checkedAt).toLocaleString()}. No automatic polling.` : busy ? 'Reading connection observations…' : 'Connection observations unavailable.',
-  resultsLabel: `${rows.length} matching sources / ${inventory?.sources.length || 0} loaded`,
-  serverSummary: totals?.serverCurrent == null ? 'Current aggregate unavailable' : `${totals.serverCurrent} current connections · ${totals.serverAvailable ?? 'unknown'} available · ${totals.serverTotalCreated ?? 'unknown'} created since server start`,
+  resultsLabel: `${deployments.length} matching deployments · ${inventory?.sources.length || 0} loaded observations${inventory?.nextCursor ? ' · more available (partial page)' : ' · coverage remains partial'}`,
+  serverSummary: totals?.serverCurrent == null ? 'Unavailable — database-reported connection count was not returned' : `${totals.serverCurrent} current connections · ${totals.serverAvailable ?? 'unknown'} available · ${totals.serverTotalCreated ?? 'unknown'} created since server start`,
   serverNote: inventory?.server.note || 'Database aggregate is separate from instrumented pools.',
   observedSummary: totals ? `${totals.observedOpen} observed open across loaded snapshots · ${totals.observedCheckedOut} checked out · ${totals.freshSources} fresh sources · ${totals.staleSources} stale sources` : '',
-  notes: (inventory?.coverage.notes || []).map(text => ({ text }))
+  notes: presentMongoCoverageNotes(inventory?.coverage.notes || [])
  };
  const scopeKey = JSON.stringify([expectedActor, expectedApiOrigin]);
- return <SettingsDocumentHost clearMobileLaunchers documentKey="mongodb-connections" title="MongoDB connections layout" defaultDocument={MONGO_CONNECTION_INVENTORY_BLOCKS} scopeKey={scopeKey} accountTransport={accountTransport}>
+ return <SettingsDocumentHost clearMobileLaunchers documentKey="mongodb-connections" title="MongoDB connections layout" defaultDocument={MONGO_CONNECTION_INVENTORY_BLOCKS} migrateBlocks={migrateMongoInventoryBlocks} scopeKey={scopeKey} accountTransport={accountTransport}>
   {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ inventory: display }} actions={actions} enabled={!editing} onError={() => setError('This control could not complete. Try refreshing observations.')}>
    <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
   </TransientBlockHost>}

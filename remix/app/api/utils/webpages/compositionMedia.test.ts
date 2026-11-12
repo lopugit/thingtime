@@ -4,7 +4,6 @@ import { compositionAttachmentIds } from '../actions/compositionMediaCore';
 import { compositionMediaIds, createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
 import { canView, fail, type ThingDoc } from '../things/things';
 import { HTML_MAX_DEPTH, HTML_MAX_NODES } from '../../../components/Kinds/htmlRenderPolicy';
-import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
@@ -124,7 +123,7 @@ test('authored HTML discovery uses renderer bounds and screens CSS values indepe
 	assert.deepEqual(ids(`<div style='background: url("${url('unclosed')})'></div>`), []);
 	assert.deepEqual(ids('<span></span>'.repeat(HTML_MAX_NODES - 1) + `<img src='${url('over-node-limit')}'>`), []);
 	assert.deepEqual(ids('<div>'.repeat(HTML_MAX_DEPTH) + `<img src='${url('over-depth-limit')}'>` + '</div>'.repeat(HTML_MAX_DEPTH)), []);
-	assert.deepEqual(ids(' '.repeat(MAX_WEBPAGE_HTML_CHARS) + `<img src='${url('over-size-limit')}'>`), []);
+	assert.deepEqual(ids(' '.repeat(24_000) + `<img src='${url('after-large-markup')}'>`), ['after-large-markup']);
 	assert.deepEqual(ids(`<textarea><img src='${url('raw-text')}'></textarea><noscript><img src='${url('noscript')}'></noscript>`), []);
 	assert.deepEqual(ids(`<head><noscript><img src='${url('repaired-body')}'></noscript></head>`), ['repaired-body'], 'Detached DOMParser repairs invalid head content with scripting disabled');
 });

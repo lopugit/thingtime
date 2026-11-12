@@ -34,7 +34,7 @@ export async function discoverApplications(): Promise<SearchItem[]> {
   if (process.platform !== 'darwin') return [];
   // Spotlight can enumerate application bundles across every indexed volume
   // without recursively crawling the disk. The Rust indexer remains the
-  // authoritative full-volume inventory; this is its fast startup/failure
+  // authoritative full-volume inventory; this is its failure
   // fallback, and the direct scan covers a managed container Spotlight has
   // not indexed yet.
   const [spotlight, direct] = await Promise.all([
@@ -42,12 +42,6 @@ export async function discoverApplications(): Promise<SearchItem[]> {
     discoverApplicationsIn(macApplicationDirectories),
   ]);
   return deduplicateApplications([...spotlight, ...direct]);
-}
-
-/** A bounded immediate catalog for daemon startup; the Rust index fills in every volume asynchronously. */
-export async function discoverApplicationsQuick(): Promise<SearchItem[]> {
-  if (process.platform !== 'darwin') return [];
-  return discoverApplicationsIn(macApplicationDirectories);
 }
 
 export async function discoverApplicationsIn(directories: readonly string[]): Promise<SearchItem[]> {

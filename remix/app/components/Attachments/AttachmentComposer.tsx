@@ -36,6 +36,8 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 
 export type AttachmentComposerProps = {
 	ownerId: string;
+	/** A stable external share is consumed once per mounted composer. */
+	initialFiles?: readonly File[];
   preserveDrafts?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
@@ -479,6 +481,17 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onCleanupDeferred,
 		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus, initialLinkedSeeds }
 	);
+	const initialFilesConsumed = React.useRef(false);
+	React.useEffect(() => {
+		if (initialFilesConsumed.current || !props.initialFiles?.length || uploadsNotGranted || disabled) return;
+		let active = true;
+		queueMicrotask(() => {
+			if (!active || initialFilesConsumed.current || !props.initialFiles?.length) return;
+			initialFilesConsumed.current = true;
+			enqueueFiles([...props.initialFiles]);
+		});
+		return () => { active = false; };
+	}, [props.initialFiles, enqueueFiles, uploadsNotGranted, disabled]);
 	// the add-by-URL field below the grid — clears after each accepted Add so
 	// the next link goes straight in
 	const [linkUrl, setLinkUrl] = React.useState('');

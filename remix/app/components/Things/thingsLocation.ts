@@ -29,6 +29,6 @@ export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & P
   if (href.startsWith('/builder') || !isFolder(thing)) return href;
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);
-  for (const key of ['q', 'preview', 'device']) next.delete(key);
+  for (const key of ['q', 'preview', 'device', 'libraryArchive']) next.delete(key);
   return `/things?${next}`;
 };

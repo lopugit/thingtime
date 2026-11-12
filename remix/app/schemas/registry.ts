@@ -1,7 +1,14 @@
+import { isCssPropertyName, isSafeWebpageCssValue, normalizeCssPropertyName } from './cssDeclarationNames';
+import { pageCollectionBinding } from './pageCollections';
+import { THING_METADATA_KIND } from '../utils/thingMetadata.ts';
+import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../utils/thingStoragePolicy.ts';
+import { MAX_STORABLE_NESTING } from './storableLimits';
 import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
+import { parseSourceInputArgument } from './sourceInputs';
+import { parseWebpageActivation } from './webpageActivation.ts';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
 import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
@@ -16,7 +23,7 @@ import { parseBrowserExpressionLimits } from './browserActions';
 import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
 import { parseActionRequestPagination } from './actionRequestPagination';
 import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
-import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
+import { postThingReferences } from '../components/Feed/postThingReferences.ts';
 import { isActionLookupProvider } from './actionLookups';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
 // can take. Everything in the `things` collection is a thing: one root Thing
@@ -34,7 +41,7 @@ import { isActionLookupProvider } from './actionLookups';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
+import { blocksToText, isEditorJsDoc } from '../components/Editor/editorJsValue.ts';
 import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
@@ -44,9 +51,8 @@ import {
 	ATTACHMENT_PROFILE_SLOTS,
 	ATTACHMENT_PURPOSES,
 	ATTACHMENT_STATES,
-	ATTACHMENT_THINGTIME,
+	ATTACHMENT_THINGTIME, ATTACHMENT_BLOB_THINGTIME,
 	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
-	MAX_ATTACHMENT_NAME_CHARS,
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
 
@@ -114,7 +120,7 @@ export const MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX = 'mongodb-connection-snapsho
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control', MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -503,6 +509,7 @@ export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
 // Messenger (see api/utils/messenger): chats, messages, communities, custom
 // emojis, follows. All bounds here so no write path can disagree about them.
+// Processing chunk size for agent/provider replies, not a user message limit.
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_CHAT_NAME_CHARS = 80;
 export const MAX_CHAT_TOPIC_CHARS = 250;
@@ -996,21 +1003,19 @@ const postSchema: ThingtimeSchema = {
       name: 'text',
       type: 'string',
       required: false,
-      max: MAX_TEXT_CHARS,
-      description: `Canonical plain-text post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+      description: 'Canonical plain-text post body (required for text posts), without a product character cap.'
     },
     {
       name: 'richText',
       type: 'record',
       required: false,
-      description: 'Bounded native Editor.js document preserving inline marks, block styles, whitespace, and line breaks.'
+      description: 'Native Editor.js document preserving inline marks, block styles, whitespace, and line breaks without product count or character caps.'
     },
     {
       name: 'images',
       type: 'string[]',
       required: false,
-      max: MAX_IMAGES,
-      description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).`
+      description: 'http(s) image URLs without product count or character caps (image posts need at least one).'
     },
     {
       name: 'listing',
@@ -1046,8 +1051,7 @@ const postSchema: ThingtimeSchema = {
       name: 'title',
       type: 'string',
       required: false,
-      max: MAX_POST_TITLE_CHARS,
-      description: `Optional headline (Reddit-style post title), max ${MAX_POST_TITLE_CHARS} chars. Subspace posts usually carry one; ordinary feed posts may too.`
+      description: 'Optional headline without a product character cap.'
     },
     {
       name: 'subspaceId',
@@ -1075,7 +1079,7 @@ const postSchema: ThingtimeSchema = {
 };
 
 const fileSchema: ThingtimeSchema = {
-  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  id: 'file', version: 2, kind: 'crystal', collection: null, title: 'File',
   summary: 'A stable file identity with retained attachment versions and Timeline history.',
   detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
   createdVia: 'POST /api/v1/files',
@@ -1083,7 +1087,8 @@ const fileSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
     { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
-    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' },
+    { name: 'symbolicLink', type: 'object', required: false, description: 'Optional inert posix-symlink-v1 metadata; targetBase64 is canonical raw POSIX readlink bytes matching the attachment payload. Never dereference.' }
   ]
 };
 
@@ -1107,18 +1112,16 @@ const attachmentSchema: ThingtimeSchema = {
 			name: 'name',
 			type: 'string',
 			required: true,
-			max: MAX_ATTACHMENT_NAME_CHARS,
 			description: 'Immutable original filename; never used as an S3 key.'
 		},
 		{
 			name: 'filenamePreview',
 			type: 'string',
 			required: false,
-			max: MAX_ATTACHMENT_NAME_CHARS,
 			description: 'Owner-selected filename shown in the UI; the original download filename is preserved.'
 		},
-		{ name: 'title', type: 'string', required: false, max: 200, description: 'Owner-authored media title.' },
-		{ name: 'description', type: 'string', required: false, max: 2000, description: 'Owner-authored media description.' },
+		{ name: 'title', type: 'string', required: false, description: 'Owner-authored media title.' },
+		{ name: 'description', type: 'string', required: false, description: 'Owner-authored media description.' },
 		{
 			name: 'size',
 			type: 'number',
@@ -1167,7 +1170,7 @@ const commentSchema: ThingtimeSchema = {
     'post — each has its own /post/:id page. Comments used to live embedded inside post docs — ' +
     'the things v1→v2 migration explodes them into these.',
   requiresTarget: true,
-  fields: [{ name: 'text', type: 'string', required: true, max: MAX_COMMENT_CHARS, description: `Comment body, max ${MAX_COMMENT_CHARS} chars.` }],
+  fields: [{ name: 'text', type: 'string', required: true, description: 'Comment body without a product character cap.' }],
   example: { text: 'So say we all 🚀' }
 };
 
@@ -1235,7 +1238,7 @@ const shareSchema: ThingtimeSchema = {
 // level the crystal/extended field sits at). This is the database's physical
 // ceiling, not a validator choice — if mongod ever raises its limit, re-probe
 // and lift this number to match.
-export const MAX_STORABLE_NESTING = 179;
+export { MAX_STORABLE_NESTING } from './storableLimits';
 export const MAX_DATA_CRYSTAL_NODES = 10000;
 export const MAX_DATA_ARRAY_ITEMS = 1000;
 export const MAX_DATA_KEY_CHARS = 60;
@@ -1257,10 +1260,10 @@ const dataSchema: ThingtimeSchema = {
     'schemas, so the open shape can’t ride past a typed whitelist. Convention: carry a `schema` ' +
     'field naming a published schema thing (e.g. ' +
     '"Table") so schema-driven searches can find you, and tag the thing for feed filters. Keys ' +
-    `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting is unbounded up to ` +
-    `MongoDB's own ${MAX_STORABLE_NESTING}-level storage limit (circular references rejected), ` +
-    `${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
-    `${MAX_DATA_ARRAY_ITEMS} items, strings at ${MAX_TEXT_CHARS} chars.`,
+    'use letters/numbers/_/-; strings, arrays, keys and value counts have no product size caps. ' +
+    `Nesting retains MongoDB's ${MAX_STORABLE_NESTING}-level storage constraint; circular/prototype references are rejected. ` +
+    'Request framing, storage accounting and database constraints still apply.',
+
   fields: [
     {
       name: '*',
@@ -1461,13 +1464,9 @@ export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
 export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
 export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
 export const WEBPAGE_ROUTE_PATTERN = /^\/[a-z0-9\-/_]*$/;
-// Figma-style per-block custom CSS + rich/raw HTML bounds. HTML is never
-// trusted at render (the client parses it through the sanitising allowlist
-// renderer); the gate bounds size and blocks the classic CSS escape hatches.
-export const MAX_WEBPAGE_CSS_PROPS = 40;
-export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
-export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
-export const MAX_WEBPAGE_HTML_CHARS = 20000;
+// HTML is stored as source and never trusted at render. The renderer applies
+// its sanitizing allowlist and execution budgets; document/transport storage
+// boundaries remain independent of the amount of authored CSS and HTML.
 export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
 // source-bound blocks may poll on an interval (a clock, a live tally):
 // bounded below so one page can never hammer the executor
@@ -1476,7 +1475,6 @@ export const MAX_WEBPAGE_SOURCE_INTERVAL_MS = 3_600_000;
 export const DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS = 15_000;
 export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
 export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
-export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
 
 const componentSchema: ThingtimeSchema = {
 	id: 'component',
@@ -1595,6 +1593,7 @@ const webpageSchema: ThingtimeSchema = {
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a pageKey.' },
 		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the webpage this one was forked from (provenance only).' },
 		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the page canvas.' },
+		{ name: 'activationAction', type: 'record', required: false, description: 'Optional owner-only Action to run when a saved private page opens or its configured civil date changes.' },
 		{
 			name: 'blocks',
 			type: 'record',
@@ -1646,6 +1645,7 @@ export const ACTION_STEP_OPS = [
 	'http.request',
 	'lookup',
 	'things.create',
+	'things.ensure',
 	'things.get',
 	'things.search',
 	'things.update',
@@ -1659,7 +1659,6 @@ export const ACTION_STEP_OPS = [
 export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
 export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'json'] as const;
 export const MAX_ACTION_STEPS = 40;
-export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
 export const MAX_ACTION_CAPABILITY_SCOPES = 12;
 export const MAX_ACTION_KEY_CHARS = 80;
@@ -1764,9 +1763,8 @@ const actionSchema: ThingtimeSchema = {
 			name: 'inputs',
 			type: 'record',
 			required: false,
-			max: MAX_ACTION_INPUTS,
 			description:
-				`Typed input descriptor list, max ${MAX_ACTION_INPUTS}: { name, type (${ACTION_INPUT_TYPES.join('/')}), ` +
+				`Typed input descriptor list: { name, type (${ACTION_INPUT_TYPES.join('/')}), ` +
 				'label?, description?, required?, default?, values? (enum), min?/max? (number), maxLength? (string) }. ' +
 				'The /actions run panel renders one input per descriptor.'
 		},
@@ -1777,7 +1775,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_STEPS,
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
-				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
+				'things.create { schema, values }; things.ensure { schema, key, values, folderId?, each?, matchFields? }; things.get { id }; things.search { schema?, limit? }; ' +
 				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
@@ -2022,6 +2020,8 @@ const subspaceSchema: ThingtimeSchema = {
         { name: 'icon', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Emoji icon.' },
         { name: 'iconUrl', type: 'string', required: false, description: 'http(s) icon image URL.' },
         { name: 'bannerUrl', type: 'string', required: false, description: 'http(s) banner image URL.' },
+        { name: 'iconPresentation', type: 'object', required: false, description: 'Optional framing, CSS declarations and HTML attributes for the current icon.' },
+        { name: 'bannerPresentation', type: 'object', required: false, description: 'Optional framing, CSS declarations and HTML attributes for the current banner.' },
         { name: 'accent', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'CSS accent color.' }
       ]
     }
@@ -2705,6 +2705,7 @@ const friendThingSchema: ThingtimeSchema = {
 // the removal reason), report (a post report, to the mods), role (promoted /
 // demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
+  'device-alert',
   'friend-request',
   'friend-accepted',
   'new-follower',
@@ -2780,6 +2781,7 @@ export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: s
 };
 
 export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCategory> = {
+  'device-alert':'system',
   'friend-request': 'social',
   'friend-accepted': 'social',
   'new-follower': 'social',
@@ -3583,8 +3585,7 @@ const chatMessageSchema: ThingtimeSchema = {
 			name: 'text',
 			type: 'string',
 			required: false,
-			max: MAX_MESSAGE_CHARS,
-			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
+			description: 'Optional message text. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.'
 		},
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
@@ -3882,7 +3883,7 @@ const deviceStateSchema: ThingtimeSchema = {
 		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
 		{ name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
 		{ name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
-		{ name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
+		{ name: 'state', type: 'record', required: true, description: 'Bounded lock, volume, brightness, battery, safe open-app summary and optional host resource measurements.' },
 		{ name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
 	],
 	example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
@@ -3908,6 +3909,23 @@ const deviceConnectorSchema: ThingtimeSchema = {
 		revision: 42,
 		connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
 	}
+};
+
+const deviceSyncControlSchema: ThingtimeSchema = {
+  id: 'device-sync-control', version: 1, kind: 'crystal', collection: null,
+  title: 'Device sync control', summary: 'Private delivery state for managing installed sync jobs from any browser.',
+  detail: 'Protected home control Thing. Commands and replies are secure BinData, never generic searchable content. The exact owner/device/request identity is immutable. One claim token owns completion; requests are never re-leased. Execution expires after two minutes and the operation marker is retained for ten minutes by the shared disposable-control TTL.',
+  createdVia: 'POST /api/v1/devices/sync-control',
+  fields: [
+    { name: 'requestId', type: 'string', required: true, description: 'Immutable client operation identity.' },
+    { name: 'digest', type: 'string', required: true, description: 'Hash of the validated command.' },
+    { name: 'deviceCommandKey', type: 'string', required: true, description: 'Shared indexed command queue identity.' },
+    { name: 'pairingHash', type: 'string', required: true, description: 'Binding to the current paired device session.' },
+    { name: 'status', type: 'string', required: true, description: 'pending, processing, complete or error.' },
+    { name: 'deadlineAt', type: 'date', required: true, description: 'Deadline beyond which the request cannot execute or disclose its result.' },
+    { name: 'leaseHash', type: 'string', required: false, description: 'Hash of the sole claiming worker token.' }
+  ],
+  example: { requestId: 'sync-status-1', status: 'pending' }
 };
 
 const deviceCommandSchema: ThingtimeSchema = {
@@ -4237,6 +4255,7 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 export const EXTERNAL_CONNECTION_THINGTIME = [
   'external-account',
   'external-account-link',
+  'external-auth-connection',
   'external-post',
   'external-post-source',
   'feed-filter',
@@ -4248,10 +4267,14 @@ export const EXTERNAL_CONNECTION_THINGTIME = [
 export const EXTERNAL_RESERVED_ID_PREFIX = 'ext-';
 
 export const DEVICE_THINGTIME = [
+	'device-alert-sound',
+	'device-observation-cleanup',
+	'device-observation',
 	'device',
 	'device-state',
 	'device-connector',
 	'device-command',
+	'device-sync-control',
 	'device-command-event',
 	'device-ai-live-state',
 	'device-approval',
@@ -4262,17 +4285,21 @@ export const DEVICE_THINGTIME = [
 // Thing kinds are bounded operational machinery and remain writable while an
 // account is full; the durable device/state/connector/screen mirror and all
 // imported chat rows stay ordinary quota-billed content.
-export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
+export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-sync-control', 'device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 // Historical chats have a dedicated atomic lifecycle, never generic CRUD.
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'sync-source-index', 'sync-source-observation',
+  THING_METADATA_KIND,
+  THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
+  'backup-job', 'backup-job-event', ATTACHMENT_BLOB_THINGTIME,
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
-  'password-manager-entry',
+  'password-manager-entry', 'password-verification-device',
   'draft',
   // Moderator-managed references; only the subspace embeds endpoint writes them.
   'subspace-embed',
@@ -4351,7 +4378,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['sync-source-index', 'sync-source-observation', 'post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4478,12 +4505,20 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  ...['backup-job', 'backup-job-event'].map(id => ({
+    id, version: 1, kind: 'crystal' as const, collection: null,
+    title: id === 'backup-job' ? 'Protected backup job' : 'Protected backup transition',
+    summary: 'Private durable backup coordinator control record.',
+    detail: 'Dedicated home-plane coordinator only. Original session references, immutable selectors, leases, fixed scalar cursors and opaque encrypted hash-checkpoint references never pass through generic Things reads, writes, exports, sharing, bulk operations or Actions. Transition history is relational, never a growing root array. This schema does not expose an execution endpoint.',
+    createdVia: 'Trusted backup Workflow coordinator', fields: [], example: {}
+  })),
   ...['mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation'].map(id => ({
     id, version: 1, kind: 'crystal' as const, collection: null, title: id.replace('mail-', 'Mail '),
     summary: 'Private encrypted mail record.', detail: 'Owned mail records use the same versioned model in the cloud, browser and local connector. Credentials and message content are encrypted. Proxy inboxes contain folder references only. Generic Thing reads, writes and sharing cannot access these records.',
     createdVia: '/api/v1/mail', fields: [], example: {}
   })),
 
+  { id:'password-verification-device',version:1,kind:'crystal',collection:null,title:'Password verification device trust',summary:'Private server-owned device trust.',detail:'Opaque hashed device binding and scope live in protected Binary control-plane records. Only successful current-password confirmation enrolls trust. Generic reads, writes, sharing and Actions cannot access it.',createdVia:'/api/v1/passwords',fields:[],example:{} },
   { id: 'password-manager-entry', version: 2, kind: 'crystal', collection: null, title: 'Password manager entry',
     summary: 'An encrypted, private credential with ordered custom fields.',
     detail: 'Created only through the password manager API. The title, password type, ordered fields and field types form an extensible document; field values are encrypted together with the account vault key. Generic Thing CRUD, search, sharing and history cannot disclose the entry. The Thing fields mod supplies sectioned and typed field editors. Imported source JSON, account/vault attributes, flags, tags, and password history are encrypted alongside the fields; private encrypted files are relational attachment Things.',
@@ -4505,6 +4540,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
         { name: 'structured', type: 'boolean', required: false, description: 'Preserve the original JSON type of structured values.' }
       ], description: 'Ordered fields in the encrypted document: id, label, type and value. Defaults are username, password and website.' }
     ], example: { title: 'Example login', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: '' }, { id: 'password', label: 'Password', type: 'password', value: '' }] } },
+  ...['sync-source-index', 'sync-source-observation'].map(id => ({ id, version: 1, kind: 'crystal' as const, collection: null,
+    title: id === 'sync-source-index' ? 'Sync source index' : 'Sync source observation',
+    summary: 'Protected private source-discovery metadata; never proof of saved bytes.',
+    detail: 'Quota-accounted atomic Things with relational target links and canonical cascade deletion. The approved sync-run endpoint owns writes; full-owner scoped reads remain available after Pause or authorization expiry.',
+    createdVia: '/api/v1/files/sync-transfer-admissions', fields: [], example: {} })),
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
@@ -4652,6 +4692,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	deviceStateSchema,
 	deviceConnectorSchema,
 	deviceCommandSchema,
+	deviceSyncControlSchema,
 	deviceCommandEventSchema,
 	deviceAiLiveStateSchema,
 	deviceApprovalSchema,
@@ -4720,8 +4761,8 @@ export type ThingtimeCrystalValidationOptions = {
 // Shared with the client so the composer controls and this validator agree.
 export const MEDIA_LAYOUT_MODES = ['masonry', 'rows', 'grid'] as const;
 export const MEDIA_LAYOUT_SPAN_VALUES = ['normal', 'wide', 'tall', 'big'] as const;
-export const MAX_MEDIA_LAYOUT_ENTRIES = 25; // pattern rows + span entries share the attachment cap
-export const MAX_MEDIA_LAYOUT_TRACK = 6; // max images per row / grid columns
+export const MAX_MEDIA_LAYOUT_ENTRIES = Number.POSITIVE_INFINITY; // compatibility alias; no product row/span ceiling
+export const MAX_MEDIA_LAYOUT_TRACK = Number.POSITIVE_INFINITY; // positive integer tracks are validated below
 export type MediaLayoutSpan = (typeof MEDIA_LAYOUT_SPAN_VALUES)[number];
 export type PostMediaLayout = {
 	mode: (typeof MEDIA_LAYOUT_MODES)[number];
@@ -4740,13 +4781,13 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 
 	if (mode === 'rows') {
 		const pattern = raw.pattern;
-		if (!Array.isArray(pattern) || !pattern.length || pattern.length > MAX_MEDIA_LAYOUT_ENTRIES) {
-			return fail(400, `mediaLayout.pattern must be 1-${MAX_MEDIA_LAYOUT_ENTRIES} row sizes`);
+		if (!Array.isArray(pattern) || !pattern.length) {
+			return fail(400, 'mediaLayout.pattern must contain positive integer row sizes');
 		}
 		const rows: number[] = [];
 		for (const entry of pattern) {
-			if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
-				return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+			if (typeof entry !== 'number' || !Number.isSafeInteger(entry) || entry < 1) {
+				return fail(400, 'mediaLayout.pattern rows must be positive safe integers');
 			}
 			rows.push(entry);
 		}
@@ -4755,14 +4796,13 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 
 	// grid
 	const columns = raw.columns === undefined ? 3 : raw.columns;
-	if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
-		return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+	if (typeof columns !== 'number' || !Number.isSafeInteger(columns) || columns < 1) {
+		return fail(400, 'mediaLayout.columns must be a positive safe integer');
 	}
 	let spans: Record<string, MediaLayoutSpan> | undefined;
 	if (raw.spans !== undefined && raw.spans !== null) {
 		if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
 		const entries = Object.entries(raw.spans as Record<string, unknown>);
-		if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
 		const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
 		for (const [key, entry] of entries) {
 			// Attachment ids are generated UUIDs or att_<sha256> values. Keep the
@@ -4812,26 +4852,24 @@ const sanitizePostCrystal = (
     if (!input.richText || typeof input.richText !== 'object' || Array.isArray(input.richText)) {
       return fail(400, 'richText must be a native rich-text document');
     }
-    const sanitized = sanitizeDataValue(input.richText, { path: 'richText', depth: 2 });
+    const sanitized = sanitizeDataValue(input.richText, { path: 'richText', depth: 2, unboundedContent: true });
     if (sanitized.ok === false) return sanitized;
-    if (!isEditorJsDoc(sanitized.value) || !isEditorJsDocSafeToEdit(sanitized.value)) {
+    if (!isEditorJsDoc(sanitized.value)) {
       return fail(400, 'richText must be a safe native rich-text document');
     }
     richText = sanitized.value as Record<string, unknown>;
     text = blocksToText(richText.blocks as any[]).trim();
   }
-  if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
 
   const rawImages = input.images;
   const images: string[] = [];
   if (rawImages !== undefined && rawImages !== null) {
     if (!Array.isArray(rawImages)) return fail(400, 'images must be a list of URLs');
-    if (rawImages.length > MAX_IMAGES) return fail(400, `A post can have at most ${MAX_IMAGES} images`);
     for (const entry of rawImages) {
       if (typeof entry !== 'string') return fail(400, 'images must be a list of URLs');
       const trimmed = entry.trim();
       if (!trimmed) continue;
-      if (trimmed.length > MAX_IMAGE_URL_CHARS || !isHttpUrl(trimmed)) {
+      if (!isHttpUrl(trimmed)) {
         return fail(400, 'Images must be http(s) URLs');
       }
       images.push(trimmed);
@@ -4849,7 +4887,7 @@ const sanitizePostCrystal = (
     const value = input.listing;
     if (!value || typeof value !== 'object') return fail(400, 'Marketplace posts need listing details');
     const raw = value as Record<string, unknown>;
-    const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, 120) : '';
+    const title = typeof raw.title === 'string' ? raw.title.trim() : '';
     if (!title) return fail(400, 'Listing title is required');
     const price = Number(raw.price);
     if (!Number.isFinite(price) || price < 0 || price > 1_000_000_000) {
@@ -4858,7 +4896,7 @@ const sanitizePostCrystal = (
     const currency = typeof raw.currency === 'string' && /^[A-Za-z]{3}$/.test(raw.currency.trim()) ? raw.currency.trim().toUpperCase() : 'AUD';
     const category = MARKETPLACE_CATEGORIES.includes(raw.category as any) ? (raw.category as string) : 'other';
     const condition = raw.condition === 'new' || raw.condition === 'used' ? raw.condition : null;
-    const location = typeof raw.location === 'string' ? raw.location.trim().slice(0, 120) || null : null;
+    const location = typeof raw.location === 'string' ? raw.location.trim() || null : null;
     listing = { title, price: Math.round(price * 100) / 100, currency, category, condition, location, sold: !!raw.sold };
   }
 
@@ -4873,13 +4911,13 @@ const sanitizePostCrystal = (
       if (typeof raw !== 'object' || Array.isArray(raw)) {
         return fail(400, 'Thingtime posts need a thing — an object with at least one field 🌀');
       }
-      const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
+      const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2, unboundedContent: true });
 			if (sanitized.ok === false) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
       if (thing.kind === 'thing-collection') {
-        if (!Array.isArray(thing.items) || !thing.items.length || thing.items.length > MAX_POST_THINGS ||
+        if (!Array.isArray(thing.items) || !thing.items.length ||
           thing.items.some(item => !item || typeof item !== 'object' || !['data', 'interactive'].includes(item.mode))) {
-          return fail(400, `Attach 1-${MAX_POST_THINGS} Things with a data or interactive mode`);
+          return fail(400, 'Attach Things with a data or interactive mode');
         }
         const items = postThingReferences(thing);
         if (items.length !== thing.items.length) return fail(400, 'Attached Things require unique valid ids');
@@ -4910,7 +4948,6 @@ const sanitizePostCrystal = (
 		return fail(400, 'title must be a string');
 	}
 	const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
-	if (title.length > MAX_POST_TITLE_CHARS) return fail(400, `Post title is too long (max ${MAX_POST_TITLE_CHARS})`);
 	let subspaceId: string | null = null;
 	if (input.subspaceId !== undefined && input.subspaceId !== null && input.subspaceId !== '') {
 		if (typeof input.subspaceId !== 'string' || !SUBSPACE_REF_PATTERN.test(input.subspaceId.trim())) {
@@ -4951,7 +4988,6 @@ const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]):
   if (ids?.includes('post')) return { ok: true, crystal: {} };
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (!text) return fail(400, 'Comment text is required');
-  if (text.length > MAX_COMMENT_CHARS) return fail(400, `Comment is too long (max ${MAX_COMMENT_CHARS})`);
   return { ok: true, crystal: { text } };
 };
 
@@ -5004,7 +5040,7 @@ const sanitizeDataValue = (
   // where the walked root actually lives relative to the stored crystal —
   // crystal.thing payloads sit one level deeper, so their storable nesting
   // budget is one less and their error paths carry the prefix
-  base?: { path: string; depth: number }
+  base?: { path?: string; depth?: number; unboundedContent?: boolean }
 ): { ok: true; value: unknown } | Fail => {
   let rootOut: unknown;
   let nodes = 0;
@@ -5023,7 +5059,7 @@ const sanitizeDataValue = (
     const item = stack.pop()!;
     const { value, path, depth } = item;
     if (item.key !== undefined) {
-      if (item.key.length > MAX_DATA_KEY_CHARS || !DATA_KEY_PATTERN.test(item.key)) {
+      if ((!base?.unboundedContent && item.key.length > MAX_DATA_KEY_CHARS) || !DATA_KEY_PATTERN.test(item.key)) {
         return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${item.key.slice(0, 80)})`);
       }
       if (PROTOTYPE_POLLUTION_KEYS.has(item.key)) {
@@ -5031,7 +5067,7 @@ const sanitizeDataValue = (
       }
     }
     nodes += 1;
-    if (nodes > MAX_DATA_CRYSTAL_NODES) {
+    if (!base?.unboundedContent && nodes > MAX_DATA_CRYSTAL_NODES) {
       return fail(400, `Data crystals can hold at most ${MAX_DATA_CRYSTAL_NODES} values`);
     }
     if (value === null || typeof value === 'boolean') {
@@ -5044,7 +5080,7 @@ const sanitizeDataValue = (
       continue;
     }
     if (typeof value === 'string') {
-      if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
+      if (!base?.unboundedContent && value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
       item.assign(value);
       continue;
     }
@@ -5054,7 +5090,7 @@ const sanitizeDataValue = (
       if (depth > MAX_STORABLE_NESTING) {
         return fail(400, `MongoDB can store at most ${MAX_STORABLE_NESTING} nested levels per crystal (${path || 'root'})`);
       }
-      if (value.length > MAX_DATA_ARRAY_ITEMS) return fail(400, `Data arrays cap at ${MAX_DATA_ARRAY_ITEMS} items (${path})`);
+      if (!base?.unboundedContent && value.length > MAX_DATA_ARRAY_ITEMS) return fail(400, `Data arrays cap at ${MAX_DATA_ARRAY_ITEMS} items (${path})`);
       const out: unknown[] = new Array(value.length);
       item.assign(out);
       for (let index = value.length - 1; index >= 0; index--) {
@@ -5108,7 +5144,7 @@ const sanitizeDataValue = (
 // reopen the squat class the uniqueKeys migration closed (see
 // KIND-BLIND history in collections.ts).
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-  const sanitized = sanitizeDataValue(input);
+  const sanitized = sanitizeDataValue(input, { unboundedContent: true });
 	if (sanitized.ok === false) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
@@ -5584,7 +5620,7 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
-const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
+const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true; source: Record<string, unknown> } | Fail => {
 	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
 	const rawSource = input as Record<string, unknown>;
 	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
@@ -5592,19 +5628,34 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
 	}
 	const source: Record<string, unknown> = { action };
+	if (rawSource.passive !== undefined && (typeof rawSource.passive !== 'boolean' || (rawSource.passive && !allowPassive))) {
+		return fail(400, 'Passive sources belong on ordinary webpage blocks');
+	}
+	if (rawSource.passive) source.passive = true;
+	if (rawSource.collection !== undefined) {
+		const collection = pageCollectionBinding(rawSource.collection);
+		if (!collection || !source.passive || rawSource.refresh === 'live') {
+			return fail(400, 'A keyed collection requires a passive cursor-backed webpage source.');
+		}
+		source.collection = collection;
+	}
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
+			return fail(400, `Component/page source.inputs must be an object of scalar values or ttArg bindings`);
 		}
 		const inputs: Record<string, unknown> = {};
 		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
-		if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Component/page source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
 		for (const [key, value] of entries) {
-			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS || PROTOTYPE_POLLUTION_KEYS.has(key)) {
 				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
 			}
+			const binding = parseSourceInputArgument(value);
+			if (binding) {
+				inputs[key] = binding;
+				continue;
+			}
 			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
+			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a scalar or a ttArg path binding`);
 			if (scalar !== null) inputs[key] = scalar;
 		}
 		if (Object.keys(inputs).length) source.inputs = inputs;
@@ -5740,23 +5791,6 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 // where a built-in app screen renders and only ever resolve on the matching
 // site route — /p/ pages ignore them.
 
-// One css declaration value: no nested rules/markup, no expression()/@import,
-// no javascript: url — url() only with https/site-relative/data-image targets.
-const isSafeWebpageCssValue = (value: string): boolean => {
-	// no markup/nested-rule characters; `;` stays legal (data: URIs need it, and
-	// values are applied per-property through style objects, where a semicolon
-	// can never open a second declaration)
-	if (/[<>{}]/.test(value)) return false;
-	const lower = value.toLowerCase();
-	if (lower.includes('expression(') || lower.includes('@import') || lower.includes('javascript:')) return false;
-	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
-	for (const match of urlMatches) {
-		const target = (match[1] || '').trim();
-		if (!/^(https:\/\/|\/(?![/\\])|data:image\/)/.test(target)) return false;
-	}
-	return true;
-};
-
 // Site-relative or explicit https. The second character matters: the WHATWG URL
 // parser folds `\` into `/` for special schemes, so `/\evil.example` resolves to
 // https://evil.example — a protocol-relative URL wearing a site-relative coat.
@@ -5814,19 +5848,13 @@ const sanitizeWebpageBlock = (
 		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
 			return fail(400, `Block ${id} css must be an object of css property → value`);
 		}
-		const entries = Object.entries(raw.css as Record<string, unknown>);
-		if (entries.length > MAX_WEBPAGE_CSS_PROPS) {
-			return fail(400, `Block ${id} css can hold at most ${MAX_WEBPAGE_CSS_PROPS} properties`);
-		}
 		const css: Record<string, string> = {};
-		for (const [key, value] of entries) {
-			if (!WEBPAGE_CSS_KEY_PATTERN.test(key) || key.length > MAX_WEBPAGE_CSS_KEY_CHARS) {
-				return fail(400, `Block ${id} css key "${key.slice(0, 40)}" must be a kebab-case css property`);
+		for (const [name, value] of Object.entries(raw.css as Record<string, unknown>)) {
+			const key = normalizeCssPropertyName(name);
+			if (!isCssPropertyName(key) || name !== key) {
+				return fail(400, `Block ${id} css key "${name.slice(0, 40)}" must be a CSS property name`);
 			}
 			if (typeof value !== 'string' || !value.trim()) continue;
-			if (value.length > MAX_WEBPAGE_CSS_VALUE_CHARS) {
-				return fail(400, `Block ${id} css value for ${key} is too long (max ${MAX_WEBPAGE_CSS_VALUE_CHARS})`);
-			}
 			if (!isSafeWebpageCssValue(value)) {
 				return fail(400, `Block ${id} css value for ${key} contains a blocked construct`);
 			}
@@ -5835,16 +5863,20 @@ const sanitizeWebpageBlock = (
 		if (Object.keys(css).length) block.css = css;
 	}
 
-		if (raw.args !== undefined && raw.args !== null) {
-			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
-				return fail(400, `Block ${id} args must be an object of scalar arg values`);
+		for (const field of ['args', 'argBindings'] as const) {
+			if (raw[field] === undefined || raw[field] === null) continue;
+			if (typeof raw[field] !== 'object' || Array.isArray(raw[field])) {
+				return fail(400, `Block ${id} ${field} must be an object of scalar arg values`);
 			}
 			const args: Record<string, unknown> = {};
-			const entries = Object.entries(raw.args as Record<string, unknown>);
+			const entries = Object.entries(raw[field] as Record<string, unknown>);
 			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
-				return fail(400, `Block ${id} args can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
+				return fail(400, `Block ${id} ${field} can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
 			}
 			for (const [key, value] of entries) {
+				if (field === 'argBindings' && ['__proto__', 'constructor', 'prototype'].includes(key)) {
+					return fail(400, `Block ${id} argument binding key is reserved`);
+				}
 				if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
 					return fail(400, `Block ${id} arg key "${key.slice(0, 40)}" is not a valid arg name`);
 				}
@@ -5852,19 +5884,19 @@ const sanitizeWebpageBlock = (
 				if (scalar === null && value !== null) return fail(400, `Block ${id} arg ${key} must be a string, number, or boolean`);
 				if (scalar !== null) args[key] = scalar;
 			}
-			if (Object.keys(args).length) block.args = args;
+			if (Object.keys(args).length) block[field] = args;
 		}
 	// Source bindings can scope any editable subtree. Execution retains the
 	// same viewer-owned Action authorization as a component source.
 	if (raw.source != null) {
-		const checked = sanitizeSourceBinding(raw.source);
+		const checked = sanitizeSourceBinding(raw.source, type !== 'component');
 		if (isFail(checked)) return checked;
 		block.source = checked.source;
 	}
 	if (type === 'element' || type === 'collection' || type === 'condition') {
 		if (type === 'element') {
 			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
 			if (tag === 'tt-media-pipeline') {
 				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
 			}
@@ -5946,11 +5978,7 @@ const sanitizeWebpageBlock = (
 		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
 		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
 		if (html.trim()) {
-			// rich WYSIWYG content — size-bounded here; the client renders it ONLY
-			// through the sanitising allowlist renderer (tags/props/urls/styles)
-			if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-				return fail(400, `Block ${id} rich text is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-			}
+			// Rich WYSIWYG HTML goes through the sanitizing renderer.
 			block.html = html;
 		}
 		const style = typeof raw.style === 'string' ? raw.style : '';
@@ -5998,9 +6026,6 @@ const sanitizeWebpageBlock = (
 	if (type === 'html') {
 		const html = typeof raw.html === 'string' ? raw.html : '';
 		if (!html.trim()) return fail(400, `Block ${id} needs html`);
-		if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-			return fail(400, `Block ${id} html is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-		}
 		// stored verbatim, never rendered raw: the client parses it into the
 		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
 		block.html = html;
@@ -6115,6 +6140,12 @@ const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; cry
 			return fail(400, 'previewBg must be a short CSS background value');
 		}
 		crystal.previewBg = previewBg;
+	}
+
+	if (input.activationAction !== undefined && input.activationAction !== null) {
+		const activationAction = parseWebpageActivation(input.activationAction);
+		if (!activationAction) return fail(400, 'Invalid webpage activation Action');
+		crystal.activationAction = activationAction;
 	}
 
 	if (input.blocks === undefined || input.blocks === null) {
@@ -6297,7 +6328,6 @@ const sanitizeActionSchemaRef = (value: unknown, label: string): Fail | { ok: tr
 
 const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record<string, unknown>[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action inputs must be a list of input descriptors');
-	if (input.length > MAX_ACTION_INPUTS) return fail(400, `Actions can declare at most ${MAX_ACTION_INPUTS} inputs`);
 	const inputs: Record<string, unknown>[] = [];
 	const seen = new Set<string>();
 	for (const entry of input) {
@@ -6510,15 +6540,15 @@ const sanitizeActionSteps = (
 		// object ({ ttExpr } / { ttConcat }) that resolves at run time
 		const isExpressionObject = (value: unknown): boolean =>
 			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
-		const checkRefString = (value: unknown, field: string): Fail | null => {
+		const checkRefString = (value: unknown, field: string, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
 			if (isExpressionObject(value)) {
-				const checked = validateActionValue(value, stepIndex);
+				const checked = validateActionValue(value, stepIndex, 0, scope);
 				if (isFail(checked)) return checked;
 				step[field] = value;
 				return null;
 			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
-			const checked = validateActionValue(value.trim(), stepIndex);
+			const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
 			if (isFail(checked)) return checked;
 			step[field] = value.trim();
 			return null;
@@ -6552,13 +6582,30 @@ const sanitizeActionSteps = (
 			step.provider = raw.provider;
 			step.credentialId = raw.credentialId;
 			failure = checkRefString(raw.query, 'query');
-		} else if (op === 'things.create') {
+		} else if (op === 'things.create' || op === 'things.ensure') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
-			failure = checkValues(raw.values, 'values', true) || requireCapability(stepIndex, 'things.create', schema.ref);
+			const ensure = op === 'things.ensure';
+			const batch = ensure && raw.each !== undefined;
+			const itemScope = batch ? { itemDepth: 1 } : TOP_SCOPE;
+			failure = checkValues(raw.values, 'values', true, itemScope) || requireCapability(stepIndex, 'things.create', schema.ref);
+			if (!failure && ensure) {
+				failure = requireCapability(stepIndex, 'things.read', schema.ref) || checkRefString(raw.key, 'key', itemScope)
+					|| (raw.folderId !== undefined ? checkRefString(raw.folderId, 'folderId', itemScope) : null)
+					|| (batch ? checkAnyValue(raw.each, 'each') : null);
+				if (!failure && raw.matchFields !== undefined) {
+					if (!Array.isArray(raw.matchFields) || !raw.matchFields.length || raw.matchFields.length > MAX_ACTION_SEARCH_WHERE_KEYS ||
+						raw.matchFields.some(field => typeof field !== 'string' || !ACTION_SEARCH_FIELD_PATTERN.test(field) ||
+							ACTION_BANNED_SEGMENTS.has(field) || field === 'schema' || field === 'schemaId')) {
+						return fail(400, `Step ${stepIndex} matchFields needs plain crystal field names`);
+					}
+					step.matchFields = [...new Set(raw.matchFields)];
+				}
+			}
 		} else if (op === 'things.get') {
-			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');
+			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read') ||
+				(raw.ownedFolderId === undefined ? null : checkRefString(raw.ownedFolderId, 'ownedFolderId'));
 		} else if (op === 'things.search') {
 			if (raw.schema !== undefined && raw.schema !== null) {
 				const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
@@ -6699,8 +6746,8 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		if (!entry || typeof entry !== 'object') continue;
 		const step = entry as Record<string, unknown>;
 		const schema = typeof step.schema === 'string' ? step.schema : null;
-		if (step.op === 'things.create' && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
-		if ((step.op === 'things.get' || step.op === 'things.search') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
+		if ((step.op === 'things.create' || step.op === 'things.ensure') && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
+		if ((step.op === 'things.get' || step.op === 'things.search' || step.op === 'things.ensure') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
 		// an UNSCOPED get or search is the broadest read in the vocabulary —
 		// it must surface as the '*' ("reads things") effect, never as nothing
 		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');

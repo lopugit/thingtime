@@ -2,7 +2,9 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { existsSync, mkdirSync, readFileSync, rmSync, statSync } = require('node:fs');
+const { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync, writeFileSync } = require('node:fs');
+const { randomUUID } = require('node:crypto');
+const { hostname } = require('node:os');
 const path = require('node:path');
 
 const remixDir = path.resolve(__dirname, '..');
@@ -15,19 +17,35 @@ const corepackBin = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 // packages behind. A directory lock serialises them: the second waits for the
 // first, then runs its own (now nearly free) pass.
 const installLockPath = path.join(remixDir, 'node_modules', '.thingtime-install.lock');
-const INSTALL_LOCK_STALE_MS = 15 * 60 * 1000;
 const INSTALL_LOCK_WAIT_MS = 10 * 60 * 1000;
+
+// A dead parent can leave pnpm running. Detect it promptly, but preserve the
+// lock until the operator verifies this checkout has no surviving installer.
+const inspectInstallOwner = (lockPath) => {
+	let files;
+	try { files = readdirSync(lockPath); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }
+	const markers = files.filter(name => /^owner-[a-f0-9-]+\.json$/.test(name));
+	if (files.length !== 1 || markers.length !== 1) return false;
+	const marker = path.join(lockPath, markers[0]);
+	let owner;
+	try { owner = JSON.parse(readFileSync(marker, 'utf8')); } catch { return false; }
+	if (owner.hostname !== hostname() || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) return false;
+	try { process.kill(owner.pid, 0); return false; } catch (error) { if (error.code !== 'ESRCH') return false; }
+	throw new Error(`[deps] Interrupted installer lock at ${lockPath}. Its owner exited, but a child installer may remain. Verify no installer is using this checkout, remove this lock's owner marker and empty directory, then rerun bootstrap.`);
+};
 
 /* global Atomics, SharedArrayBuffer */
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 const withInstallLock = (run, { lockPath = installLockPath, logger = console } = {}) => {
 	mkdirSync(path.dirname(lockPath), { recursive: true });
+	const ownerName = `owner-${randomUUID()}.json`;
 	const started = Date.now();
 	let announced = false;
 	for (;;) {
 		try {
 			mkdirSync(lockPath);
+			writeFileSync(path.join(lockPath, ownerName), JSON.stringify({ pid: process.pid, hostname: hostname() }), { flag: 'wx', mode: 0o600 });
 			break;
 		} catch (error) {
 			if (error.code !== 'EEXIST') throw error;
@@ -37,10 +55,18 @@ const withInstallLock = (run, { lockPath = installLockPath, logger = console } =
 			} catch {
 				continue; // released between our attempt and the stat
 			}
-			if (age > INSTALL_LOCK_STALE_MS) {
-				logger.warn(`[deps] Removing a stale install lock (${Math.round(age / 60000)} min old).`);
-				rmSync(lockPath, { recursive: true, force: true });
+			if (inspectInstallOwner(lockPath)) {
 				continue;
+			}
+			// Old empty locks have no owner evidence. Never remove them merely
+			// because time elapsed: another installer may still be working.
+			let ownerless;
+			try { ownerless = readdirSync(lockPath).length === 0; } catch (readError) {
+				if (readError.code === 'ENOENT') continue; // holder released after our owner check
+				throw readError;
+			}
+			if (age > 1000 && ownerless) {
+				throw new Error(`[deps] Ownerless install lock at ${lockPath}. Verify no installer is using this checkout, remove only the empty lock directory, then rerun bootstrap.`);
 			}
 			if (Date.now() - started > INSTALL_LOCK_WAIT_MS) {
 				throw new Error(`[deps] Another dependency install has held ${lockPath} for over ${INSTALL_LOCK_WAIT_MS / 60000} minutes.`);
@@ -55,7 +81,8 @@ const withInstallLock = (run, { lockPath = installLockPath, logger = console } =
 	try {
 		return run();
 	} finally {
-		rmSync(lockPath, { recursive: true, force: true });
+		try { unlinkSync(path.join(lockPath, ownerName)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+		try { rmdirSync(lockPath); } catch (error) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error; }
 	}
 };
 

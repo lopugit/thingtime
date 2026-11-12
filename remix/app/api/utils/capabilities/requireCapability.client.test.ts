@@ -1,9 +1,11 @@
+import { createLibraryArchiveReadChecker } from '~/utils/libraryArchiveCapabilities.client';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { afterEach, beforeEach, test } from 'node:test';
 import { createThingtimeCapabilityChecker } from './requireCapability.client';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
+import { canKeepThingAfterReadFailure } from '../../../components/Things/thingDetailSectionsCore';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 beforeEach(() => {
@@ -110,7 +112,8 @@ test('archive clients reject missing, older and breaking contracts but accept co
 test('owned-plan clients negotiate each new operation and reject pre-admission or breaking origins', async (t) => {
   for (const [feature, minimum, old] of [
     ['api.ai-models', '1.8.0', '1.7.0'], ['api.lopu-chats', '1.7.0', '1.6.0'],
-    ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0']
+    ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0'],
+    ['api.lopu-chats-reply', '1.23.1', '1.23.0'], ['api.lopu-chats-reply', '1.23.2', '1.23.1']
   ]) {
     for (const version of [undefined, old, '2.0.0', minimum, '1.99.0']) {
       const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { [feature]: { version } } : {} }));
@@ -241,4 +244,111 @@ test("an immediate remount never inherits the previous caller's aborted discover
   await old;
   await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
   assert.equal(calls, 2, 'Late old failure must preserve the successful remount cache');
+});
+
+test('discovery read failures retain readable projections only for transient transport/HTTP failures', async (t) => {
+  for (const status of [408, 429, 500, 503, 401, 403, 404]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status }));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), status === 408 || status === 429 || status >= 500);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
+  const offline = t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Network unavailable'); });
+  await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+    assert.equal(canKeepThingAfterReadFailure(error), true);
+    return true;
+  });
+  offline.mock.restore();
+  for (const body of [null, manifest('0.1.0'), { ...manifest(), origin: 'https://wrong-origin.test' }, { ...manifest(), features: {} }]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => Response.json(body));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), false);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
+  const malformed = t.mock.method(globalThis, 'fetch', async () => new Response('{'));
+  await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+    assert.equal(canKeepThingAfterReadFailure(error), false);
+    return true;
+  });
+  malformed.mock.restore();
+});
+
+test('manifest body transport remains transient while malformed complete bodies do not', async (t) => {
+  for (const failure of [new TypeError('Connection terminated'), new DOMException('Connection check timed out', 'TimeoutError')]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{')); controller.error(failure); } })));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), true);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
+});
+
+
+test('active API capability source refuses an older proxy despite a newer frontend manifest', async t => {
+  let current = '2.2.0';
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push(String(url));
+    if (String(url).endsWith('/api/v1/capabilities')) {
+      assert.equal(init?.credentials, 'omit'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
+      return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': current },
+        dataEnvironment: { authorityOrigin: 'https://must-not-be-followed.example' } });
+    }
+    return Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.connections': { version: '2.3.0' } } });
+  });
+  const frontend = createThingtimeCapabilityChecker();
+  const active = createThingtimeCapabilityChecker({ source: 'active-api' });
+  await frontend('api.connections', '2.3.0');
+  await assert.rejects(active('api.connections', '2.3.0'), /incompatible/);
+  current = '2.3.1'; await active('api.connections', '2.3.0');
+  assert.ok(calls.every(url => url === THINGTIME_CAPABILITY_MANIFEST_PATH || url === 'https://thingtime.test/api/v1/capabilities'));
+});
+
+test('active API source keeps explicit origin, schema and response endpoint fences', async t => {
+  let body: unknown = null, responseUrl = '';
+  t.mock.method(globalThis, 'fetch', async () => { const response = Response.json(body); if (responseUrl) Object.defineProperty(response, 'url', { value: responseUrl }); return response; });
+  const active = createThingtimeCapabilityChecker({ source: 'active-api' });
+  for (const invalid of [null, { ok: true, schemaVersion: 2, features: {} },
+    { ok: true, schemaVersion: 1, origin: 'https://foreign.test', features: { 'api.connections': '2.3.0' } },
+    { ok: true, schemaVersion: 1, features: [] }, { ok: false, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }]) {
+    body = invalid; await assert.rejects(active('api.connections', '2.3.0'), /incompatible/);
+  }
+  body = { ok: true, schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.connections': '2.3.0' } };
+  await active('api.connections', '2.3.0');
+  for (const url of ['https://foreign.test/api/v1/capabilities', 'https://thingtime.test/other']) {
+    responseUrl = url;
+    await assert.rejects(createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0'), /changed origin or endpoint/);
+  }
+});
+
+
+test('Archive read gate rejects a 1.62 active API behind a 1.63 frontend and retries after rollout', async () => {
+  const origin = 'https://thingtime.test';
+  let activeVersion: string | undefined = '1.62.0';
+  const calls: string[] = [];
+  const fetcher = (async (url: string) => {
+    const path = new URL(url, origin).pathname;
+    calls.push(path);
+    return Response.json(path === '/api/v1/capabilities'
+      ? { ok: true, schemaVersion: 1, features: activeVersion ? { 'api.things': activeVersion } : {} }
+      : { schemaVersion: 1, origin, features: { 'api.things': { version: '1.63.0' } } });
+  }) as typeof fetch;
+  const check = createLibraryArchiveReadChecker(createThingtimeCapabilityChecker(), createThingtimeCapabilityChecker({ source: 'active-api' }));
+  const transport = { fetch: fetcher, currentOrigin: () => origin };
+  let queries = 0;
+  const query = async () => { await check(origin, transport); queries++; };
+  for (const version of ['1.62.0', undefined, '2.0.0']) {
+    activeVersion = version;
+    await assert.rejects(query(), /api.things is incompatible/);
+    assert.equal(queries, 0, 'an incompatible active API cannot reach the library query');
+  }
+  assert.deepEqual(new Set(calls), new Set(['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']));
+  activeVersion = '1.63.0';
+  await query();
+  assert.equal(queries, 1);
 });

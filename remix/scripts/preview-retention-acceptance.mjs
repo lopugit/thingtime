@@ -2,6 +2,7 @@
 // belong to the explicitly selected disposable replica, never a production cookie.
 // TT_RETENTION_SESSION_FILE=/private/task/session.json TT_RETENTION_DATABASE_HOST=127.0.0.1:17343
 // TT_PLAYWRIGHT_MODULE=/private/tools/node_modules/playwright/index.mjs node scripts/preview-retention-acceptance.mjs
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -150,14 +151,15 @@ try {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 950 });
     const host = page.locator('[data-settings-document="preview-retention-settings"]');
+    await enableCurrentPageBuilder(page);
     await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
     const select = page.getByRole('combobox', { name: 'Select block', exact: true });
     await select.selectOption('preview-retention-cleanup-description');
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(`Editable retention guidance ${width}`);
     await select.selectOption('preview-retention-orphan-grace-input');
-    await page.getByRole('textbox', { name: 'Element title', exact: true }).fill(`Editable grace input ${width}`);
-    await page.getByRole('textbox', { name: 'Element title', exact: true }).blur();
+    await page.getByLabel('Element title', { exact: true }).fill(`Editable grace input ${width}`);
+    await page.getByLabel('Element title', { exact: true }).blur();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Opened Builder inspector overflow');
     await page.screenshot({ path: join(out, `retention-builder-${width}.png`), fullPage: true });
     await page.getByRole('button', { name: 'Close builder', exact: true }).click();

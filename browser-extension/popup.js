@@ -1,3 +1,4 @@
+import {initializePasswordWorkspace} from './vault-popup.js';
 import {DEFAULT_ORIGIN, providerOrigin, DIAGNOSTIC_REASONS} from './protocol.js';
 import {WORKSPACE_DEFAULTS, workspacePreferences, fitWorkspaceBounds, createLatestInspection} from './workspace.js';
 const $ = selector => document.querySelector(selector);
@@ -78,7 +79,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 try {
   const [config, workspace] = await Promise.all([chrome.runtime.sendMessage({action: 'state'}), chrome.runtime.sendMessage({action: 'workspace-state'})]);
-  enabled.checked = config.enabled === true; origin.value = config.origin || DEFAULT_ORIGIN; $('#enabled-badge').textContent = enabled.checked ? 'Passkeys enabled' : 'Passkeys off';
+  enabled.checked = config.enabled === true; $('#autofill-enabled').checked = config.autofillEnabled !== false; origin.value = config.origin || DEFAULT_ORIGIN; $('#enabled-badge').textContent = enabled.checked ? 'Passkeys enabled' : 'Passkeys off';
   appearance(workspace.preferences); $('#version').textContent = `v${chrome.runtime.getManifest().version}`;
   await Promise.all([refresh(), inspectConnection(), applySize()]);
 } catch { feedback.textContent = 'The extension is unavailable. Reopen it to try again.'; }
@@ -86,7 +87,7 @@ form.addEventListener('submit', async event => {
   event.preventDefault(); const button = form.querySelector('button'); button.disabled = true;
   try {
     const selected = providerOrigin(origin.value.trim());
-    const response = await chrome.runtime.sendMessage({action: 'settings', enabled: enabled.checked, origin: selected});
+    const response = await chrome.runtime.sendMessage({action: 'settings', enabled: enabled.checked, autofillEnabled: $('#autofill-enabled').checked, origin: selected});
     if (!response.ok) throw new Error('Settings could not be saved.');
     origin.value = selected; $('#enabled-badge').textContent = enabled.checked ? 'Passkeys enabled' : 'Passkeys off';
     feedback.textContent = enabled.checked ? 'Thingtime is enabled. Reload existing website tabs to connect.' : 'Thingtime is off. Websites use the browser’s native provider.'; await refresh();
@@ -102,3 +103,5 @@ $('#appearance').addEventListener('submit', async event => {
 });
 $('#apply-size').addEventListener('click', async () => { try { $('#appearance-feedback').textContent = await applySize() ? 'Saved dimensions applied to this window, fitted to the available screen.' : 'Open the workspace from the toolbar to resize its window.'; } catch { $('#appearance-feedback').textContent = 'The browser could not resize this window.'; } });
 $('#reset-appearance').addEventListener('click', async () => { try { const saved = await chrome.runtime.sendMessage({action: 'workspace-settings', preferences: WORKSPACE_DEFAULTS}); if (!saved.ok) throw new Error(); appearance(saved.preferences); $('#appearance-feedback').textContent = 'Default appearance restored.'; } catch { $('#appearance-feedback').textContent = 'Defaults could not be saved.'; } });
+
+initializePasswordWorkspace();

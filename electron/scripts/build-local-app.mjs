@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
 import { productionSigningIdentity } from './production-signing-identity.mjs';
+import { ensureElectronBuildDependencies } from './ensure-build-dependencies.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
@@ -91,6 +92,7 @@ const signingEnvironment = {
 
 const pinnedPnpm = await createPinnedPnpmEnvironment(packageManager, signingEnvironment);
 try {
+	ensureElectronBuildDependencies({ electronDir, packageManager, environment: pinnedPnpm.environment });
 	run('corepack', [packageManager, 'run', 'build:resources'], { env: pinnedPnpm.environment });
 	await rm(path.join(electronDir, 'release'), { force: true, recursive: true });
 	run(electronBuilder, ['--dir', '--mac', '--config.forceCodeSigning=true', `--config.mac.identity=${qualifier}`, '--config.mac.notarize=false'], {

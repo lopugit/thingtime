@@ -1,12 +1,13 @@
+import { DeviceSyncResources } from './DeviceSyncResources';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Box, Button, FormControl, FormLabel, Select, Text } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Select, Spinner, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { createDesktopFolderHost, type FolderHost } from '~/fileSync/desktopFolders.client';
+import { SyncDetailsSection } from './SyncDetailsSection';
 import { MobileFolderAccess } from './MobileFolderAccess';
-import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 
 /** Local status supplies candidates only. The signed host and paired node must
  * both verify the active account before these controls can access any folder. */
@@ -14,12 +15,16 @@ export function DesktopFolderAccess({
 	ownerId,
 	pairedDeviceIds,
 	ownedDeviceIds,
-	deviceId: selectedDeviceId
+	deviceId: selectedDeviceId,
+	active = true,
+ showResourceSummary = true
 }: {
 	ownerId: string;
 	pairedDeviceIds: readonly string[];
 	ownedDeviceIds: readonly string[];
 	deviceId?: string;
+	active?: boolean;
+ showResourceSummary?: boolean;
 }) {
 	const user = useCurrentUser(),
 		dataPlane = useDataPlane();
@@ -39,6 +44,8 @@ export function DesktopFolderAccess({
 	if (!candidates.length) return null;
 	return (
 		<DeviceFolders
+			active={active}
+   showResourceSummary={showResourceSummary}
 			key={JSON.stringify([ownerId, candidates, identity.generation])}
 			ownerId={ownerId}
 			candidates={candidates}
@@ -46,18 +53,15 @@ export function DesktopFolderAccess({
 		/>
 	);
 }
-function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; candidates: string[]; generation: number }) {
+function DeviceFolders({ ownerId, candidates, generation, active, showResourceSummary }: { ownerId: string; candidates: string[]; generation: number; active: boolean; showResourceSummary: boolean }) {
 	const [choice, setChoice] = useState('');
 	const deviceId = candidates.length === 1 ? candidates[0] : candidates.includes(choice) ? choice : '';
 	return (
 		<Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={4} minWidth={0}>
-			<Text fontWeight={700} fontSize="14px">
-				Folders on this Mac
-			</Text>
 			{candidates.length > 1 ? (
 				<FormControl marginTop={2}>
-					<FormLabel fontSize="12px">Local device connection</FormLabel>
-					<Select value={choice} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a connection">
+					<FormLabel fontSize="12px">This Mac’s device profile</FormLabel>
+					<Select value={choice} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a device profile">
 						{candidates.map((id) => (
 							<option key={id} value={id}>
 								{id}
@@ -66,21 +70,20 @@ function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; c
 					</Select>
 				</FormControl>
 			) : null}
-			{deviceId ? <VerifiedFolders key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
+			{deviceId ? <VerifiedFolders active={active} key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
+			{showResourceSummary && deviceId ? <Box mt={3}>
+				<SyncDetailsSection title="Device activity">
+					<DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} />
+				</SyncDetailsSection>
+			</Box> : null}
 		</Box>
 	);
 }
-function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; deviceId: string; generation: number }) {
-	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
-	let taskHost: FolderHost | undefined;
-	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
-		try { task.host?.assertCurrent(); taskHost = task.host; } catch { /* Reauthorize after stop or identity change. */ }
-	}
+function VerifiedFolders({ ownerId, deviceId, generation, active }: { ownerId: string; deviceId: string; generation: number; active: boolean }) {
 	const [host, setHost] = useState<FolderHost>(),
 		[error, setError] = useState(''),
 		[attempt, setAttempt] = useState(0);
 	useEffect(() => {
-		if (taskHost) { setHost(undefined); return; }
 		const controller = new AbortController(),
 			bridge = getElectronBridge();
 		setError('');
@@ -104,12 +107,15 @@ function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; d
 				if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Folder access is unavailable.');
 			});
 		return () => controller.abort();
-	}, [ownerId, deviceId, generation, attempt, taskHost]);
-	if (taskHost || host) return <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
+	}, [ownerId, deviceId, generation, attempt]);
+	// Settings own a stable, independently verified host. Borrowing a task host
+	// ties the entire editor tree to that run's abort signal and unmounts cards
+	// when the run finishes, even though account/origin authority is unchanged.
+	if (host) return <MobileFolderAccess active={active} ownerId={ownerId} deviceId={deviceId} host={host} />;
 	return (
 		<Box marginTop={2}>
 			<Text fontSize="12px" role={error ? 'alert' : undefined}>
-				{error || 'Verifying this Mac’s account connection…'}
+				{error || <Spinner as="span" size="xs" role="status" aria-label="Verifying this Mac’s account connection" />}
 			</Text>
 			{error ? (
 				<Button marginTop={2} size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>

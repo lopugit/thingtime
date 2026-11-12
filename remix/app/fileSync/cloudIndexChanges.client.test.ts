@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseCloudIndexFeed, readCloudIndexChanges, type CloudIndexChange } from './cloudIndexChanges.client';
 import type { CloudInventoryPage } from './cloudInventoryPages';
+import { cloudFileSyncEntry } from './cloudFile';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
 import type { SyncEntry } from './reconcile';
 const scope = { origin: 'https://cloud-index.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' },
 	rootId = 'cloud-root';
@@ -147,6 +149,21 @@ test('remote feed validation refuses foreign roots, absent boundaries, and inval
 		{ changes: [{ position: 11, entry: folder('new'), subtree: null }] }
 	])
 		assert.throws(() => parseCloudIndexFeed({ ...valid, ...patch }, rootId, 10));
+});
+
+test('remote delta accepts a canonical empty cloud file without weakening nonempty fingerprint validation', () => {
+	const empty = cloudFileSyncEntry({
+		id: 'empty-file', revision: 'revision-1', name: 'empty.bin', folderId: rootId, trashed: false,
+		content: { attachmentId: 'empty-attachment', version: EMPTY_CONTENT_SHA256, size: 0,
+			fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8 * 1024 * 1024, partCount: 0, sha256: EMPTY_CONTENT_SHA256 } }
+	}, 'empty.bin');
+	assert.equal(empty.fingerprint, undefined);
+	assert.equal(parseCloudIndexFeed(feed(11, [{ position: 11, entry: empty, subtree: null }]).feed, rootId, 10).changes[0].entry.sha256, EMPTY_CONTENT_SHA256);
+	for (const entry of [
+		{ ...empty, size: 1 },
+		{ ...empty, sha256: '0'.repeat(64) },
+		{ ...empty, fingerprint: undefined, sha256: null }
+	]) assert.throws(() => parseCloudIndexFeed(feed(11, [{ position: 11, entry, subtree: null }]).feed, rootId, 10));
 });
 
 test('a failed subtree retains the prior durable Timeline cursor for replay', { timeout: 5000 }, async () => {

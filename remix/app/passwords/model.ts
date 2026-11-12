@@ -1,12 +1,14 @@
+import { entryVerificationWindow, type EntryVerificationWindow } from './verificationPolicy';
 import { validatePasswordIcon, type PasswordIcon } from './icons';
+import { passwordAutofillOrigins } from './websites';
 export const PASSWORD_ENTRY_KIND = 'password-manager-entry';
 export const PASSWORD_TYPES = ['login', 'password', 'api-key', 'secure-note', 'passkey-reference', 'passkey', 'credit-card', 'identity', 'document', 'software-license', 'bank-account', 'database', 'driver-license', 'outdoor-license', 'membership', 'passport', 'rewards', 'social-security-number', 'email-account', 'server', 'wireless-router', 'ssh-key', 'api-credential', 'medical-record', 'other'] as const;
 export const FIELD_TYPES = ['text', 'password', 'url', 'email', 'notes', 'totp', 'address', 'credit-card-number', 'credit-card-type', 'date', 'gender', 'menu', 'month-year', 'phone', 'reference', 'ssh-key', 'structured'] as const;
 export type PasswordType = typeof PASSWORD_TYPES[number];
 export type FieldType = typeof FIELD_TYPES[number];
 export type PasswordField = { id: string; label: string; type: FieldType; value: string; section?: string; concealed?: boolean; multiline?: boolean; structured?: boolean; sourcePath?: (string | number)[] };
-export type PasswordEntry = { icon?: PasswordIcon; title: string; passwordType: PasswordType; fields: PasswordField[]; onePassword?: string; onePasswordContext?: string; categoryId?: string; tags?: string[]; archived?: boolean; favorite?: boolean; importArchiveId?: string };
-export type PasswordMetadata = { icon?: PasswordIcon; id: string; title: string; passwordType: PasswordType; revision: number; updatedAt: string };
+export type PasswordEntry = { verificationWindow?: EntryVerificationWindow; icon?: PasswordIcon; title: string; passwordType: PasswordType; fields: PasswordField[]; onePassword?: string; onePasswordContext?: string; categoryId?: string; tags?: string[]; archived?: boolean; favorite?: boolean; importArchiveId?: string };
+export type PasswordMetadata = { websiteIcon?: boolean; username?: string; icon?: PasswordIcon; id: string; title: string; passwordType: PasswordType; revision: number; updatedAt: string };
 
 export const validPasswordId = (id: unknown): id is string => typeof id === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id);
 export function emptyPasswordEntry(): PasswordEntry {
@@ -39,6 +41,7 @@ export function validatePasswordEntry(value: unknown): PasswordEntry {
     return { id: field.id, label: field.label.trim(), type: field.type, value: field.value, ...extra };
   });
   const result: PasswordEntry = { title: input.title.trim(), passwordType: input.passwordType, fields };
+  if (input.verificationWindow !== undefined) result.verificationWindow = entryVerificationWindow(input.verificationWindow);
   if (input.icon !== undefined) result.icon = validatePasswordIcon(input.icon);
   if (input.onePassword !== undefined) {
     if (typeof input.onePassword !== 'string') throw new Error('Invalid source item.');
@@ -53,3 +56,55 @@ export function validatePasswordEntry(value: unknown): PasswordEntry {
   return result;
 }
 export const passwordFieldValue = (entry: PasswordEntry, id: string) => entry.fields.find(field => field.id === id)?.value ?? '';
+
+/** Browser autofill accepts only a canonical website login password, never a
+ * signing key, authenticator seed or an arbitrary concealed custom field. */
+export const isPasswordFillEntry = (entry:PasswordEntry) => ['login','password','email-account'].includes(entry.passwordType) && entry.fields.some(field=>field.id==='password'&&field.type==='password'&&!!field.value);
+
+export const passwordCanAutofillAtOrigin = (entry: PasswordEntry, origin: string) =>
+  isPasswordFillEntry(entry) && passwordAutofillOrigins(entry.fields).includes(origin);
+
+const identityLabel = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '');
+const loginIdentityLabels = new Set(['username', 'email', 'emailaddress', 'loginemail', 'signinemail', 'rootuseremail', 'rootuseremailaddress']);
+const metadataLabels = new Set(['description', 'title', 'notes', 'label', 'accountlabel', 'displayname', 'appaction', 'clientid']);
+const loginFormPath = (field: PasswordField) => {
+  const path = field.sourcePath;
+  return path?.length === 4 && path[0] === 'details' && path[1] === 'loginFields' && typeof path[2] === 'number' && path[3] === 'value' ? path[2] : undefined;
+};
+
+/** Discovery and protected fill agree on the login identifier. Imported
+ * descriptions and hidden form inputs never become usernames. Use retained
+ * source metadata only to exclude hidden fields; read values from live fields. */
+export const passwordPreviewUsername = (entry:PasswordEntry):string => {
+  let importedFields: unknown[] | undefined;
+  const isHiddenImport = (field: PasswordField) => {
+    const index = loginFormPath(field);
+    if (index === undefined || !entry.onePassword) return false;
+    if (!importedFields) {
+      try {
+        const fields = JSON.parse(entry.onePassword)?.details?.loginFields;
+        importedFields = Array.isArray(fields) ? fields : [];
+      } catch { importedFields = []; }
+    }
+    const source = importedFields[index] as {fieldType?:unknown;type?:unknown} | undefined;
+    return isHiddenPasswordFormField(source);
+  };
+  const usable = (field: PasswordField) => ['text', 'email'].includes(field.type) && !!field.value.trim() &&
+    !field.concealed && !field.structured && !field.multiline && !metadataLabels.has(identityLabel(field.label)) && !isHiddenImport(field);
+  const username = entry.fields.find(field => field.id === 'username' && usable(field));
+  const email = entry.fields.find(field => field.id === 'email' && usable(field));
+  if (username) return username.value;
+  if (email) return email.value;
+  if (['login', 'password', 'email-account'].includes(entry.passwordType)) {
+    const explicitlyLabeled = entry.fields.filter(field => (field.type === 'email' || loginFormPath(field) !== undefined) &&
+      loginIdentityLabels.has(identityLabel(field.label)) && usable(field));
+    const values = new Set(explicitlyLabeled.map(field => field.value));
+    if (values.size === 1) return values.values().next().value ?? '';
+    if (values.size > 1) return '';
+  }
+  return '';
+};
+
+export function isHiddenPasswordFormField(field: {fieldType?:unknown;type?:unknown} | undefined): boolean {
+  return [field?.fieldType, field?.type].some(type => typeof type === 'string' && ['h', 'hidden'].includes(type.toLowerCase()));
+}

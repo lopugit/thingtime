@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { RenameDialog } from '~/components/Things/ThingsDialogs';
 import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { thingRenameCrystal, isManagedLibraryThing, type ThingsThing } from '~/components/Things/thingsCore';
@@ -6,6 +7,8 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { thingStorageHref } from '../../Things/thingStorageNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { canOfferRecordingHandoff, sendRecordingThingToLopu, type RecordingThingIdentity } from '~/components/Lopu/recordingThingHandoff';
 import type { ThingActionId } from '~/schemas/thingActions';
@@ -29,6 +32,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const sharedAccess = useSharedAccess();
   const sharedPath = useSharedThingPath();
   const user = useCurrentUser();
+  const dataPlane = useDataPlane();
   const navigate = useNavigate();
   const lopu = useLopu();
   const identity = `${user?.id || ''}:${id}`;
@@ -47,6 +51,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const fetched = resolved?.identity === identity ? resolved.thing : undefined;
   // Live card projections win over an earlier menu read (e.g. privacy changed).
   const thing = initialThing ? { ...fetched, ...initialThing } : fetched;
+  const storageHref = thingStorageHref(id, { archive: thing?.thingtime?.includes('chat-archive'), dataPlane, key: sharedAccess.key });
   const inspectHref = sharedPath(`/thing/${encodeURIComponent(id)}`);
   const href = (thing && thingBuilderHref(thing, user?.id)) || openHref || inspectHref;
   const permalink = openHref || (thing ? sharedPath(thingLink(thing)) : inspectHref);
@@ -77,9 +82,10 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const builderNavigation = builderThingMenuSections(thing, user?.id).map(section => ({ ...section,
     actions: section.actions.map(action => action.command === 'open-live' && action.href ? { ...action, href: sharedPath(action.href) } : action)
   }));
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
-    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false
-  }, [...builderNavigation, ...extensions]);
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, 'share-preview': true, ...capabilities,
+    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false,
+    'storage-placement': !!user?.id && !user.temporary && thing?.author?.id === user.id && { href: storageHref }
+  }, [...builderNavigation, ...extensions], id);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
       switch (event.action.command) {
@@ -87,7 +93,9 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         case 'open-builder': { const target = thing && thingBuilderHref(thing, user?.id); if (target) navigate(target); break; }
         case 'open-live': { const target = thing && thingLiveHref(thing); if (target) navigate(sharedPath(target)); break; }
         case 'inspect': navigate(inspectHref); break;
+        case 'storage-placement': navigate(storageHref); break;
         case 'history': openThingHistory(id, thing?.thingtime); break;
+        case 'share-preview': openSharePreview(thingEntityLink(permalink, window.location.origin, thing, user?.id, sharedAccess.key).href); break;
         case 'copy-link': {
           const url = thingEntityLink(permalink, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',

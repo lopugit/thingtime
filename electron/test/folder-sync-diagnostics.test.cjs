@@ -119,3 +119,17 @@ test('failure histogram is fixed numeric counts, complete and equal to failed me
         assert.deepEqual(legacy, base);
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('download diagnostics keep phase, code and timing without retaining private transfer metadata', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'folder-download-diagnostic-'));
+    const file = path.join(directory, 'folder-sync.log');
+    try {
+        await recordFolderSyncDiagnostic(file, { phase: 'download-stage', step: 'secret-step', code: 'temporary' });
+        assert.equal(fs.existsSync(file), false);
+        await recordFolderSyncDiagnostic(file, { phase: 'download-stage', step: 'sign-target', code: 'temporary',
+            url: 'private-signed-url', ownerId: 'private-owner', token: 'private-token', offset: 4 });
+        const [{ time, ...row }] = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+        assert.ok(Number.isFinite(Date.parse(time)));
+        assert.deepEqual(row, { phase: 'download-stage', step: 'sign-target', code: 'temporary' });
+    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

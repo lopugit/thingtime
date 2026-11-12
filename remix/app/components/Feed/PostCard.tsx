@@ -58,6 +58,7 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { PostThingMenu } from './PostThingMenu';
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
 import { UpdownControl } from './UpdownControl';
@@ -72,6 +73,7 @@ import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
 import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, authorLinkTarget, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
 import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
+import { PresentedImage } from '../Media/PresentedImage';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
@@ -321,17 +323,16 @@ export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; 
   const initial = author ? getUserDisplayName(author).trim().charAt(0).toUpperCase() : '?';
 
   const circle = author?.avatarUrl ? (
-    <Image
-      src={author.avatarUrl}
-      alt={authorName(author)}
-      loading="lazy"
+    <Box
       flexShrink={0}
       width={size}
       height={size}
       borderRadius="999px"
-      objectFit="cover"
+      overflow="hidden"
       background="var(--tt-surface-alt, #f5f5f7)"
-    />
+    >
+      <PresentedImage src={author.avatarUrl} presentation={author.avatarPresentation} alt={authorName(author)} loading="lazy" />
+    </Box>
   ) : (
     <Center
       flexShrink={0}
@@ -390,14 +391,11 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
     );
   }
 
-  const shown = images.slice(0, 4);
-  const hidden = images.length - shown.length;
 
   return (
     <Grid templateColumns="repeat(2, 1fr)" gap={1.5}>
-      {shown.map((src, index) => {
+      {images.map((src, index) => {
         const spansBoth = images.length >= 3 && index === 0;
-        const showOverlay = hidden > 0 && index === shown.length - 1;
 
         return (
           <Box key={`${src}-${index}`} position="relative" gridColumn={spansBoth ? '1 / -1' : undefined}>
@@ -412,19 +410,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
               borderRadius={RADIUS_MD}
               background="var(--tt-surface-alt, #f5f5f7)"
             />
-            {showOverlay && (
-              <Center
-                position="absolute"
-                inset={0}
-                borderRadius={RADIUS_MD}
-                background="rgba(0, 0, 0, 0.45)"
-                color="white"
-                fontWeight={700}
-                fontSize="lg"
-              >
-                +{hidden}
-              </Center>
-            )}
+
           </Box>
         );
       })}
@@ -598,10 +584,10 @@ const PostBody = ({
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
+    {post.type === 'thingtime' && post.thing && <PostLinkedThings subjectId={post.id} value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
     {post.attachmentsTruncated && <Link to={`/thing/${encodeURIComponent(post.id)}`} style={{ fontSize: '0.8rem' }}>View all attachments on the original Thing</Link>}
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
@@ -776,7 +762,8 @@ const viewerAsAuthor = (user: any): FeedAuthor | null =>
         id: user.id,
         username: user.username,
         displayName: user.displayName ?? null,
-        avatarUrl: user.avatarUrl ?? null
+        avatarUrl: user.avatarUrl ?? null,
+        avatarPresentation: user.avatarPresentation
       }
     : null;
 
@@ -1381,6 +1368,7 @@ const CommentRow = (props: {
                 <MessageCircle size={13} strokeWidth={2.2} />
               </Flex>
               {reactControl}
+              {!pending && <PersistedThingMenu id={comment.id} label="Comment actions" openHref={`/post/${encodeURIComponent(comment.id)}`} />}
               {showVotesOnComments && commentUpdown}
               {(canReportComment || guestReportComment) && (
                 <Flex
@@ -2524,7 +2512,7 @@ function PostCardImpl(props: PostCardProps) {
             share copies a public original's tags, so a second chip row here
             would just duplicate it) */}
             <PostTextBody post={post} />
-            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (

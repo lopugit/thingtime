@@ -40,7 +40,7 @@ test('workspace-specific app names apply only to parallel development', async ()
 	const run = (isPackaged, env) => {
 		const calls = [];
 		const app = { isPackaged, setName: value => calls.push(['name', value]), setPath: (key, value) => calls.push([key, value]) };
-		require('node:vm').runInNewContext(setup, { process: { env }, require: name => name === 'electron' ? { app } : require(name) });
+		require('node:vm').runInNewContext(setup, { process: { env, argv: [] }, require: name => name === 'electron' ? { app } : require(name) });
 		return calls;
 	};
 	const env = { THINGTIME_DESKTOP_PARALLEL_DEV: '1', THINGTIME_DESKTOP_DEV_PROFILE: '/private/synthetic-profile', THINGTIME_DESKTOP_DEV_NAME: 'Thingtime Dev retention' };

@@ -7,6 +7,7 @@ import {
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
+import { attachmentBlobBytesForAccounting } from '../attachments/attachmentBlobs.ts';
 import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
 import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
 
@@ -21,6 +22,12 @@ export class InvalidAttachmentStorageEnvelopeError extends Error {
   }
 }
 
+export const thingStorageJsonPayload = (doc: { crystal?: unknown; extended?: unknown; tags?: unknown }) => ({
+  crystal: doc.crystal ?? null,
+  extended: doc.extended ?? null,
+  tags: doc.tags ?? []
+});
+
 // One versioned logical byte definition for every billable Thing. Ordinary
 // Things measure the exact UTF-8 JSON stored in the customer-controlled payload
 // fields. Protected attachment Things additionally add their verified root
@@ -29,6 +36,11 @@ export class InvalidAttachmentStorageEnvelopeError extends Error {
 // indexes, and replication remain excluded shared physical costs.
 export const thingStorageSizeBytes = (doc: {
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   crystal?: unknown;
   extended?: unknown;
   tags?: unknown;
@@ -40,12 +52,11 @@ export const thingStorageSizeBytes = (doc: {
   timelineNoteVersion?: unknown;
   secure?: unknown;
 }): number => {
+  const blobBytes = attachmentBlobBytesForAccounting(doc);
+  if (blobBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
+  if (blobBytes !== undefined) return blobBytes;
   const payloadBytes = Buffer.byteLength(
-    JSON.stringify({
-      crystal: doc.crystal ?? null,
-      extended: doc.extended ?? null,
-      tags: doc.tags ?? []
-    }),
+    JSON.stringify(thingStorageJsonPayload(doc)),
     'utf8'
   );
   const objectBytes = attachmentObjectSizeBytesForAccounting(doc);
@@ -67,6 +78,11 @@ export const thingStorageSizeBytes = (doc: {
 export const currentContentStorageSizeBytes = (doc: {
   schemaVersion?: unknown;
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   storageClass?: unknown;
   storageAccountingVersion?: unknown;
   sizeBytes?: unknown;
@@ -118,6 +134,7 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'post-discovery',
 	'lopu-recording-settings',

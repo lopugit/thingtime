@@ -9,9 +9,11 @@ import { COLLECTION_SCHEMA_VERSIONS, isProtectedThingtime } from '../../../schem
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 import { cloudFileSyncEntry, parseCloudFileCommit } from '../../../fileSync/cloudFile';
 function fixture() {
+ const verifiedFingerprints = new Map<string, any>();
  let docs = new Map<string, any>(), events = new Map<string, any>(), charged = 0, failAppend = false, fingerprints = 0, receiptReads = 0;
  const now = new Date('2026-10-17T00:00:00Z');
  const matches = (doc: any, filter: any) => Object.entries(filter).every(([k, v]: any) => {
+  if (v && typeof v === 'object' && '$gt' in v) return +doc[k] > +v.$gt;
   if (v && typeof v === 'object' && '$in' in v) return v.$in.some((x: any) => x == null ? doc[k] == null : doc[k] === x);
   return Array.isArray(doc[k]) && typeof v === 'string' ? doc[k].includes(v) : doc[k] instanceof Date && v instanceof Date ? +doc[k] === +v : doc[k] === v;
  });
@@ -23,7 +25,7 @@ function fixture() {
   transaction: async work => { const before = structuredClone({ docs, events, charged }); try { return await work({}); } catch (error) { docs = before.docs; events = before.events; charged = before.charged; throw error; } },
   fingerprint: async (_viewer, id) => { fingerprints++; const doc = docs.get(String(id)); if (!doc || doc.ownerId !== 'owner') return { ok: false, status: 404, error: 'missing' };
    return { ok: true, id: doc.shareId, version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId), size: 2,
-    fingerprint: { algorithm: 'sha256-parts-v1', ...contentPartPlan(2), sha256: doc.shareId.endsWith('1') ? 'a'.repeat(64) : 'b'.repeat(64) } }; },
+    fingerprint: verifiedFingerprints.get(String(id)) ?? { algorithm: 'sha256-parts-v1', ...contentPartPlan(2), sha256: doc.shareId.endsWith('1') ? 'a'.repeat(64) : 'b'.repeat(64) } }; },
   entries: async (_things, _owner, ids) => { receiptReads++; assert.ok(ids.length<=128); return ids.filter(id => events.has(id)).map(id => ({ event: structuredClone(events.get(id)) } as any)); },
   append: async (_things, event) => { if (failAppend) throw Error('append failed'); events.set(event.id, structuredClone(event)); return { event } as any; },
   debit: async (_owner, bytes) => { charged += bytes; }, lockFolder: async () => null
@@ -33,7 +35,7 @@ function fixture() {
   attachmentState: 'ready', attachmentPurpose: 'file', attachmentEnvelopeVersion: 1, objectKey: 'objects/'+id, objectVersionId: 'version-'+id, objectSizeBytes: 2,
   storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: now, updatedAt: now, ...patch };
   try { doc.sizeBytes = thingStorageSizeBytes(doc); } catch { doc.sizeBytes = 0; } docs.set(id, doc); return attachmentContentVersion(id, doc.objectKey, doc.objectVersionId); }
- return { service, upload, receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: (value = true) => { failAppend = value; } };
+ return { service, upload, setFingerprint: (id: string, value: any) => verifiedFingerprints.set(id, value), receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: (value = true) => { failAppend = value; } };
 }
 const input = (contentVersion: string) => ({ id: randomUUID(), operationId: randomUUID(), expectedRevision: null, name: 'fixture.bin', folderId: null, attachmentId: 'att1', contentVersion, trashed: false });
 test('stable identity, exact retries, retained versions, trash and restore share Timeline', async () => {
@@ -55,6 +57,48 @@ test('stable identity, exact retries, retained versions, trash and restore share
 test('a failed history transaction cannot bind uploads, charge metadata or publish a file', async () => {
  const f = fixture(); const create = input(f.upload('att1')); f.failAppend(); assert.equal((await f.service.commit('owner', create)).ok, false);
  assert.equal(f.docs().has(create.id), false); assert.equal(f.docs().get('att1').targetId, undefined); assert.equal(f.charged(), 0);
+});
+test('a terminal file fence occupies the original operation without publishing bytes or a file revision', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const fence = { kind: 'terminal-no-effect', id: create.id, operationId: create.operationId, expectedRevision: null };
+	const first: any = await f.service.fence('owner', fence);
+	assert.deepEqual(first, { ok: true, status: 'terminal', fence, replayed: false });
+	assert.deepEqual(await f.service.fence('owner', fence), { ok: true, status: 'terminal', fence, replayed: true });
+	assert.deepEqual(await f.service.read('owner', create.id, create.operationId), { ok: true, receipt: null, terminal: fence });
+	assert.equal(f.docs().has(create.id), false);
+	assert.equal(f.docs().get('att1').targetId, undefined);
+	const charged = f.charged(), fingerprints = f.fingerprints();
+	assert.equal((await f.service.commit('owner', create)).ok, false);
+	assert.equal(f.fingerprints(), fingerprints, 'the late original writer stops before byte lookup');
+	assert.equal(f.charged(), charged);
+	assert.equal(f.docs().has(create.id), false);
+	assert.equal(f.events().size, 1);
+	assert.equal((await f.service.fence('owner', { ...fence, expectedRevision: 'different' })).ok, false);
+});
+test('an already committed file wins the terminal fence without another effect or charge', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const committed: any = await f.service.commit('owner', create);
+	assert.equal(committed.ok, true);
+	const charged = f.charged(), count = f.events().size;
+	const result: any = await f.service.fence('owner', { kind: 'terminal-no-effect', id: create.id,
+		operationId: create.operationId, expectedRevision: create.expectedRevision });
+	assert.equal(result.status, 'complete');
+	assert.deepEqual(result.receipt.file, committed.file);
+	assert.equal(result.replayed, true);
+	assert.equal(f.charged(), charged);
+	assert.equal(f.events().size, count);
+	assert.deepEqual((await f.service.read('owner', create.id, create.operationId) as any).receipt.file, committed.file);
+	assert.equal((await f.service.fence('other', { kind: 'terminal-no-effect', id: create.id,
+		operationId: create.operationId, expectedRevision: null })).ok, false);
+});
+test('a forged terminal payload cannot impersonate the original file or operation identity', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const fence = { kind: 'terminal-no-effect' as const, id: create.id, operationId: create.operationId, expectedRevision: null };
+	assert.equal((await f.service.fence('owner', fence)).ok, true);
+	const event = [...f.events().values()][0];
+	event.after.value.id = randomUUID();
+	assert.equal((await f.service.read('owner', create.id, create.operationId)).ok, false);
+	assert.equal((await f.service.fence('owner', fence)).ok, false);
 });
 test('foreign, bound, blocked, expiring, linked or unaccounted bytes cannot be published', async () => {
  for (const patch of [{ ownerId: 'other' }, { targetId: 'other-file' }, { moderation: { status: 'blocked' } }, { attachmentExpiresAt: new Date() },
@@ -180,4 +224,41 @@ test('failed publication retains original sync provenance and rejects a differen
   assert.equal((await f.service.commit('owner', create)).ok, true);
   assert.deepEqual(f.docs().get('att1').attachmentFileSyncOrigin, origin);
   assert.equal(f.docs().get('att1').targetId, create.id);
+});
+
+test('link metadata must match verified ready attachment bytes and survives read, retention and restore', async () => {
+ const { symbolicLinkFingerprint } = await import('../../../fileSync/symbolicLink');
+ const { fileRestoreCommand, timelineFileVersion } = await import('../../../fileSync/fileVersions');
+ const f=fixture(), symbolicLink={format:'posix-symlink-v1' as const,targetBase64:'Li4='}, create={...input(f.upload('att1')),symbolicLink};
+ assert.equal((await f.service.commit('owner',create)).ok,false,'Metadata cannot claim unrelated ready bytes');assert.equal(f.docs().get('att1').targetId,undefined);
+ f.setFingerprint('att1',await symbolicLinkFingerprint(symbolicLink));
+ const first:any=await f.service.commit('owner',create);assert.equal(first.ok,true);assert.deepEqual(first.file.symbolicLink,symbolicLink);
+ assert.deepEqual((await f.service.read('owner',create.id) as any).file.symbolicLink,symbolicLink);
+ const ordinary:any=await f.service.commit('owner',{...create,symbolicLink:undefined,operationId:randomUUID(),expectedRevision:first.file.revision});assert.equal(ordinary.ok,true);assert.equal(ordinary.file.symbolicLink,undefined);
+ const restore=fileRestoreCommand(ordinary.file,first.file,randomUUID()), restored:any=await f.service.commit('owner',restore);assert.equal(restored.ok,true);assert.deepEqual(restored.file.symbolicLink,symbolicLink);
+ const event=f.events().get(restored.file.revision);assert.deepEqual(timelineFileVersion(event,'after')?.symbolicLink,symbolicLink);
+ const retained:any=await f.service.commit('owner',{...restore,kind:'retained-version',operationId:randomUUID(),expectedRevision:restored.file.revision});assert.equal(retained.ok,true);assert.deepEqual(timelineFileVersion(f.events().get(retained.file.revision),'after')?.symbolicLink,symbolicLink);
+ assert.equal((await f.service.commit('owner',{...restore,operationId:randomUUID(),expectedRevision:restored.file.revision,symbolicLink:{...symbolicLink,targetBase64:'Li4v'}})).ok,false,'Target-byte length mismatch must not publish');
+});
+
+test('trusted file composition requires an active outer transaction and propagates failure', async () => {
+ const f = fixture(), value = input(f.upload('att1'));
+ await assert.rejects(f.service.commit('owner', value, { session: {} }), /active transaction/);
+ assert.equal(f.docs().has(value.id), false);
+ f.failAppend(true);
+ await assert.rejects(f.service.commit('owner', value, { session: { inTransaction: () => true } }), /append failed/);
+});
+
+test('only trusted composition consumes a live owned import draft with its canonical binding', async () => {
+ const f = fixture(), version = f.upload('att1', { attachmentImportDraft: true, attachmentExpiresAt: new Date('2026-10-18T00:00:00Z') }), value = input(version);
+ assert.equal((await f.service.commit('owner', value)).ok, false);
+ assert.equal(f.docs().get('att1').targetId, undefined);
+ const result = await f.service.commit('owner', value, { session: { inTransaction: () => true }, consumeImportDraft: true });
+ assert.equal(result.ok, true); assert.equal(f.docs().get('att1').targetId, value.id); assert.equal(f.docs().get('att1').parentId, value.id);
+ assert.equal(f.docs().get('att1').attachmentImportDraft, false); assert.equal(f.docs().get('att1').attachmentExpiresAt, null);
+ assert.equal(f.docs().get('att1').sizeBytes, thingStorageSizeBytes(f.docs().get('att1')));
+ assert.equal(f.charged(), thingStorageSizeBytes(f.docs().get(value.id)), 'binding envelope changes do not charge the already reserved attachment bytes twice');
+ const expired = fixture(), expiredValue = input(expired.upload('att1', { attachmentImportDraft: true, attachmentExpiresAt: new Date('2026-10-16T00:00:00Z') }));
+ await assert.rejects(expired.service.commit('owner', expiredValue, { session: { inTransaction: () => true }, consumeImportDraft: true }), /ready file upload/);
+ assert.equal(expired.docs().get('att1').targetId, undefined);
 });

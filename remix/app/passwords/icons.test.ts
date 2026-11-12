@@ -9,7 +9,7 @@ import { exportPasswords, import1Pux, visitPasswordFile } from './transfer';
 import { exportOnePasswordItem } from './onePassword';
 import { zipSync, strToU8 } from 'fflate';
 import { settingsDocumentBlocks } from '../components/Settings/settingsDocument';
-import { passwordIconBlocks } from '../components/Passwords/passwordIconBlocks';
+import { passwordIconBlocks, migratePasswordIconBranding } from '../components/Passwords/passwordIconBlocks';
 const fileId = `att_${'a'.repeat(64)}`;
 const maxBytes = 16 * 1024 * 1024;
 test('icons require explicit HTTPS without credentials and favicon selects only the chosen origin', () => {
@@ -63,4 +63,27 @@ test('icon controls are individual reusable editable blocks with transient, unsa
   const serialized = JSON.stringify(blocks);
   for (const id of ['icon-upload', 'icon-url', 'icon-use-url', 'icon-website', 'icon-remove']) assert.ok(serialized.includes(`"id":"${id}"`));
   assert.equal(serialized.includes('https://'), false);
+});
+
+test('automatic Website help upgrades only the shipped copy and preserves authored style, text and deletion',()=>{
+ const old={id:'icon-help',type:'element',tag:'p',text:'Upload an image, or choose an HTTPS URL. URL icons contact that website anonymously when displayed. Some sites block private loading; upload the image if that happens.',css:{color:'rebeccapurple'}} as any;
+ const migrated=migratePasswordIconBranding([old]);assert.match(migrated[0].text as string,/Remove icon returns to automatic/);assert.strictEqual(migrated[0].css,old.css);
+ assert.strictEqual(migratePasswordIconBranding(migrated),migrated);
+ const authored=[{...old,text:'My custom icon help'}];assert.strictEqual(migratePasswordIconBranding(authored),authored);
+ const deleted:any[]=[];assert.strictEqual(migratePasswordIconBranding(deleted),deleted);
+});
+
+test('icon layout migration shrinks only shipped grid and native file control defaults', () => {
+ const legacyCss = { display: 'grid', gap: '10px', 'min-width': '0', margin: '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '10px' };
+ const upload: any = { id: 'icon-upload', type: 'element', tag: 'input', props: { type: 'file', name: 'icon-file' } };
+ const original: any[] = [{ id: 'icon-fields', type: 'element', tag: 'fieldset', css: legacyCss, children: [upload] }];
+ const migrated = migratePasswordIconBranding(original);
+ assert.equal(migrated[0].css?.['grid-template-columns'], 'minmax(0, 1fr)');
+ assert.equal(migrated[0].children?.[0].css?.['max-width'], '100%');
+ assert.deepEqual(original[0].css, legacyCss);
+ assert.equal(original[0].children[0].css, undefined);
+ assert.strictEqual(migratePasswordIconBranding(migrated), migrated);
+ const custom: any[] = [{ ...original[0], css: { ...legacyCss, padding: '24px' }, children: [{ ...upload, css: { width: '80%' } }] }];
+ assert.strictEqual(migratePasswordIconBranding(custom), custom);
+ const removed: any[] = []; assert.strictEqual(migratePasswordIconBranding(removed), removed);
 });

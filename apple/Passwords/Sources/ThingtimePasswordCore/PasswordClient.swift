@@ -55,6 +55,10 @@ public final class PasswordClient: @unchecked Sendable {
         let id: String?
         let revision: Int?
         let entry: PasswordEntry?
+        let settings: VerificationSettings?
+    }
+    private struct VerificationSettings: Decodable {
+        let reuseRecentDeviceVerification: Bool?
     }
     private func call(_ body: [String: Any]) async throws -> Reply {
         var request = URLRequest(url: account.origin.appendingPathComponent("api/v1/passwords"))
@@ -71,13 +75,14 @@ public final class PasswordClient: @unchecked Sendable {
     // The provider uses only these semantic operations. Origin and schema are
     // part of negotiation; a manifest from another account endpoint is invalid.
     static let capabilityRequirements = ["api.passwords": [1, 0, 0]]
-    static func compatibleCapabilities(_ data: Data, origin: URL) -> Bool {
+    static let verificationCapabilityRequirements = ["api.passwords": [1, 5, 0]]
+    static func compatibleCapabilities(_ data: Data, origin: URL, requirements: [String: [Int]] = capabilityRequirements) -> Bool {
         guard data.count < 512 * 1024,
               let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               manifest["schemaVersion"] as? Int == 1,
               manifest["origin"] as? String == origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
               let features = manifest["features"] as? [String: [String: Any]] else { return false }
-        for (feature, minimum) in capabilityRequirements {
+        for (feature, minimum) in requirements {
             guard let version = features[feature]?["version"] as? String,
                   version.range(of: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else { return false }
             let parts = version.split(separator: ".").compactMap { Int($0) }
@@ -87,10 +92,21 @@ public final class PasswordClient: @unchecked Sendable {
         return true
     }
     public func requireCapability() async throws {
+        try await requireCapability(Self.capabilityRequirements)
+    }
+    private func requireCapability(_ requirements: [String: [Int]]) async throws {
         var request = URLRequest(url: account.origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, _) = try await receive(request)
-        guard Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.incompatibleService }
+        guard Self.compatibleCapabilities(data, origin: account.origin, requirements: requirements) else { throw PasswordProviderError.incompatibleService }
+    }
+    // Fetch on every operation. An old or unavailable server may still serve
+    // credentials, but must never enable recent-unlock reuse through a default.
+    public func deviceVerificationReuseAllowed() async throws -> Bool {
+        try await requireCapability(Self.verificationCapabilityRequirements)
+        let reply = try await call(["operation": "verification-settings"])
+        guard let allowed = reply.settings?.reuseRecentDeviceVerification else { throw PasswordProviderError.invalidResponse }
+        return allowed
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()

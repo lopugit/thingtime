@@ -10,6 +10,7 @@ on:
       - electron/**
       - MCP/**
       - macos/**
+      - filesystem-indexer/**
       - remix/**
       - .github/workflows/electron-pr-release.yml
   workflow_dispatch:

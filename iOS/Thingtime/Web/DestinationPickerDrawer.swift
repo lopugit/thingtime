@@ -11,6 +11,8 @@ struct DestinationPickerDrawer: View {
     let onClose: () -> Void
     let onWidgetSettings: () -> Void
     let onMail: () -> Void
+    let onScan: () -> Void
+    let onSharedDrafts: () -> Void
 
     @State private var expandedDeploymentSectionIDs: Set<String>
 
@@ -24,7 +26,9 @@ struct DestinationPickerDrawer: View {
         onRefreshDeployments: @escaping () async -> Void,
         onClose: @escaping () -> Void,
         onWidgetSettings: @escaping () -> Void = {},
-        onMail: @escaping () -> Void = {}
+        onMail: @escaping () -> Void = {},
+        onScan: @escaping () -> Void = {},
+        onSharedDrafts: @escaping () -> Void = {}
     ) {
         self.deploymentSections = deploymentSections
         self.staticDestinations = staticDestinations
@@ -36,6 +40,8 @@ struct DestinationPickerDrawer: View {
         self.onClose = onClose
         self.onWidgetSettings = onWidgetSettings
         self.onMail = onMail
+        self.onScan = onScan
+        self.onSharedDrafts = onSharedDrafts
 
         let selectedSectionID = deploymentSections.first(where: { section in
             section.deployments.contains(where: { $0.id == selectedDestinationID })
@@ -53,6 +59,24 @@ struct DestinationPickerDrawer: View {
                 onClose: onClose
             )
 
+            Button(action: onScan) {
+                HStack(spacing: 12) {
+                    Image(systemName: "viewfinder")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("LiDAR scans").font(.body.weight(.medium))
+                        Text("Browse scans and capture a space").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
+                .padding(12)
+            }
+            .buttonStyle(.plain)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .accessibilityIdentifier("native-open-lidar-scanner")
+
             Button(action: onMail) {
                 Label("Mail", systemImage: "envelope")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,6 +87,17 @@ struct DestinationPickerDrawer: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
             .accessibilityIdentifier("native-open-mail")
+
+            Button(action: onSharedDrafts) {
+                Label("Shared drafts", systemImage: "square.and.pencil")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal, 12)
+            }
+            .buttonStyle(.plain)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .accessibilityIdentifier("native-open-shared-drafts")
 
             Button(action: onWidgetSettings) {
                 Label("Widget settings", systemImage: "square.grid.2x2")

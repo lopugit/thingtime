@@ -2,11 +2,35 @@ import { compositionAttachmentIds } from '../../api/utils/actions/compositionMed
 import { rewriteComposition } from '../../api/utils/actions/forkCompositionCore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { expandedComponentBlock, templateEachRows, templateEachRowScope, templateToBlocks, resolveBlockProps } from './templateBlocks';
+import { expandedComponentBlock, resolveBlockArguments, templateEachRows, templateEachRowScope, templateToBlocks, resolveBlockProps } from './templateBlocks';
 import { copyBoundedJson } from '../../utils/boundedJson';
 import { sanitizeWebpageBlocks } from '../../schemas/registry';
 import { compositionReferences } from '../../api/utils/actions/sharedCompositionCore';
 import { duplicateBlock, moveBlock, findBlock, requiresEditableIntrinsicContract } from './webpageBlocks';
+
+test('explicit argument bindings preserve literal values, expansion and missing-row resets', () => {
+ const block: any = { id: 'instance', type: 'component', component: 'record-view',
+  args: { id: 'fallback', literal: '{item.id}' }, argBindings: { id: '{item.id}', enabled: false, index: 0 } };
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-a' } }),
+  { id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-b' } }),
+  { id: 'record-b', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, {}).id, '');
+ assert.equal(resolveBlockArguments(block, { item: { id: '{viewer.id}' }, viewer: { id: 'protected' } }).id, '{viewer.id}');
+ assert.deepEqual(resolveBlockArguments({ ...block, args: {}, argBindings: { enabled: '{item.enabled}', index: '{item.index}' } },
+  { item: { enabled: false, index: 0 } }), { enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, { item: { id: { executable: true } } }).id, '');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }).literal, '{item.id}');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }, true).literal, 'record-a');
+ const expanded = expandedComponentBlock(block, { savedArgs: { saved: '{item.id}' },
+  args: [{ name: 'defaultLiteral', type: 'string', default: '{item.id}' }] }, []);
+ assert.deepEqual(expanded.argBindings, block.argBindings);
+ assert.deepEqual(resolveBlockArguments(expanded, { item: { id: 'record-a' } }),
+  { defaultLiteral: '{item.id}', saved: '{item.id}', id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(sanitizeWebpageBlocks([expanded]).ok, true);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { id: { executable: true } } }]).ok, false);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { constructor: 'unsafe' } }]).ok, false);
+});
 let next = 0;
 const id = (kind: string) => `${kind}-${++next}`;
 
@@ -96,6 +120,7 @@ test('route controls expand into separately editable fields and repeated rows wi
   { tag: 'tt-form', props: { identityName: 'id' }, children: [
    { tag: 'label', children: ['Address', { tag: 'tt-change', props: { inputPath: 'query', 'data-tt-action': 'suggest', 'data-tt-action-inputs': { vaultId: '{vaultId}' } }, children: [{ tag: 'input', props: { name: 'query', value: '{query.value}' } }] }] },
    { tag: 'tt-select', props: { name: 'favoriteId', optionsPath: 'result.favorites', labelPath: 'crystal.title' } },
+   { tag: 'tt-upload', props: { name: 'markerAvatar', imageOnly: true, value: { ttArg: 'result.record.crystal.markerAvatar' } } },
    { tag: 'button', ttAction: 'save-stop', children: ['Save stop'] }
   ] },
   { tag: 'tt-collection', props: { itemsPath: 'result.items', itemTemplate: { ttTemplate: { tag: 'article', children: [
@@ -107,10 +132,11 @@ test('route controls expand into separately editable fields and repeated rows wi
  ] }, kind => `${kind}-${++nextId}`);
  const flat = (rows: any[]): any[] => rows.flatMap(row => [row, ...flat(row.children || [])]);
  const all = flat(blocks);
- for (const tag of ['tt-style', 'tt-form', 'tt-change', 'input', 'tt-select', 'button', 'strong', 'tt-mapbox'])
+ for (const tag of ['tt-style', 'tt-form', 'tt-change', 'input', 'tt-select', 'tt-upload', 'button', 'strong', 'tt-mapbox'])
   assert.ok(all.some(row => row.tag === tag), tag);
  assert.equal(new Set(all.map(row => row.id)).size, all.length);
  assert.equal(requiresEditableIntrinsicContract(blocks), true);
+ assert.equal(requiresEditableIntrinsicContract(blocks, ['tt-upload']), true);
  assert.ok(all.some(row => row.type === 'collection' && row.props?.itemsPath === 'last.result.suggestions' && row.props?.maxItems === 20));
  assert.ok(all.some(row => row.props?.['data-tt-action'] === 'remove-stop' && row.props?.['data-tt-action-inputs']?.id === '{item.id}'));
  const saved = sanitizeWebpageBlocks([{ id: 'scope', type: 'container', source: { action: 'read-route', inputs: { routeId: '{query.routeId}' } }, args: { vaultId: 'vault-reference' }, children: blocks }]);
@@ -140,4 +166,19 @@ test('converted ttEach preserves primitive rows, object entries, aliases and emp
  assert.equal(converted[0].props?.templateEach, true);
  assert.equal(converted[0].props?.empty, 'None for {query.name}');
  assert.throws(() => templateToBlocks({ ttEach: { arg: 'result.items', empty: { tag: 'p', children: ['No rows'] }, node: { tag: 'span' } } }, id), /empty branch/);
+});
+
+test('editable collection paging and map selection properties survive conversion and save', () => {
+ const props = { source: { action: 'read-page', offsetInput: 'offset', limitInput: 'limit', totalPath: 'total' }, selectedKey: '{query.id}', itemKey: 'id', revealSelected: true, totalPath: 'result.total', itemTemplate: { ttTemplate: { tag: 'p', children: ['{item.name}'] } } };
+ const blocks = templateToBlocks({ tag: 'tt-collection', props }, id);
+ const saved = sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok, true);
+ if (!saved.ok) return;
+ const savedProps = saved.blocks[0].props as Record<string, unknown>;
+ assert.deepEqual(savedProps.source, props.source);
+ assert.equal(savedProps.selectedKey, props.selectedKey);
+ assert.equal(savedProps.revealSelected, true);
+ const map = sanitizeWebpageBlocks([{ id: 'map', type: 'element', tag: 'tt-mapbox', props: { onSelectQueryParams: { view: 'places' } } }]);
+ assert.equal(map.ok, true);
+ if (map.ok) assert.deepEqual(map.blocks[0].props, { onSelectQueryParams: { view: 'places' } });
 });

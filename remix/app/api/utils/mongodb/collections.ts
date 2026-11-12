@@ -30,7 +30,9 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     // LRU touch — Map iteration order is insertion order
     clientCache.delete(uri);
     clientCache.set(uri, cached);
-    return cached;
+    const client = await cached;
+    mongoConnectionTracker.recordAccess(client);
+    return client;
   }
 
   const entry = (async () => {
@@ -85,7 +87,9 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     stale?.then((client: any) => client.close()).catch(() => {});
   }
 
-  return entry;
+  const client = await entry;
+  mongoConnectionTracker.recordAccess(client);
+  return client;
 };
 
 // Observability may reuse a home client, but must never create or warm one.
@@ -219,21 +223,29 @@ const adoptVersionedCollections = async (db: any) => {
 // includes the adoption pass, so no caller can reach a collection handle
 // before legacy names have been (re)checked.
 let homeDbPromise: Promise<any> | null = null;
+let homeDbClient: any = null;
 
 const getRawHomeThingtimeDb = async () => {
   await requireGatewayDatabaseAccess();
   if (!homeDbPromise) {
     homeDbPromise = (async () => {
-      const db = (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
+      const client = await getClientCachedFor(getMongoUri(), true);
+      const db = client.db('thingtime');
+      homeDbClient = client;
       await adoptVersionedCollections(db);
       return db;
     })().catch((err) => {
       // don't cache a failed connection/adoption — let the next call retry
       homeDbPromise = null;
+      homeDbClient = null;
       throw err;
     });
   }
-  return homeDbPromise;
+  const db = await homeDbPromise;
+  // A warm database handle bypasses getClientCachedFor. Attribute its use at
+  // this canonical access boundary too; the request context deduplicates it.
+  if (homeDbClient) mongoConnectionTracker.recordAccess(homeDbClient);
+  return db;
 };
 
 // Keep identity reads available for authenticated repair; gate every normal
@@ -1769,6 +1781,7 @@ registerGatewayDrain(async () => {
   clientCache.clear();
   customIndexesEnsured.clear();
   homeDbPromise = null;
+  homeDbClient = null;
   indexesEnsured = null;
   ensuredFingerprint = null;
   homeRelationshipKeys = null;

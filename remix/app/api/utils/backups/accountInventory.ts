@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import {
 	backupDraftProjection,
 	backupDraftFromDoc,
@@ -33,13 +34,17 @@ import { CLOUD_FILE_ADAPTER, parseCloudFile } from '../../../fileSync/cloudFile'
 import { timelineScopeKey } from '../../../timeline/contract';
 import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, backupId, backupJson, parseBackupItem, type BackupItem } from '../../../backups/manifest';
 import { prepareBackup, type BackupAccess, type BackupObjectStore } from './portableBackup';
+import { openBackupReferenceIndex, BACKUP_REFERENCE_COVERAGE_ADAPTER, parseBackupReferenceEvidence, BACKUP_SOURCE_EXCLUSION_ADAPTER, parseBackupSourceExclusion } from './storedReferences';
+import { createHash } from 'node:crypto';
+import { accountContentValue } from '../../../timeline/accountContent';
+import { backupNotificationProjection, backupNotificationSnapshotFromDoc, retainBackupNotification } from './notificationSnapshots';
 
 export const ACCOUNT_INVENTORY_PAGE_SIZE = 128;
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 // Census reads never fetch crystal, secure, tokens, grants or private envelopes.
 // Dedicated Timeline and account adapters decode only their approved content.
-const censusProjection = { _id: 0, shareId: 1, ownerId: 1, thingtime: 1 };
-const contentProjection = {
+export const censusProjection = { _id: 0, shareId: 1, ownerId: 1, thingtime: 1 };
+export const contentProjection = {
 	...censusProjection,
 	crystal: 1,
 	extended: 1,
@@ -50,43 +55,49 @@ const contentProjection = {
 	geo: 1,
 	timelineHeadId: 1
 };
-const fileProjection = {
+export const fileProjection = {
 	...censusProjection,
 	timelineHeadId: 1,
 	folderId: 1,
 	'crystal.name': 1,
 	'crystal.trashed': 1,
-	'crystal.content': 1
+	'crystal.content': 1,
+ 'crystal.symbolicLink': 1
 };
-type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account';
+export type Census = { shareId: string; ownerId: string; thingtime: string[] };
+export type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account' | 'notification' | 'excluded-authority';
 type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference | BackupProfileAttachmentReference;
-function family(doc: Census): Family {
+export function family(doc: Census, supportedContentOnly = false): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
 		!doc.thingtime.length ||
-		doc.thingtime.length > 64 ||
-		doc.thingtime.some((kind) => typeof kind !== 'string' || !id(kind))
+		doc.thingtime.some((kind) => typeof kind !== 'string' || !kind || kind.trim() !== kind)
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'user') return 'account';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'draft') return 'draft';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'theme') return 'theme';
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'notification') return 'notification';
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'subscription') return 'excluded-authority';
+	if (doc.thingtime.length === 1 && ['backup-job', 'backup-job-event'].includes(doc.thingtime[0])) return 'excluded-authority';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
-	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind)))
-		throw Error('Account snapshot needs a dedicated adapter for a managed Thing; no complete inventory was published');
+	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind))) {
+		if (supportedContentOnly) return 'excluded-authority';
+		throw Error(`Account snapshot needs a dedicated adapter for managed Thing family ${doc.thingtime.join('+')}; no complete inventory was published`);
+	}
 	return 'content';
 }
-function fileItem(doc: any, ordinal: number): BackupItem {
+export function fileItem(doc: any, ordinal: number): BackupItem {
 	const file = parseCloudFile({
 		id: doc.shareId,
 		revision: doc.timelineHeadId,
 		folderId: doc.folderId ?? null,
 		name: doc.crystal?.name,
 		trashed: doc.crystal?.trashed,
-		content: doc.crystal?.content
+		content: doc.crystal?.content,
+  ...(doc.crystal?.symbolicLink ? { symbolicLink: doc.crystal.symbolicLink } : {})
 	});
 	return parseBackupItem({
 		ordinal,
@@ -110,8 +121,10 @@ export function createAccountInventoryProducer(
 		snapshot<T>(work: (session: any) => Promise<T>): Promise<T>;
 		customPlane(): boolean;
 		attachmentHead(input: { objectKey: string; versionId: string }): Promise<AttachmentObjectHead>;
-	}> = {}
+	}> = {}, options: { selection?: 'strict-account' | 'supported-content' } = {}
 ) {
+	const selection = options.selection ?? 'strict-account';
+	if (!['strict-account', 'supported-content'].includes(selection)) throw Error('Invalid backup source selection');
 	const deps = {
 		collection: getHomeThingsCollection,
 		snapshot: withHomeMongoSnapshot,
@@ -139,16 +152,18 @@ export function createAccountInventoryProducer(
 		const heads = new Map<string, AttachmentObjectHead>();
 		const readAttachmentHead = async (doc: any) => {
 			await check();
-			const key = JSON.stringify([doc.shareId, doc.objectKey, doc.objectVersionId, doc.objectSizeBytes]);
+			const physical = attachmentPhysicalObject(doc);
+      const key = JSON.stringify([physical.objectKey, physical.versionId, doc.objectSizeBytes]);
 			if (heads.has(key)) return heads.get(key)!;
-			const value = await deps.attachmentHead({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+			const value = await deps.attachmentHead({ objectKey: physical.objectKey, versionId: physical.versionId! });
 			await check();
 			if (heads.size >= ACCOUNT_INVENTORY_PAGE_SIZE) heads.delete(heads.keys().next().value!);
 			heads.set(key, value);
 			return value;
 		};
 		const collection = await deps.collection();
-		return deps.snapshot(async (session) => {
+		const referenceIndex = await openBackupReferenceIndex(scope.ownerId);
+		try { return await deps.snapshot(async (session) => {
 			if (!session?.snapshotEnabled || session.inTransaction()) throw Error('Account inventory requires a read-only snapshot session');
 			const queryRows = async function* (
 				filter: Record<string, unknown>,
@@ -184,9 +199,13 @@ export function createAccountInventoryProducer(
 						if (timeline) timelineBackupRecordFromDoc(row);
 						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
 						else if (projection === backupThemeProjection) backupThemeSnapshotFromDoc(row);
+						else if (projection === backupNotificationProjection) backupNotificationSnapshotFromDoc(row);
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
 							if (projection === backupAttachmentProjection) {
+								// Only the portable policy status is relevant; provider stamps
+								// contain Dates/diagnostics and must never enter JSON export.
+								if ('moderation' in bounded) bounded.moderation = { status: bounded.moderation?.status ?? null };
 								for (const key of ['attachmentExpiresAt', 'attachmentPartsIssuedAt', 'attachmentMpuEmptyVerifiedAt']) {
 									if (bounded[key] instanceof Date) bounded[key] = bounded[key].toISOString();
 								}
@@ -279,7 +298,7 @@ export function createAccountInventoryProducer(
 					doc.ownerId !== scope.ownerId ||
 					doc.shareId !== head.shareId ||
 					JSON.stringify(doc.thingtime) !== JSON.stringify(head.thingtime) ||
-					family(doc) !== kind
+					family(doc, selection === 'supported-content') !== kind
 				)
 					throw Error('Account snapshot content changed');
 			};
@@ -293,7 +312,8 @@ export function createAccountInventoryProducer(
 					for (const row of page) {
 						if (!id(row.shareId) || row.shareId <= last || row.ownerId !== scope.ownerId) throw Error('Account inventory identity is ambiguous');
 						last = row.shareId;
-						const kind = family(row),
+						referenceIndex.addIdentity(row.shareId, row.thingtime);
+						const kind = family(row, selection === 'supported-content'),
 							group = groups.get(kind) ?? [];
 						group.push(row);
 						groups.set(kind, group);
@@ -305,33 +325,47 @@ export function createAccountInventoryProducer(
 					// Bounded family batches, never a payload query per Thing. Large
 					// Timeline/draft envelopes use eight rows (at most ~32 MiB of content).
 					for (const [kind, group] of groups) {
-						const batchSize = kind === 'timeline' || kind === 'draft' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
+						const batchSize = kind === 'timeline' || kind === 'draft' || kind === 'notification' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
+							if (kind === 'excluded-authority') {
+								for (const row of expected) {
+									const excludedFamily = row.thingtime.join('+'), legacy = excludedFamily === 'subscription';
+									referenceIndex.addExcludedAuthority(row.shareId, excludedFamily);
+									const snapshot = { adapter: BACKUP_SOURCE_EXCLUSION_ADAPTER, version: legacy ? 1 : 2,
+										value: { family: excludedFamily, reason: legacy ? 'live-entitlement-authority' : ['backup-job', 'backup-job-event'].includes(excludedFamily) ? 'live-worker-authority' : 'unsupported-managed-adapter' } };
+									parseBackupSourceExclusion(snapshot);
+									projected.set(row.shareId, parseBackupItem({ ordinal: ordinals.get(row.shareId), thingId: row.shareId, revision: 'excluded-' + createHash('sha256').update(backupJson(snapshot)).digest('hex'), snapshot, content: null }));
+								}
+								continue;
+							}
 							if (kind === 'account') {
 								if (expected.length !== 1 || expected[0].shareId !== scope.ownerId) throw Error('Account snapshot identity is ambiguous');
 								const guardedAccess = { ...access, scope, authorize: check };
 								const snapshot = await readBackupAccountContent(guardedAccess, session, async () => collection);
 								boundary();
 								await verifyReferences(backupProfileAttachmentReferences(snapshot));
+								const account = accountContentValue(snapshot);
+								referenceIndex.addSelection(scope.ownerId, 'theme', account.preferences.activeThemeId);
+								referenceIndex.addSelection(scope.ownerId, 'feed-algorithm', account.preferences.activeFeedAlgorithmId);
 								const entry = await retainBackupAccountContent(store, snapshotId, ordinals.get(scope.ownerId)!, snapshot, guardedAccess);
 								boundary();
 								projected.set(scope.ownerId, entry);
 								continue;
 							}
-							if (kind === 'content' || kind === 'theme') {
+							if (kind === 'content' || kind === 'theme' || kind === 'notification') {
 								// Process one large canonical record at a time. Never collect 128
 								// potentially large payloads in addition to the driver's wire batch.
 								let count = 0;
 								for await (const doc of queryRows(
 									{ shareId: { $in: expected.map((row) => row.shareId) } },
-									kind === 'theme' ? backupThemeProjection : contentProjection,
+									kind === 'theme' ? backupThemeProjection : kind === 'notification' ? backupNotificationProjection : contentProjection,
 									batchSize
 								)) {
 									await check();
 									boundary();
 									sameRow(doc, expected[count++], kind);
-									const retain = kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
+									const retain = kind === 'theme' ? retainBackupThemeSnapshot : kind === 'notification' ? retainBackupNotification : retainBackupThingSnapshot;
 									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
 										...access,
 										scope,
@@ -339,6 +373,7 @@ export function createAccountInventoryProducer(
 									});
 									boundary();
 									projected.set(doc.shareId, entry);
+									if (kind === 'content') referenceIndex.addContent(doc);
 								}
 								if (count !== expected.length) throw Error('Account snapshot content is incomplete');
 								continue;
@@ -387,6 +422,7 @@ export function createAccountInventoryProducer(
 								}
 								boundary();
 								projected.set(doc.shareId, entry);
+								if (kind === 'attachment') referenceIndex.addAttachment(attachments!.get(doc.shareId)!, doc.attachmentExpiresAt == null && !doc.attachmentImportDraft);
 							}
 						}
 					}
@@ -403,6 +439,16 @@ export function createAccountInventoryProducer(
 				}
 				boundary();
 				await check();
+				await referenceIndex.validate(async () => { await check(); boundary(); }, access.signal);
+				let evidencePage = 0;
+				for await (const evidence of referenceIndex.evidencePages()) {
+					await check(); boundary();
+					const thingId = `~.backup-coverage:${snapshotId}:${String(evidencePage).padStart(16, '0')}`;
+					if (referenceIndex.hasIdentity(thingId)) throw Error('Backup coverage identity collides with a source Thing');
+					const snapshot = { adapter: BACKUP_REFERENCE_COVERAGE_ADAPTER, version: 1, value: { ...evidence, page: evidencePage++ } };
+					parseBackupReferenceEvidence(snapshot);
+					yield parseBackupItem({ ordinal: ordinal++, thingId, revision: 'snapshot-' + createHash('sha256').update(backupJson(snapshot)).digest('hex'), snapshot, content: null });
+				}
 			}
 			return prepareBackup(
 				store,
@@ -412,14 +458,15 @@ export function createAccountInventoryProducer(
 					scope,
 					boundary: { kind: 'point-in-time', token, startedAt: occurredAt, completedAt: occurredAt },
 					coverage: {
-						selectionId: `owned-things:${scope.ownerId}`,
+						selectionId: `${selection === 'supported-content' ? 'supported-owned-things' : 'owned-things'}:${scope.ownerId}`,
 						description:
-							'All owned Things in home storage at one database snapshot; unsupported managed families refuse the entire inventory. User records retain approved profile content and private preferences only; credentials and security state, settings outside this collection and other devices require separate producers.'
+							(selection === 'supported-content' ? 'Explicit supported-content selection: unsupported managed families are retained only as exclusion metadata, never their private envelopes. ' : '') +
+							'Owned home Things at one database snapshot, with manifest-bound reference coverage evidence distinguishing closed, unresolved and unsupported traversal. Dangling or external pointers are preserved as data, never grants or complete functional restore coverage. This is not whole-account coverage: credentials and security state, external settings, device-local state and authorized foreign/public/system dependency capture require separate producers.'
 					}
 				},
 				rows(),
 				{ ...access, scope, authorize: check }
 			);
-		});
+		}); } finally { await referenceIndex.close(); }
 	};
 }

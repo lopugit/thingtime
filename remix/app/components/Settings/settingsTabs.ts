@@ -23,6 +23,7 @@ export function resolveSettingsTab(value?: string | null, hash = ''): SettingsTa
 	// Keep existing section bookmarks and links working after introducing tabs.
 	if (hash === '#ai-waterfalls') return 'ai-waterfalls';
 	if (hash === '#password-manager') return 'passwords';
+	if (hash === '#connector-confirmations') return 'connections';
 	if (hash === '#secure-vault') return 'security';
 	if (hash === '#lopu' || hash === '#lopu-instructions') return 'lopu';
 	if (hash === '#lopu-accounts' || hash === '#lopu-base-prompt') return 'admin';

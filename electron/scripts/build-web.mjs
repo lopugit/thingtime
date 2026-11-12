@@ -64,7 +64,11 @@ const pnpmRunner = pnpmExecPath
     ? { command: process.execPath, args: [pnpmExecPath] }
     : { command: pnpmExecPath, args: [] }
   : { command: corepackCommand, args: ['pnpm'] };
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+// Node cannot spawn a .cmd shim without a shell. Use npm's actual JS entry on
+// Windows so paths/arguments never pass through command interpolation.
+const npmRunner = process.platform === 'win32'
+  ? { command: process.execPath, args: [path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')] }
+  : { command: 'npm', args: [] };
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -95,10 +99,14 @@ function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
 
+// Mail and database staging resolve packages from Remix before its build runs.
+// Repair fresh-worktree dependency links through the shared preflight first.
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-dependencies.js')]);
+
 // MCP has its own npm lockfile and is not part of the Remix pnpm workspace.
 // Install it from that lockfile before the expensive web build, including in a
 // fresh worktree where MCP/node_modules is intentionally absent.
-run(npmCommand, ['ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
+run(npmRunner.command, [...npmRunner.args, 'ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
 run(process.execPath, [path.join(electronDir, 'scripts/build-mail.mjs')]);
 run(process.execPath, [path.join(electronDir, 'scripts/build-database.mjs')]);
 
@@ -107,7 +115,10 @@ await rm(stagedAiDir, { force: true, recursive: true });
 await rm(remixOutputDir, { force: true, recursive: true });
 
 runRemixScript('ensure-bcrypt');
-runRemixScript('pre-dev');
+// The desktop build needs pinned Mapbox assets and branch metadata, not the
+// local-development .env writer (a Bash script unavailable on native Windows).
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-mapbox-assets.mjs')]);
+process.env.THINGTIME_BRANCH_NAME ||= readGitValue(['branch', '--show-current']) || 'unknown';
 runRemixScript('build:client');
 runRemixScript('sync:nitro-template');
 runRemixScript('build:server', {
@@ -115,6 +126,18 @@ runRemixScript('build:server', {
     NITRO_PRESET: 'node_middleware'
   }
 });
+
+if (process.platform === 'win32') {
+  const fromRemix = createRequire(path.join(remixDir, 'package.json'));
+  const resvgManifest = fromRemix.resolve('@resvg/resvg-js/package.json');
+  const fromResvg = createRequire(resvgManifest);
+  const binding = `@resvg/resvg-js-win32-${process.arch}-msvc`;
+  const modules = path.join(remixOutputDir, 'server', 'node_modules');
+  const packages = [['@resvg/resvg-js', resvgManifest], [binding, fromResvg.resolve(`${binding}/package.json`)]];
+  for (const [name, manifest] of packages) {
+    await cp(path.dirname(manifest), path.join(modules, name), { dereference: true, recursive: true });
+  }
+}
 
 run(pnpmRunner.command, [...pnpmRunner.args, '--dir', mcpDir, 'run', 'build:desktop']);
 

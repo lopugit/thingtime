@@ -4,16 +4,24 @@ import OSLog
 
 @MainActor
 protocol NativeUploadBackgroundTask: AnyObject {
+    var identity: AnyObject { get }
     var expiration: (() -> Void)? { get set }
     var progress: Progress { get }
     func update(subtitle: String)
     func complete(success: Bool)
 }
+extension NativeUploadBackgroundTask { var identity: AnyObject { self } }
+
 @MainActor
 protocol NativeUploadBackgroundScheduling: AnyObject {
     func register(_ handler: @escaping (NativeUploadBackgroundTask) -> Void) -> Bool
     func submit() throws
+    func submit(title: String, subtitle: String) throws
     func cancel()
+}
+
+extension NativeUploadBackgroundScheduling {
+    func submit(title: String, subtitle: String) throws { try submit() }
 }
 
 /// One registered system identifier and one in-flight lease. A cancelled request
@@ -29,24 +37,36 @@ final class NativeUploadBackgroundCoordinator {
     private var registered = false
     private var activated = false
     private var pending: NativeUploadBackgroundLease?
+    // Weak identity remembers delivery, never authority. A repeated callback
+    // after release must not complete the same OS task a second time.
+    private let delivered = NSHashTable<AnyObject>.weakObjects()
     init(scheduler: NativeUploadBackgroundScheduling?) { self.scheduler = scheduler }
     func activate() {
         guard !activated else { return }; activated = true
         registered = scheduler?.register { [weak self] task in
-            guard let lease = self?.pending else { task.complete(success: false); return }
+            guard let self else { task.complete(success: false); return }
+            guard !self.delivered.contains(task.identity) else { return }
+            self.delivered.add(task.identity)
+            guard let lease = self.pending else { task.complete(success: false); return }
             lease.accept(task)
         } ?? false
     }
     func begin(size: Int64, timeoutNanoseconds: UInt64 = 2_000_000_000,
                expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
-        guard registered, let scheduler, pending == nil, !Task.isCancelled, size > 0, size < Int64.max else { return nil }
-        let lease = NativeUploadBackgroundLease(size: size, cancel: { scheduler.cancel() }, expired: expired,
+        guard size > 0, size < Int64.max else { return nil }
+        return await begin(presentation: .init(title: "Uploading to Thingtime", subtitle: "Preparing your file…",
+            completedSubtitle: "File uploaded", bytes: size), timeoutNanoseconds: timeoutNanoseconds, expired: expired)
+    }
+    func begin(presentation: NativeUploadBackgroundLease.Presentation, timeoutNanoseconds: UInt64 = 2_000_000_000,
+               expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
+        guard registered, let scheduler, pending == nil, !Task.isCancelled else { return nil }
+        let lease = NativeUploadBackgroundLease(presentation: presentation, cancel: { scheduler.cancel() }, expired: expired,
             released: { [weak self] value in if self?.pending === value { self?.pending = nil } })
         pending = lease
         return await withTaskCancellationHandler(operation: {
             await withCheckedContinuation { continuation in
                 lease.wait(continuation, timeoutNanoseconds: timeoutNanoseconds)
-                do { try scheduler.submit() } catch { lease.submissionFailed() }
+                do { try scheduler.submit(title: presentation.title, subtitle: presentation.subtitle) } catch { lease.submissionFailed() }
             }
         }, onCancel: { Task { @MainActor in lease.finish(success: false) } })
     }
@@ -54,19 +74,27 @@ final class NativeUploadBackgroundCoordinator {
 
 @MainActor
 final class NativeUploadBackgroundLease {
+    struct Presentation {
+        let title: String
+        let subtitle: String
+        let completedSubtitle: String
+        var bytes: Int64?
+    }
     private enum State { case waiting, active, cancelledBeforeLaunch, finished }
     private var state: State = .waiting
     private var systemTask: NativeUploadBackgroundTask?
     private var continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>?
     private var deadline: Task<Void, Never>?
-    private let size: Int64
+    private let presentation: Presentation
     private let cancel: () -> Void
     private let expired: () -> Void
     private let released: (NativeUploadBackgroundLease) -> Void
+    private(set) var measuredUnits: Int64 = 0
+    private(set) var lastProgressAt: Date?
     var canContinue: Bool { state == .active }
-    init(size: Int64, cancel: @escaping () -> Void, expired: @escaping () -> Void,
+    init(presentation: Presentation, cancel: @escaping () -> Void, expired: @escaping () -> Void,
          released: @escaping (NativeUploadBackgroundLease) -> Void) {
-        self.size = size; self.cancel = cancel; self.expired = expired; self.released = released
+        self.presentation = presentation; self.cancel = cancel; self.expired = expired; self.released = released
     }
     func wait(_ continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>, timeoutNanoseconds: UInt64) {
         self.continuation = continuation
@@ -80,13 +108,18 @@ final class NativeUploadBackgroundLease {
         let waiting = continuation; continuation = nil; waiting?.resume(returning: lease)
     }
     func accept(_ task: NativeUploadBackgroundTask) {
+        if state == .active, systemTask?.identity === task.identity { return }
         guard state == .waiting else {
             task.complete(success: false)
             if state == .cancelledBeforeLaunch { state = .finished; released(self) }
             return
         }
         state = .active; systemTask = task
-        task.progress.totalUnitCount = size + 1; task.progress.completedUnitCount = 0
+        // A continued task needs finite Progress. With no known payload yet,
+        // its sole known unit is final verification; real discovery replaces
+        // this denominator before reporting its first measured completed work.
+        task.progress.totalUnitCount = presentation.bytes.map { $0 + 1 } ?? 1
+        task.progress.completedUnitCount = 0
         task.expiration = { [weak self] in
             guard let self, self.canContinue else { return }
             self.finish(success: false); self.expired()
@@ -99,11 +132,21 @@ final class NativeUploadBackgroundLease {
         state = .finished; settle(nil); released(self)
     }
     func progress(_ bytes: Int64) {
-        guard canContinue, let task = systemTask, bytes >= task.progress.completedUnitCount, bytes <= size else { return }
+        guard let size = presentation.bytes, canContinue, let task = systemTask,
+              bytes >= task.progress.completedUnitCount, bytes <= size else { return }
         task.progress.completedUnitCount = bytes
+        if bytes > measuredUnits { measuredUnits = bytes; lastProgressAt = Date() }
         task.update(subtitle: bytes == size ? "Verifying upload…" : "\(Int(Double(bytes) / Double(size) * 100))% uploaded")
     }
-    func finish(success: Bool) {
+    func work(completed: Int64, total: Int64?, subtitle: String) {
+        guard presentation.bytes == nil, canContinue, let task = systemTask,
+              let total, completed >= task.progress.completedUnitCount, total > completed else { return }
+        task.progress.totalUnitCount = total
+        task.progress.completedUnitCount = completed
+        if completed > measuredUnits { measuredUnits = completed; lastProgressAt = Date() }
+        task.update(subtitle: subtitle)
+    }
+    func finish(success: Bool, settledSubtitle: String? = nil) {
         switch state {
         case .waiting:
             state = .cancelledBeforeLaunch; settle(nil); cancel()
@@ -111,7 +154,12 @@ final class NativeUploadBackgroundLease {
             state = .finished
             if let task = systemTask {
                 task.expiration = nil
-                if success { task.progress.completedUnitCount = size + 1; task.update(subtitle: "File uploaded") }
+                if success {
+                    // A finite available-originals pass can settle with durable
+                    // gaps. Do not turn its measured backlog into a false 100%.
+                    if settledSubtitle == nil, task.progress.totalUnitCount > 0 { task.progress.completedUnitCount = task.progress.totalUnitCount }
+                    task.update(subtitle: settledSubtitle ?? presentation.completedSubtitle)
+                }
                 task.complete(success: success)
             }
             systemTask = nil; settle(nil); released(self)
@@ -138,7 +186,10 @@ private final class SystemNativeUploadBackgroundScheduler: NativeUploadBackgroun
         return registered
     }
     func submit() throws {
-        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+        try submit(title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+    }
+    func submit(title: String, subtitle: String) throws {
+        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
         request.strategy = .fail
         do { try BGTaskScheduler.shared.submit(request) }
         catch {
@@ -161,7 +212,8 @@ private final class SystemNativeUploadBackgroundTask: NativeUploadBackgroundTask
             task.expirationHandler = { Task { @MainActor in callback() } }
         }
     }
+    var identity: AnyObject { task }
     var progress: Progress { task.progress }
-    func update(subtitle: String) { task.updateTitle("Uploading to Thingtime", subtitle: subtitle) }
+    func update(subtitle: String) { task.updateTitle(task.title, subtitle: subtitle) }
     func complete(success: Bool) { task.setTaskCompleted(success: success) }
 }

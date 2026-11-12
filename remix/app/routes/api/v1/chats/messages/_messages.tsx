@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
@@ -41,7 +41,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (!limit.allowed) {
     return json({ ok: false, error: 'Easy there, speed-typer 🌸' }, rateLimitedResponseInit(limit));
   }
-  const body = await readJsonBody(request, 64 * 1024);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 	if (Array.isArray(body?.attachmentIds) && body.attachmentIds.length) {
 		if (user.accountKind !== 'user') {
 			return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });

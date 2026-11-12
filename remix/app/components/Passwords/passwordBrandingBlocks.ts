@@ -32,3 +32,22 @@ export const passwordBrandingMigration = (headingId: string) => (blocks: Webpage
   };
   return visit(blocks);
 };
+
+/** Repair only shipped subtitle/icon contrast. Authored colors, structure, content,
+ * and deleted blocks remain user-owned; hierarchy comes from size and weight. */
+const oldPreviewIconCss:Record<string,string>={width:'32px',height:'32px','object-fit':'contain','flex-shrink':'0'};
+export const PASSWORD_PREVIEW_ICON_CSS:Record<string,string>={...oldPreviewIconCss,background:'#fff',padding:'3px','border-radius':'6px','box-sizing':'border-box'};
+export const migratePasswordPreviewContrast = (blocks: WebpageBlock[]): WebpageBlock[] => {
+  let changed = false;
+  const next = blocks.map(block => {
+    const children = block.children ? migratePasswordPreviewContrast(block.children) : undefined;
+    const repair = (block.id === 'pp-username' || block.id === 'pp-type') && block.type === 'element'
+      && block.css?.color === 'var(--tt-muted, #6b7280)';
+    const iconRepair=block.id==='pp-icon'&&block.type==='element'&&block.tag==='img'&&block.props?.src==='{item.image}'
+      &&Object.keys(block.css||{}).length===Object.keys(oldPreviewIconCss).length&&Object.entries(oldPreviewIconCss).every(([key,value])=>block.css?.[key]===value);
+    if (!repair && !iconRepair && children === block.children) return block;
+    changed = true;
+    return { ...block, ...(repair ? { css: { ...block.css, color: 'inherit' } } : {}), ...(iconRepair?{css:{...PASSWORD_PREVIEW_ICON_CSS}}:{}), ...(children ? { children } : {}) };
+  });
+  return changed ? next : blocks;
+};

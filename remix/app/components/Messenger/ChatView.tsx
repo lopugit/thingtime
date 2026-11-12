@@ -6,7 +6,7 @@ import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
 import { useLopu } from '../Lopu/useLopu';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { Composer } from './Composer';
+import { Composer, type ComposerInitialDraft, type MessageSubmission } from './Composer';
 import { AgentLiveActivity } from './AgentLiveActivity';
 import { EmojiUploadModal } from './EmojiUploadModal';
 import { MessageList } from './MessageList';
@@ -46,6 +46,10 @@ const dedupeNewestFirst = (lists: ChatMessage[][]): ChatMessage[] => {
 };
 
 export type ChatViewProps = {
+  initialDraft?: ComposerInitialDraft;
+  onSent?: (result: { messageId: string; chatId: string; requestId: string }) => void | Promise<void>;
+  beforeSubmit?: (targetId: string, operationId: string, payload: Record<string, unknown>) => Promise<void>;
+  initialSubmission?: MessageSubmission;
   api: MessengerApi;
   // Hidden embedded views retain drafts without polling or marking unread data.
   active?: boolean;
@@ -285,7 +289,8 @@ export const ChatView = (props: ChatViewProps) => {
             username: user.username,
             displayName: user.displayName,
             temporary: user.temporary,
-            avatarUrl: user.avatarUrl
+            avatarUrl: user.avatarUrl,
+            avatarPresentation: user.avatarPresentation
           }
         : null,
       text,
@@ -313,6 +318,7 @@ export const ChatView = (props: ChatViewProps) => {
       createdAt: new Date().toISOString()
     };
     setMessages((prev) => [optimistic, ...prev]);
+    let committed = false;
     try {
 			const payload = await api.sendMessage({
 				chatId,
@@ -321,6 +327,7 @@ export const ChatView = (props: ChatViewProps) => {
 				attachmentIds,
 				...(reply ? { replyToId: reply.id } : {})
 			});
+      committed = true;
       setMessages((prev) => {
         const next = prev.map((m) => (m.id === localId ? payload.message : m));
 				writeMessages(
@@ -333,9 +340,11 @@ export const ChatView = (props: ChatViewProps) => {
 			if (reply) setReplyTo((current) => (current?.id === reply.id ? null : current));
       props.onChatsChanged();
       emitMessengerRefresh();
+      await props.onSent?.({ messageId: payload.message.id, chatId, requestId });
       return true;
     } catch (err: any) {
       setMessages((prev) => prev.filter((m) => m.id !== localId));
+      if (committed) throw err;
 			if (hasUnknownMutationOutcome(err)) {
 				lopu({ title: 'That message may already have sent. Retry safely to confirm it.', status: 'info' });
 				throw err;
@@ -540,6 +549,10 @@ export const ChatView = (props: ChatViewProps) => {
 						/>
 					) : null}
           <Composer
+            initialDraft={props.initialDraft}
+            active={active}
+            beforeSubmit={props.beforeSubmit}
+            initialSubmission={props.initialSubmission}
             targetId={chatId}
 						placeholder={
 							isLopuAiSource(chatSummary.externalSource)
@@ -548,7 +561,7 @@ export const ChatView = (props: ChatViewProps) => {
 									? `Message ${liveSource.label} on your computer`
 									: chatSummary.externalSource
 										? `Reply in Thingtime about ${title}`
-										: `Message ${title}`
+										: props.initialDraft ? 'Add a message…' : `Message ${title}`
 						}
             pickerEmojis={pickerEmojis}
             replyTo={replyTo}

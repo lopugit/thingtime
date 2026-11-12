@@ -1,9 +1,15 @@
+import { parsePhotoTransferPolicy, supportsNativePhotoTransferPolicy, supportsNativeUploadPolicy, type PhotoTransferPolicy } from './photoTransferPolicy';
+import { parseNativePhotoRunStatus, parseNativePhotoRunWake, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
+import type { FileSyncApproval } from './configuredPlan';
+import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+import { parseDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
-import { parseNativeUploadBatchResult } from './uploadBatch';
+import { parseNativeUploadBatchResult, UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
-import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
+import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativePhotoQueueApproval, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { trackNativeUploadBackground } from './nativeUploadBackground';
 import { parseFileSyncConfiguration } from './configuration';
@@ -24,6 +30,7 @@ import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
 import type { SyncOperation, SyncReceiptLookup } from './execute';
 import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
+import { rootIdentity } from '../utils/rootIdentity';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, validSyncPath, type SyncEntry } from './reconcile';
 import {
@@ -39,36 +46,55 @@ import {
 export type MobileFolder = {
 	id: string;
 	name: string;
+	/** Owner-private location metadata; never pass to relative file operations. */
+	sourcePath?: string;
 	publicationVersion?: string;
 	sourceKind?: 'photos';
 	photoAccess?: 'full' | 'limited' | 'unavailable';
 };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
+/** Current native metadata only. A captured digest remains provisional until
+ * the upload's byte or retained-content proof is checked. */
+export type NativePathStamp = Pick<SyncEntry, 'path' | 'id' | 'version' | 'kind' | 'size'>;
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
-export type FolderRequest = { resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
+export type FolderRequest = { control?: 'photos-startup-v1'; deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
 	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
-	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
+	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
+	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
+	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true; continueInBackground?: true }
+	| { action: 'read-upload-policy'; deviceId: string; rootId?: string }
+	| { action: 'set-upload-policy'; deviceId: string; rootId?: string; uploadPolicy: PhotoTransferPolicy }
+	| { action: 'read-photo-transfer-policy'; deviceId: string; rootId?: string }
+	| { action: 'set-photo-transfer-policy'; deviceId: string; rootId?: string; photoTransferPolicy: PhotoTransferPolicy }
+	| { action: 'wake-photo-run'; activation: 'foreground-entry'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
+	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
+	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
+	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string; explicitPause?: true }
+	| { action: 'upload-file'; rootId: string; continueInBackground?: true; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
-	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
+	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' | 'pause-photo-runs' }
 	| { action: 'remove'; rootId: string }
 	| { action: 'scan'; rootId: string; excludedPaths?: string[]; ignoreRules?: string }
 	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-stream-finish'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-changes'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; pageSize?: number; waitMilliseconds?: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
-	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' }
-	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported'; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' | 'strict-async'; allowCloudGaps?: true; photoDownloadAuthorization?: FileSyncApproval; photoQueueApproval?: NativePhotoQueueApproval }
+	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported' | 'strict-async'; excludedPaths?: string[]; ignoreRules?: string; allowCloudGaps?: true; photoQueueApproval?: NativePhotoQueueApproval }
+	| { action: 'photo-queue-finish'; rootId: string; photoBatchId: string; photoQueueApproval: NativePhotoQueueApproval }
 	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy: 'backup-supported' }
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'inspect'; rootId: string; path: string }
+	| { action: 'inspect-stamp'; rootId: string; path: string }
+	| { action: 'observe-path'; rootId: string; path: string; observation: { version: 1; network: 'wifi' | 'any'; chargingOnly: boolean; configurationId: string; configurationRevision: string }; remainingMs: number }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
 	| { action: 'version-restore-reviewed' | 'version-restore-status'; rootId: string; restore: NativeVersionRestore }
 	| { action: 'trash-list'; rootId: string; cursor?: string }
 	| { action: 'trash-restore-reviewed'; rootId: string; trash: MobileTrashRequest; restore: NativeRestore }
-	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
+	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true; photoDownloadAuthorization?: FileSyncApproval }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
 	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile; target?: import('./signedDownloadTarget').SignedDownloadTarget }
 	| { action: 'stage-range'; rootId: string; transfer: MobileStageRequest; offset: number; bytes: Uint8Array<ArrayBuffer> }
@@ -87,11 +113,18 @@ export type FolderRequest = { resourceLimits?: import('./configuration').FileSyn
 	  }
 );
 export type FolderResult = {
+	uploadPolicy?: PhotoTransferPolicy;
+	photoTransferPolicy?: PhotoTransferPolicy;
+	photoRunStatus?: NativePhotoRunStatus;
+	photoContinuation?: NativePhotoContinuation;
+	deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy;
 	resources?: SyncResourceStatus;
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
 	validatedFolderBatch?: import('./folderBatch').NativeFolderBatchResult;
+	uploadedSingle?: { attachmentId: string; version: string; size: number; fingerprint: ContentFingerprint; payloadBytes: number | null };
 	uploadedFile?: { fingerprint: ContentFingerprint };
-	uploadedPart?: { sha256: string; payloadBytes?: number };
+	deferred?: import('./contentFingerprint').NativeDeferredFileResult;
+	uploadedPart?: { sha256: string; payloadBytes?: number; alreadyUploaded?: true };
 	writeApproval?: MobileWriteApproval;
 	publication?: SyncReceiptLookup;
 	trash?: SyncReceiptLookup;
@@ -107,7 +140,11 @@ export type FolderResult = {
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
 	inspectedEntry?: SyncEntry | null;
+	inspectedStamp?: NativePathStamp | null;
+	observedEntries?: (SyncEntry | null)[];
+	observationUnavailable?: true;
 	backupCapture?: NativeBackupStatus;
+	strictCapture?: { id: string; generation: string; state: NativeBackupStatus['state']; indexedEntries: number; cloudOriginals?: number; photoDownloadFraction?: number };
 	skippedPage?: NativeSkippedPage;
 	cancelled?: true;
 	capture?: NativeInventoryCapture;
@@ -120,26 +157,61 @@ export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
 	| 'platform'
 	| 'fileResourceLimitsVersion'
+	| 'fileUploadPolicyVersion'
+	| 'filePhotoAutomationVersion'
+	| 'filePhotoContinuationVersion'
 	| 'fileDownloadVersion'
 	| 'fileUploadVersion'
+	| 'fileSingleUploadVersion'
 	| 'fileUploadBatchVersion'
 	| 'fileFolderBatchVersion'
 	| 'fileAccessVersion'
+	| 'fileInventoryStrictCoverage'
+	| 'fileSymbolicLinksVersion'
 	| 'fileStagingVersion'
 	| 'filePublicationVersion'
 	| 'fileTrashVersion'
 	| 'fileVersionsVersion'
 >;
+/** Display metadata from the exact Mac grant; no parent-directory authority. */
+export const validNativeSourcePath = (value: unknown): value is string =>
+ typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') &&
+ !/[\p{Cc}\p{Cf}]/u.test(value) && (value === '/' || value.split('/').slice(1).every(part => part !== '' && part !== '.' && part !== '..'));
+export const supportsNativeSymbolicLinks = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.17.0') && capabilitySatisfies(bridge.fileSymbolicLinksVersion ?? '', '1.0.0');
+/** A native implementation must explicitly negotiate link creation/fallback;
+ * ignoring metadata and publishing an ordinary target-text file is unsafe. */
+export function assertNativeSymbolicLinkRequest(request: FolderRequest, capabilities: FolderCapabilities | undefined) {
+ const r = request as any;
+ const mutation = r.transfer?.operation?.mutation ?? r.trash?.operation?.mutation;
+ const entries = [r.upload?.source, r.expected, r.restore?.expected, r.cloudFile, mutation?.source, mutation?.expectedTarget, mutation?.expected,
+  ...(r.batch?.descriptor?.members?.map((member: any) => member.write?.operation?.mutation?.source) ?? [])];
+ if (entries.some(entry => entry?.symbolicLink !== undefined) && !supportsNativeSymbolicLinks(capabilities)) throw Error('Update the native app to preserve symbolic links and their exact target bytes.');
+}
+export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
+ bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
+export const supportsSoleNativePhotoRun = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.2.0');
+export const supportsNativePhotoForegroundWake = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.8.0');
+export const supportsNativePhotoContinuation = (bridge: FolderCapabilities | undefined = getNativeBridge(), minimum = '1.0.0') =>
+	supportsSoleNativePhotoRun(bridge) && capabilitySatisfies(bridge?.filePhotoContinuationVersion ?? '', minimum);
+export const supportsNativePhotoRuns = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.1.0');
+export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.0.0');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
-/** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
+/** Mac 1.1 and iOS 1.7 distinguish verified retained parts from new traffic. */
 export const supportsNativePartPayloadBytes = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1;
+	(bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1) ||
+	(bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion, '1.7.0'));
 export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileUploadBatchVersion ?? '');
 export const supportsNativeFolderBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileFolderBatchVersion ?? '');
+export const supportsNativePathObservation = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.21.0');
+export const supportsNativePathStamp = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.22.0');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -149,6 +221,16 @@ export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefi
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && major === 1 &&
 		(minor > minimum || (minor === minimum && patch >= 1));
 };
+/** Photos use a scoped virtual capture only on hosts that implement PhotoKit pages and inspection. */
+export const supportsNativePhotoInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.19.0')
+		: bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0');
+export const supportsNativePhotoCloudGaps = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.6.0');
+export const supportsNativePhotoCloudFetch = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.7.0');
+export const supportsNativePhotoQueue = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.8.0');
 /** Exclusions are pruned before opening native files or descending directories. */
 export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 6 : bridge?.platform === 'ios' ? 4 : undefined;
@@ -157,7 +239,19 @@ export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefi
 };
 /** Mac 1.8 explicitly negotiates best-effort backup and its complete skip ledger. */
 export const supportsNativeBackupCapture = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 8;
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.8.0')
+		: bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0');
+/** iOS Rust folder inventory has no reliable subtree watcher for strict absence. */
+export function assertNativeFolderInventoryCoverage(bridge: FolderCapabilities, policy: import('./reconcile').SyncPolicy) {
+	const lacksStrictCoverage = bridge.fileInventoryStrictCoverage === false ||
+		(bridge.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0') &&
+			bridge.fileInventoryStrictCoverage !== true);
+	if (lacksStrictCoverage && (policy.mode !== 'backup' || policy.propagateDeletes))
+		throw Error('This device cannot verify a complete folder inventory. Choose one-way Backup with deletion propagation disabled.');
+}
+export const supportsNativeStrictCapture = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.18.0')
+		: bridge?.platform === 'ios' && supportsNativePhotoInventoryPages(bridge);
 export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 9;
 /** Mac 1.10 adds opt-in byte-bounded inventory batches. */
@@ -172,6 +266,27 @@ export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefi
 export const supportsNativeStreamingBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativeStreamingIndex(bridge) && (Number(bridge!.fileAccessVersion!.split('.')[1]) > 11 || Number(bridge!.fileAccessVersion!.split('.')[2]) >= 1);
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if ('photoQueueApproval' in request && request.photoQueueApproval !== undefined) {
+		const { request: queue, authorization } = request.photoQueueApproval;
+		if (!supportsNativePhotoQueue(bridge) || !queue || authorization?.configuration?.sourceKind !== 'photos' ||
+			authorization.configuration.mode !== 'backup' || queue.configurationId !== authorization.id ||
+			queue.configurationRevision !== authorization.updatedAt ||
+			!(request.action === 'photo-queue-finish' || ((request.action === 'scan-capture' || request.action === 'scan-status') &&
+				request.allowCloudGaps && request.capturePolicy === 'strict-async'))) throw Error('Native Photos queue is unavailable.');
+	}
+	if ('photoDownloadAuthorization' in request && request.photoDownloadAuthorization !== undefined) {
+		const auth = request.photoDownloadAuthorization;
+		if (!supportsNativePhotoCloudFetch(bridge) || auth.configuration?.sourceKind !== 'photos' ||
+			auth.configuration?.network !== 'any' || auth.configuration?.localRootId !== request.rootId ||
+			(request.action === 'scan-capture' && (request.capturePolicy !== 'strict-async' || request.allowCloudGaps !== true)))
+			throw Error('PhotoKit download requires the saved Photos network permission.');
+	}
+	if ('allowCloudGaps' in request && (request.allowCloudGaps !== true ||
+		(request.action !== 'scan-capture' && request.action !== 'scan-status') ||
+		request.capturePolicy !== 'strict-async' || !supportsNativePhotoCloudGaps(bridge)))
+		throw Error('Update Thingtime for photo backup with iCloud gaps.');
+	if ('capturePolicy' in request && request.capturePolicy === 'strict-async' && !supportsNativeStrictCapture(bridge))
+		throw Error('Update the native app to run indexing in the background.');
 	if ((['scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action) || ('capturePolicy' in request && request.capturePolicy === 'one-way-supported')) && !supportsNativeStreamingIndex(bridge)) throw Error('Update Thingtime Mac to transfer while indexing.');
 	if ('pageSize' in request && request.pageSize !== undefined) {
 		if (!['scan-page', 'scan-skips', 'scan-changes'].includes(request.action)) throw Error('Invalid native inventory page size action.');
@@ -197,6 +312,11 @@ export const supportsNativePathInspection = (bridge: FolderCapabilities | undefi
 	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
 };
+export const supportsNativeSingleUpload = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileSingleUploadVersion ?? '', '1.0.0');
+export const supportsNativeDeferredUploads = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion ?? '', '1.5.0');
+const supportsExplicitNativeUploadContinuation = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion ?? '', '1.4.0');
 export const supportsNativeFileUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativePartUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 2;
 export const supportsNativeBackgroundUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -294,6 +414,9 @@ export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined 
 	Boolean(
 		bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '')
 	);
+const nativeFolderBusyMessage = 'Another folder request is running.';
+class NativeFolderBusy extends Error {}
+
 export function parseMobileFolderResult(
 	value: unknown,
 	expected: { requestId: string; ownerId: string; origin: string },
@@ -302,6 +425,21 @@ export function parseMobileFolderResult(
 	const message = value as any,
 		payload = message?.payload;
 	if (message?.type !== 'mobile-files-result' || !payload || Object.entries(expected).some(([key, value]) => payload[key] !== value)) return null;
+	const expectedRoot = 'rootId' in request ? request.rootId : undefined;
+	if (payload.syncWait !== undefined) {
+		const { syncWait, retryAt, minimumPartBytes } = payload;
+		const transfer = ['upload-part', 'upload-file', 'defer-upload'].includes(request.action);
+		const allowed = syncWait === 'inactive' ? ['upload-part', 'list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-run-status', 'pause-photo-runs', 'run-photo-in-background', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
+			syncWait === 'data-budget' ? transfer : ['upload-part', 'upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
+		const deadline = typeof retryAt === 'string' ? Date.parse(retryAt) : NaN;
+		if (!allowed || !isSyncWaitReason(syncWait) || syncWait === 'paused' || payload.rootId !== expectedRoot || payload.error !== undefined ||
+			(retryAt !== undefined && (syncWait !== 'data-budget' || !Number.isSafeInteger(deadline) || deadline < 0)) ||
+			(minimumPartBytes !== undefined && (syncWait !== 'data-budget' || retryAt !== undefined || !Number.isSafeInteger(minimumPartBytes) || minimumPartBytes < 1))) throw Error('Invalid native sync wait.');
+		throw new SyncConditionsWait(syncWait, retryAt === undefined ? undefined : deadline, minimumPartBytes);
+	}
+	if (payload.error === LEGACY_NATIVE_INACTIVE_MESSAGE && (payload.rootId === undefined || payload.rootId === expectedRoot))
+		throw new SyncConditionsWait('inactive');
+	if (payload.error === nativeFolderBusyMessage) throw new NativeFolderBusy(nativeFolderBusyMessage);
 	if (typeof payload.error === 'string') throw Error(payload.error.slice(0, 240));
 	if (
 		!Array.isArray(payload.roots) ||
@@ -315,6 +453,7 @@ export function parseMobileFolderResult(
 				!r.name ||
 				r.name.length > 1024 ||
 				(r.sourceKind !== undefined && r.sourceKind !== 'photos') ||
+				(r.sourcePath !== undefined && (!validNativeSourcePath(r.sourcePath) || r.sourceKind === 'photos')) ||
 				(r.sourceKind === 'photos'
 					? !['full', 'limited', 'unavailable'].includes(r.photoAccess) || r.publicationVersion !== undefined
 					: r.photoAccess !== undefined) ||
@@ -327,11 +466,67 @@ export function parseMobileFolderResult(
 		roots: payload.roots.map((r: any) => ({
 			id: r.id,
 			name: r.name,
+			...(r.sourcePath !== undefined ? { sourcePath: r.sourcePath } : {}),
 			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {}),
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'read-upload-policy' || request.action === 'set-upload-policy') {
+  if (payload.deviceId !== request.deviceId || payload.rootId !== request.rootId) throw Error('Invalid upload policy scope.');
+  result.uploadPolicy = parsePhotoTransferPolicy(payload.uploadPolicy);
+  if (request.action === 'set-upload-policy' && JSON.stringify(result.uploadPolicy) !== JSON.stringify(parsePhotoTransferPolicy(request.uploadPolicy))) throw Error('The device did not acknowledge the saved upload policy.');
+ }
+	if (request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') {
+        if (payload.deviceId !== request.deviceId || payload.rootId !== request.rootId || payload.roots.length)
+            throw Error('Photos transfer policy scope changed.');
+        result.photoTransferPolicy = parsePhotoTransferPolicy(payload.photoTransferPolicy);
+        if (request.action === 'set-photo-transfer-policy' && JSON.stringify(result.photoTransferPolicy) !== JSON.stringify(parsePhotoTransferPolicy(request.photoTransferPolicy)))
+            throw Error('The device did not confirm the saved Photos transfer policy.');
+    }
+	// iOS includes the validated grant snapshot on successful gated replies.
+	// The action-specific fields bind the reply to the requested Photos run.
+	if (request.action === 'arm-photo-run') {
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.authorization.id || payload.photoRunArmed !== true ||
+			typeof payload.scheduled !== 'boolean') throw Error('Native Photos did not confirm the background run.');
+		if (request.execution === 'native') {
+			const revision = payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision;
+			if (payload.nativeOwnsRun !== true || revision !== request.authorization.updatedAt ||
+				payload.deviceId !== request.authorization.scope.deviceId || payload.photoRunProgress == null) throw Error('Native Photos did not confirm sole execution.');
+			result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
+		}
+	} else if (request.action === 'photo-run-status' || request.action === 'wake-photo-run') {
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.deviceId !== request.deviceId)
+			throw Error('Native Photos run status scope changed.');
+		result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
+	}
+    if (request.action === 'wake-photo-run') {
+        if (payload.photoWakeRevision !== request.configurationRevision) throw Error('Native Photos wake settings changed.');
+        result.photoRunStatus!.wake = parseNativePhotoRunWake(payload.photoRunWake);
+    }
+	if (request.action === 'run-photo-in-background') {
+		const status = payload.photoContinuationStatus;
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId ||
+			payload.deviceId !== request.deviceId || payload.configurationRevision !== request.configurationRevision ||
+			!['active', 'declined', 'complete', 'waiting'].includes(status) || payload.photoContinuationRequested !== (status === 'active'))
+			throw Error('Native Photos did not confirm the background request.');
+		result.photoContinuation = { requested: payload.photoContinuationRequested, status };
+	}
+
+	if (request.action === 'pause-photo-runs' && (payload.photoRunsPaused !== true || payload.roots.length || payload.rootId !== undefined))
+		throw Error('Native Photos did not confirm pause.');
+	if (request.action === 'defer-upload') {
+		const queued = payload.deferredUpload;
+		if (payload.rootId !== request.rootId || !queued || typeof queued.deferred !== 'boolean' || typeof queued.scheduled !== 'boolean' ||
+			(queued.scheduled && !queued.deferred) || queued.uploadId !== request.upload.uploadId || queued.requestId !== request.upload.requestId ||
+			queued.version !== request.upload.source.version) throw Error('Invalid deferred file admission.');
+		result.deferred = { queued: queued.deferred, scheduled: queued.scheduled };
+	} else if (request.action === 'cancel-deferred-upload') {
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.cancelled !== true)
+			throw Error('Deferred file cancellation was not confirmed.');
+		result.cancelled = true;
+	}
 	if (payload.resources !== undefined) result.resources = parseSyncResourceStatus(payload.resources);
+	if (request.action === 'resources' && payload.deviceResourceLimits !== undefined) result.deviceResourceLimits = parseDeviceSyncResourcePolicy(payload.deviceResourceLimits);
 	if (request.action === 'validate-folder-batch') {
 		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId) throw Error('Folder batch source root changed.');
 		result.validatedFolderBatch = parseNativeFolderBatchResult(payload.validatedFolderBatch, { ...request.batch, remainingMs: request.remainingMs });
@@ -352,7 +547,9 @@ export function parseMobileFolderResult(
 			'path-collision': 'multiple paths have the same normalized name'
 		};
 		const failure = payload.scanFailure;
-		if ((request.action !== 'scan' && request.action !== 'scan-capture') || payload.rootId !== request.rootId ||
+		const strictStatus = request.action === 'scan-status' && request.capturePolicy === 'strict-async' &&
+			payload.capturePolicy === 'strict-async' && payload.captureId === request.captureId && payload.strictCaptureState === 'interrupted';
+		if ((request.action !== 'scan' && request.action !== 'scan-capture' && !strictStatus) || payload.rootId !== request.rootId ||
 			payload.complete !== false || payload.entries !== undefined || payload.capture !== undefined || payload.inventoryPage !== undefined ||
 			!failure || typeof failure !== 'object' || Array.isArray(failure) ||
 			Object.keys(failure).some(key => !['reason', 'path'].includes(key)) ||
@@ -365,6 +562,14 @@ export function parseMobileFolderResult(
 	if (['scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-page', 'scan-skips', 'scan-discard', 'scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action)) {
 		const rules = canonicalIgnoreRules('ignoreRules' in request ? request.ignoreRules : undefined);
 		if (rules !== (payload.ignoreRules === undefined ? '' : payload.ignoreRules)) throw Error('Native scan ignore rules changed.');
+	}
+	if (request.action === 'upload-single') {
+		const file = payload.uploadedSingle, upload = request.upload;
+		if (!validFileUpload(upload) || upload.source.size > UPLOAD_BATCH_FILE_BYTES || payload.rootId !== request.rootId || !file ||
+			file.attachmentId !== upload.uploadId || !/^[a-f0-9]{64}$/.test(file.version) || file.size !== upload.source.size ||
+			!validContentFingerprint(file.fingerprint, file.size) || !equalContentFingerprints(file.fingerprint, upload.source.fingerprint!) ||
+			(file.payloadBytes !== null && file.payloadBytes !== 0 && file.payloadBytes !== file.size)) throw Error('Invalid native single upload receipt.');
+		result.uploadedSingle = structuredClone(file);
 	}
 	if (request.action === 'upload-file') {
 		const file = payload.uploadedFile,
@@ -404,7 +609,8 @@ export function parseMobileFolderResult(
 		// Optional telemetry cannot invalidate an otherwise exact authenticated receipt.
 		result.uploadedPart = {
 			sha256: part.sha256,
-			...(Number.isSafeInteger(part.payloadBytes) && part.payloadBytes === upload.length ? { payloadBytes: part.payloadBytes } : {})
+			...(part.alreadyUploaded === true && part.payloadBytes === 0 ? { payloadBytes: 0, alreadyUploaded: true as const } :
+				Number.isSafeInteger(part.payloadBytes) && part.payloadBytes === upload.length ? { payloadBytes: part.payloadBytes } : {})
 		};
 	}
 	if (request.action.startsWith('version-')) {
@@ -576,6 +782,40 @@ export function parseMobileFolderResult(
 		verifyScanExclusions(request, payload.excludedPaths);
 		result.changesPage = parseNativeIndexChangesPage(payload.changesPage, request.captureId, 'afterSequence' in request ? request.afterSequence : 0, request.action === 'scan-changes' ? request.pageSize : undefined);
 		if (request.action === 'scan-cancel') { if (!['interrupted', 'complete'].includes(result.changesPage.state)) throw Error('Native streaming cancellation was not confirmed.'); result.cancelled = true; }
+	} else if (request.action === 'photo-queue-finish') {
+		if (payload.rootId !== request.rootId || payload.photoQueueFinished !== request.photoBatchId)
+			throw Error('The native Photos batch acknowledgement changed.');
+	} else if ((request.action === 'scan-capture' || request.action === 'scan-status' || request.action === 'scan-cancel') && request.capturePolicy === 'strict-async') {
+		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'strict-async' || payload.captureId !== request.captureId ||
+			payload.backupCapture !== undefined || payload.entries !== undefined || payload.inventoryPage !== undefined)
+			throw Error('Native strict capture scope or policy changed.');
+		verifyScanExclusions(request, payload.excludedPaths);
+		if (request.action === 'scan-cancel') {
+			if (payload.cancelled !== true || payload.complete !== false || payload.capture !== undefined) throw Error('Native strict capture cancellation was not confirmed.');
+			result.cancelled = true;
+		} else {
+			const state = payload.strictCaptureState, generation = payload.captureGeneration;
+			if (!['running', 'complete', 'interrupted'].includes(state) || payload.complete !== (state === 'complete') || (state !== 'complete' && payload.capture !== undefined))
+				throw Error('Native strict capture state changed.');
+			const descriptor = parseNativeInventoryCapture({ id: request.captureId, generation, totalEntries: payload.indexedEntries });
+			const gaps = payload.cloudOriginals;
+			if (request.allowCloudGaps === true ? !Number.isSafeInteger(gaps) || gaps < 0 : gaps !== undefined)
+				throw Error('Native photo coverage changed.');
+			const fraction = payload.photoDownloadFraction;
+			if (fraction !== undefined && (request.allowCloudGaps !== true || state !== 'running' ||
+				typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction < 0 || fraction > 1))
+				throw Error('Invalid PhotoKit download progress.');
+			result.strictCapture = { id: descriptor.id, state, generation: descriptor.generation, indexedEntries: descriptor.totalEntries,
+				...(request.allowCloudGaps === true ? { cloudOriginals: gaps } : {}),
+				...(fraction !== undefined ? { photoDownloadFraction: fraction } : {}) };
+			if (state === 'complete') {
+				const capture = parseNativeInventoryCapture(payload.capture);
+				if ((request.allowCloudGaps === true ? capture.coverage === undefined || capture.totalSkipped !== gaps : capture.coverage !== undefined) ||
+					capture.id !== request.captureId || capture.generation !== generation || capture.totalEntries !== descriptor.totalEntries)
+					throw Error('Native strict capture identity or coverage changed.');
+				result.capture = capture;
+			}
+		}
 	} else if (request.action === 'scan-status') {
 		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'backup-supported' || payload.capture !== undefined || payload.entries !== undefined)
 			throw Error('Native backup capture scope or policy changed.');
@@ -606,11 +846,29 @@ export function parseMobileFolderResult(
 			if (result.capture.id !== request.captureId) throw Error('Native capture identity changed.');
 		} else if (request.action === 'scan-page') result.inventoryPage = parseNativeInventoryPage(payload.inventoryPage, request.capture, request.offset, request.pageSize);
 		else if (payload.discarded !== true) throw Error('Native inventory cleanup was not confirmed.');
+	} else if (request.action === 'observe-path') {
+		const parent = request.path.split('/').slice(0, -1).join('/'), paths = parent ? [request.path, parent] : [request.path];
+		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || (payload.observationUnavailable === true ? payload.complete !== false : payload.complete !== true) ||
+			(!payload.observation || Object.keys(request.observation).some(key => payload.observation[key] !== request.observation[key as keyof typeof request.observation])) || !Array.isArray(payload.observedEntries) || payload.observedEntries.length !== (payload.observationUnavailable === true ? 0 : paths.length) ||
+			payload.observedEntries.some((entry: SyncEntry | null, i: number) => entry !== null && (!validSyncEntry(entry) || entry.path !== paths[i])) || !payload.conditions || !['wifi', 'cellular', 'ethernet'].includes(payload.conditions.network) || (payload.conditions.charging !== null && typeof payload.conditions.charging !== 'boolean'))
+			throw Error('Invalid native compound observation.');
+		result.observedEntries = structuredClone(payload.observedEntries);
+		if (payload.observationUnavailable === true) result.observationUnavailable = true;
+		result.conditions = { network: payload.conditions.network, charging: payload.conditions.charging };
 	} else if (request.action === 'inspect') {
 		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
 			(payload.entry !== null && (!validSyncEntry(payload.entry) || payload.entry.path !== request.path)))
 			throw Error('Invalid native path observation.');
 		result.inspectedEntry = payload.entry === null ? null : structuredClone(payload.entry);
+	} else if (request.action === 'inspect-stamp') {
+		const stamp = payload.stamp;
+		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
+			(stamp !== null && (!stamp || Object.keys(stamp).some(key => !['path', 'id', 'version', 'kind', 'size'].includes(key)) ||
+				stamp.path !== request.path || typeof stamp.id !== 'string' || stamp.id.length < 1 || stamp.id.length > 512 ||
+				typeof stamp.version !== 'string' || stamp.version.length < 1 || stamp.version.length > 512 ||
+				!['file', 'folder'].includes(stamp.kind) || !Number.isSafeInteger(stamp.size) || stamp.size < 0)))
+			throw Error('Invalid native path stamp.');
+		result.inspectedStamp = stamp === null ? null : structuredClone(stamp);
 	} else if (request.action === 'scan') {
 		const exclusions = verifyScanExclusions(request, payload.excludedPaths), ignored = createSyncIgnorePolicy(request.ignoreRules);
 		if (
@@ -698,6 +956,9 @@ export const supportsMobileTrashRecovery = (bridge: FolderCapabilities | undefin
 export const supportsNativeFileVersions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileVersionsVersion ?? '');
 
+const folderRequestTails = new WeakMap<ThingtimeNativeBridge, Promise<void>>();
+const cancelledFolderRequest = () => new DOMException('Folder request cancelled', 'AbortError');
+
 export function requestMobileFolders(
 	ownerId: string,
 	request: FolderRequest,
@@ -706,12 +967,104 @@ export function requestMobileFolders(
 	onBackground?: (allowed: boolean) => void
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
-	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
-	try { assertNativeScanExclusions(request, bridge); } catch (error) { return Promise.reject(error); }
+	if (!bridge || !supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (signal.aborted) return Promise.reject(cancelledFolderRequest());
+	const input = structuredClone(request);
+	const startupControl = supportsNativePhotoForegroundWake(bridge) && ['list', 'photo-run-status', 'wake-photo-run'].includes(input.action);
+	// Only native 1.8 acknowledges independent identities for these controls.
+	if (startupControl) input.control = 'photos-startup-v1';
+	else delete input.control;
+	const origin = window.location.origin;
+	const generation = rootIdentity.read().generation;
+	const check = () => {
+		const identity = rootIdentity.read();
+		if (signal.aborted || identity.pending || identity.generation !== generation || window.location.origin !== origin || getNativeBridge() !== bridge)
+			throw cancelledFolderRequest();
+	};
+ const send = async () => {
+  check();
+  const result = await requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
+  check();
+  if ((input.action === 'set-upload-policy' && result.uploadPolicy) || (input.action === 'set-photo-transfer-policy' && result.photoTransferPolicy)) {
+   check();
+   const [{ openSyncJournal }, { wakeUploadPolicyJobs, SYNC_UPLOAD_POLICY_CHANGED_EVENT }] = await Promise.all([import('./journal.client'), import('./syncJobJournal')]);
+   check(); const journal = await openSyncJournal();
+   try { await wakeUploadPolicyJobs(journal, { origin, ownerId, deviceId: input.deviceId, rootId: input.rootId }, check); }
+   finally { journal.close(); }
+   check(); window.dispatchEvent(new Event(SYNC_UPLOAD_POLICY_CHANGED_EVENT));
+  }
+  return result;
+ };
+ // Preferences and local denials bypass the long-running folder request slot.
+ if (startupControl || bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
+	const run = (folderRequestTails.get(bridge) ?? Promise.resolve()).then(async () => {
+		check();
+		let result: FolderResult;
+		try { result = await send(); }
+		catch (error) {
+			// This exact reply means native rejected dispatch. A timeout or
+			// uncertain mutation never issues a second command.
+			if (!(error instanceof NativeFolderBusy) || !['list', 'conditions', 'photo-run-status'].includes(input.action)) throw error;
+			check();
+			await new Promise(resolve => setTimeout(resolve, 150));
+			check();
+			result = await send();
+		}
+		check();
+		return result;
+	});
+	const tail = run.then(() => {}, () => {});
+	folderRequestTails.set(bridge, tail);
+	void tail.then(() => { if (folderRequestTails.get(bridge) === tail) folderRequestTails.delete(bridge); });
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(cancelledFolderRequest());
+		signal.addEventListener('abort', abort, { once: true });
+		void run.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+	});
+}
+
+function requestMobileFoldersNow(
+	bridge: ThingtimeNativeBridge,
+	ownerId: string,
+	request: FolderRequest,
+	signal: AbortSignal,
+	onProgress?: (bytes: number, total: number) => void,
+	onBackground?: (allowed: boolean) => void
+): Promise<FolderResult> {
+	try { assertNativeScanExclusions(request, bridge); assertNativeSymbolicLinkRequest(request, bridge); } catch (error) { return Promise.reject(error); }
 	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
+	if (request.action === 'observe-path' && (!supportsNativePathObservation(bridge) || !validSyncPath(request.path)))
+		return Promise.reject(Error('Compound observation requires a supported app and a relative path.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
+	if (request.action === 'inspect-stamp' && (!supportsNativePathStamp(bridge) || !validSyncPath(request.path)))
+		return Promise.reject(Error('Path stamp inspection requires a supported Mac app and a relative path.'));
+	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
+	if ((request.action === 'read-upload-policy' || request.action === 'set-upload-policy') && !supportsNativeUploadPolicy(bridge)) throw Error('Update Thingtime before changing folder upload limits.');
+ if (['upload-file', 'defer-upload', 'upload-part'].includes(request.action)) {
+  const upload = (request as { upload: NativePartUpload & Partial<NativeFileUpload> }).upload;
+  if (request.action === 'upload-part' && supportsNativeUploadPolicy(bridge) && !upload.authorization) throw Error('Folder parts require the exact saved sync authorization. Refresh this sync connection before retrying.');
+  if (upload.authorization?.configuration.uploadPolicy && !supportsNativeUploadPolicy(bridge)) throw Error('Update Thingtime before using this folder upload policy.');
+ }
+	if ((request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') && !supportsNativePhotoTransferPolicy(bridge))
+		throw Error('Update Thingtime to manage device and folder Photos upload settings.');
+	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
+		throw Error('This iPhone does not support starting continued Photos work.');
+    if (request.action === 'wake-photo-run' && !supportsNativePhotoForegroundWake(bridge))
+        throw Error('Update Thingtime to wake an existing Photos backup immediately.');
+	if (request.action === 'arm-photo-run' && request.continueInBackground !== undefined &&
+		(request.continueInBackground !== true || request.execution !== 'native' || request.resume !== true || !supportsNativePhotoContinuation(bridge, '1.1.0')))
+		throw Error('This iPhone does not support requesting continued Photos work at backup start.');
+
+	if ((request.action === 'photo-run-status' || request.action === 'pause-photo-runs' || (request.action === 'arm-photo-run' && request.execution === 'native')) &&
+		!supportsSoleNativePhotoRun(bridge)) throw Error('Update Thingtime to use the native Photos runner.');
+	if (request.action === 'arm-photo-run' && !supportsNativePhotoRuns(bridge)) throw Error('Update Thingtime to prepare a background Photos run.');
+	if ((request.action === 'defer-upload' || request.action === 'cancel-deferred-upload') && !supportsNativeDeferredUploads(bridge))
+		throw Error('Update Thingtime to queue Photos transfers in the background.');
+	if (request.action === 'defer-upload' && !validFileUpload(request.upload)) throw Error('Invalid deferred file upload.');
+	if (request.action === 'cancel-deferred-upload' && (![request.configurationId, request.deviceId].every(value =>
+		typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)))) throw Error('Invalid deferred file cancellation.');
 	if (request.action === 'upload-file' && (!supportsNativeFileUploads(bridge) || !validFileUpload(request.upload)))
 		return Promise.reject(Error('Native file upload requires a supported app and a canonical source.'));
 	if (request.action === 'upload-part' && (!supportsNativePartUploads(bridge) || !validPartUpload(request.upload)))
@@ -776,8 +1129,7 @@ export function requestMobileFolders(
 		return Promise.reject(Error('Update the app to browse and restore retained files.'));
 	if (request.action.startsWith('version-') && !supportsNativeFileVersions(bridge))
 		return Promise.reject(Error('Update this app to restore retained file versions.'));
-	const input = structuredClone(request),
-		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
+	const input = request, expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
 		let nextOffset = 0,
 			uploadedBytes = 0;
@@ -800,7 +1152,7 @@ export function requestMobileFolders(
 		const abort = () => {
 			cleanup();
 			stop();
-			reject(new DOMException('Folder request cancelled', 'AbortError'));
+			reject(cancelledFolderRequest());
 		};
 		const listener = (event: Event) => {
 			try {
@@ -842,9 +1194,9 @@ export function requestMobileFolders(
 				}
 				const complete =
 					received && message?.type === 'mobile-files-result' && Object.entries(expected).every(([key, value]) => message?.payload?.[key] === value);
-				if (complete && !message.payload.error && nextOffset !== received.byteLength) throw Error('Native upload range is incomplete.');
+				if (complete && !message.payload.error && !message.payload.syncWait && nextOffset !== received.byteLength) throw Error('Native upload range is incomplete.');
 				const result = parseMobileFolderResult(
-					complete && !message.payload.error
+					complete && !message.payload.error && !message.payload.syncWait
 						? { ...message, payload: { ...message.payload, chunk: { ...message.payload.chunk, bytes: received } } }
 						: message,
 					expected,
@@ -857,7 +1209,7 @@ export function requestMobileFolders(
 				}
 			} catch (error) {
 				cleanup();
-				stop();
+				if (!(error instanceof NativeFolderBusy)) stop();
 				reject(error);
 			}
 		};
@@ -866,7 +1218,7 @@ export function requestMobileFolders(
 			stop();
 			reject(Error('Folder access timed out. Your saved selections are preserved.'));
 		};
-		const pacedPayload = syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		const pacedPayload = (['upload-file', 'upload-part'].includes(input.action) && supportsNativeUploadPolicy(bridge)) || syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
 		let timer = pacedPayload ? undefined : setTimeout(
 			expire,
 			input.action === 'upload-part' || input.action === 'upload-file'
@@ -927,7 +1279,7 @@ export function requestMobileFolders(
 							offset: input.offset,
 							length: input.bytes.byteLength
 					  }
-					: { ...expected, ...input };
+					: { ...expected, ...input, ...(input.action === 'upload-part' && supportsNativeUploadPolicy(bridge) ? { action: 'upload-part-authorized' } : {}) };
 			bridge!.postMessage({ type: 'mobile-files', payload });
 		} catch (error) {
 			cleanup();
@@ -946,8 +1298,11 @@ export function mobileFolderSource(
 	scanned: SyncEntry,
 	signal: AbortSignal,
 	request = requestMobileFolders,
-	bridge: FolderCapabilities | undefined = getNativeBridge()
+	bridge: FolderCapabilities | undefined = getNativeBridge(),
+	continueInBackground = false,
+	photoDownloadAuthorization?: FileSyncApproval
 ): FingerprintSource {
+	if (scanned.symbolicLink && !supportsNativeSymbolicLinks(bridge)) throw Error('Update the native app to read symbolic links without following their targets.');
 	const entry = structuredClone(scanned);
 	if (!validSyncEntry(entry) || entry.kind !== 'file') throw Error('Select a scanned file.');
 	const streaming =
@@ -966,6 +1321,7 @@ export function mobileFolderSource(
 				version: entry.version,
 				offset: 0,
 				length: 1,
+				...(photoDownloadAuthorization && supportsNativePhotoCloudFetch(bridge) ? { photoDownloadAuthorization } : {}),
 				...(!full && chunkProofs ? { verifiedChunks: true as const } : {})
 			},
 			signal
@@ -973,6 +1329,25 @@ export function mobileFolderSource(
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
+		...(entry.size > 0 && entry.size <= UPLOAD_BATCH_FILE_BYTES && !entry.symbolicLink && supportsNativeSingleUpload(bridge) ? {
+			uploadSingle: async (upload: NativeFileUpload, callerSignal?: AbortSignal) => {
+				const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
+				active.throwIfAborted();
+				const result = await request(ownerId, { action: 'upload-single', rootId, upload: { ...upload, source: entry } }, active);
+				active.throwIfAborted();
+				if (!result.uploadedSingle) throw Error('Native single upload receipt is missing.');
+				return result.uploadedSingle;
+			}
+		} : {}),
+		...(entry.size > 0 && supportsNativeDeferredUploads(bridge) ? {
+			deferUpload: async (upload: NativeFileUpload, callerSignal?: AbortSignal) => {
+				const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
+				const result = await request(ownerId, { action: 'defer-upload', rootId, upload: { ...upload, source: entry } }, active);
+				active.throwIfAborted();
+				if (!result.deferred) throw Error('Native deferred upload receipt is missing.');
+				return result.deferred;
+			}
+		} : {}),
 		...(entry.size > 0 && supportsNativeFileUploads(bridge)
 			? {
 					uploadFile: async (upload: NativeFileUpload, callerSignal?: AbortSignal, progress?: (bytes: number, total: number) => void) => {
@@ -982,7 +1357,8 @@ export function mobileFolderSource(
 						try {
 							const result = await request(
 								ownerId,
-								{ action: 'upload-file', rootId, upload: { ...upload, source: entry } },
+								{ action: 'upload-file', rootId, upload: { ...upload, source: entry },
+									...(continueInBackground && supportsExplicitNativeUploadContinuation(bridge) ? { continueInBackground: true as const } : {}) },
 								active,
 								progress,
 								background.set
@@ -1008,7 +1384,8 @@ export function mobileFolderSource(
 						if (!result.uploadedPart) throw Error('Native upload receipt is missing.');
 						return {
 							sha256: result.uploadedPart.sha256,
-							...(supportsNativePartPayloadBytes(bridge) && result.uploadedPart.payloadBytes === upload.length
+							...(bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion, '1.7.0') && result.uploadedPart.alreadyUploaded === true && result.uploadedPart.payloadBytes === 0
+								? { payloadBytes: 0, alreadyUploaded: true as const } : supportsNativePartPayloadBytes(bridge) && result.uploadedPart.payloadBytes === upload.length
 								? { payloadBytes: upload.length } : {})
 						};
 					}
@@ -1066,4 +1443,34 @@ export function mobileFolderSource(
 			return bytes;
 		}
 	};
+}
+
+
+export async function readNativePhotoRunProgress(ownerId: string, scope: { rootId: string; configurationId: string; deviceId: string },
+	signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoRunStatus> {
+	const result = await request(ownerId, { action: 'photo-run-status', ...scope }, signal);
+	signal.throwIfAborted();
+	if (!result.photoRunStatus) throw Error('Native Photos did not provide its run status.');
+	return result.photoRunStatus;
+}
+
+
+/** Use only from the user's explicit Run in Background action. */
+export async function requestNativePhotoBackground(ownerId: string,
+	scope: { rootId: string; configurationId: string; deviceId: string; configurationRevision: string },
+	signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoContinuation> {
+	const result = await request(ownerId, { action: 'run-photo-in-background', ...scope }, signal);
+	signal.throwIfAborted();
+	if (!result.photoContinuation) throw Error('Native Photos did not confirm the background request.');
+	return result.photoContinuation;
+}
+
+/** No permission prompt, Resume or new authorization epoch. Foreground entry may request the existing finite continued task. */
+export async function wakeNativePhotoRun(ownerId: string,
+ scope: { rootId: string; configurationId: string; deviceId: string; configurationRevision: string },
+ signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoRunStatus> {
+ const result = await request(ownerId, { action: 'wake-photo-run', activation: 'foreground-entry', ...scope }, signal);
+ signal.throwIfAborted();
+ if (!result.photoRunStatus?.wake) throw Error('Native Photos did not confirm the foreground wake.');
+ return result.photoRunStatus;
 }

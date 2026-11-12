@@ -94,13 +94,17 @@ public final class MobileSyncTrash: @unchecked Sendable {
             var items: [Item] = []
             for name in page {
                 try Task.checkCancellation()
-                let fd = openat(journal, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-                guard fd >= 0 else { throw Failure.storage }; defer { close(fd) }
-                guard let row = try NativeFileJournal.read(fd, as: Record.self) else { continue }
-                guard row.request.scope.ownerId == owner.ownerId, row.request.scope.origin == owner.origin.absoluteString,
-                      row.request.scope.dataPlane == "home", row.request.rootId == rootId else { continue }
-                try row.request.validate(owner: owner)
-                guard try key(row.request) == name, row.version == 1, row.bookmarkHash == Self.digest(bookmark), row.rootIdentity == binding else { throw Failure.changed }
+                let stateFD = openat(journal, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                guard stateFD >= 0 else { throw Failure.storage }; defer { close(stateFD) }
+                guard let pointer = try NativeFileJournal.read(stateFD, as: Record.self) else { continue }
+                guard pointer.request.scope.ownerId == owner.ownerId, pointer.request.scope.origin == owner.origin.absoluteString,
+                      pointer.request.scope.dataPlane == "home", pointer.request.rootId == rootId else { continue }
+                try pointer.request.validate(owner: owner)
+                guard try key(pointer.request) == name, pointer.version == 1, pointer.bookmarkHash == Self.digest(bookmark), pointer.rootIdentity == binding else { throw Failure.changed }
+                let row = try linkedRecord(pointer, bookmark: bookmark)
+                let local = row.destinationJournal == nil ? nil : try MobileFolderReader.access(bookmark) { try linkedDirectory($0, row: row) }
+                defer { if let local { close(local) } }
+                let fd = local ?? stateFD
                 var retained = stat()
                 if fstatat(fd, "retained", &retained, AT_SYMLINK_NOFOLLOW) != 0 {
                     if errno == ENOENT {
@@ -111,7 +115,7 @@ public final class MobileSyncTrash: @unchecked Sendable {
                         continue
                     }; throw Failure.storage
                 }
-                let kind = retained.st_mode & S_IFMT == S_IFDIR ? "folder" : retained.st_mode & S_IFMT == S_IFREG ? "file" : "other"
+                let kind = retained.st_mode & S_IFMT == S_IFDIR ? "folder" : (retained.st_mode & S_IFMT == S_IFREG || retained.st_mode & S_IFMT == S_IFLNK) ? "file" : "other"
                 let needsReview = row.conflict || row.receipt == nil || kind == "other" || (kind == "file" && retained.st_nlink != 1)
                 items.append(Item(request: row.request, kind: kind, size: kind == "file" ? max(0, Int64(retained.st_size)) : 0,
                                   state: row.restoration != nil ? "restoring" : needsReview ? "needs-review" : "retained", restore: row.restoration?.request))
@@ -133,6 +137,8 @@ public final class MobileSyncTrash: @unchecked Sendable {
         var restoration: RestoreState?
         var effectiveExpected: Entry? = nil
         var parentAfter: Entry? = nil
+        var destinationJournal: String? = nil
+        var journalIdentity: String? = nil
     }
     private let directory: URL
     private let beforeMove: (() throws -> Void)?
@@ -190,7 +196,37 @@ public final class MobileSyncTrash: @unchecked Sendable {
                       existing.rootIdentity == binding else { throw Failure.changed }
                 if let receipt = existing.receipt { guard receipt == Receipt(request) else { throw Failure.changed } }
             }
+            if let pointer = row, pointer.destinationJournal != nil {
+                return try MobileFolderReader.access(bookmark) { grant in
+                    let local = try linkedDirectory(grant, row: pointer); defer { close(local) }
+                    guard var latest = try NativeFileJournal.read(local, as: Record.self), latest.request == request,
+                          latest.rootIdentity == binding, latest.bookmarkHash == pointer.bookmarkHash,
+                          latest.destinationJournal == pointer.destinationJournal, latest.journalIdentity == pointer.journalIdentity else { throw Failure.changed }
+                    var value: Record? = latest
+                    let result = try work(root, local, &value)
+                    if let saved = try NativeFileJournal.read(local, as: Record.self) { latest = saved }
+                    try NativeFileJournal.save(latest, fd)
+                    return result
+                }
+            }
             return try work(root, fd, &row)
+        }
+    }
+    private func linkedDirectory(_ root: Int32, row: Record) throws -> Int32 {
+        guard let path = row.destinationJournal, !path.contains("/"), NativeSymbolicLinks.isOwnedJournal(root, name: path) else { throw Failure.changed }
+        let fd = openat(root, path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { throw Failure.changed }
+        guard try NativeFileDestination.identity(MobileFolderReader.info(fd)) == row.journalIdentity else { close(fd); throw Failure.changed }
+        return fd
+    }
+    private func linkedRecord(_ row: Record, bookmark: Data) throws -> Record {
+        guard row.destinationJournal != nil else { return row }
+        return try MobileFolderReader.access(bookmark) { root in
+            let local = try linkedDirectory(root, row: row); defer { close(local) }
+            guard let latest = try NativeFileJournal.read(local, as: Record.self), latest.request == row.request,
+                  latest.rootIdentity == row.rootIdentity, latest.bookmarkHash == row.bookmarkHash,
+                  latest.destinationJournal == row.destinationJournal, latest.journalIdentity == row.journalIdentity else { throw Failure.changed }
+            return latest
         }
     }
     private func resolved(_ expected: Entry, previous: String?, request: Request, bookmark: Data,
@@ -198,7 +234,9 @@ public final class MobileSyncTrash: @unchecked Sendable {
         guard let previous else { return expected }
         let fd = openat(journal, try key(request, operationId: previous), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw Failure.changed }; defer { close(fd) }
-        guard let row = try NativeFileJournal.read(fd, as: Record.self), row.version == 1,
+        guard let pointer = try NativeFileJournal.read(fd, as: Record.self) else { throw Failure.changed }
+        let row = try linkedRecord(pointer, bookmark: bookmark)
+        guard row.version == 1,
               row.request.scope == request.scope, row.request.rootId == request.rootId,
               row.request.operation.id == previous, row.bookmarkHash == Self.digest(bookmark), row.rootIdentity == rootIdentity,
               row.request.parent?.expected == expected, row.receipt == Receipt(row.request), !row.conflict, row.restoration == nil,
@@ -226,9 +264,7 @@ public final class MobileSyncTrash: @unchecked Sendable {
         }
     }
     private func retained(_ fd: Int32) throws -> Int32? {
-        let item = openat(fd, "retained", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        if item < 0 { if errno == ENOENT { return nil }; throw Failure.storage }
-        return item
+        return try NativeSymbolicLinks.openEntry(fd, name: "retained", absent: true)
     }
     private func verifyPayload(_ file: Int32, expected: Entry, restoring: Bool) throws {
         if restoring, expected.kind == "folder" {
@@ -285,11 +321,25 @@ public final class MobileSyncTrash: @unchecked Sendable {
         }
     }
     public func trash(_ request: Request, owner: FileSyncOwnerScope, bookmark: Data) throws -> Receipt {
-        try withRecord(request, owner: owner, bookmark: bookmark, create: true, missing: { throw Failure.storage }) { journal, fd, value in
+        try withRecord(request, owner: owner, bookmark: bookmark, create: true, missing: { throw Failure.storage }) { journal, stateFD, value in
             if let receipt = value?.receipt { return receipt }
             guard value?.restoration == nil else { throw Failure.changed }
             return try NativeFileDestination.coordinated(bookmark: bookmark, path: request.operation.mutation.path) { root, parent in
                 let rootIdentity = try NativeFileDestination.identity(MobileFolderReader.info(root))
+                var fd = stateFD, opened: Int32? = nil
+                defer { if let opened { close(opened) } }
+                if request.operation.mutation.expected.symbolicLink != nil, value?.destinationJournal == nil {
+                    let name = ".thingtime-link-trash-" + request.operation.id
+                    if mkdirat(root, name, 0o700) != 0 { guard errno == EEXIST, NativeSymbolicLinks.isOwnedJournal(root, name: name) else { throw Failure.changed } }
+                    let local = openat(root, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                    guard local >= 0 else { throw Failure.storage }; opened = local
+                    try NativeSymbolicLinks.register(local, link: nil, journal: true)
+                    var pointer = value ?? Record(version: 1, request: request, bookmarkHash: Self.digest(bookmark), rootIdentity: rootIdentity, receipt: nil, conflict: false, restoration: nil)
+                    pointer.destinationJournal = name; pointer.journalIdentity = try NativeFileDestination.identity(MobileFolderReader.info(local))
+                    try NativeFileJournal.save(pointer, local); try NativeFileJournal.save(pointer, stateFD)
+                    guard fsync(root) == 0 else { throw Failure.storage }
+                    value = pointer; fd = local
+                }
                 if var existing = value {
                     guard existing.rootIdentity == rootIdentity else { throw Failure.changed }
                     let prior = try recover(fd, root: root, parent: parent, row: &existing)
@@ -327,16 +377,9 @@ public final class MobileSyncTrash: @unchecked Sendable {
     public func inspect(_ request: Request, owner: FileSyncOwnerScope, bookmark: Data) throws -> Entry? {
         try withRecord(request, owner: owner, bookmark: bookmark, create: false, missing: { nil }) { _, fd, row in
             guard row != nil, let file = try retained(fd) else { return nil }; defer { close(file) }
-            let before = try MobileFolderReader.info(file), kind: String
-            if before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1 { kind = "file" }
-            else if before.st_mode & S_IFMT == S_IFDIR { kind = "folder" }
-            else { throw Failure.changed }
-            let fingerprint = kind == "file" ? try MobileFolderReader.fingerprint(file, size: Int64(before.st_size)) : nil
-            let entry = Entry(path: request.operation.mutation.path, id: NativeFileDestination.identity(before), version: MobileFolderReader.stamp(before),
-                kind: kind, size: kind == "file" ? Int64(before.st_size) : 0,
-                sha256: kind == "file" && fingerprint == nil ? Self.digest(Data()) : nil, fingerprint: fingerprint)
-            guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == entry.version else { throw Failure.changed }
-            return entry
+            let before = try MobileFolderReader.info(file)
+            guard before.st_mode & S_IFMT != S_IFREG || before.st_nlink == 1 else { throw Failure.changed }
+            return try MobileFolderReader.entry(file, path: request.operation.mutation.path)
         }
     }
     public func restoration(_ request: Request, owner: FileSyncOwnerScope, bookmark: Data) throws -> RestoreState? {
@@ -391,7 +434,7 @@ public final class MobileSyncTrash: @unchecked Sendable {
                 let observed = try moved(target, expected: restore.expected, restoring: true)
                 guard fsync(target) == 0, fsync(parent) == 0, fsync(root) == 0, fsync(fd) == 0 else { throw Failure.storage }
                 let result = Entry(path: restore.path, id: observed.id, version: observed.version, kind: observed.kind,
-                    size: observed.size, sha256: observed.sha256, fingerprint: observed.fingerprint)
+                    size: observed.size, sha256: observed.sha256, fingerprint: observed.fingerprint, symbolicLink: observed.symbolicLink)
                 row.restoration?.receipt = result; try NativeFileJournal.save(row, fd)
                 return result
             }

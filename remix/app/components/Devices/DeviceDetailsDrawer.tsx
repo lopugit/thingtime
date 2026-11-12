@@ -2,17 +2,20 @@ import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
 import { Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
-import { ChevronDown, CircleAlert, LockKeyhole, Maximize2, WifiOff } from 'lucide-react';
+import { ChevronDown, CircleAlert, LockKeyhole, Maximize2, MoreHorizontal, WifiOff } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
+import { deviceServicePresentation } from './deviceStatusPresentation';
 import { resolvedDevicePresence, DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
 import { DeviceApplications } from './DeviceApplications';
 import { DeviceAudioControls } from './DeviceAudioControls';
 import { DeviceApprovalCard } from './DeviceApprovalCard';
 import { DeviceCommandTimeline } from './DeviceCommandTimeline';
 import { DeviceConnectors } from './DeviceConnectors';
+import { DeviceDashboard } from './DeviceDashboard';
+import { DeviceLocationWorkspace } from './DeviceLocationWorkspace';
 import { DeviceNetworkControls } from './DeviceNetworkControls';
 import { DevicePowerControls } from './DevicePowerControls';
 import { DeviceSystemControls } from './DeviceSystemControls';
@@ -39,6 +42,7 @@ const Section = ({
 	section,
 	label,
 	count,
+	summary,
 	advanced = false,
 	children
 }: {
@@ -46,11 +50,13 @@ const Section = ({
 	section: DeviceDrawerSectionId;
 	label: string;
 	count?: number;
+	summary?: string;
 	advanced?: boolean;
 	children: React.ReactNode;
 }) => {
 	const [expanded, setExpanded] = React.useState(() => readDeviceDrawerPreferences(deviceId).sections[section]);
 	const panelId = React.useId();
+	React.useEffect(() => setExpanded(readDeviceDrawerPreferences(deviceId).sections[section]), [deviceId, section]);
 	const toggleExpanded = React.useCallback(() => {
 		setExpanded((current) => {
 			const next = !current;
@@ -60,7 +66,7 @@ const Section = ({
 	}, [deviceId, section]);
 
 	return (
-		<Box marginTop={5}>
+		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={2}>
 			<Flex
 				alignItems="center"
 				aria-controls={panelId}
@@ -87,6 +93,7 @@ const Section = ({
 						{label}
 					</Text>
 					{typeof count === 'number' ? <DeviceStatusPill label={String(count)} tone="neutral" /> : null}
+					{summary && !expanded ? <Text color="var(--tt-muted, #71717a)" fontSize="12px" noOfLines={1}>{summary}</Text> : null}
 					{advanced ? <DeviceStatusPill label="advanced" tone="neutral" /> : null}
 				</Flex>
 				<Box
@@ -122,14 +129,14 @@ const batteryLabel = (value: number | null | undefined): string | null => {
 	return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}% battery`;
 };
 
-const Notice = ({ icon, children, danger = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean }) => (
+const Notice = ({ icon, children, danger = false, neutral = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean; neutral?: boolean }) => (
 	<Flex
 		alignItems="flex-start"
-		background={danger ? 'rgba(220, 38, 38, 0.07)' : 'rgba(217, 119, 6, 0.08)'}
+		background={neutral ? 'var(--tt-surface-alt, #f2f2f5)' : danger ? 'rgba(220, 38, 38, 0.07)' : 'rgba(217, 119, 6, 0.08)'}
 		border="1px solid"
-		borderColor={danger ? 'rgba(220, 38, 38, 0.25)' : 'rgba(217, 119, 6, 0.26)'}
+		borderColor={neutral ? 'var(--tt-border, #ececef)' : danger ? 'rgba(220, 38, 38, 0.25)' : 'rgba(217, 119, 6, 0.26)'}
 		borderRadius="var(--tt-radius-md, 12px)"
-		color={danger ? 'var(--tt-danger, #dc2626)' : 'var(--tt-warning, #b45309)'}
+		color={neutral ? 'var(--tt-muted, #71717a)' : danger ? 'var(--tt-danger, #dc2626)' : 'var(--tt-warning, #b45309)'}
 		fontSize="11px"
 		gap={2}
 		lineHeight="1.45"
@@ -164,6 +171,7 @@ export type DeviceDetailsDrawerProps = {
 	screenVideo?: ScreenVideoContract;
 	screenAvailability?: ScreenSessionAvailability;
 	screenStartInput?: Record<string, unknown> | null;
+	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 	onPermissionModeChange?: (deviceId: string, mode: DeviceExecutionPermissionMode) => void | Promise<void>;
 };
 
@@ -183,10 +191,12 @@ export const DeviceDetailsDrawer = memo(
 		screenVideo,
 		screenAvailability,
 		screenStartInput = null,
-		onPermissionModeChange
+		onPermissionModeChange,
+		onContextMenu
 	}: DeviceDetailsDrawerProps) => {
 		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
 		const [resizing, setResizing] = React.useState(false);
+		const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
 		const summary = state?.summary || null;
 		const isWatch = summary?.platform === 'watchos';
@@ -335,6 +345,7 @@ export const DeviceDetailsDrawer = memo(
 		const details = (
 			<>
 					<DetailHeader
+						onContextMenu={state && onContextMenu ? (event: React.MouseEvent) => onContextMenu(state.deviceId, event) : undefined}
 						borderBottom="1px solid var(--tt-border, #ececef)"
 						paddingBottom={3}
 						paddingLeft={{ base: 4, sm: 5 }}
@@ -342,6 +353,7 @@ export const DeviceDetailsDrawer = memo(
 						paddingTop={{ base: 'calc(16px + env(safe-area-inset-top))', md: 4 }}
 					>
 						{summary ? (
+							<Flex alignItems="center" gap={2} justifyContent="space-between" minWidth={0}>
 							<Box minWidth={0}>
 								<Flex alignItems="center" gap={2} minWidth={0} wrap="wrap">
 									<Text as="h2" fontSize="15px" fontWeight={800} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
@@ -353,9 +365,11 @@ export const DeviceDetailsDrawer = memo(
 									{summary.system?.model || summary.platform}
 									{summary.system?.osVersion ? ` · ${summary.system.osVersion}` : ''}
 									{battery ? ` · ${battery}` : ''}
-									{` · ${formatDeviceLastSeen(summary.lastSeenAt, now)}`}
+									{presence === 'online' && summary.serviceStatus !== 'degraded' ? ` · ${formatDeviceLastSeen(summary.lastSeenAt, now)}` : null}
 								</Text>
 							</Box>
+							{state && onContextMenu ? <Button aria-label="Device actions" title="Device actions" aria-haspopup="menu" minWidth="44px" height="44px" padding={0} variant="ghost" flexShrink={0} onClick={(event) => onContextMenu(state.deviceId, event)}><MoreHorizontal aria-hidden size={18} /></Button> : null}
+							</Flex>
 						) : (
 							<Text as="h2" fontSize="15px" fontWeight={800}>
 								Device details
@@ -383,12 +397,18 @@ export const DeviceDetailsDrawer = memo(
 							</Box>
 						) : (
 							<>
+								<Section deviceId={state.deviceId} key={`overview:${state.deviceId}`} section="overview" label="Device overview" summary={battery || summary.system?.model || summary.platform}>
+									<DeviceDashboard deviceId={state.deviceId} ownerId={ownerId} snapshot={snapshot} presence={presence} now={now} />
+								</Section>
+								{ownerId && <Section deviceId={state.deviceId} key={`location:${state.deviceId}`} section="location" label="Location history"><DeviceLocationWorkspace ownerId={ownerId} deviceId={state.deviceId} model={summary.system?.model} platform={summary.platform} /></Section>}
 								{isWatch ? (
-									<WatchDeviceDetails now={now} summary={summary} />
+									<Section deviceId={state.deviceId} key={`watch:${state.deviceId}`} section="watch" label="Watch sync & health" summary={summary.syncStatus || 'paired'}>
+										<WatchDeviceDetails now={now} summary={summary} />
+									</Section>
 								) : (
 									<>
 								{presence !== 'online' ? (
-									<Notice icon={<WifiOff aria-hidden size={15} />}>
+									<Notice neutral icon={<WifiOff aria-hidden size={15} />}>
 										{presence === 'stale'
 											? 'This device has stopped reporting recently. Queueable actions can wait for it to reconnect.'
 											: 'This device is offline. Live state may be stale, and unsupported offline actions remain disabled.'}
@@ -403,13 +423,17 @@ export const DeviceDetailsDrawer = memo(
 									<Notice danger icon={<CircleAlert aria-hidden size={15} />}>
 										{summary.serviceStatus === 'version-mismatch'
 											? 'The desktop node and web client versions are incompatible.'
-											: `Node health: ${summary.lastError?.code || 'degraded'}`}
+											: `Node health: ${summary.lastError?.code || 'Connection unavailable'}`}
 									</Notice>
 								) : null}
 
-								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
-									<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">Open device sync &amp; backup</Button>
-                  <Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
+								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="Folders & sync configs" section="sync">
+									<Flex gap={2} wrap="wrap">
+										<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">
+											Manage folders &amp; sync configs
+										</Button>
+										<Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
+									</Flex>
 								</Section>
 								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Live device filesystem" section="files">
                   {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}
@@ -486,8 +510,7 @@ export const DeviceDetailsDrawer = memo(
 									>
 										<Flex alignItems="center" gap={1.5} wrap="wrap">
 											<DeviceStatusPill
-												label={`service · ${summary.serviceStatus}`}
-												tone={summary.serviceStatus === 'running' ? 'positive' : 'warning'}
+												{...deviceServicePresentation(summary.serviceStatus, summary.lastSeenAt, now)}
 											/>
 											<DeviceStatusPill
 												label={`pairing · ${summary.pairingStatus}`}
@@ -668,7 +691,7 @@ export const DeviceDetailsDrawer = memo(
 		);
 
 		if (presentation === 'page') return (
-			<Box background="var(--tt-card, #ffffff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" color="var(--tt-ink, #17171c)" marginX="auto" maxWidth="1280px" minWidth={0} width="100%">
+			<Box data-tt-device-details="page" background="var(--tt-card, #ffffff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" color="var(--tt-ink, #17171c)" marginX="auto" maxWidth="1280px" minWidth={0} width="100%">
 				<Flex borderBottom="1px solid var(--tt-border, #ececef)" justifyContent="flex-end" padding={3}>
 					<Button as={RouterLink} size="sm" to="/things" variant="outline">Back to Things</Button>
 				</Flex>
@@ -677,12 +700,13 @@ export const DeviceDetailsDrawer = memo(
 		);
 
 		return (
-			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
+			<Drawer initialFocusRef={closeButtonRef} isOpen={isOpen} onClose={onClose} placement="right" size="full">
 				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
 				<DrawerContent
 					background="var(--tt-card, #ffffff)"
 					color="var(--tt-ink, #17171c)"
 					containerProps={{ zIndex: DRAWER_MODAL_Z }}
+					data-tt-device-details="drawer"
 					cursor={resizing ? 'ew-resize' : undefined}
 					marginLeft="auto"
 					maxWidth="100vw"
@@ -736,6 +760,7 @@ export const DeviceDetailsDrawer = memo(
 					/>
 					<DrawerCloseButton
 						aria-label="Close device details"
+						ref={closeButtonRef}
 						height={11}
 						marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }}
 						pointerEvents="auto"

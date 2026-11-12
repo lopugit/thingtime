@@ -1,4 +1,4 @@
-import { visitStoredBlocks } from './sharedCompositionCore';
+import { visitStoredBlocks, iterateStoredBlocks, storedComponentScope } from './sharedCompositionCore';
 import { literalAttachmentId, mapCssMediaUrls, isRenderMediaStyleProp, mapStyleMediaUrls } from '../../../components/Sharing/renderMediaCore';
 import { visitAuthoredHtmlMedia } from './authoredHtmlMedia';
 import {
@@ -7,6 +7,7 @@ import {
 	MAX_RESOLVED_NODES,
 	sanitizeArgSpecs
 } from '../../../components/ComponentsLibrary/componentTemplate';
+import { iterateStoredTemplateNodes, componentScopeValue, storedReferenceText, StoredReferenceUnsupportedError } from '../../../components/ComponentsLibrary/componentTemplate';
 import { copiedMediaRefs, copiedMediaUrl } from '../../../components/Sharing/copiedMediaRefs';
 
 // Media capabilities come only from literal first-party URLs in stored render
@@ -180,3 +181,110 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 	}
 	return ids;
 };
+
+/** Worker media discovery over stored output positions. The complete source
+ * record is bounded by storage; the iterator never expands a resolved render
+ * tree or applies preview budgets to a saved backup. IDs are observations only,
+ * never grants; the capture adapter must resolve owner/target/version itself. */
+export function* iterateStoredCompositionMedia(kinds: string[], crystal: Record<string, any>, options: { args?: Record<string, unknown>; signal?: AbortSignal } = {}): Generator<string | null> {
+	const scope = storedComponentScope(crystal, options.args);
+	const copied = kinds.includes('component') ? copiedMediaRefs(crystal.render?.ttMediaRefs, true) : new Map<string, string>();
+	const urlId = (value: unknown) => {
+		if (typeof value !== 'string') return null;
+		if (value.startsWith('/api/v1/attachments/content?') && /[{}$]/.test(value)) throw new StoredReferenceUnsupportedError('Runtime-dependent stored media reference');
+		const id = literalAttachmentId(copiedMediaUrl(value, copied));
+		if (!id && value.startsWith('/api/v1/attachments/content?')) throw new StoredReferenceUnsupportedError('Stored media identity is outside the supported unkeyed reference protocol');
+		return id;
+	};
+	type Position = 'props' | 'style' | 'url';
+	function* values(root: unknown, position: Position, current: Record<string, unknown>, opaque = false): Generator<string | null> {
+		const stack: Iterator<{ value: any; position: Position; opaque: boolean }>[] = [];
+		const one = function* (value: unknown, position: Position, opaque: boolean) { yield { value, position, opaque }; };
+		stack.push(one(root, position, opaque));
+		while (stack.length) {
+			options.signal?.throwIfAborted();
+			const next = stack[stack.length - 1].next();
+			if (next.done) { stack.pop(); continue; }
+			yield null;
+			const { value, position: at, opaque: resolved } = next.value;
+			if (typeof value === 'string') {
+				// Arguments are values, never fresh template syntax.
+				// Repeated scalar interpolation can amplify one small stored value
+				// into an enormous string. Until a streaming scalar URL/CSS adapter
+				// exists, mark that format unsupported instead of allocating it or
+				// certifying a resolver-truncated prefix as complete media coverage.
+				if (!resolved) {
+					const tokens = new Set<string>();
+					for (const match of value.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*)\}/g)) {
+						if (tokens.has(match[1])) throw new StoredReferenceUnsupportedError('Repeated media interpolation needs a streaming scalar adapter');
+						tokens.add(match[1]);
+					}
+				}
+				const text = resolved ? value : storedReferenceText(value, current, Infinity);
+				if (at === 'url') { const id = urlId(text); if (id) yield id; }
+				if (at === 'style') {
+					const ids: string[] = [];
+					try { mapCssMediaUrls(text, url => { const id = urlId(url); if (id) ids.push(id); return url; }, { stored: true, signal: options.signal }); }
+					catch { options.signal?.throwIfAborted(); throw new StoredReferenceUnsupportedError('Stored CSS media cannot be fully decoded'); }
+					yield* ids;
+				}
+				continue;
+			}
+			if (!value || typeof value !== 'object') continue;
+			const children = function* () {
+				if (Array.isArray(value)) { if (at === 'style') for (const child of value) yield* one(child, at, resolved); return; }
+				if (!resolved) {
+					if ('ttArg' in value) {
+						const selected = componentScopeValue(current, String(value.ttArg));
+						if (selected === undefined) throw new StoredReferenceUnsupportedError('Runtime-dependent stored media value');
+						yield* one(selected, at, true); return;
+					}
+					if ('ttMap' in value) {
+						yield* one(value.ttMap?.default, at, false);
+						if (value.ttMap?.values && typeof value.ttMap.values === 'object') for (const key of Object.keys(value.ttMap.values)) yield* one(value.ttMap.values[key], at, false);
+						return;
+					}
+					if ('ttIf' in value) { yield* one(value.ttIf?.then, at, false); yield* one(value.ttIf?.else, at, false); return; }
+					if ('ttFormat' in value) throw new StoredReferenceUnsupportedError('Formatted media needs an exact output adapter');
+					if ('ttMerge' in value) throw new StoredReferenceUnsupportedError('Stored media merge needs an exact output adapter');
+					if ('ttRepeat' in value || 'ttEach' in value) throw new StoredReferenceUnsupportedError('Stored media value repetition needs an exact output adapter');
+				}
+				for (const key of Object.keys(value)) {
+					if (at === 'style') yield* one(value[key], at, resolved);
+					else if (at === 'props') {
+						if (['src', 'poster', 'href'].includes(key)) yield* one(value[key], 'url', resolved);
+						else if (isRenderMediaStyleProp(key)) yield* one(value[key], 'style', resolved);
+						else if (key.startsWith('_')) yield* one(value[key], at, resolved);
+					}
+				}
+			};
+			stack.push(children());
+		}
+	}
+	function* render(root: unknown, current: Record<string, unknown>) {
+		for (const step of iterateStoredTemplateNodes(root, current, options.signal)) {
+			if (!step) { yield null; continue; }
+			const { node, scope, opaque } = step;
+			if (!opaque && ['ttArg', 'ttMap', 'ttIf', 'ttFormat', 'ttMerge', 'ttRepeat', 'ttEach'].some(key => key in node)) continue;
+			yield* values(node.props, 'props', scope, opaque);
+		}
+	}
+	if (kinds.includes('webpage')) {
+		for (const step of iterateStoredBlocks(crystal.blocks, options.signal)) {
+			if (!step) { yield null; continue; }
+			const { block, scope } = step;
+			yield* values(block.css, 'style', scope, true);
+			if (block.type === 'media') { const id = urlId(block.src); if (id) yield id; }
+			if (block.type === 'text') { const id = urlId(block.href); if (id) yield id; }
+			if (block.type === 'text' || block.type === 'html') {
+				const ids: string[] = [];
+				try { visitAuthoredHtmlMedia(block.html, url => { const id = urlId(url); if (id) ids.push(id); }, { stored: true, signal: options.signal }); }
+				catch { options.signal?.throwIfAborted(); throw new StoredReferenceUnsupportedError('Stored HTML media cannot be fully decoded'); }
+				yield* ids;
+			}
+			if (block.type === 'element') yield* render({ tag: block.tag, props: block.props }, scope);
+		}
+		yield* values(crystal.previewBg, 'style', {}, true);
+	}
+	if (kinds.includes('component') || kinds.includes('schema')) yield* render(crystal.render, scope);
+}

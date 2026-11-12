@@ -1,4 +1,6 @@
+import { browserPasskeyAppIdReason } from './browserPasskeyAppId';
 import { parse as parseDomain } from 'tldts';
+import { PASSWORD_PROVIDER_NAME, passwordProviderAAGUIDBytes } from './passwordProviderIdentity';
 import type { PasswordEntry } from './model';
 
 type Descriptor = { type: 'public-key'; id: string; transports?: string[] };
@@ -13,7 +15,7 @@ type PublicKeyOptions = {
 /** origin must come from the browser's authenticated tab/frame sender, never page input. */
 export type BrowserPasskeyRequest = { type: 'create' | 'get'; origin: string; crossOrigin?: false; publicKey: PublicKeyOptions };
 export type BrowserPasskeyCredential = {
-  id: string; rawId: string; type: 'public-key'; authenticatorAttachment: 'platform'; clientExtensionResults: { credProps?: { rk: true } };
+  id: string; rawId: string; type: 'public-key'; authenticatorAttachment: 'platform'; clientExtensionResults: { credProps?: { rk: true }; appid?: false };
   response: { clientDataJSON: string; attestationObject?: string; authenticatorData?: string; signature?: string; userHandle?: string; transports?: string[]; publicKey?: string; publicKeyAlgorithm?: number };
 };
 const fail = (name: string, message: string): never => { throw new DOMException(message, name); };
@@ -49,6 +51,11 @@ function relyingParty(request: BrowserPasskeyRequest): string {
     return fail('SecurityError', 'A public suffix or invalid domain cannot be a relying party.');
   return rp;
 }
+/** Same-site client compatibility; signing remains independently RP-bound. */
+function validateAppId(value: unknown, origin: string): void {
+  if (typeof value !== 'string') return fail('TypeError', 'AppID must be a string.');
+  if (browserPasskeyAppIdReason(value, origin)) return fail('SecurityError', 'This AppID requires the native passkey provider.');
+}
 export function validateBrowserPasskeyRequest(input: unknown): BrowserPasskeyRequest {
   if (!object(input) || !['create', 'get'].includes(input.type) || typeof input.origin !== 'string' || !object(input.publicKey)) return fail('TypeError', 'Invalid passkey request.');
   // Snapshot page-controlled options before any asynchronous operation.
@@ -57,7 +64,14 @@ export function validateBrowserPasskeyRequest(input: unknown): BrowserPasskeyReq
   const options = request.publicKey;
   relyingParty(request); passkeyBytes(options.challenge);
   if (options.timeout !== undefined && (!Number.isFinite(options.timeout) || options.timeout < 0)) return fail('TypeError', 'Invalid passkey timeout.');
-  if (options.extensions !== undefined && (!object(options.extensions) || Object.entries(options.extensions).some(([key, value]) => request.type !== 'create' || key !== 'credProps' || value !== true))) return fail('NotSupportedError', 'Requested passkey extensions are unsupported.');
+  if (options.extensions !== undefined) {
+    if (!object(options.extensions)) return fail('NotSupportedError', 'Requested passkey extensions are unsupported.');
+    for (const [key, value] of Object.entries(options.extensions)) {
+      if (request.type === 'create' && key === 'credProps' && value === true) continue;
+      if (request.type === 'get' && key === 'appid') { validateAppId(value, request.origin); continue; }
+      return fail('NotSupportedError', 'Requested passkey extensions are unsupported.');
+    }
+  }
   const verification = (value: unknown) => { if (value !== undefined && !['required', 'preferred', 'discouraged'].includes(value as string)) fail('TypeError', 'Invalid user verification option.'); };
   verification(options.userVerification);
   for (const key of ['allowCredentials', 'excludeCredentials'] as const) {
@@ -116,10 +130,10 @@ export async function prepareBrowserPasskeyRegistration(input: BrowserPasskeyReq
   const jwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
   const idBytes = crypto.getRandomValues(new Uint8Array(32)), id = passkeyBase64url(idBytes);
   const cose = cborMap([[cborInt(1), cborInt(2)], [cborInt(3), cborInt(-7)], [cborInt(-1), cborInt(1)], [cborInt(-2), cborBytes(passkeyBytes(jwk.x))], [cborInt(-3), cborBytes(passkeyBytes(jwk.y))]]);
-  const authenticatorData = join(await authData(crypto, rp, true), new Uint8Array(16), bytes(0, idBytes.length), idBytes, cose);
+  const authenticatorData = join(await authData(crypto, rp, true), passwordProviderAAGUIDBytes(), bytes(0, idBytes.length), idBytes, cose);
   const attestation = cborMap([[cborText('fmt'), cborText('none')], [cborText('attStmt'), cborMap([])], [cborText('authData'), cborBytes(authenticatorData)]]);
   const fields: [string, string, string][] = [['username', 'Username', user.name], ['website', 'Website', `https://${rp}`], ['relyingParty', 'Relying party', rp], ['credentialId', 'Credential id', id], ['userHandle', 'User handle', user.id], ['privateKey', 'Passkey private key', jwk.d!]];
-  const entry: PasswordEntry = { title: `${rp} · ${user.name}`, passwordType: 'passkey', fields: fields.map(([id, label, value]) => ({ id, label, value, type: id === 'privateKey' ? 'password' : id === 'website' ? 'url' : 'text', ...(id === 'privateKey' ? { concealed: true } : {}) })) };
+  const entry: PasswordEntry = { title: `${PASSWORD_PROVIDER_NAME} Passkey · ${rp} · ${user.name}`, passwordType: 'passkey', fields: fields.map(([id, label, value]) => ({ id, label, value, type: id === 'privateKey' ? 'password' : id === 'website' ? 'url' : 'text', ...(id === 'privateKey' ? { concealed: true } : {}) })) };
   const publicKey = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   const response = credential(id, { clientDataJSON: passkeyBase64url(clientData(request)), attestationObject: passkeyBase64url(attestation), authenticatorData: passkeyBase64url(authenticatorData), transports: ['internal'], publicKey: passkeyBase64url(publicKey), publicKeyAlgorithm: -7 });
   if (request.publicKey.extensions?.credProps === true) response.clientExtensionResults = { credProps: { rk: true } };
@@ -143,5 +157,9 @@ export async function createBrowserPasskeyAssertion(entry: PasswordEntry, input:
   const key = await crypto.subtle.importKey('pkcs8', join(prefix, raw), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const data = clientData(request), authenticatorData = await authData(crypto, rp, false);
   const signature = derSignature(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, join(authenticatorData, await hash(crypto, data)))));
-  return credential(id, { clientDataJSON: passkeyBase64url(data), authenticatorData: passkeyBase64url(authenticatorData), signature: passkeyBase64url(signature), userHandle: handle });
+  const response = credential(id, { clientDataJSON: passkeyBase64url(data), authenticatorData: passkeyBase64url(authenticatorData), signature: passkeyBase64url(signature), userHandle: handle });
+  // This provider signs only ordinary RP-bound WebAuthn credentials. The AppID
+  // was authorized, but never replaced the RP hash (WebAuthn 10.1.1 steps 5–6).
+  if (Object.prototype.hasOwnProperty.call(request.publicKey.extensions || {}, 'appid')) response.clientExtensionResults = { appid: false };
+  return response;
 }

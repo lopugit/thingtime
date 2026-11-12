@@ -56,6 +56,15 @@ const makeContext = (scope: Record<string, unknown> = {}, random = () => 0.5): E
 const run = (expression: unknown[], scope?: Record<string, unknown>, random?: () => number): any =>
 	evaluateExpression(expression, makeContext(scope, random));
 
+test('civil date ranges validate exact dates and cross months, leap days and years', () => {
+	assert.deepEqual(run(['civilDateRange', '2028-02-28', 3]), ['2028-02-28', '2028-02-29', '2028-03-01']);
+	assert.deepEqual(run(['civilDateRange', '2026-12-31', '2']), ['2026-12-31', '2027-01-01']);
+	assert.deepEqual(run(['civilDateRange', '2026-12-31', 0]), []);
+	assert.throws(() => run(['civilDateRange', '2026-02-29', 1]), /valid YYYY-MM-DD/);
+	assert.throws(() => run(['civilDateRange', '2026-03-01', 1.5]), /range budget/);
+	assert.throws(() => run(['civilDateRange', '9999-12-31', 2]), /supported calendar/);
+});
+
 test('math functions compute over numbers and numeric strings', () => {
 	assert.equal(run(['add', 1, 2, '3']), 6);
 	assert.equal(run(['sub', 10, 4]), 6);
@@ -317,46 +326,37 @@ test('budgets refuse runaway evaluation and oversized lists', () => {
 });
 
 test('flatten refuses an oversized result without building it first', () => {
-	// `map(range(1000), range(1000))` is a million elements for ~2k of the
-	// 20k-node budget, and NOTHING checks the run deadline inside an
-	// expression. So flatten's cap has to bite during the walk: a cap that
-	// only reads the finished array makes the refusal cost as much as the
-	// success, and reduce+concat made that cost quadratic (~2.2s of blocking
-	// CPU, measured). Every sibling on the same input stays under ~80ms.
-	const nested = Array.from({ length: 400 }, () => Array.from({ length: 400 }, (_value, index) => index));
-	const started = process.hrtime.bigint();
-	assert.throws(() => run(['flatten', nested]), /lists cap at/);
-	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-	// 160,000 elements: linear is single-digit ms, quadratic is ~hundreds
-	assert.ok(elapsedMs < 250, `flatten refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	let inspected = 0;
+	const inner = new Proxy(Array.from({ length: MAX_EXPRESSION_LIST_LENGTH }, (_value, index) => index), {
+		get(target, key, receiver) {
+			if (typeof key === 'string' && /^\d+$/.test(key)) {
+				assert.ok(++inspected <= MAX_EXPRESSION_LIST_LENGTH + 1, 'flatten read too many elements before refusing');
+			}
+			return Reflect.get(target, key, receiver);
+		}
+	});
+	// Resolve the array through a ref so these reads measure the evaluator's
+	// flattening work rather than the test resolver copying an array literal.
+	assert.throws(() => run(['flatten', '$nested'], { nested: [inner, inner] }), /lists cap at/);
 	// and the ordinary semantics are untouched, including the exact boundary
 	assert.deepEqual(run(['flatten', [[1], [2, 3], 4]]), [1, 2, 3, 4]);
 	assert.equal(run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH }, (_value, index) => index)]]).length, MAX_EXPRESSION_LIST_LENGTH);
 	assert.throws(() => run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH + 1 }, (_value, index) => index)]]), /lists cap at/);
 });
 
-test('replace and join refuse an oversized result without building it first', () => {
-	// Same hazard as flatten, on the text side. `capText` reads `.length` on a
-	// FINISHED string, and V8's Array#join materialises the whole flat result:
-	// a 20k-char haystack split on a 1-char needle and rejoined with a 20k-char
-	// replacement built 399,980,001 chars (~382MB RSS, ~173ms of blocking,
-	// uninterruptible CPU) before the cap looked at it. Both sources are
-	// reachable from one saved program — `padStart` clamps its target length to
-	// exactly MAX_EXPRESSION_STRING_CHARS — and `actions.run` allows 240/min,
-	// so the refusal has to cost O(input), not O(would-be output).
+test('replace and join refuse an oversized result without building it first', { concurrency: false }, () => {
 	const big = run(['padStart', 'x', MAX_EXPRESSION_STRING_CHARS, 'y']);
 	assert.equal(big.length, MAX_EXPRESSION_STRING_CHARS);
-
-	for (const expression of [
-		['replace', big, 'y', big],
-		['join', Array.from({ length: 200 }, () => big), big]
-	]) {
-		const started = process.hrtime.bigint();
-		assert.throws(() => run(expression), /text caps at/, `${expression[0]} must refuse`);
-		const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-		// projecting the length is single-digit ms; building ~400M chars first
-		// is hundreds of ms and hundreds of megabytes
-		assert.ok(elapsedMs < 100, `${expression[0]} refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	const join = Array.prototype.join;
+	try {
+		Array.prototype.join = function (this: unknown[], separator?: string) {
+			assert.ok(separator !== big || this.length < 2, 'text builder tried to join an oversized result');
+			return join.call(this, separator);
+		};
+		assert.throws(() => run(['replace', 'yxy', 'y', big]), /text caps at/);
+		assert.throws(() => run(['join', ['a', 'b'], big]), /text caps at/);
+	} finally {
+		Array.prototype.join = join;
 	}
 
 	// ordinary semantics and the exact boundary are untouched
@@ -371,28 +371,16 @@ test('replace and join refuse an oversized result without building it first', ()
 });
 
 test('concat refuses an oversized result without building it first', () => {
-	// The fourth text builder with the same hazard as flatten/replace/join. Its
-	// arg COUNT is bounded (MAX_EXPRESSION_ARGS), which is why it reads safe —
-	// but an arg's SIZE is not. A `$step` ref to a things.search result is one
-	// resolved value worth hundreds of thousands of characters, and `concat`
-	// took `capText(args.map(toText).join(''))`: 24 of those built ~8.4M chars
-	// (423x its own 20k cap, ~25ms of blocking, uninterruptible CPU and ~16MB)
-	// and only THEN refused, so the refusal cost far more than the success.
-	// Capping during the walk refuses on the FIRST arg past the bound and never
-	// serialises the other 23: measured 25.3ms/15.7MB → 1.8ms/0.4MB.
-	const searchResult = Array.from({ length: 100 }, (_value, index) => ({
-		id: `thing-${index}`,
-		ownerId: 'someone',
-		createdAt: '2026-01-01T00:00:00.000Z',
-		crystal: { title: 'x'.repeat(400), body: 'y'.repeat(3000) }
-	}));
-	const args = Array.from({ length: 24 }, () => '$rows');
-	const started = process.hrtime.bigint();
-	assert.throws(() => run(['concat', ...args], { rows: searchResult }), /text caps at/);
-	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-	// stopping at the first oversized arg is low-single-digit ms; building the
-	// whole ~8.4M-char result first is tens of ms and megabytes per refused call
-	assert.ok(elapsedMs < 100, `concat refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	const oversizedText = 'y'.repeat(MAX_EXPRESSION_STRING_CHARS);
+	let trailingSerializations = 0;
+	const trailing = {
+		get body() {
+			trailingSerializations++;
+			return oversizedText;
+		}
+	};
+	assert.throws(() => run(['concat', '$first', '$trailing'], { first: { body: oversizedText }, trailing }), /text caps at/);
+	assert.equal(trailingSerializations, 0, 'concat serialized a later argument after the first crossed the cap');
 
 	// ordinary semantics and the exact boundary are untouched
 	assert.equal(run(['concat', 'a', 1, null, true]), 'a1true');
@@ -402,26 +390,49 @@ test('concat refuses an oversized result without building it first', () => {
 	assert.throws(() => run(['concat', big, 'z']), /text caps at/);
 });
 
-test('split refuses an oversized result without building it first', () => {
-	// The fifth builder with the flatten/replace/join/concat hazard, and the
-	// one whose input is LEAST bounded. Every other text function takes its
-	// input from a capped builder, but `text(0)` is `toText` of ANY resolved
-	// value: a `$step` ref straight to one long crystal text field is a plain
-	// string (toText is a no-op on strings), and the things write route accepts
-	// a 768KB body — a things.search result of 100 of those serialises to tens
-	// of millions of characters. `capList` read `.length` on a FINISHED array,
-	// so `.split('')` materialised one element per character first: measured
-	// 280ms of blocking, uninterruptible CPU and +172MB heap for a REFUSAL, at
-	// 240 actions.run/min. Refusing at the cap makes it O(cap) — flat in the
-	// input size — so the refusal costs less than the success, not more.
-	const body = 'y'.repeat(4_000_000);
-	for (const separator of ['', 'y']) {
-		const started = process.hrtime.bigint();
-		assert.throws(() => run(['split', '$body', separator], { body }), /lists cap at/, `split on ${JSON.stringify(separator)} must refuse`);
-		const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-		// stopping at the 1000th element is sub-millisecond and does not grow
-		// with the input; building all 4,000,000 first is 40-60ms and ~100MB
-		assert.ok(elapsedMs < 10, `split refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+test('split refuses an oversized result without building it first', { concurrency: false }, () => {
+	const maxInspectedPieces = MAX_EXPRESSION_LIST_LENGTH + 1;
+	const body = 'y'.repeat(maxInspectedPieces * 4);
+	const iterate = String.prototype[Symbol.iterator];
+	const indexOf = String.prototype.indexOf;
+	const split = String.prototype.split;
+	let codePoints = 0;
+	let delimiterSearches = 0;
+
+	// Count work on the resolved source. Eager iteration and unrestricted
+	// native splitting must fail even if the runner performs them quickly.
+	try {
+		String.prototype[Symbol.iterator] = function (this: string) {
+			const iterator = iterate.call(this);
+			if (String(this) !== body) return iterator;
+			const next = iterator.next.bind(iterator);
+			iterator.next = () => {
+				assert.ok(++codePoints <= maxInspectedPieces, 'split inspected too many code points before refusing');
+				return next();
+			};
+			return iterator;
+		};
+		String.prototype.indexOf = function (this: string, search: string, from?: number) {
+			if (String(this) === body) assert.ok(++delimiterSearches <= maxInspectedPieces, 'split searched for too many delimiters before refusing');
+			return indexOf.call(this, search, from);
+		};
+		String.prototype.split = function (this: string, ...args: unknown[]) {
+			if (String(this) === body) {
+				const limit = args[1];
+				assert.ok(
+					typeof limit === 'number' && Number.isInteger(limit) && limit >= 0 && limit <= maxInspectedPieces,
+					'split materialised an unrestricted list before refusing'
+				);
+			}
+			return Reflect.apply(split, this, args);
+		};
+		for (const separator of ['', 'y']) {
+			assert.throws(() => run(['split', '$body', separator], { body }), /lists cap at/, `split on ${JSON.stringify(separator)} must refuse`);
+		}
+	} finally {
+		String.prototype[Symbol.iterator] = iterate;
+		String.prototype.indexOf = indexOf;
+		String.prototype.split = split;
 	}
 
 	// ordinary semantics and the exact boundary are untouched, including
@@ -451,4 +462,16 @@ test('dateAdd refuses an out-of-range result instead of throwing a raw RangeErro
 	// the ordinary range still answers
 	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'day']), '2026-02-01T00:00:00.000Z');
 	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'year']), '2027-01-31T00:00:00.000Z');
+});
+
+
+test('URI components encode delimiters and Unicode with deterministic type and malformed-text refusals', () => {
+ assert.equal(run(['encodeURIComponent', "A & B/#?%=+é東京😀!'()*"]), "A%20%26%20B%2F%23%3F%25%3D%2B%C3%A9%E6%9D%B1%E4%BA%AC%F0%9F%98%80!'()*");
+ for (const value of [null, undefined, '']) assert.equal(run(['encodeURIComponent', value]), '');
+ for (const value of [42, false, [], {}]) assert.throws(() => run(['encodeURIComponent', value]), /expected text or null/);
+ for (const value of ['\ud800', '\udc00', 'a\ud800b', '\ud800\ud800']) assert.throws(() => run(['encodeURIComponent', value]), /^Error: encodeURIComponent requires well-formed UTF-16 text$/);
+ assert.throws(() => run(['encodeURIComponent']), /arg/);
+ assert.throws(() => run(['encodeURIComponent', 'a', 'b']), /arg/);
+ assert.throws(() => run(['encodeURIComponent', 'é'.repeat(MAX_EXPRESSION_STRING_CHARS)]), /Expression text caps/);
+ assert.equal(run(['concat', 'https://maps.example/?q=', {ttExpr: ['encodeURIComponent', '$address']}], {address: '7 A&B St'}), 'https://maps.example/?q=7%20A%26B%20St');
 });

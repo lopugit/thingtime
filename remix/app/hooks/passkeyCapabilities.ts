@@ -1,7 +1,7 @@
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 export const PASSKEY_REQUIREMENTS = {
 	login: { 'api.auth-passkeys-login-options': '1.1.0', 'api.auth-passkeys-login': '1.1.0' },
-	registration: { 'api.auth-passkeys-register-options': '1.1.0', 'api.auth-passkeys-register': '1.1.0' }
+	registration: { 'api.auth-passkeys-register-options': '1.2.0', 'api.auth-passkeys-register': '1.2.0' }
 } as const;
 export const supportsPasskeyCeremonies = (manifest: any, origin: string, kind: keyof typeof PASSKEY_REQUIREMENTS) =>
 	manifest?.origin === origin &&

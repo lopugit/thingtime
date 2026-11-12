@@ -4,7 +4,7 @@ export const LOPU_USER_VAULT_SYSTEM_TYPE = 'tt.lopuUserVault';
 export const LOPU_TRANSCRIPT_SYSTEM_TYPE = 'tt.lopuTranscriptPage';
 export const LOPU_USER_VAULT_SCHEMA_VERSION = 1;
 
-export type LopuProviderKind = 'anthropic' | 'openai' | 'google' | 'xai' | 'openrouter' | 'mistral' | 'deepseek' | 'groq' | 'cohere' | 'compatible';
+export type LopuProviderKind = 'anthropic' | 'anthropic-api-key' | 'openai' | 'google' | 'xai' | 'openrouter' | 'mistral' | 'deepseek' | 'groq' | 'cohere' | 'compatible';
 
 export type LopuProviderEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type LopuProviderSpeed = 'normal' | 'fast';
@@ -35,7 +35,7 @@ const CLAUDE_REASONING = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const GOOGLE_REASONING = ['minimal', 'low', 'medium', 'high'] as const;
 const XAI_REASONING = ['low', 'medium', 'high', 'xhigh'] as const;
 
-export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
+const PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	{
 		id: 'openai',
 		label: 'OpenAI / Codex',
@@ -55,7 +55,7 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	},
 	{
 		id: 'anthropic',
-		label: 'Anthropic / Claude',
+		label: 'Claude Code OAuth (existing runtime)',
 		endpoint: 'https://api.anthropic.com',
 		tokenLabel: 'Claude Code OAuth token',
 		models: [
@@ -153,6 +153,19 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	}
 ] as const;
 
+// Separate saved kind: never infer authentication from a secret's prefix or
+// reinterpret an existing Claude Code connection as Console-billed access.
+export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = PROVIDER_TEMPLATES.flatMap((template) =>
+ template.id === 'anthropic' ? [{ ...template, id: 'anthropic-api-key' as const,
+  label: 'Anthropic Console API key', tokenLabel: 'Anthropic Console API key' }, template] : [template]
+);
+
+export const validateAnthropicApiKey = (value: string): string => {
+ if (!value.trim() || value !== value.trim() || /[\r\n]/.test(value) || value.startsWith('sk-ant-oat'))
+  throw new TypeError('Use an Anthropic Console API key for this connection, not a Claude Code setup token.');
+ return value;
+};
+
 const SAFE_ID = /^[A-Za-z0-9_-]{8,120}$/;
 
 export const boundedVaultText = (value: unknown, max: number): string | null => {
@@ -232,6 +245,7 @@ export const normalizeLopuProviderEndpoint = (value: unknown): string | null => 
 
 export const normalizeLopuProviderKind = (value: unknown): LopuProviderKind | null =>
 	value === 'anthropic' ||
+	value === 'anthropic-api-key' ||
 	value === 'openai' ||
 	value === 'google' ||
 	value === 'xai' ||
@@ -250,6 +264,14 @@ export const providerTemplateFor = (provider: LopuProviderKind): LopuProviderTem
 export const providerModelFor = (provider: LopuProviderKind, modelId: unknown): LopuProviderModel | null => {
 	if (typeof modelId !== 'string') return null;
 	return providerTemplateFor(provider)?.models.find((model) => model.id === modelId.trim()) ?? null;
+};
+
+/** A saved provider's resolved model owns tuning support. Unknown custom models
+ * retain explicit tuning; known models never receive unsupported effort fields.
+ * This changes the effective turn only, not the user's saved preference. */
+export const normalizeVaultProviderEffort = (provider: LopuProviderKind, modelId: string, effort: LopuProviderEffort | null): LopuProviderEffort | null => {
+  const model = providerModelFor(provider, modelId);
+  return effort && (!model || model.efforts.includes(effort)) ? effort : null;
 };
 
 // A provider-native model id as the vault or a voice request may carry it

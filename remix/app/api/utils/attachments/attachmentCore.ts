@@ -1,4 +1,5 @@
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
+export const ATTACHMENT_BLOB_THINGTIME = 'attachment-content-blob' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
 export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
@@ -7,8 +8,15 @@ export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 // A purpose is stamped before any upload URL is issued and never changes.
 // That keeps a private draft created for one surface from being replayed into
 // a different audience (for example, a DM attachment becoming a public post).
-export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password'] as const;
+export const VAULT_ATTACHMENT_PURPOSE = 'password' as const;
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', VAULT_ATTACHMENT_PURPOSE] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
+// Empty ordinary files remain valid content on these surfaces. Image-only,
+// recording and vault ceremonies retain their existing nonempty validation.
+export const EMPTY_ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'file'] as const;
+export const attachmentPurposeAllowsEmpty = (purpose: unknown): boolean =>
+  (EMPTY_ATTACHMENT_PURPOSES as readonly unknown[]).includes(purpose);
+
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
 
@@ -92,6 +100,15 @@ export type AttachmentPrivateObjectFields = {
 	attachmentLinked?: true;
 };
 
+export type AttachmentBlobRef = { id: string; objectAttachmentId: string; objectVersionId: string };
+export const validAttachmentBlobRef = (value: unknown): value is AttachmentBlobRef => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const ref = value as AttachmentBlobRef;
+  return Object.keys(ref).length === 3 && typeof ref.id === 'string' && /^blob-[a-f0-9]{64}$/.test(ref.id) &&
+    typeof ref.objectAttachmentId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(ref.objectAttachmentId) &&
+    isAttachmentObjectVersionId(ref.objectVersionId);
+};
+
 export type AttachmentStorageCandidate = {
 	thingtime?: unknown;
 	crystal?: unknown;
@@ -110,6 +127,8 @@ export type AttachmentStorageCandidate = {
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
 	attachmentLinked?: unknown;
+	attachmentBlob?: unknown;
+	attachmentRedundantDeleteAfter?: unknown;
 };
 
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
@@ -205,7 +224,6 @@ export const canonicalLinkedAttachmentUrl = (value: unknown): string | null => {
 	const trimmed = value.trim();
 	if (
 		!trimmed ||
-		trimmed.length > MAX_LINKED_ATTACHMENT_URL_CHARS ||
 		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
 		trimmed.includes('\\') ||
 		!/^https?:\/\//i.test(trimmed)
@@ -302,13 +320,13 @@ export const linkedMediaTypeForUrl = (url: string): { contentType: string; media
 
 // A display name for the linked media, from the URL path basename (decoded
 // when possible), falling back to the hostname. The result must survive the
-// crystal name sanitizer's round-trip EXACTLY (trimmed, well-formed unicode,
-// no control/format chars, ≤255) — a name that doesn't would make the freshly
+// crystal name sanitizer's round-trip EXACTLY (well-formed Unicode with
+// no control/format characters) — a name that doesn't would make the freshly
 // minted crystal non-canonical and fail the mint.
 export const linkedAttachmentNameForUrl = (url: string): string => {
 	const canonicalName = (value: string): string | null => {
-		const sliced = value.slice(0, MAX_ATTACHMENT_NAME_CHARS).trim();
-		return sliced && !UNSAFE_FILENAME_CHAR_RE.test(sliced) && isWellFormedUnicode(sliced) ? sliced : null;
+		const sliced = value;
+		return sliced.trim() && !UNSAFE_FILENAME_CHAR_RE.test(sliced) && isWellFormedUnicode(sliced) ? sliced : null;
 	};
 	try {
 		const parsed = new URL(url);
@@ -326,12 +344,11 @@ export const linkedAttachmentNameForUrl = (url: string): string => {
 };
 
 // Single-line owner text (titles): the same hygiene as filenames.
-const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentLine = (value: unknown, _maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
 	if (!trimmed) return { ok: true };
-	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
 	if (UNSAFE_FILENAME_CHAR_RE.test(trimmed)) return { ok: false, error: `Attachment ${label}s cannot contain control or format characters` };
 	if (!isWellFormedUnicode(trimmed)) return { ok: false, error: `Attachment ${label}s must contain valid Unicode` };
 	return { ok: true, value: trimmed };
@@ -340,12 +357,11 @@ const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string)
 // Multi-line owner text (descriptions): newlines allowed, every other control
 // or format character still rejected.
 const UNSAFE_MULTILINE_CHAR_RE = /[\p{Cf}\p{Cs}]/u;
-const sanitizeAttachmentBlock = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentBlock = (value: unknown, _maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
 	if (!trimmed) return { ok: true };
-	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
 	for (let index = 0; index < trimmed.length; index += 1) {
 		const code = trimmed.charCodeAt(index);
 		if ((code <= 0x1f && code !== 0x0a) || code === 0x7f) {
@@ -364,11 +380,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 		return { ok: false, error: 'Attachment metadata must be an object' };
 	}
 	const raw = input as Record<string, unknown>;
-	const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-	if (!name) return { ok: false, error: 'Attachment name is required' };
-	if (name.length > MAX_ATTACHMENT_NAME_CHARS) {
-		return { ok: false, error: `Attachment names can contain at most ${MAX_ATTACHMENT_NAME_CHARS} characters` };
-	}
+	const name = typeof raw.name === 'string' ? raw.name : '';
+	if (!name.trim()) return { ok: false, error: 'Attachment name is required' };
 	if (UNSAFE_FILENAME_CHAR_RE.test(name)) {
 		return { ok: false, error: 'Attachment names cannot contain control or format characters' };
 	}
@@ -719,6 +732,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (looksLinked) {
 		if (
 			doc.attachmentLinked !== true ||
+      doc.attachmentBlob !== undefined ||
 			typeof doc.objectKey !== 'string' ||
 			!doc.objectKey.startsWith(LINKED_ATTACHMENT_OBJECT_KEY_PREFIX) ||
 			doc.objectSizeBytes !== 0 ||
@@ -747,5 +761,15 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	}
 	const crystal = canonicalAttachmentCrystal(doc.crystal);
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
+  if (doc.attachmentRedundantDeleteAfter !== undefined && (!validAttachmentBlobRef(doc.attachmentBlob) ||
+    (doc.attachmentRedundantDeleteAfter !== null && (!(doc.attachmentRedundantDeleteAfter instanceof Date) ||
+      !Number.isFinite(doc.attachmentRedundantDeleteAfter.getTime()))) ||
+    doc.objectKey === 'objects/' + doc.attachmentBlob.objectAttachmentId)) return null;
+  if (doc.attachmentBlob !== undefined) {
+    if (!validAttachmentBlobRef(doc.attachmentBlob) || doc.attachmentPurpose !== 'file' ||
+      !['ready', 'deleting'].includes(doc.attachmentState as string) ||
+      !isAttachmentObjectVersionId(doc.objectVersionId) || doc.uploadId !== undefined) return null;
+    return doc.attachmentRedundantDeleteAfter === undefined ? 0 : Number(doc.objectSizeBytes);
+  }
 	return Number(doc.objectSizeBytes);
 };

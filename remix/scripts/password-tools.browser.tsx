@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 /** Synthetic UI transport only. No production endpoint, account, vault or passkey ceremony. */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -19,7 +20,12 @@ const entries = new Map<string, { revision: number; entry: PasswordEntry }>([[en
   { id: 'website', label: 'Website', type: 'url', value: 'https://password-tools.invalid/' }
 ] } }]]);
 const layouts = new Map<string, any>();
-let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0;
+let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0; let duplicateKeyWarnings = 0;
+const originalConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && /same key|unique ["']?key/i.test(args[0])) duplicateKeyWarnings++;
+  originalConsoleError(...args);
+};
 const metadata = (id: string, value: { revision: number; entry: PasswordEntry }) => ({ id, title: value.entry.title, passwordType: value.entry.passwordType, revision: value.revision, updatedAt: new Date(1700000000000 + value.revision).toISOString(), ...(value.entry.icon ? { icon: value.entry.icon } : {}) });
 // Deliberately no reference to original fetch: every unrecognised request fails closed.
 window.fetch = async (input, init) => {
@@ -28,12 +34,13 @@ window.fetch = async (input, init) => {
   if (url.href === iconUrl) { iconFetches++; return new Response(iconBytes, { headers: { 'Content-Type': 'image/png' } }); }
   if (url.href === badIconUrl) return new Response(null, { status: 404 });
   if (url.origin !== location.origin) { rejectedRequests++; return Response.json({ ok: false, error: 'Synthetic fixture blocks external requests.' }, { status: 403 }); }
-  if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(['api.passwords', 'api.things', 'api.webpages-resolve', 'api.actions-run', 'api.mongodb-endpoint'].map(feature => [feature, { version: feature === 'api.passwords' ? '1.3.0' : '1.99.0' }])) });
+  if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(['api.passwords', 'api.things', 'api.webpages-resolve', 'api.actions-run', 'api.mongodb-endpoint'].map(feature => [feature, { version: feature === 'api.passwords' ? '1.6.1' : '1.99.0' }])) });
   const body = init?.body ? JSON.parse(String(init.body)) : {};
   if (url.pathname === '/api/v1/passwords') {
     const response = (data: Record<string, unknown>) => Response.json({ ok: true, ownerId, ...data });
     if (!init?.body) return response({ configured: true, entries: Array.from(entries, ([id, record]) => metadata(id, record)), nextCursor: null });
     if (body.expectedOwnerId !== ownerId) return Response.json({ ok: false, error: 'Wrong synthetic owner.' }, { status: 403 });
+    if (body.operation === 'verification-settings') return response({ settings: { window: '5m', revision: 'synthetic', reuseRecentDeviceVerification: true } });
     if (body.operation === 'file-list') return response({ files: [], nextCursor: null });
     if (body.operation === 'read') { const record = entries.get(body.id); if (!record) return Response.json({ ok: false }, { status: 404 }); reads++; return response({ id: body.id, revision: record.revision, entry: structuredClone(record.entry) }); }
     if (body.operation === 'save') {
@@ -56,7 +63,7 @@ window.fetch = async (input, init) => {
 const wait = (ms = 80) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const check = (value: unknown, message: string) => { if (!value) throw new Error(message); };
 async function until(assertion: () => boolean, message: string) { for (let i = 0; i < 50; i++) { if (assertion()) return; await wait(); } throw new Error(message); }
-const button = (label: string, root: ParentNode = document) => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent?.trim() === label || node.querySelector('p')?.textContent?.trim() === label);
+const button = (label: string, root: ParentNode = document) => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(node => [node, ...node.querySelectorAll('*')].some(part => part.textContent?.trim() === label));
 const control = (label: string) => document.querySelector<HTMLInputElement | HTMLSelectElement>(`[aria-label="${label}"]`);
 function setControl(node: HTMLInputElement | HTMLSelectElement | null, value: string) {
   if (!node) throw new Error('Required synthetic form control is missing.');
@@ -66,6 +73,7 @@ function setControl(node: HTMLInputElement | HTMLSelectElement | null, value: st
 }
 function Fixture() {
   const [status, setStatus] = React.useState('Ready · synthetic UI only');
+  React.useEffect(() => { const report = () => { const roots = document.querySelectorAll('.thing-mod-fields'); const next = JSON.stringify({ fieldGroups: roots.length, passwordInputs: document.querySelectorAll('input[aria-label="Password"]').length }); const target = document.querySelector('[data-field-counts]'); if (target && target.textContent !== next) target.textContent = next; if (roots.length > 1) observer.disconnect(); }; const observer = new MutationObserver(report); observer.observe(document.body, { childList: true, subtree: true }); report(); return () => observer.disconnect(); }, []);
   const [running, setRunning] = React.useState(false);
   const [epoch, remount] = React.useReducer(value => value + 1, 0);
   const run = async () => {
@@ -75,7 +83,29 @@ function Fixture() {
       await until(() => !!button(title), 'Synthetic entry did not load'); button(title)!.click();
       await until(() => !!control('Platform preset'), 'Actual entry editor did not open');
       check(document.querySelectorAll('select[aria-label="Platform preset"]').length === 1, 'Entry editor mounted duplicate password generators');
+      const singleFields = () => {
+        check(document.querySelectorAll('.thing-mod-fields').length === 1, 'Manager duplicated the fields editor after rerender');
+        check(document.querySelectorAll('button[aria-label="Copy Password"]').length === 1, 'Manager lost or duplicated password Copy');
+        check(duplicateKeyWarnings === 0, 'Manager emitted a duplicate React key warning');
+      };
+      singleFields();
       const draftTitle = document.getElementById('password-title') as HTMLInputElement;
+      // Real controlled editor changes, one input event per character. The
+      // ordinary manager and Thingtime wrapper must keep one fields root.
+      for (const value of ['S', 'Sy', 'Syn', 'Synt', 'Synth']) { setControl(draftTitle, value); await wait(); singleFields(); }
+      const passwordInput = control('Password') as HTMLInputElement;
+      for (const value of ['s', 'sy', 'syn', 'synthetic']) { setControl(passwordInput, value); await wait(); singleFields(); }
+      passwordInput.focus(); await wait(); singleFields(); draftTitle.focus(); await wait(); singleFields();
+      window.dispatchEvent(new Event('focus')); await wait(250); singleFields();
+      check(passwordInput.type === 'password', 'Typing or focus revealed password');
+      let copied = false;
+      const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+      try {
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { copied = value === 'synthetic'; } } });
+        document.querySelector<HTMLButtonElement>('button[aria-label="Copy Password"]')!.click(); await wait();
+        check(copied, 'Manager Copy did not write current controlled draft'); singleFields();
+      } finally { if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor); else Reflect.deleteProperty(navigator, 'clipboard'); }
+
       setControl(draftTitle, 'Synthetic retained draft'); await wait();
       button('Set up passkeys')!.click(); await wait();
       check(!!button('Close passkey guide'), 'Passkey guide did not expand');
@@ -115,11 +145,11 @@ function Fixture() {
       check(document.documentElement.scrollWidth <= innerWidth + 1, 'Horizontal page overflow');
       window.scrollTo(0, document.documentElement.scrollHeight); await wait();
       check(document.documentElement.scrollWidth <= innerWidth + 1, 'Bottom of page overflows');
-      setStatus(`PASS · ${innerWidth}px · presets, exclusions, target, masked fill, synthetic save/read/component reload, icon preview/fallback/removal, retained passkey draft; no real provider ceremony`);
+      setStatus(`PASS · ${innerWidth}px · single editor across typing/focus, zero duplicate-key warnings, manager Copy, presets, exclusions, target, masked fill, synthetic save/read/component reload, icon preview/fallback/removal, retained passkey draft; no real provider ceremony`);
     } catch (error) { setStatus(`FAIL · ${error instanceof Error ? error.message : 'Synthetic regression failed'}`); }
     finally { setRunning(false); }
   };
-  return <><Box maxW="1100px" mx="auto" p={4}><Text as="h1" fontSize="xl" fontWeight="bold">Synthetic password tools regression</Text><Text>No real credentials, accounts, provider registration or server acceptance. API writes remain in this page’s memory; reload checks remount the component and read that fixture transport.</Text><Button mt={3} disabled={running} onClick={() => void run()}>Run regression</Button><Button mt={3} ml={2} disabled={running} onClick={() => remount()}>Reload component</Button><Text role="status" data-regression-status mt={3} overflowWrap="anywhere">{status}</Text><Text fontSize="sm">Manual Builder check: open an entry, Edit layout on its generator, select a nested label or button, edit it through Builder, Save layout, Done editing layout, then Reload component and reopen the entry. Layout transport is synthetic and supports canonical saves. Unsupported requests are refused ({rejectedRequests} observed).</Text></Box><PasswordManager key={epoch} /></>;
+  return <><Box maxW="1100px" mx="auto" p={4}><Text as="h1" fontSize="xl" fontWeight="bold">Synthetic password tools regression</Text><Text>No real credentials, accounts, provider registration or server acceptance. API writes remain in this page’s memory; reload checks remount the component and read that fixture transport.</Text><Button mt={3} disabled={running} onClick={() => void run()}>Run regression</Button><Button mt={3} ml={2} disabled={running} onClick={() => remount()}>Reload component</Button><Text data-field-counts mt={3}>No editor</Text><Text role="status" data-regression-status mt={3} overflowWrap="anywhere">{status}</Text><Text fontSize="sm">Manual Builder check: turn on Builder on current page, open an entry, Edit layout on its generator, select a nested label or button, edit it through Builder, Save layout, Done editing layout, then Reload component and reopen the entry. Layout transport is synthetic and supports canonical saves. Unsupported requests are refused ({rejectedRequests} observed).</Text></Box><PasswordManager key={epoch} /></>;
 }
-const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture />, loader: () => ({ user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' }) }], { hydrationData: { loaderData: { root: { user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' } } } });
+const router = createMemoryRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture>, loader: () => ({ user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' }) }], { hydrationData: { loaderData: { root: { user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' } } } });
 createRoot(document.getElementById('root')!).render(<ChakraProvider><ThingtimeProvider storageKey="synthetic-password-tools-ui" persistLocal={false} exposeGlobals={false}><RouterProvider router={router} /></ThingtimeProvider></ChakraProvider>);

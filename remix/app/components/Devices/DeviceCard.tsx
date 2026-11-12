@@ -1,19 +1,22 @@
 import React, { memo } from 'react';
+import { Link } from 'react-router';
 import { browseClickIntent, BROWSE_CONTROLS_SX } from '../Things/browseInteraction';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
+import { deviceThingsPageHref } from './deviceNavigation';
 import { Laptop, Monitor, Server, Smartphone, Watch as WatchIcon } from 'lucide-react';
 
-import { deriveDevicePresence } from './deviceCore';
-import type { DevicePresenceStatus, DeviceSnapshot, DeviceSummary } from './deviceTypes';
+import { deviceHealthPresentation, resolvedDevicePresence, type DeviceStatusTone } from './deviceStatusPresentation';
+import type { DeviceSnapshot, DeviceSummary } from './deviceTypes';
+export { resolvedDevicePresence } from './deviceStatusPresentation';
 
-type StatusTone = 'positive' | 'warning' | 'negative' | 'neutral' | 'accent';
+type StatusTone = DeviceStatusTone;
 
 const STATUS_TONES: Record<StatusTone, { background: string; color: string }> = {
 	positive: { background: 'rgba(22, 163, 74, 0.12)', color: 'var(--tt-success, #15803d)' },
 	warning: { background: 'rgba(217, 119, 6, 0.13)', color: 'var(--tt-warning, #b45309)' },
 	negative: { background: 'rgba(220, 38, 38, 0.11)', color: 'var(--tt-danger, #dc2626)' },
-	neutral: { background: 'var(--tt-surface-alt, #f2f2f5)', color: 'var(--tt-muted, #71717a)' },
+	neutral: { background: 'var(--tt-surface-alt, #f2f2f5)', color: 'color-mix(in srgb, var(--tt-ink, #17171c) 70%, var(--tt-card, #ffffff))' },
 	accent: { background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.12))', color: 'var(--tt-accent, #db2777)' }
 };
 
@@ -27,21 +30,14 @@ export const DeviceStatusPill = memo(({ label, tone = 'neutral', title }: { labe
 		lineHeight="18px"
 		paddingX="7px"
 		title={title}
-		whiteSpace="nowrap"
+		whiteSpace="normal"
+		overflowWrap="anywhere"
+		maxWidth="100%"
 	>
 		{label}
 	</Box>
 ));
 DeviceStatusPill.displayName = 'DeviceStatusPill';
-
-export const resolvedDevicePresence = (summary: DeviceSummary, now = Date.now()): DevicePresenceStatus => {
-	const lastSeenPresence = deriveDevicePresence(summary.lastSeenAt, now);
-	if (summary.transportStatus === 'offline') return 'offline';
-	if (summary.transportStatus === 'connecting' || summary.transportStatus === 'backoff') {
-		return lastSeenPresence === 'offline' ? 'offline' : 'stale';
-	}
-	return lastSeenPresence;
-};
 
 export const formatDeviceLastSeen = (lastSeenAt: string | null | undefined, now = Date.now()): string => {
 	if (!lastSeenAt) return 'Never seen';
@@ -55,32 +51,11 @@ export const formatDeviceLastSeen = (lastSeenAt: string | null | undefined, now 
 	return `${Math.floor(elapsed / 86_400_000)}d ago`;
 };
 
-const presenceTone = (presence: DevicePresenceStatus): StatusTone => {
-	if (presence === 'online') return 'positive';
-	if (presence === 'stale') return 'warning';
-	return 'neutral';
-};
-
-const serviceTone = (summary: DeviceSummary): StatusTone => {
-	if (summary.serviceStatus === 'running') return 'positive';
-	if (summary.serviceStatus === 'starting' || summary.serviceStatus === 'needs-approval') return 'warning';
-	if (summary.serviceStatus === 'degraded') return 'warning';
-	if (summary.serviceStatus === 'version-mismatch') return 'negative';
-	return 'neutral';
-};
-
-export const DeviceHealthBadges = memo(({ summary, now }: { summary: DeviceSummary; now?: number }) => {
-	const presence = resolvedDevicePresence(summary, now);
-	return (
-		<Flex alignItems="center" gap={1.5} minWidth={0} wrap="wrap">
-			<DeviceStatusPill label={presence} tone={presenceTone(presence)} />
-			{summary.serviceStatus !== 'running' ? <DeviceStatusPill label={summary.serviceStatus} tone={serviceTone(summary)} /> : null}
-			{summary.pairingStatus !== 'paired' ? (
-				<DeviceStatusPill label={summary.pairingStatus} tone={summary.pairingStatus === 'revoked' ? 'negative' : 'warning'} />
-			) : null}
-		</Flex>
-	);
-});
+export const DeviceHealthBadges = memo(({ summary, now }: { summary: DeviceSummary; now?: number }) => (
+	<Flex alignItems="center" gap={1.5} minWidth={0} wrap="wrap">
+		{deviceHealthPresentation(summary, now).map(({ label, tone }) => <DeviceStatusPill key={label} label={label} tone={tone} />)}
+	</Flex>
+));
 DeviceHealthBadges.displayName = 'DeviceHealthBadges';
 
 const DevicePlatformIcon = ({ platform }: { platform: string }) => {
@@ -101,12 +76,11 @@ export type DeviceCardProps = {
 	now?: number;
 	controls?: React.ReactNode;
 	onSelect: (deviceId: string) => void;
-	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceCard = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu, controls }: DeviceCardProps) => {
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu, controls }: DeviceCardProps) => {
 		const observed = snapshot?.observed;
 		const model = device.system?.model || (device.platform === 'watchos' ? 'Apple Watch' : device.platform) || 'Device';
 		const version = device.system?.osVersion || device.nodeVersion || null;
@@ -117,29 +91,28 @@ export const DeviceCard = memo(
 				_focusVisible={{ boxShadow: '0 0 0 3px var(--tt-accent-soft, rgba(244, 114, 182, 0.25))' }}
 				_hover={{ borderColor: 'var(--tt-border-strong, #d4d4d8)', transform: 'translateY(-1px)' }}
 				aria-label={`Open ${device.name}`}
-			title={onOpen ? 'Click or press Enter to browse saved files. Select with the checkbox or modifier-click; right-click for device settings.' : undefined}
-				aria-pressed={selected}
-				as="button"
+				title="Open device page"
+				as={Link}
 				background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'var(--tt-card, #ffffff)'}
 				border="1px solid"
 				borderColor={selected ? 'var(--tt-accent, #f472b6)' : 'var(--tt-border, #ececef)'}
 				borderRadius="var(--tt-radius-lg, 16px)"
 				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 				color="var(--tt-ink, #17171c)"
+				display="block"
 				minWidth={0}
 				onClick={(event) => {
 					const intent = browseClickIntent(event);
-					if (intent === 'select' || (intent === 'open' && !onOpen)) onSelect(device.id);
-					else if (intent === 'open') onOpen?.(device.id);
+					if (intent === 'select' || intent === 'ignore') event.preventDefault();
+					if (intent === 'select') onSelect(device.id);
 				}}
-				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
 				onContextMenu={(event) => onContextMenu?.(device.id, event)}
 				padding={4}
 				paddingTop={controls ? 10 : 4}
 				sx={controls ? { '@media (hover: none), (pointer: coarse)': { paddingTop: '56px' } } : undefined}
 				textAlign="left"
 				transition="border-color 120ms ease, transform 120ms ease, background 120ms ease"
-				type="button"
+				to={deviceThingsPageHref(device.id)}
 				width="100%"
 			>
 				<Flex alignItems="flex-start" gap={3}>
@@ -156,10 +129,10 @@ export const DeviceCard = memo(
 						<DevicePlatformIcon platform={device.platform} />
 					</Flex>
 					<Box flex="1" minWidth={0}>
-						<Text fontSize="14px" fontWeight={700} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+						<Text as="span" display="block" fontSize="14px" fontWeight={700} title={device.name} isTruncated>
 							{device.name}
 						</Text>
-						<Text color="var(--tt-muted, #71717a)" fontSize="11px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+						<Text as="span" display="block" color="var(--tt-muted, #71717a)" fontSize="11px" isTruncated>
 							{model}
 							{version ? ` · ${version}` : ''}
 						</Text>
@@ -170,7 +143,7 @@ export const DeviceCard = memo(
 				</Flex>
 
 				<Flex alignItems="center" color="var(--tt-muted, #71717a)" fontSize="11px" gap={2} marginTop={4} wrap="wrap">
-					<Text title={device.lastSeenAt || undefined}>{formatDeviceLastSeen(device.lastSeenAt, now)}</Text>
+					{resolvedDevicePresence(device, now) === 'online' && device.serviceStatus !== 'degraded' ? <Text title={device.lastSeenAt || undefined}>{formatDeviceLastSeen(device.lastSeenAt, now)}</Text> : null}
 					{observed?.locked ? <DeviceStatusPill label="locked" tone="warning" /> : null}
 					{pendingCommandCount > 0 ? <DeviceStatusPill label={`${pendingCommandCount} queued`} tone="accent" /> : null}
 					{pendingApprovalCount > 0 ? <DeviceStatusPill label={`${pendingApprovalCount} approval`} tone="warning" /> : null}

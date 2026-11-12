@@ -18,8 +18,13 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-  file: ['name', 'trashed', 'content'],
+  file: ['name', 'trashed', 'content', 'symbolicLink'],
   'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
+  'password-verification-device': [], // Private device proofs never enter the public crystal projection.
+  'backup-job': [], // Coordinator authority is never public schema data.
+  'backup-job-event': [],
+  'sync-source-index': [], // Private discovery metadata is written only by the approved sync-run endpoint.
+  'sync-source-observation': [],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -44,7 +49,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "scheduled-task-run": ["title", "chatId", "scheduledAt", "status", "notificationStatus"],
   "schema": ["name", "description", "fields", "forkOf", "render"],
   "component": ["name", "description", "library", "category", "source", "componentKey", "familyKey", "version", "forkOf", "previewBg", "args", "savedArgs", "render"],
-  "webpage": ["name", "description", "pageKey", "siteRoute", "version", "forkOf", "previewBg", "blocks"],
+  "webpage": ["name", "description", "pageKey", "siteRoute", "version", "forkOf", "previewBg", "activationAction", "blocks"],
   "action": ["name", "description", "runtime", "actionKey", "category", "version", "forkOf", "inputs", "steps", "capabilities", "limits"],
   "action-run": ["status", "startedAt", "durationMs", "opsUsed", "depthUsed", "childActionsUsed", "error", "inputs", "result", "trace"],
   "post-discovery": ["authorId", "linkKeyDigest", "anonymousId", "ipAddress"],
@@ -57,7 +62,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
-  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "ignoreRules"],
+  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "uploadPolicy", "photoAutomation", "ignoreRules"],
   "folder": ["name", "icon", "description", "builderApp", "iconUrl", "metadata"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],
@@ -105,6 +110,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "device-state": ["deviceStateKey", "revision", "stateHash", "snapshotHash", "state", "observedAt"],
   "device-connector": ["deviceConnectorKey", "revision", "connectorHash", "connector"],
   "device-command": ["deviceCommandKey", "requestId", "kind", "input", "requiresApproval", "approvalState", "status", "controlBytes", "inputTextHash", "inputRedactedAt", "expiresAt"],
+  "device-sync-control": ["requestId", "digest", "deviceCommandKey", "pairingHash", "status", "deadlineAt", "leaseHash"],
   "device-command-event": ["deviceEventKey", "deviceControlEventScopeKey", "liveControlEventScopeKey", "retainedBytes", "liveEventSequenceKey", "liveEventHash", "liveActivityHash", "eventType", "resourceId", "revision", "payload", "expiresAt"],
   "device-ai-live-state": ["deviceAiLiveStateKey", "connectorId", "sessionId", "lastSequence", "lastObservedAt"],
   "device-approval": ["deviceApprovalKey", "commandId", "requestId", "kind", "prompt", "status"],
@@ -180,7 +186,7 @@ test('managed attachment, moderation, user, and emoji fields are closed server-o
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
-test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+test('attachment filenames remain exact while types normalize and generic CRUD stays protected', () => {
 	const validated = validateThingtimeCrystal(['attachment'], {
 		name: '  clip.MP4 ',
 		size: 123,
@@ -190,7 +196,7 @@ test('attachment metadata is normalized but its Thingtime kind remains protected
 	assert.equal(validated.ok, true);
 	if (validated.ok !== true) return;
 	assert.deepEqual(validated.crystal, {
-		name: 'clip.MP4',
+		name: '  clip.MP4 ',
 		size: 123,
 		contentType: 'video/mp4',
 		mediaKind: 'video'
@@ -378,5 +384,36 @@ test('password icon projection remains optional and retains its typed source cho
   for (const name of ['url', 'fileId']) {
     assert.equal(fields[name].type, 'string');
     assert.notEqual(fields[name].required, true, 'each source keeps its alternative field optional');
+  }
+});
+
+test('password verification device is a protected zero-field marker with no public proof projection', () => {
+  const schema = crystalSchemas.find(schema => schema.id === 'password-verification-device')!;
+  assert.ok(PROTECTED_THINGTIME.includes('password-verification-device'));
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(isProtectedThingtime(['data', schema.id]), true);
+  assert.equal(schema.collection, null);
+  const projected = projectBuiltinSchemaCrystal(schema);
+  assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+  assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
+});
+
+test('source index schemas expose no private metadata or generic write authority', () => {
+  for (const kind of ['sync-source-index', 'sync-source-observation']) {
+    const schema = crystalSchemas.find(schema => schema.id === kind)!;
+    assert.equal(isProtectedThingtime([kind]), true);
+    assert.equal(isProtectedThingtime(['builder-thing', kind]), true);
+    assert.equal(schema.collection, null);
+    assert.equal(schema.createdVia, '/api/v1/files/sync-transfer-admissions');
+    const projected = projectBuiltinSchemaCrystal(schema);
+    assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+    assert.equal(Object.prototype.hasOwnProperty.call(projected, 'uniqueKeys'), false);
+    assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
+    for (const thingtime of [[kind], ['builder-thing', kind], ['data', kind]]) {
+      assert.equal(validateThingtimeCrystal(thingtime, {}).ok, false, `${thingtime}: no generic creation sanitizer`);
+      assert.equal(validateThingtimeCrystal(thingtime, {
+        uniqueKeys: ['forged'], sourceVersion: 'forged', publication: { fileId: 'forged' }
+      }).ok, false, `${thingtime}: private metadata cannot enter generic writes`);
+    }
   }
 });

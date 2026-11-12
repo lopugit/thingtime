@@ -6,6 +6,8 @@ import { createSyncRun, executeSyncRun } from './execute';
 import { planFileSync, sameSyncStamp } from './reconcile';
 import { inventorySyncEntry } from './cloudInventory';
 import { prepareCloudInventoryRun } from './cloudWrite';
+import type { CloudTransportRuntime } from './cloudTransport';
+import { AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { openSyncJournal } from './journal.client';
 const scope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'config' };
@@ -53,7 +55,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 		activeOrigin = scope.origin;
 	const local = new Map<string, any>(),
 		receipts = new Map<string, any>();
-	const runtime = {
+	const runtime: CloudTransportRuntime = {
 		currentScope: () => scope,
 		origin: () => activeOrigin,
 		requireCapability: async () => {},
@@ -126,7 +128,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 			journal.close();
 			journal = await openSyncJournal(factory);
 		},
-		port: (cloudRootId?: string) =>
+		port: (cloudRootId?: string, beforeLocalPublication?: (operationId: string) => Promise<void>) =>
 			createCloudSyncPort(
 				run,
 				{
@@ -137,6 +139,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 						throw Error('Downloads do not open an upload source');
 					},
 					localTarget: target,
+					beforeLocalPublication,
 					cloudRootId
 				},
 				runtime
@@ -163,6 +166,29 @@ test('nested downloads use the same durable run and recover lost native publicat
 	assert.deepEqual(f.counts(), before);
 	f.journal().close();
 });
+test('a download records the publication fence only after staging and source checks, then recovers the original receipt', async () => {
+	const f = await fixture();
+	const marked: string[] = [];
+	const mark = async (id: string) => { marked.push(id); };
+	f.set('remote');
+	await assert.rejects(executeSyncRun(f.run, f.port(undefined, mark)), /Cloud source changed/);
+	assert.deepEqual(marked, [f.run.operations[0].id], 'failed file staging never claims an uncertain publication');
+	assert.equal(f.local.has('nested/file.bin'), false);
+	f.journal().close();
+
+	const lost = await fixture();
+	const published: string[] = [];
+	const publish = async (id: string) => { published.push(id); };
+	await assert.rejects(executeSyncRun(lost.run, lost.port(undefined, publish)), /lost local publication reply/);
+	const original = lost.run.operations.at(-1)!.id;
+	assert.equal(published.filter(id => id === original).length, 1);
+	await lost.reopen();
+	const before = lost.counts();
+	await executeSyncRun((await lost.journal().read(scope))!, lost.port(undefined, publish));
+	assert.equal(lost.counts().publishes, before.publishes, 'receipt lookup prevents a second native publication');
+	assert.equal(published.filter(id => id === original).length, 1, 'the recovered receipt does not mint a new dispatch');
+	lost.journal().close();
+});
 test('staged downloads reject altered source, invalid stage proof and native destination races', async () => {
 	for (const kind of ['remote', 'local', 'stage', 'origin']) {
 		const f = await fixture();
@@ -172,6 +198,25 @@ test('staged downloads reject altered source, invalid stage proof and native des
 			kind === 'remote' ? /Cloud source changed/ : kind === 'local' ? /destination CAS/ : kind === 'origin' ? /context changed/ : /Native stage/
 		);
 		assert.equal(f.counts().publishes, 1);
+		f.journal().close();
+	}
+});
+test('automatic storage exclusions refuse downloads before staging and after staged bytes are verified', async () => {
+	for (const stageFile of [false, true]) {
+		const f = await fixture();
+		f.set('none');
+		let checks = 0;
+		f.runtime.automaticStoragePlacement = {
+			rules: async () => new Map(),
+			admit: async (mutation, fresh) => {
+				if (fresh && mutation.kind === 'copy' && mutation.source.kind === 'file' && ++checks === (stageFile ? 2 : 1))
+					throw new AutomaticStoragePlacementExcluded();
+			}
+		};
+		await assert.rejects(executeSyncRun(f.run, f.port()), AutomaticStoragePlacementExcluded);
+		assert.equal(f.counts().stages, stageFile ? 2 : 1);
+		assert.equal(f.counts().publishes, 1);
+		assert.equal(f.local.has('nested/file.bin'), false);
 		f.journal().close();
 	}
 });

@@ -1,16 +1,20 @@
+import { FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR, safeProviderError } from './providerErrors';
+import { oauthClientConfig } from './oauthConfig';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 import { fail, type Fail } from './shared';
+import { GOOGLE_SERVICES, NAMED_PROVIDER_PERMISSIONS, serviceGroupFor } from '../../../connections/catalog';
+import { ownerVaultConfigured } from '../auth/vaultCipher';
 
 // Third-party feed providers — the adapter registry behind
 // /api/v1/connections/*. Each provider resolves a connect form into a stable
 // external account identity and pulls a normalized feed page for it. All
 // providers here are keyless (public content APIs / RSS), so every one is
 // live-testable with zero configuration; OAuth2 providers (Facebook,
-// Instagram, X, …) join this registry config-gated by env credentials and
-// report configured:false until those are present.
+// Instagram, X, …) join this registry gated by origin-scoped server-vault
+// credentials and report configured:false until those are present.
 
 // One shared depth contract for feed deepening: connections.ts stores
 // per-account syncDepth against this same cap, and every provider clamps its
@@ -35,11 +39,20 @@ export type ExternalFeedItem = {
 // never in crystal, never projected, never sent to a client.
 export type OAuthTokens = {
   accessToken: string;
+  idToken?: string;
+  clientId?: string;
+  oidcNonce?: string;
+  oauthBinding?: string;
+  oauthOrigin?: string;
+  oauthEnvironment?: string;
+  tokenType?: string;
   refreshToken?: string | null;
   // ISO timestamp; adapters refresh (when the provider supports it) once this
   // is near/past, otherwise the sync surfaces a "reconnect" error
   expiresAt?: string | null;
   scopes?: string[];
+  requestedScopes?: string[];
+  confirmedScopes?: string[];
   providerUserId?: string | null;
 };
 
@@ -74,10 +87,16 @@ export type ConnectField = {
   secret?: boolean;
 };
 
+export type ConnectionDiagnostics = {
+  grantedScopes: string[] | null;
+  checks: { name: string; status: 'available' | 'permission-denied' | 'unauthorized' | 'unavailable' | 'skipped' }[];
+};
+
 export type ConnectionProvider = {
   id: string;
   name: string;
   icon: string;
+  accountOnly?: boolean;
   // 'none' = public content, no account; 'oauth2' = provider SSO; 'credential'
   // = fields-based connect where a secret field is exchanged for session
   // tokens server-side (never stored itself)
@@ -92,7 +111,7 @@ export type ConnectionProvider = {
   // acl-granted per linked Thingtime user only.
   contentVisibility: 'public' | 'personal';
   about: string;
-  configured: () => boolean;
+  configured: (origin?: string) => boolean | Promise<boolean>;
   fields: ConnectField[];
   // fields-based connect (absent on SSO providers — they resolve identity
   // from tokens in the OAuth callback instead)
@@ -108,6 +127,8 @@ export type ConnectionProvider = {
   // pair with the refresh JWT — no client credentials involved); OAuth
   // providers put their refresh grant on oauth.refreshTokens instead
   refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
+  // Fixed, read-only probes owned by the adapter; no caller URL or field dispatch.
+  diagnose?: (tokens: OAuthTokens, access: { allowContentProbe: boolean }) => Promise<ConnectionDiagnostics>;
   fetchFeed: (
     account: { providerAccountId: string; config: Record<string, any> },
     opts: { limit: number; tokens?: OAuthTokens | null; pages?: number }
@@ -116,18 +137,22 @@ export type ConnectionProvider = {
   // response is saved to the Thingtime account (secure blob) and the
   // personalized feed syncs with those credentials.
   oauth?: {
+    ready?: () => boolean;
     clientIdEnv: string;
     clientSecretEnv: string;
+    clientSecretOptional?: () => boolean;
     // X requires PKCE on its authorization-code flow; the begin/callback core
     // mints an S256 verifier and threads it through the signed state JWT
     pkce?: boolean;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string }) => string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string; requestedScopes?: readonly string[] }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
       clientSecret: string;
       redirectUri: string;
       codeVerifier?: string;
+      nonce?: string;
+      authMethod?: 'none' | 'client_secret_basic';
     }) => Promise<{ ok: true; tokens: OAuthTokens } | Fail>;
     resolveAccountFromTokens: (tokens: OAuthTokens) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
     refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
@@ -464,7 +489,8 @@ const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
 // One guarded fetch for every outbound provider call: validates the target,
 // then walks redirects by hand re-validating each hop.
 const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
-  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
   const method = init.method || 'GET';
   let target = url;
   let headers = new Headers(init.headers);
@@ -594,8 +620,7 @@ const postForm = async (
       return fail(502, `The provider returned a malformed token response (${hostOf(url)})`);
     }
     if (!resp.ok) {
-      const message = data?.error?.message || data?.error_description || data?.error_message || data?.error || `status ${resp.status}`;
-      return fail(502, `Token exchange failed: ${String(message).slice(0, 200)}`);
+      return fail(502, `Token exchange failed (${hostOf(url)}, status ${resp.status})`);
     }
     return { ok: true, data };
   } catch (err: any) {
@@ -606,16 +631,19 @@ const postForm = async (
   }
 };
 
-// Authenticated JSON GET/POST for provider data APIs. Provider error bodies
-// surface as bounded messages so a revoked token reads as "reconnect", never
-// as a silent empty feed.
-const authedJson = async (
+// Authenticated JSON GET/POST for provider data APIs. Status-based errors never
+// echo provider bodies; malformed successes must not become empty results.
+export const authedJson = async (
   url: string,
-  opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
+  opts: {
+    token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>;
+    completeResponse?: boolean; signal?: AbortSignal;
+  } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
     const resp = await guardedFetch(url, {
       method: opts.method || 'GET',
+      signal: opts.signal,
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'application/json',
@@ -626,20 +654,26 @@ const authedJson = async (
       },
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
-    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
-    if (text === null) return fail(502, 'The provider response was too large to process');
-    let data: any = null;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
     if (!resp.ok) {
-      const message = data?.error?.message || data?.error?.error_user_msg || data?.error_description || data?.error?.code || `status ${resp.status}`;
+      let detail: string | null = null;
+      try {
+        // Error-parser resource bound only; never a user-content limit.
+        const text = await readBoundedBody(resp, 16 * 1024);
+        if (text !== null) detail = safeProviderError(url, resp.status, JSON.parse(text));
+      } catch {
+        // Malformed, interrupted and oversized errors retain generic copy.
+      }
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
-      return fail(status, `${hostOf(url)}: ${String(message).slice(0, 200)}`);
+      return fail(status, detail || (status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`));
     }
-    return { ok: true, data };
+    // Only fixed service actions opt in; user-supplied feed URLs retain the bounded reader.
+    const text = opts.completeResponse ? await resp.text() : await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
+    try {
+      return { ok: true, data: JSON.parse(text) };
+    } catch {
+      return fail(502, 'The provider returned malformed JSON');
+    }
   } catch (err: any) {
     const blocked = blockedFail(err);
     if (blocked) return blocked;
@@ -655,14 +689,9 @@ const expiresAtFrom = (expiresInSeconds: unknown): string | null => {
 
 const envValue = (name: string): string => (process.env[name] || '').trim();
 
-// One place resolves an SSO provider's client credentials from env — begin,
-// callback, AND token refresh must always agree on the env names.
-export const oauthCredsFor = (provider: ConnectionProvider): { clientId: string; clientSecret: string } | null => {
-  if (!provider.oauth) return null;
-  const clientId = envValue(provider.oauth.clientIdEnv);
-  const clientSecret = envValue(provider.oauth.clientSecretEnv);
-  return clientId && clientSecret ? { clientId, clientSecret } : null;
-};
+// All grant stages and the catalog use the same origin/environment vault lookup.
+export const oauthCredsFor = (provider: ConnectionProvider, origin?: string) =>
+  provider.oauth && provider.oauth.ready?.() !== false ? oauthClientConfig(provider.oauth.clientIdEnv, origin) : Promise.resolve(null);
 
 // Form-style OAuth grant factory: one implementation of the
 // authorization-code exchange + refresh for every provider whose token
@@ -697,7 +726,10 @@ const formOAuthGrant = (config: {
       accessToken: String(data.access_token),
       refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
       expiresAt: expiresAtFrom(data.expires_in),
-      scopes: config.scopes
+      tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
+      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes,
+      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean)
+        : Object.prototype.hasOwnProperty.call(data, 'scope') ? [] : previous?.confirmedScopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };
@@ -1674,20 +1706,49 @@ const githubProvider: ConnectionProvider = {
 
 const GRAPH = 'https://graph.facebook.com/v23.0';
 
+export async function readConnectionFacebookPermissions(tokens: OAuthTokens): Promise<string[] | undefined> {
+  const result = await authedJson(`${GRAPH}/me/permissions?fields=permission,status`, { token: tokens.accessToken });
+  if (result.ok === false || !Array.isArray(result.data?.data) || result.data?.paging?.next || !result.data.data.every((item: any) =>
+    item && typeof item.permission === 'string' && ['granted', 'declined', 'expired'].includes(item.status))) return undefined;
+  return result.data.data.flatMap((item: { permission?: unknown; status?: unknown }) =>
+    item?.status === 'granted' && NAMED_PROVIDER_PERMISSIONS.facebook.some(permission => permission.scope === item.permission) ? [String(item.permission)] : []);
+}
+
+const facebookCheck = (name: string, result: { ok: true; data: any } | Fail): ConnectionDiagnostics['checks'][number] => ({
+  name, status: result.ok === true ? (Array.isArray(result.data?.data) ? 'available' : 'unavailable') :
+    (result.error === FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR || result.error === 'Facebook denied this operation. Check the app’s posts permission and account access.') ? 'permission-denied' :
+    result.error === 'Facebook authorization is invalid or expired. Reconnect this account.' ? 'unauthorized' : 'unavailable'
+});
+
+const diagnoseFacebook = async (tokens: OAuthTokens, access: { allowContentProbe: boolean }): Promise<ConnectionDiagnostics> => {
+  const grantedScopes = await readConnectionFacebookPermissions(tokens) ?? null;
+  // Provider consent does not authorize content use through a Thingtime grant.
+  if (!access.allowContentProbe) return { grantedScopes, checks: ['posts', 'shares', 'likes', 'comments'].map(name => ({ name, status: 'skipped' })) };
+  const probe = (fields: string) => authedJson(`${GRAPH}/me/posts?fields=${encodeURIComponent(fields)}&limit=1`, { token: tokens.accessToken });
+  const minimal = facebookCheck('posts', await probe('id,message,created_time'));
+  const checks = [minimal];
+  // Keep optional field failures separate. Never fetch another page or emit content.
+  for (const [name, field] of [['shares', 'shares'], ['likes', 'likes.summary(true)'], ['comments', 'comments.summary(true)']]) {
+    checks.push(minimal.status === 'available' ? facebookCheck(name, await probe(`id,${field}`)) : { name, status: 'skipped' });
+  }
+  return { grantedScopes, checks };
+};
+
 const facebookProvider: ConnectionProvider = {
   id: 'facebook',
-  name: 'Facebook',
+  name: 'Facebook posts',
+  diagnose: diagnoseFacebook,
   icon: '📘',
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Facebook to link your account and sync your own timeline posts. (Meta’s API no longer exposes the friends News Feed — this pulls your posts and tagged posts.)',
-  configured: () => !!envValue('FACEBOOK_APP_ID') && !!envValue('FACEBOOK_APP_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('FACEBOOK_APP_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'FACEBOOK_APP_ID',
     clientSecretEnv: 'FACEBOOK_APP_SECRET',
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
-      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent('public_profile,user_posts')}`,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) =>
+      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent(requestedScopes?.join(',') || 'public_profile,user_posts')}`,
     exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
       const short = await fetchJson(
         `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${encodeURIComponent(clientSecret)}&code=${encodeURIComponent(code)}`
@@ -1701,7 +1762,7 @@ const facebookProvider: ConnectionProvider = {
       const winner = long.ok !== false && long.data?.access_token ? long.data : short.data;
       return {
         ok: true,
-        tokens: { accessToken: String(winner.access_token), expiresAt: expiresAtFrom(winner.expires_in), scopes: ['public_profile', 'user_posts'] }
+        tokens: { accessToken: String(winner.access_token), expiresAt: expiresAtFrom(winner.expires_in), requestedScopes: ['public_profile', 'user_posts'] }
       };
     },
     resolveAccountFromTokens: async (tokens) => {
@@ -1747,6 +1808,30 @@ const facebookProvider: ConnectionProvider = {
   }
 };
 
+// Basic identity is separate from the optional posts permission. A deployment
+// can offer account linking before requesting Meta's user_posts review.
+const facebookAccountProvider: ConnectionProvider = {
+  ...facebookProvider,
+  id: 'facebook-account',
+  name: 'Facebook account',
+  diagnose: (tokens) => diagnoseFacebook(tokens, { allowContentProbe: false }),
+  accountOnly: true,
+  about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
+  oauth: {
+    ...facebookProvider.oauth!,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) => {
+      const url = new URL('https://www.facebook.com/v23.0/dialog/oauth');
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: requestedScopes?.join(',') || 'public_profile' }).toString();
+      return url.href;
+    },
+    exchangeCode: async (input) => {
+      const result = await facebookProvider.oauth!.exchangeCode(input);
+      return result.ok === false ? result : { ok: true, tokens: { ...result.tokens, requestedScopes: ['public_profile'] } };
+    }
+  },
+  fetchFeed: async () => ({ ok: true, items: [] })
+};
+
 const instagramProvider: ConnectionProvider = {
   id: 'instagram',
   name: 'Instagram',
@@ -1754,7 +1839,7 @@ const instagramProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Instagram (professional account) to link and sync your own media. (Instagram’s API exposes your posts — not the home feed of accounts you follow.)',
-  configured: () => !!envValue('INSTAGRAM_APP_ID') && !!envValue('INSTAGRAM_APP_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('INSTAGRAM_APP_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'INSTAGRAM_APP_ID',
@@ -1854,7 +1939,7 @@ const tiktokProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with TikTok to link your account and sync your own videos. (TikTok’s API exposes your videos — the For You feed is not available to apps.)',
-  configured: () => !!envValue('TIKTOK_CLIENT_KEY') && !!envValue('TIKTOK_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TIKTOK_CLIENT_KEY', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TIKTOK_CLIENT_KEY',
@@ -1928,6 +2013,41 @@ const tiktokProvider: ConnectionProvider = {
   }
 };
 
+// Google services share one app registration and choose permissions per card.
+export const readConnectionGoogleUserInfo = (tokens: OAuthTokens) =>
+  authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+
+const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionProvider['oauth']> => {
+  const scopes = ['openid', 'profile', 'email', ...serviceScopes];
+  return {
+    clientIdEnv: 'GOOGLE_CLIENT_ID', clientSecretEnv: 'GOOGLE_CLIENT_SECRET', pkce: true,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge, requestedScopes }) => {
+      const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
+        scope: (requestedScopes || scopes).join(' '), access_type: 'offline', prompt: 'select_account consent',
+        state, code_challenge: codeChallenge || '', code_challenge_method: 'S256' }).toString();
+      return url.href;
+    },
+    ...formOAuthGrant({ tokenUrl: 'https://oauth2.googleapis.com/token', authStyle: 'body', scopes,
+      extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' }) }),
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await readConnectionGoogleUserInfo(tokens);
+      if (me.ok === false) return me;
+      if (typeof me.data?.sub !== 'string' || !me.data.sub) return fail(502, 'Google did not return an account identity');
+      return { ok: true, account: { providerAccountId: me.data.sub,
+        displayName: boundedText(me.data.name, 120) || 'Google account',
+        handle: boundedText(me.data.email, 254) || boundedText(me.data.name, 120) || 'Google account',
+        avatarUrl: httpsImage(me.data.picture), profileUrl: null, config: {} } };
+    }
+  };
+};
+const googleProviders: ConnectionProvider[] = GOOGLE_SERVICES.map((service) => ({
+  id: service.id, name: service.name, icon: '🌈', about: service.about,
+  auth: 'oauth2', contentVisibility: 'personal', accountOnly: true, fields: [],
+  configured: async (origin) => Boolean(await oauthClientConfig('GOOGLE_CLIENT_ID', origin)),
+  oauth: googleOAuth(service.scopes), fetchFeed: async () => ({ ok: true, items: [] })
+}));
+
 const youtubeAccountProvider: ConnectionProvider = {
   id: 'youtube-account',
   name: 'YouTube account',
@@ -1939,35 +2059,9 @@ const youtubeAccountProvider: ConnectionProvider = {
   // channel list AND a real subscription stays ONE post with unified comments
   postNamespace: 'youtube',
   about: 'Sign in with Google to link your real YouTube account and sync the latest uploads from your actual subscriptions.',
-  configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('GOOGLE_CLIENT_ID', origin)),
   fields: [],
-  oauth: {
-    clientIdEnv: 'GOOGLE_CLIENT_ID',
-    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
-      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid profile https://www.googleapis.com/auth/youtube.readonly')}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`,
-    ...formOAuthGrant({
-      tokenUrl: 'https://oauth2.googleapis.com/token',
-      authStyle: 'body',
-      scopes: ['openid', 'profile', 'https://www.googleapis.com/auth/youtube.readonly']
-    }),
-    resolveAccountFromTokens: async (tokens) => {
-      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
-      if (me.ok === false) return me;
-      if (!me.data?.sub) return fail(502, 'Google did not return a profile');
-      return {
-        ok: true,
-        account: {
-          providerAccountId: String(me.data.sub),
-          displayName: boundedText(me.data.name, 120) || 'YouTube account',
-          handle: boundedText(me.data.name, 120) || 'YouTube account',
-          avatarUrl: httpsImage(me.data.picture),
-          profileUrl: null,
-          config: {}
-        }
-      };
-    },
-  },
+  oauth: googleOAuth(['https://www.googleapis.com/auth/youtube.readonly']),
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'YouTube needs a reconnect — its saved sign-in is missing or expired');
     const token = opts.tokens.accessToken;
@@ -1999,6 +2093,10 @@ const youtubeAccountProvider: ConnectionProvider = {
         )
       )
     );
+    // A successful empty uploads playlist is valid. Total request failure is
+    // not: preserve a safe failure instead of stamping the account successful.
+    const failed = lists.find(({ result }) => result.ok === false);
+    if (lists.length && lists.every(({ result }) => result.ok === false) && failed?.result.ok === false) return failed.result;
     const items: ExternalFeedItem[] = [];
     for (const { channel, result } of lists) {
       if (result.ok === false) continue;
@@ -2037,7 +2135,7 @@ const redditAccountProvider: ConnectionProvider = {
   contentVisibility: 'personal',
   postNamespace: 'reddit',
   about: 'Sign in with Reddit to sync your REAL personalized front page (the best-of feed your subscriptions and activity shape).',
-  configured: () => !!envValue('REDDIT_CLIENT_ID') && !!envValue('REDDIT_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('REDDIT_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'REDDIT_CLIENT_ID',
@@ -2130,9 +2228,10 @@ const mastodonAccountProvider: ConnectionProvider = {
   about: 'Sign in on your Mastodon instance to sync your REAL home timeline (the accounts you follow).',
   // the deployment registers one app on ONE instance (MASTODON_INSTANCE) —
   // users of that instance sign in there
-  configured: () => !!mastodonInstance() && !!envValue('MASTODON_CLIENT_ID') && !!envValue('MASTODON_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(mastodonInstance() && await oauthClientConfig('MASTODON_CLIENT_ID', origin)),
   fields: [],
   oauth: {
+    ready: () => Boolean(mastodonInstance()),
     clientIdEnv: 'MASTODON_CLIENT_ID',
     clientSecretEnv: 'MASTODON_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
@@ -2298,7 +2397,7 @@ const twitchProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Twitch to sync the channels you follow that are LIVE right now.',
-  configured: () => !!envValue('TWITCH_CLIENT_ID') && !!envValue('TWITCH_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TWITCH_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TWITCH_CLIENT_ID',
@@ -2309,7 +2408,7 @@ const twitchProvider: ConnectionProvider = {
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.twitch.tv/helix/users', {
         token: tokens.accessToken,
-        headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') }
+        headers: { 'Client-Id': tokens.clientId || '' }
       });
       if (me.ok === false) return me;
       const user = me.data?.data?.[0];
@@ -2331,7 +2430,7 @@ const twitchProvider: ConnectionProvider = {
     if (!opts.tokens?.accessToken) return fail(401, 'Twitch needs a reconnect — its saved sign-in is missing or expired');
     const fetched = await authedJson(
       `https://api.twitch.tv/helix/streams/followed?user_id=${encodeURIComponent(account.config.userId || '')}&first=${Math.min(targetCount(opts), 100)}`,
-      { token: opts.tokens.accessToken, headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') } }
+      { token: opts.tokens.accessToken, headers: { 'Client-Id': opts.tokens.clientId || '' } }
     );
     if (fetched.ok === false) return fetched;
     const items: ExternalFeedItem[] = [];
@@ -2365,7 +2464,7 @@ const xProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with X to sync your home timeline. (X gates timeline reads behind its paid API tiers — a Basic-tier app key or above is required for the pull to work.)',
-  configured: () => !!envValue('X_CLIENT_ID') && !!envValue('X_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('X_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'X_CLIENT_ID',
@@ -2446,7 +2545,7 @@ const tumblrProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Tumblr to sync your REAL dashboard (the blogs you follow).',
-  configured: () => !!envValue('TUMBLR_CLIENT_ID') && !!envValue('TUMBLR_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TUMBLR_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TUMBLR_CLIENT_ID',
@@ -2517,7 +2616,7 @@ const pinterestProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Pinterest to sync your own pins. (Pinterest’s API exposes your pins and boards — not the home feed.)',
-  configured: () => !!envValue('PINTEREST_CLIENT_ID') && !!envValue('PINTEREST_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('PINTEREST_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'PINTEREST_CLIENT_ID',
@@ -2580,7 +2679,7 @@ const linkedinProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with LinkedIn to link your account. (LinkedIn does not expose feed content to standard API apps — account linking only for now.)',
-  configured: () => !!envValue('LINKEDIN_CLIENT_ID') && !!envValue('LINKEDIN_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('LINKEDIN_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'LINKEDIN_CLIENT_ID',
@@ -2633,7 +2732,7 @@ const spotifyProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Spotify to sync your recently played tracks and new releases from artists you follow.',
-  configured: () => !!envValue('SPOTIFY_CLIENT_ID') && !!envValue('SPOTIFY_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('SPOTIFY_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'SPOTIFY_CLIENT_ID',
@@ -2725,11 +2824,13 @@ const spotifyProvider: ConnectionProvider = {
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
+  ...googleProviders,
   redditAccountProvider,
   blueskyAccountProvider,
   mastodonAccountProvider,
   youtubeProvider,
   youtubeAccountProvider,
+  facebookAccountProvider,
   facebookProvider,
   instagramProvider,
   tiktokProvider,
@@ -2753,14 +2854,14 @@ export const connectionProviderById = (id: unknown): ConnectionProvider | null =
   typeof id === 'string' ? CONNECTION_PROVIDERS.find((provider) => provider.id === id.trim().toLowerCase()) || null : null;
 
 // The public projection the providers list endpoint returns.
-export const publicProviders = () =>
-  CONNECTION_PROVIDERS.map((provider) => ({
-    id: provider.id,
-    name: provider.name,
-    icon: provider.icon,
-    auth: provider.auth,
-    contentVisibility: provider.contentVisibility,
-    about: provider.about,
-    configured: provider.configured(),
-    fields: provider.fields
+export const publicProviders = async (origin?: string) =>
+  Promise.all(CONNECTION_PROVIDERS.map(async (provider) => {
+    const configured = provider.oauth ? Boolean(await oauthCredsFor(provider, origin)) : await provider.configured(origin);
+    return {
+      id: provider.id, name: provider.name, icon: provider.icon, auth: provider.auth,
+      contentVisibility: provider.contentVisibility, about: provider.about,
+      configured: configured && (provider.auth === 'none' || ownerVaultConfigured()),
+      setupRequired: !configured ? 'provider' : provider.auth !== 'none' && !ownerVaultConfigured() ? 'vault' : null,
+      service: serviceGroupFor(provider), accountOnly: provider.accountOnly === true, fields: provider.fields
+    };
   }));

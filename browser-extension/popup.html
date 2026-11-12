@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thingtime · Passkey workspace</title><link rel="icon" type="image/png" href="thingtime-icon-32.png"><link rel="stylesheet" href="popup.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thingtime · Password workspace</title><link rel="icon" type="image/png" href="thingtime-icon-32.png"><link rel="stylesheet" href="popup.css"></head>
 <body>
 <main>
-  <header><img class="mark" src="thingtime-icon-128.png" width="50" height="50" alt="" aria-hidden="true"><div><p class="eyebrow">BROWSER WORKSPACE</p><h1>Thingtime</h1><p>Passkeys, in your vault.</p></div><span id="enabled-badge" class="badge">Checking status</span></header>
+  <header><img class="mark" src="thingtime-icon-128.png" width="50" height="50" alt="" aria-hidden="true"><div><p class="eyebrow">BROWSER WORKSPACE</p><h1>Thingtime</h1><p>Your accounts, ready when you are.</p></div><span id="enabled-badge" class="badge">Checking status</span></header>
   <nav role="tablist" aria-label="Workspace sections">
     <button id="tab-overview" role="tab" aria-controls="overview" aria-selected="true">Overview</button>
     <button id="tab-requests" role="tab" aria-controls="request-panel" aria-selected="false" tabindex="-1">Requests <span id="request-count" class="count">0</span></button>
@@ -11,6 +11,14 @@
     <button id="tab-help" role="tab" aria-controls="help" aria-selected="false" tabindex="-1">Help</button>
   </nav>
   <section id="overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+  <section class="card" aria-labelledby="thingtime-account-heading"><div class="section-heading"><div><p class="eyebrow">THINGTIME ACCOUNT</p><h2 id="thingtime-account-heading">Sign in to Thingtime</h2><p id="thingtime-account-detail" class="hint">Use an account already signed in to this browser.</p></div><button id="thingtime-account-open" type="button">Sign in</button></div><div class="actions"><button id="thingtime-account-add" type="button" class="secondary">Add account</button><button id="thingtime-account-lock" type="button" class="text-button">Lock</button></div><p id="thingtime-account-status" class="hint" role="status" aria-live="polite"></p></section>
+  <section id="vault-workspace" aria-labelledby="vault-heading">
+    <div class="section-heading"><div><p class="eyebrow">YOUR PASSWORDS</p><h2 id="vault-heading">Saved accounts</h2><p id="vault-site" class="hint"></p></div><button id="vault-connect" type="button">Connect vault</button></div>
+    <label for="vault-search" class="sr-only">Search all saved accounts</label><input id="vault-search" type="search" placeholder="Search every saved account" autocomplete="off">
+    <div class="vault-toolbar"><div class="vault-summary"><span id="vault-count" class="hint"></span><span id="vault-progress" role="status" hidden><span class="vault-spinner" aria-hidden="true"></span><span id="vault-progress-label" class="sr-only"></span></span></div><button id="vault-refresh" class="text-button" type="button">Refresh</button><button id="vault-lock" class="text-button" type="button">Lock</button></div>
+    <p id="vault-status" class="hint" role="status" aria-live="polite"></p><div id="vault-accounts" class="vault-accounts"></div><button id="vault-more" class="secondary" type="button" hidden>Load more accounts</button>
+    <div class="qr-tools"><div><h3>Authenticator QR</h3><p class="hint">Choose a screen or upload a screenshot. Decoding stays on this device; passkey device-pairing QR codes are not TOTP secrets.</p></div><div class="actions"><button id="qr-screen" class="secondary" type="button">Scan QR on screen</button><button id="qr-upload-button" class="secondary" type="button" aria-controls="qr-file">Upload screenshot</button><input id="qr-file" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Authenticator QR screenshot"></div><p id="qr-status" class="hint" role="status"></p><div class="actions"><button id="qr-save" type="button" hidden>Review and save in Thingtime</button><button id="qr-cancel" class="text-button" type="button" hidden>Clear QR</button></div></div>
+  </section>
     <div class="section-heading"><div><p class="eyebrow">YOUR WEBSITE</p><h2>Connection overview</h2></div><button id="refresh-diagnostics" class="secondary" type="button">Refresh status</button></div>
     <p id="target" class="site">Open Thingtime from the toolbar on a website to inspect its connection.</p>
     <div class="card"><h3>Passkey connection</h3><p id="diagnostics" role="status" aria-live="polite">Checking the selected website’s connection…</p><p class="hint">Read-only, page-reported status. This does not access your vault or verify a sign-in.</p></div>
@@ -24,7 +32,7 @@
   <section id="config" role="tabpanel" aria-labelledby="tab-config" tabindex="0" hidden>
     <p class="eyebrow">MAKE IT YOURS</p><h2>Configuration</h2>
     <form id="settings" class="card">
-      <h3>Website passkeys</h3><label class="toggle"><input id="enabled" type="checkbox"><span>Use Thingtime for website passkeys</span></label>
+      <h3>Saved accounts</h3><label class="toggle"><input id="autofill-enabled" type="checkbox" checked><span>Offer Thingtime account chips on login forms</span></label><p class="hint">Chips offer account selection. Filling is explicit and never submits a form.</p><h3>Website passkeys</h3><label class="toggle"><input id="enabled" type="checkbox"><span>Use Thingtime for website passkeys</span></label>
       <p class="hint">Off by default. Changes here apply to passkey routing; reload existing website tabs after enabling.</p>
       <label for="origin">Thingtime origin</label><input id="origin" type="url" required spellcheck="false" autocomplete="off" placeholder="https://thingtime.com" aria-describedby="origin-hint">
       <p id="origin-hint" class="hint">Your trusted HTTPS Thingtime deployment. HTTP is allowed only for explicit localhost development.</p>
@@ -41,9 +49,9 @@
     <div class="card"><h3>Get connected</h3><ol><li>Enable website passkeys in Config and select your trusted Thingtime origin.</li><li>Reload the website, then open this workspace from its toolbar button.</li><li>Start the website’s passkey action. Complete the approval in Thingtime.</li></ol></div>
     <div class="card"><h3>Another extension can own the hook</h3><p>If Overview says a hook could not install or was replaced, another extension or the page may control WebAuthn. Turning off another provider’s passkey prompts may still leave its hook installed. Choose your preferred browser extension, then reload the website. Thingtime never overwrites an immutable hook.</p><p>Your native macOS password-provider settings are separate from browser extensions.</p></div>
     <div class="card"><h3>Native fallback is available</h3><p>Conditional sign-in and unsupported request options use the browser’s native provider. In Requests, you can also choose another provider explicitly. A credential appears only when it matches the website’s relying party and allowed credentials.</p></div>
-    <div class="card"><h3>Private by design</h3><p>This extension stores your opt-in, trusted origin and appearance preferences. Temporary routing handles identify the requesting document. Passwords, private passkey keys and account sessions stay out of extension storage.</p><p>No completed-request history is retained. Connection diagnostics are page-reported hints, never permission to use a credential.</p></div>
+    <div class="card"><h3>Private by design</h3><p>This extension stores your opt-in, trusted origin and appearance preferences. Its redacted account list stays only in memory while the owned Thingtime connection is live. Temporary routing handles identify the requesting document. Passwords, private passkey keys and account sessions stay out of extension storage.</p><p>No completed-request history is retained. Connection diagnostics are page-reported hints, never permission to use a credential.</p></div>
   </section>
-  <footer>Thingtime · Browser passkey workspace <span id="version"></span></footer>
+  <footer>Thingtime · Browser password workspace <span id="version"></span></footer>
 </main><script src="popup.js" type="module"></script>
 </body>
 </html>

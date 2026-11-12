@@ -31,18 +31,25 @@ export function validContentFingerprint(value: unknown, size: number): value is 
 export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFingerprint): boolean =>
 	a.algorithm === b.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256;
 
-export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval };
-export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
+export type PhotoUploadPublication = { expectedRevision: string | null };
+export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval; publication?: PhotoUploadPublication };
+export type NativePartUpload = { authorization?: FileSyncApproval; uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
+export type NativeDeferredFileResult = { queued: boolean; scheduled: boolean };
 export type FingerprintSource = {
+	/** Queue immutable multipart admission with optional exact Photos publication. */
+	deferUpload?(request: NativeFileUpload, signal?: AbortSignal): Promise<NativeDeferredFileResult>;
 	/** Fresh owner-authorized authority for one native range; never persist it. */
 	downloadTarget?(offset: number, length: number, signal?: AbortSignal): Promise<import('./signedDownloadTarget').SignedDownloadTarget>;
 	/** Native multipart loop and attachment completion. The caller still verifies
 	 * stored bytes and publishes the canonical file/Timeline operation. */
+	/** Bounded Mac compound transport: strong source checks include the final stored
+	 * fingerprint callback. Publication remains in the original guarded executor. */
+	uploadSingle?(request: NativeFileUpload, signal?: AbortSignal): Promise<{ attachmentId: string; version: string; size: number; fingerprint: ContentFingerprint; payloadBytes: number | null }>;
 	uploadFile?(request: NativeFileUpload, signal?: AbortSignal, progress?: (bytes: number, total: number) => void): Promise<{ fingerprint: ContentFingerprint }>;
 
 	/** Native file-backed multipart upload. Resolves only after authenticated
 	 * signing, bounded storage upload and source checks; returns the part hash. */
-	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number }>;
+	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number; alreadyUploaded?: true }>;
 
 	/** Trusted native-part adapter validates the expected source before/after PUT.
 	 * Only removes duplicate wrapper checks; initial, pre-complete and final

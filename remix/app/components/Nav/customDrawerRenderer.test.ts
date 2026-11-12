@@ -27,6 +27,19 @@ test('real drawer renderer repeats supplied context rows without database contro
  assert.ok(html.includes('max-width:100%'));
  assert.ok(!html.includes('Search records'));
 });
+test('initial authored markup serializes plain styles without interpolating complex declarations', () => {
+ const html = render({}, undefined, [{
+  id: 'plain-style', type: 'element', tag: 'div', css: {
+   'word-break': 'break-word', '-webkit-line-clamp': '3', '--色Accent': 'green',
+   'css-text': 'red', 'set-property': 'red', constructor: 'red',
+   '--second-declaration': 'black;position:fixed', color: 'blue !important'
+  }
+ }]);
+ assert.ok(html.includes('word-break:break-word'));
+ assert.ok(html.includes('-webkit-line-clamp:3'));
+ assert.ok(html.includes('--色Accent:green'));
+ assert.doesNotMatch(html, /css-text:|set-property:|constructor:|position:fixed|!important/);
+});
 test('empty transparent collection templates stay selectable in Builder edit mode', () => {
  const html = render({ drawer: { items: [], draft: {}, results: [] } }, { seamlessMode: 'edit', onHover() {}, onSelect() {}, selectedId: null, hoverId: null });
  for (const id of ['custom-drawer-items', 'custom-drawer-title', 'drawer-results', 'drawer-result-label']) assert.ok(html.includes(`data-block-id="${id}"`), id);

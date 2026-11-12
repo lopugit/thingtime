@@ -34,6 +34,18 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const applicationHeaders = routes.find(route => route.src === '/(?:.*)' && route.continue === true);
+	for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+		assert(cspSources(applicationHeaders.headers['Content-Security-Policy'], 'connect-src').includes(hub), `Emitted application policy must allow the FedCM authority ${hub}`);
+	}
+	assert.ok(routes.indexOf(applicationHeaders) < routes.findIndex(route => route.handle === 'filesystem'));
+	const credentialReview = routes.find(route => route.src && new RegExp(route.src).test('/credentials/import/') &&
+		route.headers?.['X-Frame-Options'] === 'DENY');
+	assert.equal(credentialReview?.continue, true);
+	assert.deepEqual(cspSources(credentialReview.headers['Content-Security-Policy'], 'frame-ancestors'), ["'none'"]);
+	assert.ok(routes.indexOf(credentialReview) > routes.indexOf(applicationHeaders));
+	assert.ok(routes.indexOf(credentialReview) < routes.findIndex(route => route.handle === 'filesystem'));
+
 	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
 	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
 	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
@@ -68,7 +80,7 @@ test('Vercel cron path and schedule pairs are unique', () => {
 	assert.equal(new Set(cronKeys).size, cronKeys.length, 'vercel.json must not register the same cron path and schedule twice');
 });
 
-test('recording processing, attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
+test('scheduled processing, cleanup, sync, and notification jobs are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
 		{ path: '/api/v1/auth/invites/expire', schedule: '11 * * * *' },
 		{
@@ -91,7 +103,9 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
 		},
-		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' },
+		{ path: '/api/v1/backups/run', schedule: '*/5 * * * *' },
+		{ path: '/api/v1/devices/observations/cleanup', schedule: '*/15 * * * *' }
 	]);
 });
 
@@ -102,6 +116,16 @@ const cspSources = (csp, name) =>
 		.find((s) => s.startsWith(name + ' '))
 		.split(/\s+/)
 		.slice(1);
+test('FedCM can reach the built-in production and preview authorities without broadening other directives', () => {
+	for (const policy of [prodCsp, devCsp]) {
+		const connections = cspSources(policy, 'connect-src');
+		for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+			assert(connections.includes(hub), `Missing FedCM authority ${hub}`);
+			for (const directive of ['script-src', 'frame-src', 'form-action']) assert(!cspSources(policy, directive).includes(hub));
+		}
+		for (const forbidden of ['*', 'https:', 'https://*.thingtime.com', 'https://*.vercel.app']) assert(!connections.includes(forbidden));
+	}
+});
 test('native Maps can load under the deployed policy without broad script or eval exceptions', () => {
 	const scripts = cspSources(prodCsp, 'script-src');
 	assert.deepEqual(scripts, [

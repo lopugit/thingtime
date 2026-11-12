@@ -3,7 +3,7 @@ import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
-import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 
 import { RichTextModal } from './RichTextModal';
 
@@ -14,7 +14,8 @@ import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
-import { cssLinesToRecord, cssRecordToLines } from './figmaControlValues';
+import { CssPropertyEditor, HtmlAttributeEditor, HtmlSourceEditor } from '~/components/ElementInspector/ElementInspector';
+import { allowsAuthoredHtmlAttribute, authoredHtmlAttributeName, authoredHtmlPropName } from '~/components/Kinds/htmlRenderPolicy';
 import {
 	blockLabel,
 	findBlock,
@@ -309,42 +310,6 @@ const CssField = ({
 	</Flex>
 );
 
-// The whole css record as editable `property: value` lines — the native-code
-// escape hatch. Local state while typing, committed on blur.
-const CustomCssEditor = ({ block, onCommit }: { block: WebpageBlock; onCommit: (css: Record<string, string>) => void }) => {
-	const [text, setText] = React.useState(() => cssRecordToLines(block.css));
-	const editedRef = React.useRef(false);
-	const serialized = cssRecordToLines(block.css);
-	React.useEffect(() => {
-		// track the block's css from OUTSIDE this textarea too (the dedicated
-		// padding/typography fields write the same record) — a stale buffer
-		// here would commit old css on blur, reverting those edits. Only text
-		// actively being typed is protected from the resync.
-		if (!editedRef.current) setText(serialized);
-	}, [block.id, serialized]);
-	return (
-		<FieldRow label="Custom CSS (property: value per line)">
-			<Textarea
-				{...inputStyles}
-				rows={5}
-				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-				fontSize="12px"
-				placeholder={'padding: 24px\nbackground: #fff5fa\nborder-radius: 16px'}
-				value={text}
-				onChange={(event) => {
-					editedRef.current = true;
-					setText(event.target.value);
-				}}
-				onBlur={() => {
-					editedRef.current = false;
-					onCommit(cssLinesToRecord(text));
-				}}
-				data-testid="css-custom-editor"
-			/>
-		</FieldRow>
-	);
-};
-
 // The advanced Editor.js surface for a text block — the shared RichTextModal
 // (the block right-click menu opens the same one from the canvas).
 const RichTextEditorButton = ({
@@ -396,6 +361,20 @@ const BlockInspector = ({
 		patch({ css: Object.keys(css).length ? css : undefined });
 	};
 	const [expandError, setExpandError] = React.useState('');
+	const [mediaUrlEditor, setMediaUrlEditor] = React.useState<string | null>(null);
+	const isMediaElement = block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || '');
+ const canEditAttribute = (name: string) => name !== 'style' && name !== 'data-tt-action-inputs' &&
+  (name !== 'src' || !isMediaElement) && allowsAuthoredHtmlAttribute(authoredHtmlPropName(name), block.tag);
+ const storedAttributeNames: Record<string, string> = Object.create(null);
+ const elementAttributeValues: Record<string, string> = Object.create(null);
+ if (block.type === 'element') for (const [key, value] of Object.entries(block.props || {})) {
+  const name = authoredHtmlAttributeName(key);
+  if (canEditAttribute(name) && ['string', 'number', 'boolean'].includes(typeof value)) {
+   elementAttributeValues[name] = String(value);
+   storedAttributeNames[name] = key;
+  }
+ }
+
 	const component = block.type === 'component' ? draft.componentsByRef[block.component || ''] : null;
 	const specs = React.useMemo(() => sanitizeArgSpecs(component?.crystal?.args), [component?.crystal?.args]);
 
@@ -459,23 +438,61 @@ const BlockInspector = ({
     {block.type === 'element' ? <>
      <FieldRow label="Element"><Input {...inputStyles} aria-label="Element tag" value={block.tag || 'div'} onChange={e => patch({ tag: e.target.value })} /></FieldRow>
      <FieldRow label="Text"><Textarea {...inputStyles} aria-label="Block text" value={block.text || ''} onChange={e => patch({ text: e.target.value })} /></FieldRow>
-     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
-      <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
-     </FieldRow>)}
+     {block.tag?.startsWith('tt-') ? ['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
+      <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={event => patch({ props: { ...block.props, [key]: event.target.value } })} />
+     </FieldRow>) : <HtmlAttributeEditor
+      key={block.id}
+      tagName={block.tag || 'div'}
+      primaryAttributes={[
+       'title',
+       ...(['input', 'button', 'select', 'textarea'].includes(block.tag || '') ? ['name'] : []),
+       ...(['input', 'textarea'].includes(block.tag || '') ? ['placeholder', 'value'] : []),
+       ...(['input', 'button'].includes(block.tag || '') ? ['type'] : []),
+       ...(block.tag === 'a' ? ['href'] : []),
+       ...(block.tag === 'img' ? ['alt'] : []),
+       'data-tt-action'
+      ]}
+      inputLabelPrefix="Element"
+      showRestricted
+      isAllowed={canEditAttribute}
+      value={elementAttributeValues}
+      onChange={next => {
+       const props = { ...block.props };
+       for (const name of Object.keys(elementAttributeValues)) if (!Object.prototype.hasOwnProperty.call(next, name)) delete props[storedAttributeNames[name]];
+       for (const [name, value] of Object.entries(next)) {
+        if (Object.prototype.hasOwnProperty.call(elementAttributeValues, name) && elementAttributeValues[name] === value) continue;
+        const key = storedAttributeNames[name] || authoredHtmlPropName(name);
+        if (props[key] != null && typeof props[key] === 'object') continue;
+        props[key] = value;
+       }
+       patch({ props });
+      }}
+     />}
      <FieldRow label="Action inputs"><StructuredValue key={block.id} value={block.props?.['data-tt-action-inputs']} onChange={value=>patch({props:{...block.props,'data-tt-action-inputs':value}})} /></FieldRow>
     </> : null}
-    {block.type === 'element' && ['img','video','audio'].includes(block.tag || '') ? <FieldRow label="Upload media">
-     <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
-     <input ref={uploadInputRef} type="file" accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
-    </FieldRow> : null}
+    {isMediaElement ? <>
+     <FieldRow label="Upload media">
+      <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
+      <input ref={uploadInputRef} type="file" accept={block.tag === 'img' ? `image/*,${HEIC_IMAGE_ACCEPT}` : `${block.tag}/*`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
+     </FieldRow>
+     <Button type="button" size="sm" alignSelf="start" variant="ghost" aria-expanded={mediaUrlEditor === block.id}
+      onClick={() => setMediaUrlEditor(mediaUrlEditor === block.id ? null : block.id)}>
+      {mediaUrlEditor === block.id ? 'Hide URL option' : 'Use URL instead'}
+     </Button>
+     {mediaUrlEditor === block.id ? <FieldRow label="Image or media URL">
+      <Input {...inputStyles} aria-label="Element src" value={String(block.props?.src ?? '')} onChange={e => patch({ props: { ...block.props, src: e.target.value } })} />
+     </FieldRow> : null}
+    </> : null}
     {block.type === 'element' && block.format ? <>
      <FieldRow label="Formatted value path"><Input {...inputStyles} value={String(block.format.arg || '')} onChange={e => patch({ format: { ...block.format, arg: e.target.value } })} /></FieldRow>
      <FieldRow label="Format"><Input {...inputStyles} value={String(block.format.kind || '')} onChange={e => patch({ format: { ...block.format, kind: e.target.value } })} /></FieldRow>
     </> : null}
     {block.type === 'collection' ? <>
-     {['itemsPath', 'label', 'empty', 'filterPath', 'filterValue'].map(key => <FieldRow key={key} label={key}>
+     {['itemsPath', 'label', 'empty', 'filterPath', 'filterValue', 'totalPath', 'selectedKey', 'itemKey', 'countStateKey'].map(key => <FieldRow key={key} label={key}>
       <Input {...inputStyles} aria-label={`Collection ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
      </FieldRow>)}
+     <FieldRow label="Collection source"><StructuredValue key={`${block.id}-collection-source`} value={block.props?.source} onChange={value => patch({ props: { ...block.props, source: value } })} /></FieldRow>
+     <FieldRow label="Reveal selected"><Select {...inputStyles} aria-label="Reveal selected" value={block.props?.revealSelected === true ? 'yes' : 'no'} onChange={e => patch({ props: { ...block.props, revealSelected: e.target.value === 'yes' } })}><option value="no">No</option><option value="yes">Yes</option></Select></FieldRow>
      <FieldRow label="Default page size"><Select {...inputStyles} aria-label="Default page size" value={String(block.props?.size ?? 'all')} onChange={e => patch({ props: { ...block.props, size: ['all','infinite'].includes(e.target.value) ? e.target.value : Number(e.target.value) } })}>
       <option value="all">Show all</option><option value="5">5</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="infinite">Infinite scrolling</option>
      </Select></FieldRow>
@@ -611,17 +628,8 @@ const BlockInspector = ({
 			) : null}
 
 			{block.type === 'html' ? (
-				<FieldRow label="HTML (sanitised at render — scripts/iframes never run)">
-					<Textarea
-						{...inputStyles}
-						rows={10}
-						fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-						fontSize="12px"
-						value={block.html || ''}
-						onChange={(event) => patch({ html: event.target.value })}
-						data-testid="html-block-editor"
-					/>
-				</FieldRow>
+				<HtmlSourceEditor key={block.id} label="HTML source (sanitized before rendering)"
+					value={block.html || ''} onChange={html => patch({ html })} />
 			) : null}
 
 			{block.type === 'container' ? (
@@ -669,8 +677,21 @@ const BlockInspector = ({
 						<Flex flexDirection="column" rowGap={2}>
 							<Eyebrow>Args</Eyebrow>
 							{specs.map((spec) => (
-								<ArgField
-									key={spec.name}
+								<Flex key={spec.name} direction="column" gap={1}>
+									<Checkbox size="sm" minHeight="44px"
+										isChecked={Object.prototype.hasOwnProperty.call(block.argBindings || {}, spec.name)}
+										onChange={(event) => {
+											const argBindings = { ...block.argBindings };
+											if (event.target.checked) argBindings[spec.name] = '';
+											else delete argBindings[spec.name];
+											patch({ argBindings });
+										}}
+									>Use parent data for {spec.label || spec.name}</Checkbox>
+								{Object.prototype.hasOwnProperty.call(block.argBindings || {}, spec.name) ? (
+									<Input {...inputStyles} aria-label={`Parent data binding for ${spec.label || spec.name}`}
+										placeholder="{item.id}" value={String(block.argBindings?.[spec.name] ?? '')}
+										onChange={(event) => patch({ argBindings: { ...block.argBindings, [spec.name]: event.target.value } })} />
+								) : <ArgField
 									spec={spec}
 									value={block.args?.[spec.name] ?? (component?.crystal?.savedArgs || {})[spec.name]}
 									onChange={(next) => {
@@ -679,7 +700,8 @@ const BlockInspector = ({
 										else args[spec.name] = next;
 										patch({ args });
 									}}
-								/>
+								/>}
+								</Flex>
 							))}
 						</Flex>
 					) : (
@@ -749,8 +771,7 @@ const BlockInspector = ({
 						</Flex>
 					</Box>
 					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
-						<Eyebrow>Native code</Eyebrow>
-						<CustomCssEditor block={block} onCommit={(css) => patch({ css: Object.keys(css).length ? css : undefined })} />
+						<CssPropertyEditor key={block.id} value={block.css} tagName={block.tag} onChange={css => patch({ css: Object.keys(css).length ? css : undefined })} />
 					</Box>
 				</>
 			) : null}
@@ -949,7 +970,7 @@ export const BuilderDrawer = (props: {
 								{regionLabel}
 							</Text>
 						) : null}
-						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector allowDataSources={props.allowDataSources} draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
+						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector key={JSON.stringify([draft.editorScope, draft.resolved?.page?.id, draft.branch?.id, selected.id])} allowDataSources={props.allowDataSources} draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
 					</>
 				) : !props.helpText ? (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">

@@ -78,13 +78,14 @@ one selected Thingtime connection. The server does not proxy arbitrary URLs.
   `destructiveHint: true`.
 - **Potentially public:** create, update, delete, comment, react, and share
   can affect public Thingtime content, so they advertise `openWorldHint: true`.
-  Every write-tool description tells ChatGPT to obtain the user's confirmation
-  first.
-- **Composed writes:** preview is read-only; apply is destructive and consumes
-  only an unexpired signed plan plus an explicit `confirmed: true`. Capability workflows compile into the same
-  registered grammar and remain awaiting confirmation until that exact receipt
-  is applied. The UI cannot enable Apply until the reviewer checks its explicit
-  confirmation control.
+  Each tool follows the selected Thingtime account's applicable confirmation
+  preferences, which default to on and are managed in Settings → Connections.
+  These preferences do not alter ChatGPT host approvals or Thingtime scopes.
+- **Composed writes:** preview is read-only; apply is destructive and always
+  requires an unexpired signed plan. Apply checks the current account settings
+  and requires explicit `confirmed: true` when any applicable protection is
+  enabled. The review UI shows the confirmation control when required. Scope,
+  account, revision and receipt checks always apply.
 
 ## Reviewer test cases
 

@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 // Production Builder/review UI over a real IndexedDB draft; synthetic metadata
 // and private layout API only. Run under the OS-isolated browser harness.
 import React, { StrictMode, useState } from 'react';
@@ -8,7 +9,7 @@ import { PagedSyncConflictReview } from '../app/components/Devices/PagedSyncConf
 import { createConflictReviewController } from '../app/fileSync/conflictReviewController';
 import { openSyncJournal } from '../app/fileSync/journal.client';
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
-import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { settingsFixtureCapabilities } from './lib/settings-fixture-capabilities';
 import type { ReviewDraftSpec } from '../app/fileSync/pagedReviewDraft';
 import type { SyncEntry } from '../app/fileSync/reconcile';
 const scope = { origin: location.origin, ownerId: 'editable-review-fixture', dataPlane: 'home', deviceId: 'test-device', rootId: 'test-root' };
@@ -33,7 +34,7 @@ const originalFetch = window.fetch.bind(window);
 window.fetch = async function(input,init) {
  const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
  init?.signal?.throwIfAborted();
- if(url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
+ if(url.pathname.includes('thingtime-capabilities')) return Response.json(settingsFixtureCapabilities(location.origin));
  if(url.pathname === '/api/v1/webpages/resolve') {
   const page = JSON.parse(localStorage.getItem(layoutKey) || 'null');
   return Response.json(page ? {ok:true,page,source:'user'} : {ok:false},{status:page?200:404});
@@ -62,6 +63,6 @@ function Fixture() {
   {result === 'Open' && <PagedSyncConflictReview controller={controller} mode="two-way" scopeKey="fixture" />}
  </Box></ChakraProvider>;
 }
-const router = createMemoryRouter([{id:'root',path:'*',element:<Fixture/>}],{hydrationData:{loaderData:{root:{user:{id:scope.ownerId,username:'synthetic-review'},dataPlane:'home'}}}});
+const router = createMemoryRouter([{id:'root',path:'*',element:<CurrentPageBuilderFixture><Fixture/></CurrentPageBuilderFixture>}],{hydrationData:{loaderData:{root:{user:{id:scope.ownerId,username:'synthetic-review'},dataPlane:'home'}}}});
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router}/></StrictMode>);
 Object.assign(window,{reviewUIFixture:{saved:()=>drafts.read(spec),layout:()=>JSON.parse(localStorage.getItem(layoutKey)||'null')}});

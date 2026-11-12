@@ -5,7 +5,7 @@ import { TransientBlockHost, type TransientBlockActions } from '../Builder/Trans
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { passwordIconBlocks, migratePasswordIconBranding } from './passwordIconBlocks';
 import { openPasswordIconBlob } from '~/passwords/icons.client';
-import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, passwordWebsiteIcon, type PasswordIcon } from '~/passwords/icons';
+import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, type PasswordIcon } from '~/passwords/icons';
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile } from '~/passwords/fileCrypto';
 
@@ -41,7 +41,7 @@ function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', 
     'icon.show-url': () => setShowUrl(value => !value),
     'icon.type-url': () => {}, // Kept exclusively in this transient input's DOM.
     'icon.use-url': ({ readField }) => { if (!disabled && !pending.current) { try { onChange({ kind: 'url', url: passwordIconUrl(readField('icon-url')) }); setError(''); } catch (cause) { setError((cause as Error).message); } } },
-    'icon.website': () => { if (!disabled && !pending.current) { try { onChange(passwordWebsiteIcon(website)); setError(''); } catch { setError('Enter a valid HTTPS website first.'); } } },
+    'icon.website': () => { if (!disabled && !pending.current) { onChange(undefined); setError(''); } },
     'icon.remove': () => { if (!disabled && !pending.current) { onChange(undefined); setError(''); } },
     'icon.upload': async ({ readFile, signal }) => {
       if (disabled || pending.current || !saved) return;

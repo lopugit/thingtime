@@ -130,6 +130,13 @@ type RequestOperation =
   | { operation: 'status' }
   | { operation: 'readPolicy'; configuration: IndexConfiguration | null }
   | { operation: 'observe'; configuration: IndexConfiguration; paths: string[] }
+  | {
+      operation: 'listChildren';
+      configuration: IndexConfiguration;
+      path: string;
+      after?: string;
+      limit: number;
+    }
   | { operation: 'readback'; paths: string[]; sourceIds?: string[] }
   | { operation: 'catalogue'; kinds: IndexKind[]; sourcePrefix: string; sourceIds?: string[] }
   | { operation: 'index'; configuration: IndexConfiguration }
@@ -222,6 +229,61 @@ export class FileSystemIndexerClient {
     paths: string[],
   ): Promise<{ observations: { path: string; record?: IndexRecord; descend: boolean }[] }> {
     return this.#request({ operation: 'observe', configuration, paths });
+  }
+
+  listChildren(
+    configuration: IndexConfiguration,
+    path: string,
+    after: string | undefined,
+    limit: number,
+  ): Promise<{ paths: string[]; nextAfter?: string | null }> {
+    return this.#request({
+      operation: 'listChildren',
+      configuration,
+      path,
+      ...(after ? { after } : {}),
+      limit,
+    });
+  }
+
+  /** Host-only notification: the helper returns a count, with no grant or root details. */
+  invalidateInventoryPaths(paths: string[], lostEvents: boolean, signal: AbortSignal): Promise<void> {
+    const args = [
+      ...(this.#options.prefixArguments ?? []),
+      'inventory',
+      '--database',
+      this.#options.databasePath,
+    ];
+    return new Promise((resolve, reject) => {
+      const child = execFile(
+        this.#options.binaryPath,
+        args,
+        {
+          signal,
+          timeout: 15_000,
+          maxBuffer: 4096,
+          killSignal: 'SIGKILL',
+        },
+        (error, stdout) => {
+          if (error) {
+            reject(new Error('The Rust inventory could not record filesystem changes.'));
+            return;
+          }
+          try {
+            const result = JSON.parse(stdout);
+            if (!Number.isSafeInteger(result.invalidatedScopes) || result.invalidatedScopes < 0)
+              throw new Error('Invalid inventory invalidation reply');
+            resolve();
+          } catch {
+            reject(new Error('The Rust inventory returned an invalid filesystem change receipt.'));
+          }
+        },
+      );
+      child.stdin?.on('error', () => undefined); // Process failure is reported by the callback.
+      child.stdin?.end(
+        JSON.stringify({ version: 1, operation: 'invalidatePaths', paths, lostEvents }) + '\n',
+      );
+    });
   }
 
   readback(

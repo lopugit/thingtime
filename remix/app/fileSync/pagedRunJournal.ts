@@ -1,6 +1,9 @@
+import { isNativePhotoAssetKey, nativePhotoAssetKey } from './nativeInventory';
+import { parseSymbolicLink } from './symbolicLink';
+import { emptySyncDirections, parseSyncDirections, addSyncDirection, removeUnconfirmedSyncDirection, type SyncDirectionalTotals } from './directionalProgress';
 import { eligibleFolderBatchWrite, parseFolderBatchDescriptor, type FolderBatchDescriptor, type FolderParentRef } from './folderBatch';
 import type { FolderBatchGate, PriorityReadiness } from './priorityReadiness';
-import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
+import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor, type UploadBatchFailure } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
@@ -9,6 +12,7 @@ import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type P
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { parseCloudInventoryRoot, type CloudInventoryRoot, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudWrite } from './cloudWrite';
+import { parseCloudFileNoEffectFence, type CloudFileNoEffectFence } from './cloudFile';
 import { prepareCloudOperationBinding, type CloudOperationBinding } from './cloudBinding';
 import { parseLocalTrashContext } from './localTrash';
 import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead } from './checkpoint';
@@ -17,23 +21,29 @@ import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVE
 import { journalScope, type JournalAccess } from './journalScope';
 import { pagedPlanJournal, parsePagedPlanSpec, provesConflictFreeInitialUpload, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
-import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncScope, sameSyncContent, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
 const INPUT_PATH = 'stream-input-path';
-type StreamInput = NativeIndexChange & { generation: string; inputScope?: string; inputRun?: string; inputPath?: string };
+type Replica = 'local' | 'remote';
+type ReplicaFeed = { sequence: number; generation: string; terminal: boolean };
+type StreamInput = NativeIndexChange & { generation: string; replica?: Replica; inputScope?: string; inputRun?: string; inputPath?: string };
 export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
+export const streamReconciliationKey = (scope: string): IDBValidKey => [scope, 'stream-reconciliation'];
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
-export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; streaming?: { source: 'local' | 'remote'; captureId: string } };
-export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
+export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; backgroundPhotoPublication?: true; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
+export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals; photoSourceChanged?: true };
+export type ReservedSyncPublication = { operationId: string; direction: 'upload' | 'download'; kind: 'file' | 'folder' | 'trash';
+	canonicalDispatched: boolean | null; receiptPresent: boolean; confirmed: boolean; fileId?: string };
+const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number } };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number; replicaFeeds?: Partial<Record<Replica, ReplicaFeed>> } };
 type BatchReservation = { kind?: 'folders'; id: string; count: number; remaining: number; next: number };
 type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null;
 	batch?: BatchReservation; recovery?: BatchReservation; streamScan?: { index: number; ancestor: number; phase: 0 | 1 | 2 } };
@@ -50,21 +60,47 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 	const plan = parsePagedPlanSpec(value.plan), configuration = value.configuration === undefined ? undefined : parseFileSyncConfiguration(value.configuration);
 	if (configuration && (configuration.mode !== plan.policy.mode || configuration.propagateDeletes !== plan.policy.propagateDeletes || (configuration.ignoreRules ?? '') !== (plan.ignoreRules ?? '') ||
 		JSON.stringify(configuration.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(plan.excludedPaths.map(syncPathKey).sort()))) throw Error('Saved run settings do not match the plan.');
-	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !['upload', 'download', 'backup'].includes(plan.policy.mode) || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved one-way connection without deletions.');
-	return { id: value.id, plan, ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
+	const photoAssetOrder = value.photoAssetOrder;
+	if (photoAssetOrder !== undefined && (configuration?.sourceKind !== 'photos' || configuration.mode !== 'backup' ||
+		configuration.propagateDeletes || value.streaming || !Array.isArray(photoAssetOrder) || photoAssetOrder.length > 4 ||
+		!photoAssetOrder.every(isNativePhotoAssetKey) || new Set(photoAssetOrder).size !== photoAssetOrder.length))
+		throw Error('Invalid saved Photos asset order.');
+	if (value.backgroundPhotoPublication !== undefined && (value.backgroundPhotoPublication !== true ||
+		configuration?.sourceKind !== 'photos' || configuration.mode !== 'backup' || configuration.propagateDeletes ||
+		value.review || value.streaming)) throw Error('Invalid saved background Photos publication.');
+	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'two-way' ? 'both' : plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved connection without deletions.');
+	return { id: value.id, plan, ...(photoAssetOrder ? { photoAssetOrder: [...photoAssetOrder] } : {}), ...(value.backgroundPhotoPublication ? { backgroundPhotoPublication: true as const } : {}), ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
+const validStreamInput = (change: NativeIndexChange & { replica?: Replica }, spec: PagedRunSpec) =>
+	validIndexProvenance(change) && (spec.streaming?.source === 'both'
+		? (change.replica === 'local' || change.replica === 'remote') && (change.sourceKind === undefined || change.replica === 'remote')
+		: change.replica === undefined && (change.sourceKind === undefined || spec.streaming?.source === 'remote'));
 const inputs = (spec: PagedRunSpec) => [spec.plan.local, spec.plan.remote, spec.plan.baseline.local, spec.plan.baseline.remote];
-const progress = ({ phase, read, total, operations, confirmed }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed });
-const orderKey = (op: SyncOperation): SortKey => syncMutationOrderKey(op.mutation);
+const progress = ({ phase, read, total, operations, confirmed, directions, photoSourceChanged }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed,
+	...(directions ? { directions: structuredClone(directions) } : {}), ...(photoSourceChanged ? { photoSourceChanged } : {}) });
+const photoRank = (spec: PagedRunSpec, path: string) => spec.photoAssetOrder?.indexOf(nativePhotoAssetKey(path) ?? '');
+const orderKey = (op: SyncOperation, spec: PagedRunSpec): SortKey => {
+	const canonical = syncMutationOrderKey(op.mutation);
+	const rank = photoRank(spec, canonical[2]);
+	if (rank === undefined) return canonical;
+	if (rank < 0 || op.mutation.kind !== 'copy' || op.mutation.from !== 'local' ||
+		op.mutation.source.kind !== 'file' || canonical[2].includes('/')) throw Error('Photos operation is outside its prepared asset batch.');
+	return [0, rank + 1, canonical[2]];
+};
 const entry = (e: SyncEntry): SyncEntry => ({ path: e.path, id: e.id, version: e.version, kind: e.kind, size: e.size, sha256: e.sha256,
 	...(e.fingerprint ? { fingerprint: { algorithm: e.fingerprint.algorithm, partSizeBytes: e.fingerprint.partSizeBytes,
-		partCount: e.fingerprint.partCount, sha256: e.fingerprint.sha256 } } : {}) });
+		partCount: e.fingerprint.partCount, sha256: e.fingerprint.sha256 } } : {}), ...(e.symbolicLink ? { symbolicLink: parseSymbolicLink(e.symbolicLink) } : {}) });
 const receiptValue = (r: SyncReceipt): SyncReceipt => ({ operationId: r.operationId,
 	scope: { origin: r.scope.origin, ownerId: r.scope.ownerId, dataPlane: r.scope.dataPlane, rootId: r.scope.rootId, deviceId: r.scope.deviceId },
 	entry: r.entry === null ? null : entry(r.entry) });
 
-const validOrder = (value: unknown): value is SortKey => Array.isArray(value) && value.length === 3 && [0, 1].includes(value[0]) &&
-	Number.isInteger(value[1]) && validSyncPath(value[2]) && value[1] === value[2].split('/').length * (value[0] === 0 ? 1 : -1);
+const validOrder = (value: unknown, spec: PagedRunSpec): value is SortKey => {
+	if (!Array.isArray(value) || value.length !== 3 || ![0, 1].includes(value[0]) ||
+		!Number.isInteger(value[1]) || !validSyncPath(value[2])) return false;
+	const rank = photoRank(spec, value[2]);
+	return rank === undefined ? value[1] === value[2].split('/').length * (value[0] === 0 ? 1 : -1)
+		: rank >= 0 && value[0] === 0 && value[1] === rank + 1 && !value[2].includes('/');
+};
 const cloudProgress = (h: Header): CloudBindingProgress => {
 	if (!h.cloud) throw Error('Prepare cloud bindings before using this run.');
 	return { prepared: h.cloud.prepared, total: h.operations, phase: h.cloud.prepared === h.operations ? 'ready' : 'preparing' };
@@ -89,12 +125,23 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 			!h.next.scope || !sameSyncScope(h.next.scope, scope) || !validSyncPathKey(h.next.after) || h.next.read !== h.read)) ||
 		(h.phase !== 'preparing' && (h.read !== h.total || h.next !== null)) ||
 		(['preparing', 'ready'].includes(h.phase) && h.confirmed !== 0) || (h.phase === 'complete' && h.confirmed !== h.operations) ||
-		(h.scheduling ? (after !== null && !validOrder(after)) : h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
-			!Number.isInteger(after[1]) || !validSyncPath(after[2]) || after[1] !== after[2].split('/').length * (after[0] === 0 ? 1 : -1)))
+		(h.photoSourceChanged !== undefined && (h.photoSourceChanged !== true || !spec.photoAssetOrder || !['running', 'complete'].includes(h.phase))) ||
+		(h.scheduling ? (after !== null && !validOrder(after, spec)) : h.confirmed === 0 ? after !== null : !validOrder(after, spec)))
 		throw Error('Paged sync run changed or is unavailable.');
+	if (h.directions) {
+  const d = parseSyncDirections(h.directions);
+  if (d.upload.operations + d.download.operations !== h.operations || d.upload.confirmed + d.download.confirmed !== h.confirmed) throw Error('Directional sync progress count changed.');
+ }
 	if (!!spec.streaming !== !!h.stream) throw Error('Invalid streaming sync progress.');
 	if (h.stream) {
-		const stream = h.stream;
+		const stream = h.stream, feeds = stream.replicaFeeds;
+		if (feeds && (spec.streaming?.source !== 'both' || Object.keys(feeds).some(k => k !== 'local' && k !== 'remote') ||
+			Object.values(feeds).some(f => !f || !identifier(f.generation) || !nonnegative(f.sequence) || typeof f.terminal !== 'boolean') ||
+			(feeds.local?.sequence ?? 0) + (feeds.remote?.sequence ?? 0) !== stream.indexedSequence ||
+			stream.generation !== spec.streaming.captureId || stream.sourceTerminal !== (!!feeds.local?.terminal && !!feeds.remote?.terminal)))
+			throw Error('Invalid two-way streaming watermarks.');
+		if (spec.streaming?.source === 'both' && !feeds && (stream.indexedSequence !== undefined || stream.sourceTerminal || stream.terminal))
+			throw Error('Missing two-way streaming watermarks.');
 		if (!nonnegative(stream.sequence) || (stream.sequence + (stream.preparedAhead ?? 0)) !== h.total || !nonnegative(stream.conflicts) || stream.conflicts > h.read ||
 			typeof stream.terminal !== 'boolean' || (stream.generation !== null && !identifier(stream.generation)) ||
 			(stream.sourceCursor !== undefined && (!/^(0|[1-9][0-9]{0,15})$/.test(stream.sourceCursor) || !Number.isSafeInteger(Number(stream.sourceCursor)))) ||
@@ -128,12 +175,64 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 	if (h.cloud !== undefined) {
 		const c = h.cloud;
 		if (!c || h.phase === 'preparing' || !nonnegative(c.prepared) || c.prepared > h.operations ||
-			(c.prepared === 0 ? c.after !== null : !validOrder(c.after)) ||
+			(c.prepared === 0 ? c.after !== null : !validOrder(c.after, spec)) ||
 			(h.phase !== 'ready' && c.prepared !== h.operations)) throw Error('Invalid cloud binding progress.');
 		parseCloudInventoryRoot(c.root); validateCloudConfiguration(c.configuration, spec, scope, c.root);
 	}
 };
 
+export type ConfirmedHistoryTotals = { operations: number; files: number; bytes: string };
+type StreamCompletionEvidence = { instance: string; revision: number; after: IDBValidKey | null; history: ConfirmedHistoryTotals; effects?: number };
+const emptyHistoryTotals = (): ConfirmedHistoryTotals => ({ operations: 0, files: 0, bytes: '0' });
+const addHistoryTotals = (a: ConfirmedHistoryTotals, b: ConfirmedHistoryTotals): ConfirmedHistoryTotals => {
+	const result = { operations: a.operations + b.operations, files: a.files + b.files, bytes: String(BigInt(a.bytes) + BigInt(b.bytes)) };
+	if (![result.operations, result.files].every((n) => Number.isSafeInteger(n) && n >= 0))
+		throw Error('Confirmed history totals exceed the supported safe range.');
+	return result;
+};
+const validateHistoryTotals = (v: ConfirmedHistoryTotals) => {
+	if (!v || ![v.operations, v.files].every((n) => Number.isSafeInteger(n) && n >= 0) || v.files > v.operations || typeof v.bytes !== 'string' || !/^(0|[1-9][0-9]*)$/.test(v.bytes))
+		throw Error('Invalid confirmed history totals.');
+	return { operations: v.operations, files: v.files, bytes: v.bytes };
+};
+const completionKey = (key: string, id: string): IDBValidKey => [key, id, 'completion-evidence'];
+const historyPathKey = (key: string, id: string, path: string): IDBValidKey => [key, id, 'completion-path', syncPathKey(path)];
+/** Strict checkpoints consume latest effects, while activity retains all confirmed revisions. */
+export function countConfirmedSyncEffects(
+	tx: IDBTransaction,
+	key: string,
+	header: PagedRunHeader,
+	check: () => void,
+	done: (count: number) => void,
+	fail: (error: unknown) => void
+) {
+	if (!header.spec.streaming) {
+		done(header.operations);
+		return;
+	}
+	const id = header.spec.id,
+		get = tx.objectStore(REVIEW_STORE).get(completionKey(key, id));
+	get.onsuccess = () => {
+		try {
+			check();
+			const saved: StreamCompletionEvidence =
+				get.result ??
+				(header.spec.streaming?.source === 'both'
+					? { instance: header.instance, revision: header.revision, after: null, history: emptyHistoryTotals(), effects: header.operations }
+					: undefined);
+			if (!saved || saved.instance !== header.instance || saved.revision !== header.revision || !nonnegative(saved.effects!))
+				throw Error('Completed stream evidence is unavailable.');
+			validateHistoryTotals(saved.history);
+            // Sealed effects are immutable under this exact header instance/revision.
+            // Recounting the whole path index per cursor page would make checkpointing quadratic.
+            if (saved.effects! + saved.history.operations !== header.operations || header.confirmed !== header.operations)
+                throw Error('Confirmed-operation history count changed.');
+            done(saved.effects!);
+		} catch (error) {
+			fail(error);
+		}
+	};
+}
 export function upgradePagedRunJournal(db: IDBDatabase, tx?: IDBTransaction) {
 	let review: IDBObjectStore | undefined;
 	for (const name of [RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES]) if (!db.objectStoreNames.contains(name)) {
@@ -182,7 +281,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		if (value.canonicalDispatched !== undefined && typeof value.canonicalDispatched !== 'boolean' || value.rebindPending !== undefined && value.rebindPending !== true) throw Error('Invalid saved operation effect evidence.');
 		if (spec.review?.kind === 'retain') validateSyncRun({ version: 2, intent: 'retain-conflicts', id: spec.id, scope, operations: [value.operation] });
 		if (value.operation.id === spec.id || value.path !== syncPathKey(value.operation.mutation.path) ||
-			(primaryKey !== undefined && JSON.stringify(primaryKey) !== JSON.stringify([key, spec.id, ...orderKey(value.operation)])))
+			(primaryKey !== undefined && JSON.stringify(primaryKey) !== JSON.stringify([key, spec.id, ...orderKey(value.operation, spec)])))
 			throw Error('Invalid saved sync operation order.');
 		if (value.operation.confirmed) validateSyncReceipt(value.operation, scope, value.receipt!);
 		else if (value.receipt !== null) throw Error('Unconfirmed operation has a receipt.');
@@ -256,10 +355,10 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					schedule.reserved = null; schedule.canonical = false; delete schedule.streamScan;
 					review.add({ kind: 'folders', scope: key, run: spec.id, instance: h.instance, batchId, configuration }, [key, spec.id, 'batch-meta', batchId]);
 					for (const [ordinal, r] of selectedRows.entries()) {
-						if (r.canonicalDispatched === undefined) { r.canonicalDispatched = false; ops.put(r, [key, spec.id, ...orderKey(r.operation)]); }
+						if (r.canonicalDispatched === undefined) { r.canonicalDispatched = false; ops.put(r, [key, spec.id, ...orderKey(r.operation, spec)]); }
 						review.add({ scope: key, run: spec.id, instance: h.instance, batchId, ordinal, parent: selected[ordinal].parent, operationId: r.operation.id, confirmed: false, canonicalDispatched: false }, [key, spec.id, 'batch-member', batchId, ordinal]);
 						review.add({ batchId, ordinal, instance: h.instance }, [key, spec.id, 'batch-operation', r.operation.id]);
-						review.delete([key, spec.id, 'pending', ...orderKey(r.operation)]); review.delete([key, spec.id, 'pending-path', r.path]);
+						review.delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]); review.delete([key, spec.id, 'pending-path', r.path]);
 					}
 					h.revision++; save(h, tx); done(descriptor);
 				};
@@ -308,7 +407,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	};
 	const inputRow = (value: StreamInput, spec: PagedRunSpec, generation: string | null, primaryKey: IDBValidKey): StreamInput => {
 		if (!value || !nonnegative(value.sequence) || value.sequence === 0 || value.generation !== generation ||
-			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validIndexProvenance(value) ||
+			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validStreamInput(value, spec) ||
 			JSON.stringify(primaryKey) !== JSON.stringify([key, spec.id, 'input', value.sequence]) ||
 			(value.inputScope !== undefined && (value.inputScope !== key || value.inputRun !== spec.id || value.inputPath !== syncPathKey(value.entry.path))))
 			throw Error('Durable streaming input is missing or changed.');
@@ -432,7 +531,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					const root = { rootId: spec.configuration!.remoteFolderId, rootRevision: 'per-entry' };
 					validateCloudConfiguration(spec.configuration!, spec, scope, root);
 					const h: Header = { spec, scope: key, instance: crypto.randomUUID(), planInstance: 'streaming', phase: 'running', read: 0, total: 0,
-						operations: 0, confirmed: 0, next: null, revision: 0, confirmedThrough: null, scheduling: freshScheduling(),
+						operations: 0, confirmed: 0, directions: emptySyncDirections(), next: null, revision: 0, confirmedThrough: null, scheduling: freshScheduling(),
 						cloud: { configuration: spec.configuration!, root, prepared: 0, after: null }, stream: { sequence: 0, generation: null, terminal: false, conflicts: 0 } };
 					tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key); registerJournalMetadata(tx, access, key, 'run', spec.id, h.instance); save(h, tx); done(progress(h));
 				} catch (error) { fail(error); } };
@@ -451,10 +550,13 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					check(); if (saved.result) { validate(saved.result, spec); if (head.result !== spec.id) throw Error('Paged run lost its active root.'); done(progress(saved.result)); return; }
 					const baseline = tx.objectStore(PAGED_CHECKPOINT_HEADS).get(key);
 					baseline.onsuccess = () => { try {
-						check(); if (baseline.result) {
-							validatePagedCheckpointHead(baseline.result, key);
-							if (JSON.stringify(baseline.result.baseline) !== JSON.stringify(spec.plan.baseline)) throw Error('Plan must use the current paged sync baseline.');
-						}
+						check();
+						if (baseline.result) validatePagedCheckpointHead(baseline.result, key);
+						if (spec.plan.photoBaselineInstance !== undefined) {
+							if (!spec.photoAssetOrder || baseline.result?.instance !== spec.plan.photoBaselineInstance)
+								throw Error('The Photos baseline changed before the batch started.');
+						} else if (baseline.result && JSON.stringify(baseline.result.baseline) !== JSON.stringify(spec.plan.baseline))
+							throw Error('Plan must use the current paged sync baseline.');
 						const legacy = tx.objectStore('runs').get(key);
 						legacy.onsuccess = () => { try {
 							check(); if (legacy.result) {
@@ -477,7 +579,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 										tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, capture.id, spec.id, 'run']);
 										if (--pending) return;
 										const h: Header = { spec, scope: key, instance: crypto.randomUUID(), planInstance: p.instance, phase: 'preparing',
-											read: 0, total: p.decisions, operations: 0, confirmed: 0, next: null, revision: 0, confirmedThrough: null,
+											read: 0, total: p.decisions, operations: 0, confirmed: 0, directions: emptySyncDirections(), next: null, revision: 0, confirmedThrough: null,
 											...(spec.review ? { review: { pages: 0, entries: 0, complete: false, matched: 0 } } : {}) };
 										tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key);
 										tx.objectStore(PLAN_PIN_STORE).add(true, [key, spec.plan.id, spec.id]);
@@ -522,7 +624,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			if (JSON.stringify(current) !== JSON.stringify(h)) throw Error('Paged sync progress changed.');
 			for (const operation of operations) tx.objectStore(PAGED_RUN_STORES[1]).add(
 				{ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null } satisfies Row,
-				[key, spec.id, ...orderKey(operation)]);
+				[key, spec.id, ...orderKey(operation, spec)]);
+			if (h.directions) for (const operation of operations) addSyncDirection(h.directions, operation);
 			const next: Header = { ...h, read: h.read + page.decisions.length, operations: h.operations + operations.length,
 				next: page.next, revision: h.revision + 1, phase: page.next ? 'preparing' : 'ready',
 				...(h.review ? { review: { ...h.review, matched: h.review.matched + conflicts.length } } : {}) };
@@ -551,7 +654,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							}
 							operations.push(op); size += length;
 						}
-						after = orderKey(op);
+						after = orderKey(op, spec);
 					}
 					const more = rows.length === INVENTORY_PAGE_ENTRIES + 1;
 					if (!more && h.confirmed + operations.length !== h.operations) throw Error('Sync operations ended before their declared count.');
@@ -659,7 +762,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		for (const r of snapshot.rows) {
 			const cloud = await prepareCloudOperationBinding(r.operation, scope, h.cloud!.root.rootId, {
 				node: async path => { if (!nodes.has(path)) throw Error('Cloud binding input is missing.'); return nodes.get(path)!; },
-				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash
+				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash,
+				guardPhotoPublication: spec.backgroundPhotoPublication
 			}); check();
 			const bound = { ...r, cloud }, length = bytes(bound) + 1;
 			if (size + length > INVENTORY_PAGE_BYTES) {
@@ -673,15 +777,196 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			if (current.instance !== h.instance) throw Error('Paged sync run was replaced.');
 			if (current.revision !== h.revision) { done(cloudProgress(current)); return; }
 			if (JSON.stringify(current) !== JSON.stringify(h)) throw Error('Cloud preparation changed.');
-			for (const r of prepared) tx.objectStore(PAGED_RUN_STORES[1]).put(r, [key, spec.id, ...orderKey(r.operation)]);
+			for (const r of prepared) tx.objectStore(PAGED_RUN_STORES[1]).put(r, [key, spec.id, ...orderKey(r.operation, spec)]);
 			for (const [path, id] of changes) tx.objectStore(CLOUD_PARENTS).put(id, [key, spec.id, path]);
-			h.cloud!.prepared += prepared.length; h.cloud!.after = orderKey(prepared.at(-1)!.operation); h.revision++;
+			h.cloud!.prepared += prepared.length; h.cloud!.after = orderKey(prepared.at(-1)!.operation, spec); h.revision++;
 			save(h, tx); done(cloudProgress(h));
 		});
 	};
+    let directionMigrations = directionMigrationsByDatabase.get(db);
+    if (!directionMigrations) { directionMigrations = new Map(); directionMigrationsByDatabase.set(db, directionMigrations); }
+    /** Explicit resume migration. Display reads never start it. Each transaction
+     * reads <=128 rows and releases its locks before yielding or checking abort. */
+    const backfillDirections = (value: PagedRunSpec): Promise<PagedRunProgress | undefined> => {
+        check();
+        const spec = parsePagedRunSpec(value), migrationKey = key + "\u0000" + spec.id, existing = directionMigrations!.get(migrationKey);
+        if (existing) return existing;
+        const migration = (async () => {
+            const initial = await withHeader(spec, 'readonly', (h, _tx, done) => done({ instance: h.instance, revision: h.revision, progress: progress(h) })) as { instance: string; revision: number; progress: PagedRunProgress };
+            if (initial.progress.directions) return initial.progress;
+            const totals = emptySyncDirections();
+            for (const storeName of [PAGED_RUN_STORES[1], REVIEW_STORE]) {
+                const prefix: IDBValidKey[] = storeName === REVIEW_STORE ? [key, spec.id, 'history'] : [key, spec.id];
+                let after: IDBValidKey | undefined;
+                for (;;) {
+                    check();
+                    const page = await withHeader(spec, 'readonly', (h, tx, done, fail) => {
+                        if (h.instance !== initial.instance || h.revision !== initial.revision) { done(null); return; }
+                        const range = (keyRange ?? globalThis.IDBKeyRange).bound(after ?? prefix, [...prefix, []], after !== undefined, false);
+                        readPage<Row>(tx.objectStore(storeName), range, 128, (rows, keys) => done({ rows, keys }), fail);
+                    }) as { rows: Row[]; keys: IDBValidKey[] } | null;
+                    if (!page) return undefined;
+                    for (const record of page.rows) { check(); addSyncDirection(totals, row(record, spec).operation); }
+                    if (page.rows.length < 128) break;
+                    after = page.keys.at(-1);
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                }
+            }
+            return withHeader(spec, 'readwrite', (h, tx, done) => {
+                if (h.instance !== initial.instance || h.revision !== initial.revision || totals.upload.operations + totals.download.operations !== h.operations || totals.upload.confirmed + totals.download.confirmed !== h.confirmed) { done(undefined); return; }
+                h.directions = totals; save(h, tx); done(progress(h));
+            }) as Promise<PagedRunProgress | undefined>;
+        })();
+        directionMigrations!.set(migrationKey, migration);
+        void migration.finally(() => { if (directionMigrations!.get(migrationKey) === migration) directionMigrations!.delete(migrationKey); }).catch(() => {});
+        return migration;
+    };
+
+	/** Resume a bounded migration of existing confirmed history. Cursor and per-path
+	 * aggregates commit together, so interruption cannot duplicate activity. */
+	const prepareStreamCompletion = async (spec: PagedRunSpec) => {
+		if (!spec.streaming) throw Error('A completed stream is required.');
+		for (;;) {
+			const finished = await withHeader<boolean>(
+				spec,
+				'readwrite',
+				(h, tx, done, fail) => {
+					if (h.phase !== 'complete' || !h.stream?.terminal) throw Error('Finish stream receipts before sealing completion evidence.');
+					const store = tx.objectStore(REVIEW_STORE),
+						get = store.get(completionKey(key, spec.id));
+					get.onsuccess = () => {
+						try {
+							check();
+							const saved: StreamCompletionEvidence = get.result ?? {
+								instance: h.instance,
+								revision: h.revision,
+								after: null,
+								history: emptyHistoryTotals()
+							};
+							if (saved.instance !== h.instance || saved.revision !== h.revision ||
+                                (saved.after !== null && (!Array.isArray(saved.after) || saved.after.length !== 4 ||
+                                saved.after[0] !== key || saved.after[1] !== spec.id || saved.after[2] !== 'history' || !identifier(saved.after[3]))))
+                                throw Error('Completed stream history changed.');
+							validateHistoryTotals(saved.history);
+							if (saved.effects !== undefined) {
+								done(true);
+								return;
+							}
+							const prefix = [key, spec.id, 'history'],
+								ranges = keyRange ?? globalThis.IDBKeyRange;
+							readPage<Row>(
+								store,
+								ranges.bound(saved.after ?? prefix, [...prefix, []], saved.after !== null),
+								128,
+								(records, keys) => {
+									try {
+										check();
+										const groups = new Map<string, ConfirmedHistoryTotals>();
+                                        const entries = new Map<string, SyncEntry>();
+										let history = saved.history;
+										for (const record of records) {
+											const r = row(record, spec);
+											if (!r.operation.confirmed) {
+												if (!(record as Row & { unpublished?: boolean }).unpublished || r.receipt)
+													throw Error('Unconfirmed historical receipt is unavailable.');
+												continue;
+											}
+											if (!r.receipt || (record as Row & { unpublished?: boolean }).unpublished)
+												throw Error('Confirmed historical receipt is unavailable.');
+											const m = r.operation.mutation,
+												file = m.kind === 'copy' && m.source.kind === 'file';
+											const value = { operations: 1, files: file ? 1 : 0, bytes: String(file ? m.source.size : 0) };
+											history = addHistoryTotals(history, value);
+											groups.set(m.path, addHistoryTotals(groups.get(m.path) ?? emptyHistoryTotals(), value));
+                                            entries.set(m.path, m.kind === 'copy' ? m.source : m.expected);
+										}
+										const next: StreamCompletionEvidence = { ...saved, history, after: keys.at(-1) ?? saved.after };
+										let pending = groups.size;
+										const persist = () => {
+											if (records.length === 128) {
+												store.put(next, completionKey(key, spec.id));
+												done(false);
+												return;
+											}
+											const count = tx
+												.objectStore(PAGED_RUN_STORES[1])
+												.index('path')
+												.count(ranges.bound([key, spec.id], [key, spec.id, []]));
+											count.onsuccess = () => {
+												try {
+													check();
+													if (count.result + history.operations !== h.operations || h.confirmed !== h.operations)
+														throw Error('Confirmed-operation history count changed.');
+													next.effects = count.result;
+													store.put(next, completionKey(key, spec.id));
+													done(true);
+												} catch (error) {
+													fail(error);
+												}
+											};
+										};
+										if (!pending) {
+											persist();
+											return;
+										}
+										for (const [path, value] of groups) {
+											const id = historyPathKey(key, spec.id, path),
+												old = store.get(id);
+											old.onsuccess = () => {
+												try {
+													check();
+													if (old.result !== undefined && (!validSyncEntry(old.result.entry) || old.result.entry.path !== path))
+                                                        throw Error('Confirmed historical path changed.');
+                                                    const prior = old.result === undefined ? emptyHistoryTotals() : validateHistoryTotals(old.result);
+													store.put({ ...addHistoryTotals(prior, value), entry: old.result?.entry ?? entries.get(path)! }, id);
+													if (!--pending) persist();
+												} catch (error) {
+													fail(error);
+												}
+											};
+										}
+									} catch (error) {
+										fail(error);
+									}
+								},
+								fail
+							);
+						} catch (error) {
+							fail(error);
+						}
+					};
+				},
+				true
+			);
+			check();
+			if (finished) return;
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+	};
+
 	return {
 		get scope() { return structuredClone(scope); },
-		begin, step, read, beginCloud, stepCloud,
+		begin, step, read, beginCloud, stepCloud, backfillDirections,
+		/** Exact, owner-scoped identity for reconciling a stopped publication. This
+		 * read never advances the scheduler or exposes source paths or bytes. */
+		reservedPublication: (value: PagedRunSpec) => {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<ReservedSyncPublication | null>(spec, 'readonly', (h, tx, done, fail) => {
+				const id = h.scheduling?.reserved;
+				if (!id) { done(null); return; }
+				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const r = row(get.result, spec), m = r.operation.mutation;
+					if (r.operation.id !== id) throw Error('Reserved operation identity changed.');
+					const write = r.cloud ? rebindWrite(r, spec) : undefined;
+					const direction = m.kind === 'copy' ? m.from === 'local' ? 'upload' : 'download' : m.side === 'remote' ? 'upload' : 'download';
+					const kind = m.kind === 'trash' ? 'trash' : m.source.kind;
+					done({ operationId: id, direction, kind, canonicalDispatched: r.canonicalDispatched ?? null,
+						receiptPresent: r.receipt !== null, confirmed: r.operation.confirmed,
+						...(direction === 'upload' && kind === 'file' && write ? { fileId: write.before?.id ?? id } : {}) });
+				} catch (error) { fail(error); } };
+			});
+		},
 		/** Upgrade only structural initial uploads that could never execute.
 		 * Retire metadata atomically; large operation rows are collected later. */
 		async retireUnstartedInitialUpload(value: PagedRunSpec, expected: FileSyncConfiguration): Promise<boolean> {
@@ -761,11 +1046,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Commit one fully prepared revision and its feed cursor atomically.
 		 * The prior version's receipt remains retained before replacing a path. */
-		async appendStream(value: PagedRunSpec, change: NativeIndexChange & { generation: string }, binding: CloudOperationBinding | null, conflict = false, observe = true) {
+		async appendStream(value: PagedRunSpec, change: StreamInput, binding: CloudOperationBinding | null, conflict = false, observe = true) {
 			const spec = parsePagedRunSpec(value), event = structuredClone(change), prepared = binding && structuredClone(binding);
-			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry) || !validIndexProvenance(event) || (event.sourceKind !== undefined && spec.streaming.source !== 'remote')) throw Error('Invalid streaming index change.');
+			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry) || !validStreamInput(event, spec)) throw Error('Invalid streaming index change.');
 			if (prepared) { const write = parseCloudWrite(prepared.write), m = write.operation.mutation;
-				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== spec.streaming.source || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
+				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== (event.replica ?? spec.streaming.source) || (event.replica !== undefined && (!!m.source.symbolicLink || (m.source.kind === 'folder' && m.expectedTarget !== null) ||
+					(m.from === 'local' && !write.guardDestination))) || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
 			if (bytes({ event, prepared }) > INVENTORY_PAGE_BYTES) throw Error('Streaming change exceeds its byte bound.');
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				const stream = h.stream!, events = tx.objectStore(REVIEW_STORE), token = [key, spec.id, 'event', event.sequence], get = events.get(token);
@@ -775,7 +1061,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					if (stream.indexedSequence !== undefined) {
 						const staged = events.get([key, spec.id, 'input', event.sequence]);
 						staged.onsuccess = () => { try { check(); const source = staged.result;
-							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind) throw Error('Durable streaming input changed before preparation.');
+							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind || source.replica !== event.replica) throw Error('Durable streaming input changed before preparation.');
 						} catch (error) { fail(error); } };
 					}
 					if (event.sequence !== stream.sequence + 1) {
@@ -797,12 +1083,13 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						check(); const prior: Row | undefined = previous.result;
 						if (prior && (!row(prior, spec).operation.confirmed || h.scheduling!.reserved === prior.operation.id)) throw Error('Finish the prior path revision before replacing it.');
 						if (effective) {
-							if (prior) { events.add(prior, [key, spec.id, 'history', prior.operation.id]); ops.delete([key, spec.id, ...orderKey(prior.operation)]); }
+							if (prior) { events.add(prior, [key, spec.id, 'history', prior.operation.id]); ops.delete([key, spec.id, ...orderKey(prior.operation, spec)]); }
 							const operation = effective.write.operation; validateSyncOperation(operation);
 							events.add(true, [key, spec.id, 'used-operation', operation.id]);
-							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, canonicalDispatched: false, cloud: effective } satisfies Row, [key, spec.id, ...orderKey(operation)]);
-							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
-							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation); h.confirmedThrough = null;
+							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, canonicalDispatched: false, cloud: effective } satisfies Row, [key, spec.id, ...orderKey(operation, spec)]);
+							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation, spec)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
+							if (h.directions) addSyncDirection(h.directions, operation);
+							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation, spec); h.confirmedThrough = null;
 							h.scheduling!.index = 0; h.scheduling!.after = null; delete h.scheduling!.streamScan;
 						}
 						events.add({ event, conflict: conflict && observed, operationId: effective?.write.operation.id ?? null }, token);
@@ -821,8 +1108,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		 * transfers. A quota/transaction failure leaves its source watermark intact. */
 		async appendStreamInput(value: PagedRunSpec, generation: string, changes: readonly NativeIndexChange[], terminal: boolean) {
 			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
-			if (!spec.streaming || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
-				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validIndexProvenance(row) || (row.sourceKind !== undefined && spec.streaming.source !== 'remote')) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
+			if (!spec.streaming || spec.streaming.source === 'both' || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
+				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validStreamInput(row, spec)) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
 			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
 				const stream = h.stream!, after = stream.indexedSequence ?? stream.sequence;
 				if (stream.sourceTerminal || stream.terminal || (stream.generation !== null && stream.generation !== generation) || rows.some((row, i) => row.sequence !== after + i + 1)) throw Error('Streaming input generation or watermark changed.');
@@ -837,6 +1124,35 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				stream.indexedSequence = after + rows.length; stream.generation = generation; stream.sourceTerminal = terminal; h.revision++; save(h, tx); done(undefined);
 			});
 		},
+		/** Atomically join a producer's own watermark to the shared durable queue.
+		 * Neither producer can advance or seal the other producer's feed. */
+		async appendReplicaStreamInput(value: PagedRunSpec, replica: Replica, sourceGeneration: string, after: number, changes: readonly NativeIndexChange[], terminal: boolean) {
+			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
+			if (spec.streaming?.source !== 'both' || !['local', 'remote'].includes(replica) || !identifier(sourceGeneration) || !nonnegative(after) ||
+				typeof terminal !== 'boolean' || rows.length > INVENTORY_PAGE_ENTRIES || bytes(rows) > INVENTORY_PAGE_BYTES ||
+				rows.some((row, i) => row.sequence !== after + i + 1 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validStreamInput({ ...row, replica }, spec)))
+				throw Error('Invalid two-way streaming input page.');
+			const generation = spec.streaming.captureId;
+			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+				const stream = h.stream!, previous = stream.replicaFeeds?.[replica], indexed = stream.indexedSequence ?? 0;
+				if (stream.terminal || previous?.terminal || (previous?.sequence ?? 0) !== after ||
+					(previous && previous.generation !== sourceGeneration)) throw Error('Two-way source generation or watermark changed.');
+				const events = tx.objectStore(REVIEW_STORE);
+				for (const [i, row] of rows.entries()) {
+					const sequence = indexed + i + 1;
+					events.add({ ...row, replica, sequence, generation, inputScope: key, inputRun: spec.id, inputPath: syncPathKey(row.entry.path) }, [key, spec.id, 'input', sequence]);
+					if (row.sourceKind === 'delta') {
+						const token = [key, spec.id, 'delta', syncPathKey(row.entry.path)], prior = events.get(token);
+						prior.onsuccess = () => { try { check(); events.put(Math.max(prior.result ?? 0, row.sourcePosition!), token); } catch (error) { fail(error); } };
+					}
+				}
+				const feeds = { ...stream.replicaFeeds, [replica]: { sequence: after + rows.length, generation: sourceGeneration, terminal } };
+				stream.replicaFeeds = feeds; stream.indexedSequence = indexed + rows.length; stream.generation = generation;
+				stream.sourceTerminal = !!feeds.local?.terminal && !!feeds.remote?.terminal;
+				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+
 		/** One resumable local migration page; no network work or embedded path set. */
 		backfillStreamInputs: (value: PagedRunSpec) => backfillInputs(parsePagedRunSpec(value)),
 		/** Only the trusted native local adapter enables preparation hints. This
@@ -846,7 +1162,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			if (!h.stream.priorityPreparation) { h.stream.priorityPreparation = true; h.stream.preparedAhead = 0; h.stream.inputBackfillSequence = h.stream.sequence; h.stream.inputBackfillThrough = h.stream.indexedSequence ?? h.stream.sequence; h.revision++; save(h, tx); }
 			done(undefined);
 		}),
-		async nextStreamInput(value: PagedRunSpec, preparePriorities = true): Promise<(NativeIndexChange & { generation: string }) | null> {
+		async nextStreamInput(value: PagedRunSpec, preparePriorities = true): Promise<StreamInput | null> {
 			const spec = parsePagedRunSpec(value);
 			await drainStream(spec);
 			const preferred = preparePriorities ? await priorityInput(spec) : null;
@@ -858,6 +1174,25 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				get.onsuccess = () => { try { check(); done(inputRow(get.result, spec, h.stream!.generation, token)); } catch (error) { fail(error); } };
 			});
 		},
+
+		/** Positive queued hints can only defer work to strict reconciliation.
+		 * They never prove current metadata or authorize a mutation or child. */
+		queuedFolderPeer: (value: PagedRunSpec, change: StreamInput) => withHeader<boolean>(parsePagedRunSpec(value), 'readonly', (h, tx, done, fail) => {
+			const spec = h.spec, stream = h.stream;
+			if (spec.streaming?.source !== 'both' || !stream || stream.terminal || change.entry.kind !== 'folder' ||
+				change.generation !== stream.generation || !validStreamInput(change, spec)) { done(false); return; }
+			const prefix = [key, spec.id, syncPathKey(change.entry.path)],
+				request = tx.objectStore(REVIEW_STORE).index(INPUT_PATH).openCursor(ranges.bound(prefix, [...prefix, []]));
+			let examined = 0;
+			request.onsuccess = () => { try {
+				check(); const cursor = request.result;
+				if (!cursor || examined++ === INVENTORY_PAGE_ENTRIES) { done(false); return; }
+				const peer = inputRow(cursor.value, spec, stream.generation, cursor.primaryKey);
+				if (peer.sequence > stream.sequence && peer.sequence <= (stream.indexedSequence ?? stream.sequence) &&
+					peer.replica !== change.replica && peer.entry.kind === 'folder' && !peer.entry.symbolicLink) { done(true); return; }
+				cursor.continue();
+			} catch (error) { fail(error); } };
+		}),
 
 		async streamEntries(value: PagedRunSpec, after?: string): Promise<{ entries: SyncEntry[]; next: string | null }> {
 			const spec = parsePagedRunSpec(value);
@@ -884,20 +1219,29 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Only for an executor's preflight failure AFTER receipt lookup returned
 		 * missing. Pending/uncertain publications must retain the original ID. */
-		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean) {
-			const spec = parsePagedRunSpec(value);
+		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false, firstPlacementDispatchExcluded = false, terminalFence?: CloudFileNoEffectFence) {
+			const spec = parsePagedRunSpec(value), terminal = terminalFence && parseCloudFileNoEffectFence(terminalFence);
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (!h.stream || h.scheduling?.reserved !== operationId) throw Error('Only the reserved unpublished streaming operation can be superseded.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
-					if (r.operation.confirmed || r.receipt !== null || r.canonicalDispatched === true) throw Error('Preserve the published or uncertain revision receipt.');
+					if (terminal) {
+						const mutation = r.operation.mutation, write = r.cloud && rebindWrite(r, spec);
+						if (!write || mutation.kind !== 'copy' || mutation.from !== 'local' || mutation.source.kind !== 'file' ||
+							write.operation.id !== operationId || terminal.operationId !== operationId ||
+							terminal.id !== (write.before?.id ?? operationId) || terminal.expectedRevision !== (write.before?.revision ?? null))
+							throw Error('Terminal receipt does not bind the original file upload.');
+					}
+					if (r.operation.confirmed || r.receipt !== null ||
+						(r.canonicalDispatched !== false && !terminal && !firstPlacementDispatchExcluded && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
+						throw Error('Preserve the published or uncertain revision receipt.');
 					if (h.scheduling?.batch) throw Error('Recover the reserved batch before replanning a member.');
 					const retire = () => {
 					if (!conflict && r.canonicalDispatched === false && r.cloud && eligibleFolderBatchWrite(r.cloud.write, scope))
 						tx.objectStore(REVIEW_STORE).add({ scope: key, run: spec.id, instance: h.instance, operation: r.operation, cause: 'source-supersession' }, [key, spec.id, 'folder-supersession', operationId]);
-					tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict }, [key, spec.id, 'history', operationId]);
-					ops.delete([key, spec.id, ...orderKey(r.operation)]);
-					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+						tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict, ...(terminal ? { terminal } : {}) }, [key, spec.id, 'history', operationId]);
+					ops.delete([key, spec.id, ...orderKey(r.operation, spec)]);
+					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
 					h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.confirmedThrough = null; if (conflict) h.stream.conflicts++;
 					if (h.stream.terminal && h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
 					};
@@ -913,8 +1257,9 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							check(); const m = get.result;
 							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.operationId !== operationId || m.ordinal !== p.ordinal || m.batchId !== recovery.id || m.confirmed || m.retired)
 								throw Error('Unpublished member recovery evidence changed.');
-							if (m.canonicalDispatched) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
-							r.canonicalDispatched = false; m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
+						if (m.canonicalDispatched !== false && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
+						if (!terminal) r.canonicalDispatched = false;
+						m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
 							if (!recovery.remaining) {
 								review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]); delete h.scheduling!.recovery;
 							}
@@ -966,18 +1311,20 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const review = tx.objectStore(REVIEW_STORE), ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try {
 					check(); const r = row(get.result, spec), w = rebindWrite(r, spec);
-					if (r.canonicalDispatched !== false || r.operation.confirmed || !w || w.operation.mutation.kind !== 'copy') throw Error('Dependent operation may have an unresolved effect.');
+					if (r.canonicalDispatched !== false || r.operation.confirmed || r.receipt !== null || !w || w.operation.mutation.kind !== 'copy') throw Error('Dependent operation may have an unresolved effect.');
 					const cause = review.get([key, spec.id, 'folder-supersession', w.folderId!]);
 					cause.onsuccess = () => { try {
 						check(); if (cause.result?.instance !== h.instance || cause.result.operation?.id !== w.folderId) throw Error('Missing proven parent supersession.');
 						const finish = () => {
-							r.rebindPending = true; ops.put(r, [key, spec.id, ...orderKey(r.operation)]);
-							review.put(operationId, [key, spec.id, 'pending', ...orderKey(r.operation)]); review.put(operationId, [key, spec.id, 'pending-path', r.path]);
+							r.rebindPending = true; ops.put(r, [key, spec.id, ...orderKey(r.operation, spec)]);
+							review.put(operationId, [key, spec.id, 'pending', ...orderKey(r.operation, spec)]); review.put(operationId, [key, spec.id, 'pending-path', r.path]);
 							h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.revision++; save(h, tx); done(undefined);
 						};
 						const recovery = h.scheduling!.recovery;
 						if (!recovery) { finish(); return; }
-						if (recovery.kind !== 'folders') throw Error('Preserve original file batch recovery ordering.');
+						// File and folder recovery both retain their original member order.
+						// Release only this proven undispatched dependent; every other
+						// member keeps its original operation and receipt-first claim.
 						const pointer = review.get([key, spec.id, 'batch-operation', operationId]);
 						pointer.onsuccess = () => { try {
 							check(); const p = pointer.result;
@@ -985,7 +1332,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							const memberKey = [key, spec.id, 'batch-member', recovery.id, p.ordinal], get = review.get(memberKey);
 							get.onsuccess = () => { try {
 								check(); const member = get.result;
-								if (!member || member.instance !== h.instance || member.operationId !== operationId || member.confirmed || member.retired || member.deferred || member.canonicalDispatched !== false) throw Error('Dependent canonical publication remains uncertain.');
+								if (!member || member.scope !== key || member.run !== spec.id || member.instance !== h.instance || member.batchId !== recovery.id || member.ordinal !== p.ordinal || member.operationId !== operationId || member.confirmed || member.retired || member.deferred || member.canonicalDispatched !== false) throw Error('Dependent canonical publication remains uncertain.');
 								member.deferred = true; review.put(member, memberKey); review.add({ ...member, parentSupersession: w.folderId }, [key, spec.id, 'dependency-deferred', operationId]); review.delete([key, spec.id, 'batch-operation', operationId]);
 								if (!--recovery.remaining) { review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]); delete h.scheduling!.recovery; }
 								finish();
@@ -1017,7 +1364,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							if (m.source.kind === 'folder') review.add({ scope: key, run: spec.id, instance: h.instance, operation: r.operation, cause: 'parent-supersession' }, [key, spec.id, 'folder-supersession', operationId]);
 							review.add(true, [key, spec.id, 'used-operation', operation.id]);
 							r.operation = operation; r.cloud = { ...r.cloud!, write: parseCloudWrite({ ...w, operation, folderId: parentId }) }; delete r.rebindPending;
-							ops.put(r, [key, spec.id, ...orderKey(operation)]); review.put(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); review.put(operation.id, [key, spec.id, 'pending-path', r.path]);
+							ops.put(r, [key, spec.id, ...orderKey(operation, spec)]); review.put(operation.id, [key, spec.id, 'pending', ...orderKey(operation, spec)]); review.put(operation.id, [key, spec.id, 'pending-path', r.path]);
 							h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.revision++; save(h, tx); done(operation);
 						} catch (e) { fail(e); } };
 					} catch (e) { fail(e); } };
@@ -1026,20 +1373,45 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		async markStreamCanonicalDispatch(value: PagedRunSpec, operationId: string) {
 			const spec = parsePagedRunSpec(value);
-			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+			return withHeader<boolean>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (h.scheduling?.reserved !== operationId) throw Error('Only the reserved original operation can dispatch.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
-				get.onsuccess = () => { try { check(); const r = row(get.result, spec); r.canonicalDispatched = true; ops.put(r, [key, spec.id, ...orderKey(r.operation)]); h.revision++; save(h, tx); done(undefined); } catch (e) { fail(e); } };
+				get.onsuccess = () => { try { check(); const r = row(get.result, spec), first = r.canonicalDispatched === false; r.canonicalDispatched = true; ops.put(r, [key, spec.id, ...orderKey(r.operation, spec)]); h.revision++; save(h, tx); done(first); } catch (e) { fail(e); } };
 			});
 		},
 
 		/** Commit the canonical remote Timeline position only after the adapter's
 		 * snapshot/delta page has reached this exact durable observation cursor. */
+		async endRemountedLocalFeed(value: PagedRunSpec) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				if (!spec.streaming || spec.streaming.source === 'remote' || !h.stream) throw Error('A native local feed is required.');
+				const stream = h.stream;
+				if (stream.terminal) { done(undefined); return; }
+				// Preserve every observation, operation, receipt and watermark.
+				// Only the old native producer ends; the normal planner/consumer
+				// still drains its queue, then sealed reconciliation must run.
+				if (spec.streaming.source === 'both') {
+					const previous = stream.replicaFeeds?.local;
+					stream.replicaFeeds = { ...stream.replicaFeeds, local: {
+						sequence: previous?.sequence ?? 0, generation: previous?.generation ?? spec.streaming.captureId, terminal: true
+					} };
+					stream.indexedSequence ??= 0;
+					stream.generation = spec.streaming.captureId;
+					stream.sourceTerminal = !!stream.replicaFeeds.remote?.terminal;
+				} else {
+					stream.generation ??= spec.streaming.captureId;
+					stream.sourceTerminal = true;
+				}
+				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+
 		async checkpointStreamSource(value: PagedRunSpec, sequence: number, cursor: string, snapshotComplete: boolean) {
 			const spec = parsePagedRunSpec(value);
 			if (!/^(0|[1-9][0-9]{0,15})$/.test(cursor) || !Number.isSafeInteger(Number(cursor)) || typeof snapshotComplete !== 'boolean') throw Error('Invalid remote streaming cursor.');
 			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
-				if (spec.streaming?.source !== 'remote' || !h.stream || h.stream.terminal || (h.stream.indexedSequence ?? h.stream.sequence) !== sequence || (h.stream.sourceCursor !== undefined && Number(cursor) < Number(h.stream.sourceCursor)) || (h.stream.snapshotComplete && !snapshotComplete)) throw Error('Remote source checkpoint changed.');
+				if (!spec.streaming || !['remote', 'both'].includes(spec.streaming.source) || !h.stream || h.stream.terminal || (spec.streaming.source === 'both' ? h.stream.replicaFeeds?.remote?.sequence ?? 0 : h.stream.indexedSequence ?? h.stream.sequence) !== sequence || (h.stream.sourceCursor !== undefined && Number(cursor) < Number(h.stream.sourceCursor)) || (h.stream.snapshotComplete && !snapshotComplete)) throw Error('Remote source checkpoint changed.');
 				h.stream.sourceCursor = cursor; h.stream.snapshotComplete = snapshotComplete; h.revision++; save(h, tx); done(undefined);
 			});
 		},
@@ -1054,19 +1426,140 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		async finishStream(value: PagedRunSpec) {
 			const spec = parsePagedRunSpec(value);
+			await prepareStreamCompletion(spec);
 			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
 				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Finish every indexed revision before releasing its stream.');
 				// A complete feed establishes no whole-tree agreement. A subsequent
 				// sealed reconciliation owns review and the checkpoint publication.
-				tx.objectStore(PAGED_RUN_HEADS).delete(key); done(undefined);
+				const heads = tx.objectStore(PAGED_RUN_HEADS);
+				if (spec.streaming && h.confirmed) heads.add(spec.id, streamReconciliationKey(key));
+				heads.delete(key); done(undefined);
 			});
+		},
+
+		async streamAwaitingReconciliation(): Promise<PagedRunSpec | null> {
+			return transaction(stores, 'readonly', (tx, done, fail) => {
+				const pointer = tx.objectStore(PAGED_RUN_HEADS).get(streamReconciliationKey(key));
+				pointer.onsuccess = () => { try {
+					check(); const id = pointer.result;
+					if (id === undefined) { done(null); return; }
+					if (!identifier(id)) throw Error('Invalid early sync reconciliation identity.');
+					const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, id]);
+					get.onsuccess = () => { try {
+						check(); const h: Header = get.result, spec = parsePagedRunSpec(h?.spec);
+						validate(h, spec);
+						if (spec.id !== id || !spec.streaming || h.phase !== 'complete' || !h.confirmed)
+							throw Error('Early sync receipts are unavailable for reconciliation.');
+						done(spec);
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			});
+		},
+
+		async completedStreamProgress(value: PagedRunSpec) {
+            const spec = parsePagedRunSpec(value); await prepareStreamCompletion(spec);
+            return withHeader<PagedRunProgress>(spec, 'readonly', (h, _tx, done) => {
+                if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Early sync progress is not complete.');
+                done(progress(h));
+            }, true);
+        },
+
+        confirmedHistoryPage(value: PagedRunSpec, after?: string): Promise<{ rows: { entry: SyncEntry; history: ConfirmedHistoryTotals }[]; next: string | null }> {
+            const spec = parsePagedRunSpec(value);
+            if (!spec.streaming || (after !== undefined && !validSyncPathKey(after))) throw Error('Invalid historical activity continuation.');
+            return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+                if (h.phase !== 'complete') throw Error('Finish the stream before reading sealed historical activity.');
+                const prefix = [key, spec.id, 'completion-path'], ranges = keyRange ?? globalThis.IDBKeyRange;
+                readPage<ConfirmedHistoryTotals & { entry: SyncEntry }>(tx.objectStore(REVIEW_STORE),
+                    ranges.bound(after === undefined ? prefix : [...prefix, after], [...prefix, []], after !== undefined),
+                    INVENTORY_PAGE_ENTRIES + 1, (values, keys) => {
+                        const rows = values.slice(0, INVENTORY_PAGE_ENTRIES).map((value, i) => {
+                            if (!validSyncEntry(value.entry) || JSON.stringify(keys[i]) !== JSON.stringify(historyPathKey(key, spec.id, value.entry.path)))
+                                throw Error('Historical activity path changed.');
+                            return { entry: value.entry, history: validateHistoryTotals(value) };
+                        });
+                        done({ rows, next: values.length > INVENTORY_PAGE_ENTRIES ? syncPathKey(rows.at(-1)!.entry.path) : null });
+                    }, fail);
+            }, true);
+        },
+
+        confirmedHistoryForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(ConfirmedHistoryTotals | null)[]> {
+         const spec = parsePagedRunSpec(value);
+         if (!spec.streaming || paths.length > INVENTORY_PAGE_ENTRIES || paths.some(p => !validSyncPath(p))) throw Error('Invalid confirmed history page.');
+         return withHeader(spec, 'readonly', (_h, tx, done, fail) => {
+          const results: (ConfirmedHistoryTotals | null)[] = paths.map(() => null); let pending = paths.length;
+          if (!pending) { done(results); return; }
+          paths.forEach((path, i) => {
+           const get = tx.objectStore(REVIEW_STORE).get(historyPathKey(key, spec.id, path));
+           get.onsuccess = () => { try {
+            check(); results[i] = get.result === undefined ? null : validateHistoryTotals(get.result);
+            if (!--pending) done(results);
+           } catch (error) { fail(error); } };
+          });
+         }, true);
+        },
+
+		async earlyReceiptsForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(ConfirmedSyncOperation | null)[]> {
+			const spec = parsePagedRunSpec(value), requested = [...paths];
+			if (!spec.streaming || requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)))
+				throw Error('Invalid early sync reconciliation page.');
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase !== 'complete') throw Error('Finish the early sync feed before reconciliation.');
+				if (!requested.length) { done([]); return; }
+				const result: (ConfirmedSyncOperation | null)[] = []; let pending = requested.length;
+				requested.forEach((path, i) => {
+					const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
+					get.onsuccess = () => { try {
+						check(); const item = get.result === undefined ? null : row(get.result, spec);
+						if (item && (!item.operation.confirmed || !item.receipt)) throw Error('An early sync receipt is unavailable.');
+						result[i] = item && { operation: item.operation, receipt: item.receipt! };
+						if (!--pending) done(result);
+					} catch (error) { fail(error); } };
+				});
+			}, true);
+		},
+
+		async releaseEarlyAfterRootChange(value: PagedRunSpec, current: FileSyncConfiguration) {
+			const spec = parsePagedRunSpec(value);
+			if (!spec.streaming || (spec.configuration?.localRootId === current.localRootId &&
+				spec.configuration.remoteFolderId === current.remoteFolderId)) throw Error('Early sync receipts still belong to this root pair.');
+			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
+				const heads = tx.objectStore(PAGED_RUN_HEADS), pointer = heads.get(streamReconciliationKey(key));
+				pointer.onsuccess = () => { try {
+					check(); if (pointer.result !== spec.id) throw Error('Early sync reconciliation changed.');
+					heads.delete(streamReconciliationKey(key)); done(undefined);
+				} catch (error) { fail(error); } };
+			}, true);
+		},
+
+		/** Progress retains the exact completed early pass referenced by the strict plan. */
+		async earlyProgressSource(value: PagedRunSpec): Promise<PagedRunSpec | null> {
+			const spec = parsePagedRunSpec(value), id = spec.plan.earlyRunId;
+			if (!id) return null;
+			return withHeader(spec, 'readonly', (_h, tx, done, fail) => {
+				const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const h: Header = get.result, early = parsePagedRunSpec(h?.spec);
+					validate(h, early);
+					if (early.id !== id || !early.streaming || h.phase !== 'complete' ||
+						early.configuration?.localRootId !== spec.configuration?.localRootId ||
+						early.configuration?.remoteFolderId !== spec.configuration?.remoteFolderId)
+						throw Error('Early sync progress belongs to different folders.');
+					done(early);
+				} catch (error) { fail(error); } };
+			}, true);
 		},
 
 		async retireCompletedStream(value: PagedRunSpec) {
 			const spec = parsePagedRunSpec(value);
+			if (spec.streaming?.source === 'both') return;
 			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
 				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
-				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h); done(undefined);
+				// Confirmed streams remain pinned by strict reconciliation and its saved progress.
+				if (h.confirmed) { done(undefined); return; }
+				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h);
+				done(undefined);
 			}, true);
 		},
 
@@ -1127,27 +1620,29 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				!validSyncPathKey(token.after) || !nonnegative(token.read) || token.read === 0)) throw Error('Invalid confirmed-operation continuation.');
 			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 				if (h.phase !== 'complete') throw Error('Complete the sync run before reading checkpoint receipts.');
-				if (token && (token.instance !== h.instance || token.read >= h.operations)) throw Error('Confirmed-operation continuation changed.');
+				countConfirmedSyncEffects(tx, key, h, check, total => {
+				if (token && (token.instance !== h.instance || token.read >= total)) throw Error('Confirmed-operation continuation changed.');
 				const range = (keyRange ?? globalThis.IDBKeyRange).bound(token ? [key, spec.id, token.after] : [key, spec.id], [key, spec.id, []], !!token);
 				const request = tx.objectStore(PAGED_RUN_STORES[1]).index('path').openCursor(range);
 				const rows: ConfirmedSyncOperation[] = []; let size = 2;
 				request.onsuccess = () => { try {
 					check(); const cursor = request.result;
 					if (!cursor) {
-						if ((token?.read ?? 0) + rows.length !== h.operations) throw Error('Confirmed-operation count changed.');
-						done({ rows, next: null, total: h.operations }); return;
+						if ((token?.read ?? 0) + rows.length !== total) throw Error('Confirmed-operation count changed.');
+						done({ rows, next: null, total: total }); return;
 					}
 					const r = row(cursor.value, spec, cursor.primaryKey);
 					if (!r.operation.confirmed || !r.receipt) throw Error('Checkpoint operation is unconfirmed.');
 					const saved = { operation: r.operation, receipt: r.receipt }, length = bytes(saved) + 1;
 					if (rows.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
 						if (!rows.length) throw Error('Confirmed operation exceeds its byte bound.');
-						done({ rows, total: h.operations, next: { id: spec.id, instance: h.instance, scope, read: (token?.read ?? 0) + rows.length,
+						done({ rows, total: total, next: { id: spec.id, instance: h.instance, scope, read: (token?.read ?? 0) + rows.length,
 							after: syncPathKey(rows.at(-1)!.operation.mutation.path) } }); return;
 					}
 					rows.push(saved); size += length; cursor.continue();
 				} catch (e) { fail(e); } };
-			});
+				}, fail);
+			}, !!spec.streaming);
 		},
 		async active(): Promise<{ spec: PagedRunSpec; progress: PagedRunProgress; review?: PagedReviewProgress } | null> {
 			return transaction(stores, 'readonly', (tx, done, fail) => {
@@ -1173,6 +1668,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		 * transaction scans at most 128 rows; cursors survive interruption. */
 		/** Read-only metadata prefetch. It claims nothing and advances no source
 		 * cursor; appendStream still validates the exact immutable input. */
+		/** Read-only lookahead for already prepared flat, deletion-free backups.
+		 * The regular executor still owns all claims and Timeline receipts. */
+		async peekDeferredUploads(value: PagedRunSpec): Promise<SyncOperation[]> {
+			const spec = parsePagedRunSpec(value);
+			if (spec.streaming || spec.review || spec.configuration?.sourceKind !== 'photos' ||
+				spec.plan.policy.mode !== 'backup' || spec.plan.policy.propagateDeletes) return [];
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase !== 'running' || cloudProgress(h).phase !== 'ready') { done([]); return; }
+				const request = tx.objectStore(PAGED_RUN_STORES[1]).openCursor(operationRange(spec.id, h.confirmedThrough));
+				const operations: SyncOperation[] = []; let visited = 0;
+				request.onsuccess = () => { try {
+					check(); const cursor = request.result;
+					if (!cursor || operations.length >= 4 || visited++ >= INVENTORY_PAGE_ENTRIES) { done(operations); return; }
+					const saved = row(cursor.value, spec, cursor.primaryKey), m = saved.operation.mutation;
+					if (!saved.operation.confirmed && !saved.rebindPending && m.kind === 'copy' && m.from === 'local' &&
+						m.source.kind === 'file' && m.source.size > 0 && m.source.fingerprint && !m.path.includes('/'))
+						operations.push(structuredClone(saved.operation));
+					cursor.continue();
+				} catch (error) { fail(error); } };
+			});
+		},
 		async peekUploadBatchInputs(value: PagedRunSpec): Promise<StreamInput[]> {
 			const spec = parsePagedRunSpec(value);
 			if (spec.streaming?.source !== 'local') return [];
@@ -1248,6 +1764,92 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				h.revision++; save(h, tx); done(undefined);
 			});
 		},
+		/** Native source-change results can release only exact members proven never
+		 * dispatched. Every marked or ambiguous member keeps its original receipt-first
+		 * recovery, including when a reply was lost after canonical publication. */
+		async retireUndispatchedUploadBatchFailures(value: PagedRunSpec, supplied: UploadBatchDescriptor, failures: UploadBatchFailure[]): Promise<number> {
+			const spec = parsePagedRunSpec(value), batch = parseUploadBatchDescriptor(supplied);
+			const ordinals = failures.filter(f => f.status === 'failed' && f.code === 'source-changed' && f.retryable === false).map(f => f.ordinal);
+			if (!ordinals.length) return 0;
+			if (ordinals.length > UPLOAD_BATCH_FILES || new Set(ordinals).size !== ordinals.length ||
+				ordinals.some(n => !Number.isInteger(n) || n < 0 || n >= batch.members.length)) throw Error('Invalid source-changed batch members.');
+			return withHeader<number>(spec, 'readwrite', (h, tx, done, fail) => {
+				const schedule = h.scheduling, recovery = schedule?.recovery;
+				if (!h.stream || spec.streaming?.source !== 'local' ||
+					!sameSyncScope(batch.scope, scope) || JSON.stringify(batch.configuration.configuration) !== JSON.stringify(spec.configuration))
+					throw Error('Original upload batch recovery changed.');
+				const review = tx.objectStore(REVIEW_STORE), ops = tx.objectStore(PAGED_RUN_STORES[1]);
+				const verifyRetired = (ordinal: number, next: () => void) => {
+					const member = batch.members[ordinal], get = review.get([key, spec.id, 'history', member.write.operation.id]);
+					get.onsuccess = () => { try {
+						check(); const saved = get.result;
+						if (!saved || saved.scope !== key || saved.run !== spec.id || saved.operation?.id !== member.write.operation.id ||
+							saved.canonicalDispatched !== false || saved.receipt !== null || saved.operation.confirmed ||
+							JSON.stringify(saved.cloud?.write) !== JSON.stringify(member.write) ||
+							JSON.stringify(saved.sourceChanged) !== JSON.stringify({ batchId: batch.batchId, ordinal, instance: h.instance }))
+							throw Error('Retired source-change evidence changed.');
+						next();
+					} catch (error) { fail(error); } };
+				};
+				if (!recovery) {
+					// An interrupted reply may arrive after the last retirement removed
+					// the batch metadata. Only its exact retained history permits a no-op.
+					let verified = 0;
+					const next = () => verified === ordinals.length ? done(0) : verifyRetired(ordinals[verified++], next);
+					next(); return;
+				}
+				if (recovery.kind || schedule?.batch || schedule?.reserved !== null || recovery.id !== batch.batchId || recovery.count !== batch.members.length)
+					throw Error('Original upload batch recovery changed.');
+				let index = 0, retired = 0;
+				const finish = () => {
+					if (!recovery.remaining) {
+						review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]);
+						delete schedule.recovery;
+					}
+					if (retired) {
+						h.confirmedThrough = null;
+						if (h.stream!.terminal && h.operations === h.confirmed) h.phase = 'complete';
+						h.revision++; save(h, tx);
+					}
+					done(retired);
+				};
+				const next = () => { try {
+					check(); if (index === ordinals.length) { finish(); return; }
+					const ordinal = ordinals[index++], member = batch.members[ordinal], operationId = member.write.operation.id;
+					const memberKey = [key, spec.id, 'batch-member', recovery.id, ordinal], get = review.get(memberKey);
+					get.onsuccess = () => { try {
+						check(); const m = get.result;
+						if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.batchId !== recovery.id ||
+							m.ordinal !== ordinal || m.operationId !== operationId || m.deferred) throw Error('Source-changed member recovery evidence changed.');
+						if (m.retired) { verifyRetired(ordinal, next); return; }
+						const pointer = review.get([key, spec.id, 'batch-operation', operationId]);
+						pointer.onsuccess = () => { try {
+							check(); const p = pointer.result;
+							if (!p || p.instance !== h.instance || p.batchId !== recovery.id || p.ordinal !== ordinal)
+								throw Error('Source-changed member lost its original batch pointer.');
+							const rowGet = ops.index('operation').get([key, operationId]);
+							rowGet.onsuccess = () => { try {
+								check(); const r = row(rowGet.result, spec);
+								if (r.operation.id !== operationId || !r.cloud || JSON.stringify(r.cloud.write) !== JSON.stringify(member.write))
+									throw Error('Source-changed member lost its immutable cloud binding.');
+								if (m.confirmed || r.operation.confirmed || r.receipt !== null || m.canonicalDispatched !== false || r.canonicalDispatched !== false) { next(); return; }
+								review.add({ ...r, unpublished: true, conflict: false, sourceChanged: { batchId: batch.batchId, ordinal, instance: h.instance } }, [key, spec.id, 'history', operationId]);
+								ops.delete([key, spec.id, ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending-path', r.path]);
+								review.delete([key, spec.id, 'batch-operation', operationId]);
+								m.retired = true; review.put(m, memberKey);
+								if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation);
+								h.operations--; h.cloud!.prepared--; recovery.remaining--; retired++;
+								if (!h.operations) h.cloud!.after = null;
+								next();
+							} catch (error) { fail(error); } };
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+				next();
+			});
+		},
 		async claimUploadBatch(value: PagedRunSpec, configuration: SavedFileSyncConfiguration): Promise<UploadBatchDescriptor | null> {
 			const batch = await this.claimTransferBatch(value, configuration, false);
 			return batch && !('kind' in batch) ? batch : null;
@@ -1304,11 +1906,11 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						schedule.reserved = null; schedule.canonical = false; delete schedule.streamScan;
 						review.add({ scope: key, run: spec.id, instance: h.instance, batchId, configuration }, [key, spec.id, 'batch-meta', batchId]);
 						for (const [ordinal, r] of selected.entries()) {
-							if (r.canonicalDispatched === undefined) { r.canonicalDispatched = false; ops.put(r, [key, spec.id, ...orderKey(r.operation)]); }
+							if (r.canonicalDispatched === undefined) { r.canonicalDispatched = false; ops.put(r, [key, spec.id, ...orderKey(r.operation, spec)]); }
 							review.add({ scope: key, run: spec.id, instance: h.instance, batchId, ordinal, operationId: r.operation.id, confirmed: false, canonicalDispatched: false },
 								[key, spec.id, 'batch-member', batchId, ordinal]);
 							review.add({ batchId, ordinal, instance: h.instance }, [key, spec.id, 'batch-operation', r.operation.id]);
-							review.delete([key, spec.id, 'pending', ...orderKey(r.operation)]);
+							review.delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]);
 							review.delete([key, spec.id, 'pending-path', r.path]);
 						}
 						h.revision++; save(h, tx); done(descriptor);
@@ -1376,15 +1978,15 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (bytes(chosen) + 2 > INVENTORY_PAGE_BYTES) throw Error('Sync operation exceeds its byte bound.');
 						// Planned ancestor copies must be acknowledged before their child.
 						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
-						const finish = (operation: SyncOperation) => {
+						const finish = (operation: SyncOperation, preserveUnknownDispatch = false) => {
 							// A new input may arrive between the bulk probe and this fallback
 							// claim. Leave eligible unreserved work for the next bulk probe.
 							// A full preparation queue still frees one ordinary slot.
 							if (deferBatchEligible && !candidate.rebindPending && operation.id === chosen.id && h.operations - h.confirmed < preparationCapacity &&
 								candidate.cloud && (eligibleUploadBatchWrite(candidate.cloud.write, scope) || deferFolderBatchEligible && eligibleFolderBatchWrite(candidate.cloud.write, scope))) { done(null); return; }
 							if (operation.id === chosen.id) advance?.();
-							if (operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
-								candidate.canonicalDispatched = false; ops.put(candidate, [key, spec.id, ...orderKey(chosen)]);
+							if (!preserveUnknownDispatch && operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
+								candidate.canonicalDispatched = false; ops.put(candidate, [key, spec.id, ...orderKey(chosen, spec)]);
 							}
 							schedule.reserved = operation.id; schedule.canonical = canonical; delete schedule.streamScan; schedule.legacy = false; persist(); done(operation);
 						};
@@ -1404,11 +2006,33 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 									throw Error('Upload ancestor requires canonical sync order.');
 								if (!first && candidate.cloud && ancestors.length && parents.at(-1) === null && identifier(candidate.cloud.write.folderId)) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { done(null); return; } finish(chosen); } catch (e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										if (supersession.result) {
+											const mutation = chosen.mutation, write = rebindWrite(candidate, spec);
+											// A sealed feed cannot receive its replacement parent. Reserve
+											// this original solely for receipt-first target recovery. An
+											// unknown historical dispatch marker must remain unknown.
+											if (spec.streaming?.source === 'local' && h.stream?.terminal &&
+												(h.stream.indexedSequence ?? h.stream.sequence) === h.stream.sequence &&
+												['backup', 'upload'].includes(spec.configuration!.mode) &&
+												write && mutation.kind === 'copy' && mutation.from === 'local' &&
+												mutation.expectedTarget === null && write.before === null && write.folderId === candidate.cloud!.write.folderId) {
+												finish(chosen, true); return;
+											}
+											done(null); return;
+										}
+										finish(chosen);
+									} catch (e) { fail(e); } }; return;
 								}
 								if (!first && candidate.cloud && parents.at(-1)?.confirmed && candidate.cloud.write.folderId !== parents.at(-1)!.id) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId!]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation)]); } finish(chosen); } catch(e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										const replaced = !!supersession.result;
+										if (replaced) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation, spec)]); }
+										finish(chosen, replaced);
+									} catch(e) { fail(e); } }; return;
 								}
 								finish(first ?? chosen);
 							} catch (error) { fail(error); } };
@@ -1531,7 +2155,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							if (!cursor) { if (h.stream && h.confirmed === h.operations) { persist(); done(null); return; } throw Error('Sync operations ended before their declared count.'); }
 							const r = row(cursor.value, spec, cursor.primaryKey);
 							if (!r.operation.confirmed) { reserve(r, undefined, true); return; }
-							h.confirmedThrough = orderKey(r.operation);
+							h.confirmedThrough = orderKey(r.operation, spec);
 							if (++scanned === INVENTORY_PAGE_ENTRIES) { persist(); done('continue'); return; }
 							cursor.continue();
 						} catch (error) { fail(error); } };
@@ -1549,6 +2173,56 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				done(progress(h));
 			});
 		},
+		/** After a missing canonical receipt, retire only this unpublished
+		 * original. The checkpoint independently reobserves either a changed
+		 * source or the exact already-present file of a different runner. */
+		async omitPhotoOperation(value: PagedRunSpec, supplied: SyncOperation, settledTarget?: SyncEntry): Promise<PagedRunProgress> {
+			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied), target = structuredClone(settledTarget);
+			const mutation = expected.mutation;
+			if (target && (!spec.backgroundPhotoPublication || spec.review || mutation.kind !== 'copy' || mutation.from !== 'local' ||
+				mutation.expectedTarget !== null || mutation.source.kind !== 'file' || !mutation.source.fingerprint || !target.fingerprint || !validSyncEntry(target) ||
+				target.path !== mutation.path || !sameSyncContent(target, mutation.source))) throw Error('Photos destination does not confirm the original bytes.');
+			if (!spec.photoAssetOrder || spec.review?.kind === 'retain') throw Error('Only a prepared Photos batch can replace an obsolete source.');
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.phase !== 'running' || h.scheduling?.reserved !== expected.id || cloudProgress(h).phase !== 'ready')
+					throw Error('The obsolete Photos operation is no longer reserved.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]);
+				const get = ops.get([key, spec.id, ...orderKey(expected, spec)]);
+				get.onsuccess = () => { try {
+					check();
+					const saved = row(get.result, spec);
+					if (saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected) ||
+						(target && !saved.cloud?.write.guardDestination)) throw Error('The obsolete Photos operation has a different effect.');
+					ops.delete([key, spec.id, ...orderKey(expected, spec)]);
+					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
+					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+					h.scheduling!.reserved = null; if (!target) h.photoSourceChanged = true;
+					if (h.confirmed === h.operations) h.phase = 'complete';
+					h.revision++; save(h, tx); done(progress(h));
+				} catch (error) { fail(error); } };
+			});
+		},
+		/** A policy refusal after a missing receipt can remove only an original
+		 * operation that has never crossed the durable dispatch boundary. */
+		async omitStoragePlacementOperation(value: PagedRunSpec, supplied: SyncOperation, firstPlacementDispatchExcluded = false): Promise<PagedRunProgress> {
+			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied);
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.stream || h.phase !== 'running' || h.scheduling?.reserved !== expected.id || cloudProgress(h).phase !== 'ready')
+					throw Error('The excluded storage operation is no longer reserved.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]), primary = [key, spec.id, ...orderKey(expected, spec)], get = ops.get(primary);
+				get.onsuccess = () => { try {
+					check(); const saved = row(get.result, spec);
+					if ((!firstPlacementDispatchExcluded && saved.canonicalDispatched !== false) || saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected))
+						throw Error('Preserve the original storage operation until its effect is known.');
+					ops.delete(primary);
+					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
+					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+					h.scheduling!.reserved = null; h.scheduling!.canonical = false;
+					if (h.confirmed === h.operations) h.phase = 'complete';
+					h.revision++; save(h, tx); done(progress(h));
+				} catch (error) { fail(error); } };
+			});
+		},
 		async confirm(value: PagedRunSpec, supplied: SyncReceipt): Promise<PagedRunProgress> {
 			const spec = parsePagedRunSpec(value), receipt = structuredClone(supplied);
 			if (!receipt || typeof receipt.operationId !== 'string') throw Error('Invalid sync receipt identity.');
@@ -1564,13 +2238,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					}
 					const commit = (primaryKey: IDBValidKey, scheduled: boolean) => {
 						op.confirmed = true; r.receipt = saved; ops.put(r, primaryKey);
-						if (h.stream) { tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(op)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); }
+						if (h.stream) { tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(op, spec)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); }
+						if (h.directions) addSyncDirection(h.directions, op, true);
 						h.confirmed++; h.revision++;
 						if (scheduled) {
-							if (h.scheduling!.canonical) h.confirmedThrough = orderKey(op);
+							if (h.scheduling!.canonical) h.confirmedThrough = orderKey(op, spec);
 							h.scheduling!.reserved = null; h.scheduling!.canonical = false;
 						}
-						else h.confirmedThrough = orderKey(op);
+						else h.confirmedThrough = orderKey(op, spec);
 						if (h.confirmed === h.operations && (!h.stream || h.stream.terminal)) h.phase = 'complete';
 						save(h, tx); done(progress(h));
 					};
@@ -1594,13 +2269,13 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 									review.delete(batchMembersRange(spec, batch.id)); review.delete([key, spec.id, 'batch-meta', batch.id]); delete schedule.batch; delete schedule.recovery;
 								}
 								schedule.canonical = false;
-								commit([key, spec.id, ...orderKey(op)], true);
+								commit([key, spec.id, ...orderKey(op, spec)], true);
 								} catch (error) { fail(error); } };
 							} catch (error) { fail(error); } }; return;
 						}
 					if (h.scheduling?.reserved) {
 						if (h.scheduling.reserved !== op.id) throw Error('Confirm the reserved sync operation first.');
-						commit([key, spec.id, ...orderKey(op)], true); return;
+						commit([key, spec.id, ...orderKey(op, spec)], true); return;
 					}
 					const next = ops.openCursor(operationRange(spec.id, h.confirmedThrough));
 					next.onsuccess = () => { try {

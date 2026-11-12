@@ -294,7 +294,15 @@ export type ThingtimeNativeActivitySnapshot = {
 export type ThingtimeNativeActivityRequest = { version: '1.0.0'; action: 'list' } |
  { version: '1.0.0'; action: 'set-enabled'; id: string; enabled: boolean };
 
+export type DesktopAttachmentUploadRequest = { version: '1.0.0'; requestId: string } & (
+	| { action: 'open'; origin: string; ownerId: string; uploadId: string; partNumber: number; length: number; checksum: string }
+	| { action: 'chunk'; offset: number; bytes: Uint8Array }
+	| { action: 'finish' | 'cancel' }
+);
+
 export type ThingtimeDesktopBridge = {
+	attachmentUploadVersion?: string;
+	attachmentUploadRequest?: (request: DesktopAttachmentUploadRequest) => Promise<void>;
 	activityVersion?: string;
 	activityRequest?: (request: ThingtimeNativeActivityRequest) => Promise<ThingtimeNativeActivitySnapshot>;
 	fileExportVersion?: string;
@@ -399,6 +407,19 @@ export const getElectronBridge = () => {
 
 	return window.thingtimeDesktop;
 };
+
+/** Bind a selected account endpoint to the renderer that asked for it. */
+export function selectedDesktopApiOrigin(rendererOrigin: string, info: Pick<ThingtimeDesktopInfo, 'contentOrigin' | 'apiOrigin'>): string | null {
+ if (info.contentOrigin !== rendererOrigin || !info.apiOrigin) return null;
+ try {
+  const selected = new URL(info.apiOrigin);
+  const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(selected.hostname) || selected.hostname.endsWith('.localhost');
+  if (selected.href !== `${selected.origin}/` || (selected.protocol !== 'https:' && !(selected.protocol === 'http:' && loopback))) return null;
+  return selected.origin;
+ } catch {
+  return null;
+ }
+}
 
 export const getElectronSettingUrl = (thingtime: any, sessionHash?: string | null) => {
 	if (!sessionHash) {

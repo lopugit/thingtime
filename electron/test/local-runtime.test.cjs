@@ -143,6 +143,7 @@ test('development cleanup terminates a stubborn owned process group before retur
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
 	const exited = new Promise((resolve) => child.once('exit', resolve));
+	let failure;
 	try {
 		await new Promise((resolve, reject) => {
 			child.stdout.once('data', resolve);
@@ -154,10 +155,117 @@ test('development cleanup terminates a stubborn owned process group before retur
 			() => process.kill(-child.pid, 0),
 			(error) => error.code === 'ESRCH'
 		);
+	} catch (error) {
+		failure = error;
+		throw error;
 	} finally {
 		if (child.pid && child.exitCode === null && child.signalCode === null) {
-			try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+			try { process.kill(-child.pid, 'SIGKILL'); } catch (error) {
+				if (error.code !== 'ESRCH') throw failure
+					? new AggregateError([failure, error], 'Process-group assertion and fixture cleanup failed', { cause: failure })
+					: error;
+			}
 		}
+	}
+});
+
+async function cleanupWithProcess(processAdapter, timer = setTimeout, clock = Date) {
+	const vm = require('node:vm');
+	const { createRequire } = require('node:module');
+	const filename = path.join(__dirname, '../lib/local-runtime.cjs');
+	const module = { exports: {} };
+	vm.runInNewContext(await fs.readFile(filename, 'utf8'), {
+		require: createRequire(filename), module, process: processAdapter, setTimeout: timer, Date: clock
+	}, { filename });
+	return module.exports.stopOwnedProcessGroup;
+}
+
+test('cleanup rejects nonfinite deadlines before probing or signalling a group', async () => {
+	let signals = 0;
+	const stop = await cleanupWithProcess({ platform: 'darwin', kill: () => { signals++; } });
+	for (const budget of [NaN, Infinity, -Infinity]) {
+		for (const key of ['graceMs', 'killMs']) {
+			await assert.rejects(stop(12345, { [key]: budget }), /deadlines must be finite/);
+		}
+	}
+	assert.equal(signals, 0);
+});
+
+test('cleanup requires group absence after transient macOS reaping and rejects permission failures', async () => {
+	for (const scenario of ['reaped', 'persistent', 'initial', 'term', 'kill', 'linux']) {
+		let now = 0;
+		let killed = false;
+		let probes = 0;
+		const signals = [];
+		const denied = Object.assign(new Error('owned group permission refused'), { code: 'EPERM' });
+		const stop = await cleanupWithProcess({
+			platform: scenario === 'linux' ? 'linux' : 'darwin',
+			kill: (pid, signal) => {
+				assert.equal(pid, -12345);
+				if (signal === 0) {
+					if (scenario === 'initial') throw denied;
+					if (killed) {
+						probes++;
+						if (scenario === 'reaped' && probes > 2) throw Object.assign(new Error('reaped'), { code: 'ESRCH' });
+						throw denied;
+					}
+				} else {
+					signals.push(signal);
+					if ((scenario === 'term' && signal === 'SIGTERM') || (scenario === 'kill' && signal === 'SIGKILL')) throw denied;
+					if (signal === 'SIGKILL') killed = true;
+				}
+			}
+		}, (callback, ms) => { now += ms; callback(); }, { now: () => now });
+		if (scenario === 'reaped') {
+			await stop(12345, { graceMs: 0, killMs: 150 });
+			assert.equal(probes, 3, 'EPERM is never itself proof of group absence');
+		} else {
+			await assert.rejects(stop(12345, { graceMs: 0, killMs: 150 }), error => error === denied, scenario);
+		}
+		assert.deepEqual(signals, scenario === 'initial' ? [] : scenario === 'term' ? ['SIGTERM'] : ['SIGTERM', 'SIGKILL']);
+		if (scenario === 'persistent') assert.equal(now, 150, 'permission uncertainty is bounded by the existing deadline');
+	}
+});
+
+test('macOS cleanup waits for a real killed child zombie to be reaped', { skip: process.platform !== 'darwin' }, async () => {
+	const { spawn, spawnSync } = require('node:child_process');
+	const child = spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{},1000)"], {
+		detached: true, stdio: ['ignore', 'pipe', 'ignore']
+	});
+	const exited = new Promise(resolve => child.once('exit', resolve));
+	let zombieProbes = 0;
+	const stop = await cleanupWithProcess({
+		platform: process.platform,
+		kill: (pid, signal) => {
+			assert.equal(pid, -child.pid);
+			try {
+				const result = process.kill(pid, signal);
+				// Keep libuv from reaping until the kernel confirms this owned child is a zombie.
+				if (signal === 'SIGKILL') {
+					const deadline = Date.now() + 2000;
+					let zombie = false;
+					while (!zombie && Date.now() < deadline) {
+						zombie = /^Z/.test(spawnSync('/bin/ps', ['-p', String(child.pid), '-o', 'stat='], { encoding: 'utf8' }).stdout.trim());
+						if (!zombie) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+					}
+					assert.ok(zombie, 'owned child reached the kernel zombie state');
+				}
+				return result;
+			} catch (error) {
+				if (signal === 0 && error.code === 'EPERM') zombieProbes++;
+				throw error;
+			}
+		}
+	});
+	try {
+		await new Promise((resolve, reject) => { child.stdout.once('data', resolve); child.once('error', reject); });
+		await stop(child.pid, { graceMs: 50, killMs: 1500 });
+		await exited;
+		assert.ok(zombieProbes > 0, 'exercise the actual macOS zombie EPERM transition');
+		assert.throws(() => process.kill(-child.pid, 0), error => error.code === 'ESRCH');
+	} finally {
+		if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+		await exited;
 	}
 });
 

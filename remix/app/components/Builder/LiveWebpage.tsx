@@ -1,4 +1,5 @@
 import React from 'react';
+import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams, useLocation, useRouteLoaderData } from 'react-router';
 
@@ -21,6 +22,8 @@ import { BuilderViewport, type BuilderViewportSize } from './BuilderViewport';
 import { type SeamlessMode, isSeamlessMode, usesPageRuntime } from './seamlessMode';
 import { useCopyPage } from './useCopyPage';
 import { PageActionSurface } from './PageActionSurface';
+import { RefreshWebpageActivationSchedule, WebpageActivation } from './WebpageActivation';
+import { isPrivateActivationPage, parseWebpageActivation } from '~/schemas/webpageActivation';
 
 const SeamlessPageEditor = React.lazy(() => import('./SeamlessPageEditor'));
 
@@ -60,7 +63,8 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	const id = builderPageId || params.id;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const requestedMode = searchParams.get('mode') || (builderPageId ? 'edit' : null);
-	const standalone = useLocation().pathname.startsWith('/t/');
+	const pathname = useLocation().pathname;
+	const standalone = pathname.startsWith('/t/');
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
 	const runMode = !draft.branch && (standalone || requestedMode === 'run' || requestedMode === 'visit');
 	const linkKey = (searchParams.get('key') || '').trim();
@@ -82,6 +86,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	}, []);
 	const [editorChrome, setEditorChrome] = React.useState<BuilderChrome | null>(null);
 	const page = draft.resolved?.page || null;
+	const executionHeld = useContentExecutionHeld(page?.executionHeld);
 	const isOwner = !!user?.id && page?.author?.id === user.id;
 	const copy = useCopyPage({ id: page?.id, linkKey, name: page?.crystal?.name });
 	const editorMode =
@@ -269,11 +274,23 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	}
 
 	const shared = !isOwner && (!isSeeded || !user?.id);
-	const interactive = isOwner || isSeeded || shared;
+	const interactive = !executionHeld && (isOwner || isSeeded || shared);
+	// Only the saved, full-account standalone viewer can activate. Builder
+	// edit/view modes and any other preview are intentionally inert.
+	const savedActivation = page?.updatedAt && isOwner && user?.accountKind === 'user' && !user.temporary && !user.isCharacter &&
+		!builderPageId && !draft.branch && !executionHeld && !linkKey && !page.crystal.siteRoute &&
+		isPrivateActivationPage(page.acl) && /^\/(p|t)\//.test(pathname) &&
+		(!requestedMode || requestedMode === 'run' || requestedMode === 'visit')
+		? parseWebpageActivation(page.crystal.activationAction) : null;
+	const sourcedCutoff = typeof savedActivation?.cutoffTime === 'object';
+	const schedule = sourcedCutoff ? draft.resolved?.activationSchedule : undefined;
+	const activation = savedActivation && (!sourcedCutoff || schedule) ? {
+		...savedActivation, cutoffTime: typeof savedActivation.cutoffTime === 'string' ? savedActivation.cutoffTime : schedule?.cutoffTime
+	} : null;
 
 	return (
 		<WebpageRuntimeProvider
-			enabled={!draft.branch && usesPageRuntime(editorMode)}
+			enabled={!executionHeld && !draft.branch && usesPageRuntime(editorMode)}
 			key={`${page?.id || ''}:${user?.id || ''}:${linkKey}`}
 			pageId={page?.id || null}
 			shared={shared}
@@ -281,7 +298,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
 			suiteKey={suiteKey}
 			source={draft.resolved?.source || null}
-			onInstall={draft.branch ? undefined : isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
+			onInstall={executionHeld || draft.branch ? undefined : isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
 		>
 			{!draft.branch && copy.dialog}
 			<SharedPageSurface
@@ -296,6 +313,14 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 				whiteSpace="normal"
 			>
 				<Box width="100%" minWidth={0} boxSizing="border-box" flex="1">
+					{sourcedCutoff ? <RefreshWebpageActivationSchedule refresh={draft.refresh} /> : null}
+					{activation && page?.updatedAt ? <WebpageActivation binding={activation} revision={page.updatedAt} scheduleRevision={schedule?.revision}
+						refreshSchedule={sourcedCutoff ? draft.refresh : undefined} /> : sourcedCutoff && !draft.loading ? (
+						<Flex align="center" gap={2} px={3} py={1} wrap="wrap">
+							<Text role="status" fontSize="sm">Page setup needs its saved schedule.</Text>
+							<Button size="xs" variant="ghost" onClick={draft.refresh}>Retry</Button>
+						</Flex>
+					) : null}
 					{draft.branch ? (
 						<Flex role="status" px={4} pr={editorMode ? { base: 4, md: '344px' } : 4} py={2} gap={2} wrap="wrap" bg="var(--tt-surface)">
 							<Text fontWeight="600" overflowWrap="anywhere">Branch: {draft.branch.name}</Text>
@@ -321,6 +346,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 							</Button>
 						</Flex>
 					)}
+					<ContentExecutionBoundary held={executionHeld}>
 					<BuilderViewport size={editorMode ? viewport : null}>
 						<PageActionSurface
 							surfaceRef={setSurface}
@@ -345,6 +371,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 							/>
 						</PageActionSurface>
 					</BuilderViewport>
+					</ContentExecutionBoundary>
 					{editorMode && (
 						<React.Suspense fallback={null}>
 							<SeamlessPageEditor

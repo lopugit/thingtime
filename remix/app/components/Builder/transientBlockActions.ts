@@ -13,8 +13,10 @@ export const isTransientBlockTarget = (target: Element | null): boolean =>
  * adapters must receive their target handlers without an outer capture stop. */
 export function transientControlForTarget(root: Element, target: Element | null): HTMLElement | null {
 	const control = target?.closest?.<HTMLElement>('[data-tt-action]');
-	return control && root.contains(control) && control.closest(`[${TRANSIENT_BLOCK_BOUNDARY}]`) === root &&
-		control.getAttribute('data-tt-action') === TRANSIENT_BLOCK_ACTION ? control : null;
+	if (!control || !root.contains(control) || control.closest(`[${TRANSIENT_BLOCK_BOUNDARY}]`) !== root ||
+		control.getAttribute('data-tt-action') !== TRANSIENT_BLOCK_ACTION) return null;
+	const nested = target?.closest?.('a[href],button,input,select,textarea,summary,[contenteditable="true"],[role="button"],[role="link"]');
+	return nested && nested !== control && control.contains(nested) ? null : control;
 }
 
 export type TransientBlockInvocation = {
@@ -22,6 +24,8 @@ export type TransientBlockInvocation = {
 	value: string | boolean | undefined;
 	readField: (name: string) => string | boolean | undefined;
 	readFile: (name: string) => File | undefined;
+	/** Static validation from the trusted adapter for this exact live control. */
+	setValidity?: (message: string) => void;
 	signal: AbortSignal;
 };
 export type TransientBlockActions = Record<string, (invocation: TransientBlockInvocation) => void | Promise<void>>;

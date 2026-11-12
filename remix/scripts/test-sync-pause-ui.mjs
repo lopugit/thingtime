@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -72,6 +73,7 @@ if (!process.env.TT_SYNC_PAUSE_WORKER) {
    await page.waitForFunction(()=>window.pauseFixture.state().task?.active===false);
    await resourceStatus.getByText('Last reported sync CPU: 12% of total CPU capacity.',{exact:true}).waitFor();
    await resourceStatus.getByText(/Saved observation; this is not a current CPU measurement/).waitFor();
+   await enableCurrentPageBuilder(page);
    await resourceStatus.getByRole('button',{name:'Edit layout',exact:true}).click();
    await resourceStatus.locator('[data-block-id="sync-resource-status-cpu"]').click();
    for(const [id,text]of [['sync-resource-status-cpu','Observed: {syncResources.cpu}'],['sync-resource-status-transfers','Concurrency: {syncResources.transfers}']]){
@@ -96,7 +98,8 @@ if (!process.env.TT_SYNC_PAUSE_WORKER) {
    await resources.getByRole('textbox',{name:'Maximum indexing workers',exact:true}).fill('3');
    await resources.getByRole('textbox',{name:'CPU target (%)',exact:true}).fill('25');
    const cpu=resources.getByRole('textbox',{name:'CPU target (%)',exact:true});await cpu.fill('101');
-   assert.equal(await cpu.inputValue(),'101');assert.equal(await page.getByRole('button',{name:'Save connection',exact:true}).isDisabled(),true);await cpu.fill('25');assert.equal(await page.getByRole('button',{name:'Save connection',exact:true}).isEnabled(),true);
+   assert.equal(await cpu.inputValue(),'101');assert.equal(await page.getByRole('button',{name:'Save sync config',exact:true}).isDisabled(),true);await cpu.fill('25');assert.equal(await page.getByRole('button',{name:'Save sync config',exact:true}).isEnabled(),true);
+   await enableCurrentPageBuilder(page);
    await resources.getByRole('button',{name:'Edit layout',exact:true}).click();
    await resources.locator('[data-block-id="resources-title"]').click();
    for(const [id,text]of [['resources-title','My resource limits'],['upload-label','My upload ceiling'],['upload-kbps','Kilobits per second']]){
@@ -111,12 +114,12 @@ if (!process.env.TT_SYNC_PAUSE_WORKER) {
    await resources.getByRole('button',{name:'Save layout',exact:true}).click();
    await resources.getByText('Unsaved layout',{exact:true}).waitFor({state:'hidden'});
    await resources.getByRole('button',{name:'Done editing layout',exact:true}).click();
-   await page.getByRole('button',{name:'Save connection',exact:true}).click();
-   await page.getByRole('button',{name:'Save connection',exact:true}).waitFor({state:'hidden'});
+   await page.getByRole('button',{name:'Save sync config',exact:true}).click();
+   await page.getByRole('button',{name:'Save sync config',exact:true}).waitFor({state:'hidden'});
    const config=await page.evaluate(()=>window.syncInspectionFixture.savedRows().find(row=>row.thingtime.includes('file-sync')).crystal);
    assert.equal(config.configurationVersion,3);assert.equal(config.resourceLimits.uploadBytesPerSecond,312.5);assert.equal(config.resourceLimits.cpuPercent,25);
    await page.getByRole('button',{name:'Edit',exact:true}).first().click();
-   const name=page.getByRole('textbox',{name:'Connection name',exact:true});await name.fill(`${label} draft preserved`);
+   const name=page.getByRole('textbox',{name:'Sync config name',exact:true});await name.fill(`${label} draft preserved`);
    const before=await name.inputValue();
    await page.evaluate(()=>window.dispatchEvent(new Event('tt:sync-jobs-changed')));
    assert.equal(await name.inputValue(),before);assert.equal(await name.evaluate(el=>document.activeElement===el),true);

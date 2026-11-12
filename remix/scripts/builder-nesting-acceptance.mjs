@@ -12,6 +12,7 @@
 // --api-only hosts an empty disposable replica set/API for native acceptance,
 // reports only public origin/ports/PID, and cleans up on SIGINT/SIGTERM or 15min.
 // The full run always closes its browser and removes only its own temp state.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -359,6 +360,7 @@ try {
 		await page.getByTestId('ctx-structure-page').click();
 		const modal = page.getByTestId('block-structure-modal');
 		await modal.waitFor();
+		await enableCurrentPageBuilder(page);
 		await modal.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await modal.locator('[data-block-id="structure-node-label"]').first().click();
 		const settingsDrawer = page.getByTestId('builder-drawer').filter({ hasText: 'Settings layout' });

@@ -1,3 +1,7 @@
+import { isCivilTime } from '~/schemas/civilDates';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { requiresCollectionPagingContract } from './savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -34,9 +38,10 @@ export type WebpageTarget =
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
+	page: { id: string; executionHeld?: boolean; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
+	activationSchedule?: { cutoffTime: string; revision: string };
 };
 
 const targetQuery = (target: WebpageTarget): string => {
@@ -53,7 +58,7 @@ export type WebpageLoadResult =
 	| { status: 'missing' }
 	| { status: 'error' };
 
-export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageLoadResult> => {
+export const loadWebpageClient = async (target: WebpageTarget, signal?: AbortSignal): Promise<WebpageLoadResult> => {
 	// SiteBlocksHost resolves EVERY route a signed-in viewer lands on, and many
 	// of them can never be a siteRoute: /post/<id>, /docs/api/<group>/<docId>
 	// and the `*` thing-tree catch-all routinely carry characters the server
@@ -62,18 +67,22 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
-		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
-		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
+		await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
+		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include', signal });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
 		const data = await response.json();
 		if (data?.ok !== true || !Object.prototype.hasOwnProperty.call(data, 'page')) return { status: 'error' };
+		if (usesSourceInputReferences(data)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
+		if (usesComponentArgumentBindings(data)) await requireThingtimeCapability('api.webpages-resolve', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve']);
 		return {
 			status: 'ready',
 			data: {
 				page: data.page || null,
 				source: data.source || null,
-				componentsByRef: buildComponentsByRef(data)
+				componentsByRef: buildComponentsByRef(data),
+				...(isCivilTime(data.activationSchedule?.cutoffTime) && typeof data.activationSchedule?.revision === 'string'
+					? { activationSchedule: data.activationSchedule } : {})
 			}
 		};
 	} catch {
@@ -152,6 +161,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 			...carried,
 			id,
 			crystal,
+			...(typeof thing.executionHeld === 'boolean' ? { executionHeld: thing.executionHeld } : {}),
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
 			...(timelineHeadId ? { timelineHeadId } : {}),
@@ -164,6 +174,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
+	editorScope?: string;
 	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; componentNotice?: string; useCurrentComponents?: boolean; setUseCurrentComponents?: (value: boolean) => void; retryComponents?: () => void; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
 	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
@@ -380,6 +391,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				...(pageKey ? { pageKey } : {}),
 				...(siteRoute ? { siteRoute } : {}),
 				...(crystalBase.previewBg ? { previewBg: crystalBase.previewBg } : {}),
+				...(resolved?.source === 'user' && crystalBase.activationAction ? { activationAction: crystalBase.activationAction } : {}),
 				version: (Number(crystalBase.version) || 0) + 1,
 				...(resolved?.source === 'user'
 					? crystalBase.forkOf
@@ -391,7 +403,21 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresEditableIntrinsicContract(blocks)) {
+				if (usesComponentArgumentBindings(blocks)) await requireThingtimeCapability('api.webpages-resolve', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve']);
+				else if (usesSourceInputReferences(blocks)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
+				else if (usesPageCollections(blocks)) await requireThingtimeCapability('api.webpages-resolve', PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve']);
+				else if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+				if (usesAuthoredControls(blocks)) {
+					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+				} else if (requiresCollectionPagingContract(blocks)) {
+					await requireThingtimeCapability('api.things', '1.49.0');
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
+				} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+					await requireThingtimeCapability('api.things', '1.47.0');
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
+				} else if (requiresEditableIntrinsicContract(blocks)) {
 					await requireThingtimeCapability('api.things', '1.44.0');
 					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
 				}
@@ -588,6 +614,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	}, [resolved, dirty]);
 
 	return {
+		editorScope: scopeKey,
 		history: {
 			error: history.error, saving: history.saving, recoverable: history.recoverable,
 			dismiss: history.dismissRecovery,

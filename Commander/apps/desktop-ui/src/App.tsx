@@ -93,6 +93,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     return (
       <Suspense fallback={<Launcher state={state} />}>
         <EmojiPicker
+          key={state.activeViewSession}
           platform={state.bootstrap.platform}
           defaultAction={state.bootstrap.settings.emojiDefaultAction}
           onBack={() => {

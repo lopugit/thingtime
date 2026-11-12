@@ -1,3 +1,4 @@
+import { ExactCloudSyncDestinationChanged, type CloudSyncDestination } from '../../../fileSync/cloudSyncDestination';
 import { openInventoryUniqueness } from './inventoryUniqueness';
 import { cloudFolderMetadata } from './folderMetadata';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -31,7 +32,8 @@ const projection = {
 	'crystal.kind': 1,
 	'crystal.type': 1,
 	'crystal.trashed': 1,
-	'crystal.content': 1
+	'crystal.content': 1,
+	'crystal.symbolicLink': 1
 };
 const owned = (doc: any, ownerId: string) =>
 	doc &&
@@ -138,20 +140,109 @@ export function createCloudInventoryService(
 }
 export const readCloudInventory = createCloudInventoryService();
 
+/** Use the caller's snapshot. Mutation callers lock the destination chain
+ * in this same transaction before checking the exact path and leaf stamp. */
+async function observeCloudPathInTransaction(things: any, session: any, ownerId: string, rootId: string, requestedPath: string,
+	budget: () => number, signal?: AbortSignal, workspace = openInventoryUniqueness) {
+	if (!session) throw Error('Path observation requires a snapshot transaction');
+	const root = await readCloudInventoryRoot(things, session, ownerId, rootId, budget, signal);
+	// Each transaction retry owns a new index; a failed attempt cannot make
+	// the next attempt appear to contain duplicate records.
+	const keys = await workspace();
+	try {
+		await keys.add('id:' + rootId, budget);
+		let parentId = rootId, prefix = '', found: CloudInventoryNode | null = null, leafParent: string | null = null;
+		const parts = requestedPath.split('/');
+		for (let depth = 0; depth < parts.length; depth++) {
+			if (depth === parts.length - 1) leafParent = parentId;
+			const expected = prefix ? prefix + '/' + parts[depth] : parts[depth];
+			const expectedKey = syncPathKey(expected);
+			found = null;
+			const cursor = things.find({ ownerId, folderId: { $in: [parentId] },
+				$or: [...folderThingMatch().$or, { thingtime: 'file', 'crystal.trashed': { $ne: true } }] },
+				{ session, projection, maxTimeMS: budget(), signal, readPreference: 'primary' })
+				.batchSize(100); // Uniqueness does not require a database-wide sibling sort.
+			try {
+				for await (const doc of cursor) {
+					budget();
+					const node = readCloudInventoryNode(doc, ownerId, parentId, prefix, rootId), key = syncPathKey(node.path);
+					if (!await keys.add('id:' + doc.shareId, budget) || !await keys.add('path:' + key, budget))
+						fail(409, 'Cloud folder paths or identities are ambiguous; review the folder before syncing.');
+					if (key === expectedKey && node.path !== expected) fail(409, 'A cloud path has a case or Unicode alias; review it before syncing.');
+					if (node.path === expected) found = node;
+				}
+			} finally { await cursor.close(); }
+			budget();
+			if (!found) break;
+			if (depth + 1 < parts.length) {
+				if (found.kind === 'folder') { parentId = found.id; prefix = found.path; }
+				else fail(409, 'A cloud path ancestor is now a file.');
+			}
+		}
+		budget();
+		return { root, leafParent, entry: found ? inventorySyncEntry(found) : null };
+	} finally { await keys.close(); }
+}
+
+export async function assertCloudSyncDestination(things: any, session: any, ownerId: string, destination: CloudSyncDestination,
+	folderId: string, expected: { id: string; revision: string } | null) {
+	if (destination.path.split('/').length > MAX_FOLDER_DEPTH) throw new ExactCloudSyncDestinationChanged();
+	const deadline = Date.now() + 5000;
+	try {
+		const { leafParent, entry } = await observeCloudPathInTransaction(things, session, ownerId, destination.rootId, destination.path, () => {
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) fail(503, 'Exact sync destination verification timed out.');
+			return remaining;
+		});
+		if (leafParent !== folderId || (expected ? entry?.kind !== 'file' || entry.id !== expected.id || entry.version !== expected.revision : entry !== null))
+			throw new ExactCloudSyncDestinationChanged();
+	} catch (error) {
+		if (error instanceof StorageMutationError && error.status === 409) throw new ExactCloudSyncDestinationChanged();
+		throw error;
+	}
+}
+
+/** FIFO backpressure for snapshot work. Waiting uses the caller's existing
+ * deadline; cancellation removes an unsent request without spending a slot. */
+function createObservationSlots(concurrency: number) {
+	let active = 0;
+	const waiting = new Set<() => void>();
+	const pump = () => { while (active < concurrency && waiting.size) waiting.values().next().value!(); };
+	return (signal: AbortSignal | undefined, timeoutMs: number): Promise<() => void> => new Promise((resolve, reject) => {
+		let settled = false;
+		let timer: ReturnType<typeof setTimeout>;
+		const cleanup = () => { clearTimeout(timer); waiting.delete(start); signal?.removeEventListener('abort', abort); };
+		const cancel = (reason: unknown) => {
+			if (settled) return;
+			settled = true; cleanup(); reject(reason); pump();
+		};
+		const abort = () => cancel(signal?.reason);
+		const start = () => {
+			if (settled) return;
+			settled = true; cleanup(); active++;
+			let released = false;
+			resolve(() => { if (!released) { released = true; active--; pump(); } });
+		};
+		timer = setTimeout(() => cancel(new StorageMutationError(503, 'storage_conflict', 'Cloud path observation timed out while waiting for capacity.')), Math.max(0, timeoutMs));
+		signal?.addEventListener('abort', abort, { once: true });
+		if (signal?.aborted) { abort(); return; }
+		waiting.add(start); pump();
+	});
+}
+
 /** A fresh snapshot of one path. Missing roots/root ancestors, authorization failures
  * and bounded-read failures are errors, never evidence of absence. */
 export function createCloudPathService(overrides: Parameters<typeof createCloudInventoryService>[0] & { workspace?: typeof openInventoryUniqueness } = {}) {
 	const deps = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction,
 		customPlane: isCustomMongoEndpointActive, now: Date.now, workspace: openInventoryUniqueness, ...overrides };
-	let active = 0;
+	const acquire = createObservationSlots(2);
 	return async (ownerId: string, rootId: unknown, requestedPath: unknown, signal?: AbortSignal) => {
 		if (deps.customPlane()) return { ok: false as const, status: 409, error: 'Files currently require the home data plane' };
 		if (!ownerId || !identity(rootId)) return { ok: false as const, status: 400, error: 'Choose a cloud folder root' };
 		if (typeof requestedPath !== 'string' || !validSyncPath(requestedPath) || requestedPath.split('/').length > MAX_FOLDER_DEPTH)
 			return { ok: false as const, status: 400, error: 'Choose a supported relative cloud path' };
-		if (active >= 2) return { ok: false as const, status: 503, error: 'Cloud path capacity is busy; retry later.' };
-		active++;
 		const started = deps.now();
+		let release: (() => void) | undefined;
 		const budget = () => {
 			signal?.throwIfAborted();
 			if (deps.customPlane()) fail(409, 'Cloud inventory data plane changed');
@@ -160,52 +251,18 @@ export function createCloudPathService(overrides: Parameters<typeof createCloudI
 			return Math.min(remaining, 5000);
 		};
 		try {
+			release = await acquire(signal, 20_000);
 			budget(); const things = await deps.collection();
 			const result = await deps.transaction(async session => {
-				if (!session) throw Error('Path observation requires a snapshot transaction');
-				const root = await readCloudInventoryRoot(things, session, ownerId, rootId, budget, signal);
-				// Each transaction retry owns a new index; a failed attempt cannot make
-				// the next attempt appear to contain duplicate records.
-				const keys = await deps.workspace();
-				try {
-					await keys.add('id:' + rootId, budget);
-					let parentId = rootId, prefix = '', found: CloudInventoryNode | null = null;
-					const parts = requestedPath.split('/');
-					for (let depth = 0; depth < parts.length; depth++) {
-						const expected = prefix ? prefix + '/' + parts[depth] : parts[depth];
-						const expectedKey = syncPathKey(expected);
-						found = null;
-						const cursor = things.find({ ownerId, folderId: { $in: [parentId] },
-							$or: [...folderThingMatch().$or, { thingtime: 'file', 'crystal.trashed': { $ne: true } }] },
-							{ session, projection, maxTimeMS: budget(), signal, readPreference: 'primary' })
-							.batchSize(100); // Uniqueness does not require a database-wide sibling sort.
-						try {
-							for await (const doc of cursor) {
-								budget();
-								const node = readCloudInventoryNode(doc, ownerId, parentId, prefix, rootId), key = syncPathKey(node.path);
-								if (!await keys.add('id:' + doc.shareId, budget) || !await keys.add('path:' + key, budget))
-									fail(409, 'Cloud folder paths or identities are ambiguous; review the folder before syncing.');
-								if (key === expectedKey && node.path !== expected) fail(409, 'A cloud path has a case or Unicode alias; review it before syncing.');
-								if (node.path === expected) found = node;
-							}
-						} finally { await cursor.close(); }
-						budget();
-						if (!found) break;
-						if (depth + 1 < parts.length) {
-							if (found.kind === 'folder') { parentId = found.id; prefix = found.path; }
-							else fail(409, 'A cloud path ancestor is now a file.');
-						}
-					}
-					budget();
-					return { ok: true as const, observation: parseCloudPathObservation({ version: 1, complete: true, rootId,
-						rootRevision: folderRevision(root), path: requestedPath, entry: found ? inventorySyncEntry(found) : null }, rootId, requestedPath) };
-				} finally { await keys.close(); }
+				const { root, entry } = await observeCloudPathInTransaction(things, session, ownerId, rootId, requestedPath, budget, signal, deps.workspace);
+				return { ok: true as const, observation: parseCloudPathObservation({ version: 1, complete: true, rootId,
+					rootRevision: folderRevision(root), path: requestedPath, entry }, rootId, requestedPath) };
 			});
 			budget(); return result;
 		} catch (error) {
 			return error instanceof StorageMutationError ? { ok: false as const, status: error.status, error: error.message }
 				: { ok: false as const, status: 503, error: 'A complete cloud path observation is unavailable; keep the last complete scan.' };
-		} finally { active--; }
+		} finally { release?.(); }
 	};
 }
 export const readCloudPath = createCloudPathService();
@@ -250,6 +307,6 @@ export function readCloudInventoryNode(doc: any, ownerId: string, parentId: stri
 	}
 	if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind.');
 	try { return { kind: 'file', path, file: parseCloudFile({ id: doc.shareId, revision: doc.timelineHeadId,
-		name, folderId: parentId, trashed: doc.crystal.trashed, content: doc.crystal.content }) }; }
+		name, folderId: parentId, trashed: doc.crystal.trashed, content: doc.crystal.content, ...(doc.crystal.symbolicLink === undefined ? {} : { symbolicLink: doc.crystal.symbolicLink }) }) }; }
 	catch { return fail(409, 'A cloud file has invalid content metadata; no partial scan was returned.'); }
 }

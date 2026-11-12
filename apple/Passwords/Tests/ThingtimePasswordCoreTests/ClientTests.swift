@@ -99,6 +99,62 @@ final class ClientTests: XCTestCase {
             XCTAssertEqual(page, cursors.count)
         }
     }
+    func testVerificationSettingIsFreshOwnerBoundAndPrivate() async throws {
+        var reads = 0
+        PasswordTestProtocol.handler = { request in
+            if request.url!.path.hasPrefix("/.well-known/") {
+                return (200, Data(String(decoding: self.manifest, as: UTF8.self).replacingOccurrences(of: "1.4.0", with: "1.5.0").utf8))
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-store")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Origin"), self.origin.absoluteString)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "tt_auth=synthetic-fixture")
+            var bytes = request.httpBody ?? Data()
+            if let stream = request.httpBodyStream {
+                stream.open(); defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 512)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    if count <= 0 { break }
+                    bytes.append(contentsOf: buffer.prefix(count))
+                }
+            }
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            XCTAssertEqual(body["operation"] as? String, "verification-settings")
+            XCTAssertEqual(body["expectedOwnerId"] as? String, "fixture-owner")
+            reads += 1
+            return (200, try JSONSerialization.data(withJSONObject: ["ok": true, "ownerId": "fixture-owner", "settings": ["window": "never", "revision": "fixture-revision", "reuseRecentDeviceVerification": reads == 1]]))
+        }
+        let connection = try client()
+        let first = try await connection.deviceVerificationReuseAllowed()
+        let second = try await connection.deviceVerificationReuseAllowed()
+        XCTAssertTrue(first); XCTAssertFalse(second); XCTAssertEqual(reads, 2)
+    }
+    func testVerificationSettingRejectsOldCapabilitiesAndMalformedOrForeignReplies() async throws {
+        var routeCalled = false
+        PasswordTestProtocol.handler = { request in
+            if request.url!.path.hasPrefix("/.well-known/") { return (200, self.manifest) }
+            routeCalled = true; return (200, Data())
+        }
+        do { _ = try await client().deviceVerificationReuseAllowed(); XCTFail("Expected old capability refusal") }
+        catch { XCTAssertEqual(error as? PasswordProviderError, .incompatibleService) }
+        XCTAssertFalse(routeCalled)
+        for (reply, expected): ([String: Any], PasswordProviderError) in [
+            (["ok": true, "ownerId": "fixture-owner"], .invalidResponse),
+            (["ok": true, "ownerId": "fixture-owner", "reuseRecentDeviceVerification": true], .invalidResponse),
+            (["ok": true, "ownerId": "fixture-owner", "settings": ["window": "never"]], .invalidResponse),
+            (["ok": true, "ownerId": "fixture-owner", "settings": ["reuseRecentDeviceVerification": "true"]], .invalidResponse),
+            (["ok": true, "ownerId": "foreign-owner", "settings": ["reuseRecentDeviceVerification": true]], .invalidSession)
+        ] {
+            PasswordTestProtocol.handler = { request in
+                if request.url!.path.hasPrefix("/.well-known/") {
+                    return (200, Data(String(decoding: self.manifest, as: UTF8.self).replacingOccurrences(of: "1.4.0", with: "1.5.0").utf8))
+                }
+                return (200, try JSONSerialization.data(withJSONObject: reply))
+            }
+            do { _ = try await client().deviceVerificationReuseAllowed(); XCTFail("Expected strict setting refusal") }
+            catch { XCTAssertEqual(error as? PasswordProviderError, expected) }
+        }
+    }
     func testIndependentRecordIDsKeepSameAccountKeysAndRetryReadbackSeparate() async throws {
         let first = try PasskeyRegistrationAttempt(relyingParty: "registration.example.test", userHandle: Data([1, 2, 3]), username: "fixture")
         let second = try PasskeyRegistrationAttempt(relyingParty: first.key.relyingParty, userHandle: first.key.userHandle, username: first.key.username)

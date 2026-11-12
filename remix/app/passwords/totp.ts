@@ -1,7 +1,7 @@
 export type TotpConfig = { secret: string; algorithm: 'SHA-1' | 'SHA-256' | 'SHA-512'; digits: 6 | 8; period: number; issuer: string; account: string };
 export function decodeBase32(source: string): Uint8Array<ArrayBuffer> {
   const value = source.replace(/\s/g, '').toUpperCase().replace(/=+$/, '');
-  if (!/^[A-Z2-7]{16,1024}$/.test(value)) throw new Error('Enter a valid Base32 authenticator secret.');
+  if (!/^[A-Z2-7]{16,}$/.test(value)) throw new Error('Enter a valid Base32 authenticator secret.');
   let buffer = 0, bits = 0;
   const bytes: number[] = [];
   for (const char of value) {
@@ -13,7 +13,7 @@ export function decodeBase32(source: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(bytes);
 }
 export function parseTotp(value: string): TotpConfig {
-  if (typeof value !== 'string' || value.length > 4096) throw new Error('Invalid authenticator setup.');
+  if (typeof value !== 'string') throw new Error('Invalid authenticator setup.');
   const text = value.trim();
   let result: TotpConfig = { secret: text, algorithm: 'SHA-1', digits: 6, period: 30, issuer: '', account: '' };
   if (text.includes(':')) {
@@ -24,7 +24,7 @@ export function parseTotp(value: string): TotpConfig {
     for (const key of url.searchParams.keys()) if (url.searchParams.getAll(key).length !== 1) throw new Error('Duplicate authenticator option.');
     const algorithm = (url.searchParams.get('algorithm') || 'SHA1').toUpperCase();
     const digits = url.searchParams.get('digits') || '6', period = url.searchParams.get('period') || '30';
-    if (!['SHA1', 'SHA256', 'SHA512'].includes(algorithm) || !['6', '8'].includes(digits) || !/^\d{1,3}$/.test(period) || +period < 15 || +period > 120)
+    if (!['SHA1', 'SHA256', 'SHA512'].includes(algorithm) || !['6', '8'].includes(digits) || !/^\d+$/.test(period) || !Number.isSafeInteger(+period) || +period < 1)
       throw new Error('Unsupported authenticator algorithm, digits, or period.');
     const label = decodeURIComponent(url.pathname.slice(1));
     result = { secret: url.searchParams.get('secret') || '', algorithm: algorithm.replace('SHA', 'SHA-') as TotpConfig['algorithm'], digits: +digits as 6 | 8, period: +period, issuer: url.searchParams.get('issuer') || '', account: label };

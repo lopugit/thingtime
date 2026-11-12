@@ -224,3 +224,11 @@ test('version1 and version2 without ignore rules share the normalized version1 c
 	invalid.configuration.configuration.ignoreRules = '*.tmp';
 	assert.throws(() => parseUploadBatchDescriptor(invalid));
 });
+
+test('symbolic links use scalar canonical writes rather than an unbound bulk digest', () => {
+ const d=fixture(),source=d.members[0].write.operation.mutation.source;
+ assert.equal(eligibleUploadBatchWrite(d.members[0].write,d.scope),true);
+ source.symbolicLink={format:'posix-symlink-v1',targetBase64:Buffer.alloc(source.size,97).toString('base64')};
+ assert.equal(eligibleUploadBatchWrite(d.members[0].write,d.scope),false);
+ assert.throws(()=>parseUploadBatchDescriptor(d));
+});

@@ -1,4 +1,6 @@
-import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
+import { readDeviceSyncHistory } from '../app/fileSync/deviceSyncHistory.client';
+import { apiEndpointDocs, apiSharedFeatureVersions } from '../app/docs/apiDocs';
 import type { MobileFolder } from '../app/fileSync/mobileFolders.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { fileRetentionEventId } from '../app/fileSync/fileVersions';
@@ -12,15 +14,23 @@ import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from '../app/fileSync/nativeScanExclusions';
 import { nativeSyncTasks } from '../app/fileSync/nativeSyncTasks.client';
+import { openSyncJournal } from '../app/fileSync/journal.client';
+import { deviceFolderIdentity, resolveDeviceFolders } from '../app/fileSync/deviceFolders';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const thingtimeCapabilityManifest = (origin: string) => ({ schemaVersion: 1, origin: new URL(origin).origin,
+	features: Object.fromEntries([...Object.entries(apiSharedFeatureVersions).map(([id, version]) => [id, { version }]),
+		...apiEndpointDocs.map(doc => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])]) });
+const folderEditorQA = new URLSearchParams(location.search).has('folderEditor');
+let holdFixtureEnrollment = false, fixtureEnrollmentWaiting = false;
+const downloadsId = '22222222-2222-4222-8222-222222222222';
 const ignoreQA = new URLSearchParams(location.search).has('ignore');
 const partialQA = new URLSearchParams(location.search).has('partial');
 const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], ignorePolicies: [] as string[], scanPolicies: [] as string[][] };
+const observations = { requests: 0, lists: 0, mutations: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], ignorePolicies: [] as string[], scanPolicies: [] as string[][] };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-cancel') { nativeCaptures.delete(request.captureId); return { complete: false, cancelled: true, excludedPaths: request.excludedPaths ?? [] }; }
@@ -49,6 +59,8 @@ const inventoryReply = (request: any) => {
 };
 const observe = (request: any) => {
 	if (request.action !== 'suspend') observations.requests++;
+	if (request.action === 'list') { observations.lists++; if (coldActiveQA) captureRedraw(); }
+	if (['choose', 'scan', 'remove'].includes(request.action)) observations.mutations++;
 	if (request.action === 'scan') observations.scans++;
 	if (request.action === 'scan' || request.action === 'scan-capture') observations.scanPolicies.push(canonicalNativeScanExclusions(request.excludedPaths ?? []));
 	if (request.action === 'inspect') observations.inspections++;
@@ -61,6 +73,9 @@ const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const iosTaskQA = new URLSearchParams(location.search).get('platform') === 'ios' && new URLSearchParams(location.search).has('tasks');
 const taskQA = (desktop || iosTaskQA) && new URLSearchParams(location.search).has('tasks');
+const coldActiveQA = desktop && new URLSearchParams(location.search).has('cold-active');
+const historyQA = desktop && taskQA && new URLSearchParams(location.search).has('history');
+if (historyQA) Object.assign(window, { readSyncHistoryFixture: readDeviceSyncHistory });
 let taskHeld = false;
 const heldScans = new Map<string, () => void>();
 const captureQA = new URLSearchParams(location.search).has('capture');
@@ -97,7 +112,7 @@ const transferFolderPath = (row: any): string => {
 let holdNextScan = new URLSearchParams(location.search).has('hold-scan'), holdTransferReply = false;
 let loseTransportReply = false;
 let loseTransferReply = false,
-	network = 'wifi';
+	network = folderEditorQA ? 'cellular' : 'wifi';
 const localEntries: any[] = homeQA ? ['Applications', 'Applications/ignored', 'CustomSkip', 'CustomSkip/ignored', 'Library', 'Library/ignored', '.Trash', '.Trash/ignored', 'Documents', 'Documents/Keep', 'LibraryExtra'].map((path, i) => ({ path, id: 'home-' + i, version: 'native-v1', kind: 'folder', size: 0, sha256: null })) : conflictQA
 	? Array.from({ length: captureQA ? 2 : 22 }, (_, i) => ({
 			path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
@@ -160,7 +175,10 @@ const initialRoots: MobileFolder[] = [
 		...(photoQA ? { sourceKind: 'photos' as const, photoAccess: 'limited' as const } : {})
 	}
 ];
-let roots = new URLSearchParams(location.search).has('revoked-root') ? [] : structuredClone(initialRoots),
+const fixtureGrantKey = 'tt:fixture:downloads-granted';
+const fixtureRoots = () => [...structuredClone(initialRoots), ...(folderEditorQA && localStorage.getItem(fixtureGrantKey) ? [{ id: downloadsId, name: 'Downloads', sourcePath: '/Users/example/Downloads' }] : [])];
+const chooseFixtureFolder = () => { if (folderEditorQA) localStorage.setItem(fixtureGrantKey, '1'); return fixtureRoots(); };
+let roots = new URLSearchParams(location.search).has('revoked-root') ? [] : fixtureRoots(),
 	loseReply = false,
 	unavailable = false;
 const persist = () => localStorage.setItem(databaseKey, JSON.stringify(rows));
@@ -173,7 +191,7 @@ window.fetch = async function (this: unknown, input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
 	if (url.pathname === '/.well-known/thingtime-capabilities.json') return fixtureJson(thingtimeCapabilityManifest(url.origin));
-	if (desktop && (taskQA || homeQA) && url.pathname === '/api/v1/webpages/resolve') {
+	if (desktop && (taskQA || homeQA || folderEditorQA) && url.pathname === '/api/v1/webpages/resolve') {
 		const headers = new Headers(init?.headers);
 		if (url.origin !== location.origin || headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin ||
 			headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
@@ -216,6 +234,22 @@ window.fetch = async function (this: unknown, input, init) {
 		if (url.pathname.endsWith('/content'))
 			return fixtureJson({ ok: true, id: url.searchParams.get('id'), version: 'c'.repeat(64), size: 3, fingerprint: captureFingerprint });
 		throw Error('Unexpected synthetic attachment request');
+	}
+	if (folderEditorQA && url.pathname === '/api/v1/devices/folders') {
+		const headers = new Headers(init?.headers);
+		if (headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin || headers.get('X-Thingtime-Expected-Actor') !== ownerId ||
+			headers.get('X-Thingtime-Expected-Data-Plane') !== 'home') throw Error('Fixture destination scope changed');
+		const scope = { origin: canonicalOrigin, ownerId, dataPlane: 'home', deviceId };
+		const rootFolderId = await deviceFolderIdentity(scope, 'root');
+		if (!init?.method || init.method === 'GET') return fixtureJson({ ok: true, rootFolderId, deviceName: 'Test Mac',
+			devices: [{ deviceId, rootFolderId, name: 'Test Mac' }], folder: rows.find(row => row.id === rootFolderId) || null });
+		const result = await resolveDeviceFolders(scope, 'Test Mac', JSON.parse(String(init.body)), {
+			assertCurrent() { init.signal?.throwIfAborted(); },
+			async get(id) { const row = rows.find(row => row.id === id); if (!row) throw Object.assign(Error('Not found'), { status: 404 }); return row; },
+			async create(input) { if (rows.some(row => row.id === input.shareId)) throw Object.assign(Error('Conflict'), { status: 409 });
+				rows.push({ ...input, id: input.shareId, author: { id: ownerId } }); persist(); }
+		});
+		return fixtureJson({ ok: true, ...result });
 	}
 	if (url.pathname === '/api/v1/files') {
 		if (unavailable) throw Error('Fixture is offline');
@@ -284,6 +318,15 @@ window.fetch = async function (this: unknown, input, init) {
 				});
 			return fixtureJson({ ok: true, file: conflictFiles().find((file) => file.id === url.searchParams.get('id')) });
 		}
+		const selectedFolder = folderEditorQA && rows.find(row => row.id === url.searchParams.get('folderId') && row.thingtime.includes('folder'));
+		if (selectedFolder) {
+			if (holdFixtureEnrollment) {
+				holdFixtureEnrollment = false; fixtureEnrollmentWaiting = true;
+				await new Promise<void>(resolve => init?.signal?.addEventListener('abort', () => resolve(), { once: true }));
+				init?.signal?.throwIfAborted();
+			}
+			return fixtureJson({ ok: true, folder: { id: selectedFolder.id, name: selectedFolder.crystal.name, folderId: selectedFolder.folderId ?? null, revision: 'folder-editor-v1' } });
+		}
 		const folder = transferFolders.find((row) => row.id === url.searchParams.get('folderId'));
 		if (url.searchParams.has('operationId')) return fixtureJson({ ok: true, receipt: folder ?? null });
 		return folder ? fixtureJson({ ok: true, folder }) : fixtureJson({ ok: false }, { status: 404 });
@@ -345,7 +388,7 @@ window.thingtimeNativeBridge = {
 				);
 			else {
 				if (request.action === 'remove') roots = roots.filter((r) => r.id !== request.rootId);
-				if (request.action === 'choose') roots = structuredClone(initialRoots);
+				if (request.action === 'choose') roots = chooseFixtureFolder();
 				window.dispatchEvent(
 					new CustomEvent(nativeBridgeMessageEvent, {
 						detail: {
@@ -354,6 +397,8 @@ window.thingtimeNativeBridge = {
 								...request,
 								roots,
 								...inventoryReply(request),
+				...(historyQA && request.action === 'scan-cancel' && request.capturePolicy === 'one-way-supported' ?
+					{ changesPage: { id: request.captureId, generation: request.captureId, state: 'interrupted', revision: 0, changes: [], nextSequence: 0, hasMore: false } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 								...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
@@ -364,7 +409,7 @@ window.thingtimeNativeBridge = {
 				);
 			}
 		};
-		if (request.action === 'scan' && holdNextScan) { holdNextScan = false; if (taskQA) heldScans.set(request.requestId, reply); return; }
+		if ((request.action === 'scan' || (historyQA && ['scan-capture', 'scan-stream'].includes(request.action))) && holdNextScan) { holdNextScan = false; if (taskQA) heldScans.set(request.requestId, reply); return; }
 		setTimeout(reply, 30);
 	}
 };
@@ -385,7 +430,7 @@ if (desktop) {
 			}
 			if (request.ownerId !== ownerId || request.deviceId !== deviceId || (request.action !== 'context' && request.origin !== canonicalOrigin))
 				throw Error('Desktop fixture identity changed');
-			if (request.action === 'scan' && holdNextScan) {
+			if ((request.action === 'scan' || (historyQA && ['scan-capture', 'scan-stream'].includes(request.action))) && holdNextScan) {
 				holdNextScan = false;
 				if (taskQA) {
 					await new Promise<void>(resolve => { heldScans.set(request.requestId, resolve); pending.set(request.requestId, resolve as any); });
@@ -394,21 +439,24 @@ if (desktop) {
 				return await new Promise((resolve) => pending.set(request.requestId, resolve));
 			}
 			if (request.action === 'remove') roots = roots.filter((root) => root.id !== request.rootId);
-			if (request.action === 'choose') roots = structuredClone(initialRoots);
+			if (request.action === 'choose') roots = chooseFixtureFolder();
 			const manifest = request.action === 'context' ? thingtimeCapabilityManifest(canonicalOrigin) : undefined;
 			return {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: ignoreQA ? '1.9.0' : partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { ...(historyQA ? { fileResourceLimitsVersion: '1.1.1' } : {}), fileAccessVersion: historyQA ? '1.16.0' : ignoreQA ? '1.9.0' : partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
+				...(historyQA && request.action === 'scan-cancel' && request.capturePolicy === 'one-way-supported' ?
+					{ changesPage: { id: request.captureId, generation: request.captureId, state: 'interrupted', revision: 0, changes: [], nextSequence: 0, hasMore: false } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 				...(captureQA && request.action === 'read-range'
 					? { chunk: { version: request.version, size: captureBytes.length, offset: request.offset, length: request.length, bytes: captureBytes.slice(request.offset, request.offset + request.length) } }
 					: {}),
-				...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
+				...(request.action === 'conditions' || (historyQA && request.action === 'context') ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {}),
+				...(historyQA && request.action === 'resources' ? { roots: [], deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 } } : {})
 			};
 		}
 	};
@@ -425,6 +473,7 @@ function Fixture() {
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}
 				</Text>
 				<Text fontSize="12px">Synthetic API and native grants. No real files are accessed or uploaded.</Text>
+				{coldActiveQA && <Text role="status">Cold-start task: {nativeSyncTasks.read()?.active ? 'active' : 'idle'} · Native list requests: {observations.lists} · Native mutations: {observations.mutations}</Text>}
 				{taskQA && <><Text role="status">App transfer lease: {taskHeld ? 'active' : 'idle'}</Text>
 					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
 					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button>
@@ -546,9 +595,39 @@ function Fixture() {
 		</ChakraProvider>
 	);
 }
+if (folderEditorQA) {
+	const folderEditorScope = (id: string) => ({ origin: canonicalOrigin, dataPlane: 'home', ownerId, deviceId, rootId: id });
+	Object.assign(window, {
+		holdFixtureEnrollment: () => { holdFixtureEnrollment = true; },
+		fixtureEnrollmentWaiting: () => fixtureEnrollmentWaiting,
+		holdFixtureSyncTask: (id: string) => {
+			void nativeSyncTasks.start(folderEditorScope(id), signal => new Promise<void>(resolve =>
+				signal.addEventListener('abort', () => resolve(), { once: true })));
+		},
+		readFolderEditorJob: async (id: string) => {
+			const scope = folderEditorScope(id), journal = await openSyncJournal();
+			try { return await journal.jobs({ scope, currentScope: () => scope }).read(); }
+			finally { journal.close(); }
+		},
+		recordFixtureSyncActivity: async (id: string) => {
+			const scope = folderEditorScope(id), journal = await openSyncJournal(), endedAt = Date.now();
+			try { await journal.syncActivity({ scope, currentScope: () => scope }).append({ id: 'fixture-completed-check',
+				startedAt: endedAt - 1000, endedAt, lastActivityAt: endedAt, status: 'complete', sentBytes: 2040, receivedBytes: null }); }
+			finally { journal.close(); }
+		}
+	});
+}
+const initialRootData = { user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' };
 const router = createMemoryRouter([
-	{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }), element: <Fixture /> }
-]);
+	{ id: 'root', path: '/', loader: () => initialRootData, element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }
+], { hydrationData: { loaderData: { root: initialRootData } } });
+if (coldActiveQA) {
+	// The native runner is already busy before a fresh renderer paints. Keep its
+	// synthetic task alive so the folder list must load without waiting for idle.
+	void nativeSyncTasks.start({ origin: canonicalOrigin, dataPlane: 'home', ownerId, deviceId,
+		rootId: '11111111-1111-4111-8111-111111111111' }, signal => new Promise<void>(resolve =>
+		signal.addEventListener('abort', () => resolve(), { once: true })));
+}
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

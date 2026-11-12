@@ -9,8 +9,11 @@ const hasStoredContentIdentity = (source: import('./reconcile').SyncEntry): bool
 	!!source.fingerprint || (source.kind === 'file' && source.size === 0 && source.sha256 === EMPTY_CONTENT_SHA256);
 
 /** Queue metadata only. File bytes remain attachments; history stays in Timeline. */
-export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string };
+export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string; guardDestination?: true };
 export type CloudSyncRun = SyncRun & { cloudWrites: CloudWrite[] };
+/** An early positive stream hint can precede its parent. A sealed inventory
+ * still treats this as an error unless the parent is prepared in that run. */
+export class CloudParentMissing extends Error {}
 export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	const row = structuredClone(value);
 	validateSyncScope(row.scope);
@@ -20,6 +23,8 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	if (row.scope.dataPlane !== 'home') throw Error('Cloud file sync requires the home data plane.');
 	const op = row.operation,
 		m = op?.mutation;
+	if (row.guardDestination !== undefined && (row.guardDestination !== true || !row.cloudRootId || !row.folderId || m?.kind !== 'copy' || m.from !== 'local'))
+		throw Error('An exact cloud destination is required.');
 	if (m?.kind === 'trash' && m.side === 'local') {
 		if (!row.cloudRootId || row.before !== null || row.folderId !== null)
 			throw Error('Local Trash requires a pinned cloud root and observed path absence.');
@@ -72,7 +77,8 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 		folderId: row.folderId,
 		attachmentId: 'pending',
 		contentVersion: '0'.repeat(64),
-		trashed: m.kind === 'trash'
+		trashed: m.kind === 'trash',
+		...((m.kind === 'copy' ? m.source.symbolicLink : row.before?.symbolicLink) ? { symbolicLink: m.kind === 'copy' ? m.source.symbolicLink : row.before!.symbolicLink } : {})
 	});
 	return row;
 }
@@ -107,9 +113,11 @@ export function cloudWriteCommit(write: CloudWrite, content: CloudFile['content'
 		expectedRevision: write.before?.revision ?? null,
 		name: m.path.split('/').at(-1),
 		folderId: write.folderId,
+		...(write.guardDestination ? { syncDestination: { rootId: write.cloudRootId!, path: m.path } } : {}),
 		attachmentId: content.attachmentId,
 		contentVersion: content.version,
-		trashed: m.kind === 'trash'
+		trashed: m.kind === 'trash',
+		...((m.kind === 'copy' ? m.source.symbolicLink : write.before?.symbolicLink) ? { symbolicLink: m.kind === 'copy' ? m.source.symbolicLink : write.before!.symbolicLink } : {})
 	});
 }
 
@@ -128,7 +136,7 @@ export function prepareCloudInventoryWrite(operation: SyncOperation, scope: Sync
 		if (before) throw Error('A local Trash path is still present in the cloud inventory.');
 		return parseCloudWrite({ operation, scope, folderId: null, before: null, cloudRootId: rootId });
 	}
-	if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
+	if (!folderId) throw new CloudParentMissing('A cloud parent is missing from the complete inventory and prepared run.');
 	if (before && (before.kind === 'file' ? before.file.folderId : before.folderId) !== folderId) throw Error('Cloud inventory parent changed.');
 	if (m.kind === 'copy' && m.from === 'remote') {
 		if (!before || before.kind !== m.source.kind) throw Error('Cloud download source is missing from the complete inventory.');

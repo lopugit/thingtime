@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -13,7 +14,7 @@ if (!process.env.TT_SPEED_WORKER) {
 	const dir = await mkdtemp(join(tmpdir(), 'thingtime-speed-qa-')), req = createRequire(root + '/remix/package.json');
 	try {
 		await createRequire(req.resolve('tsx/package.json'))('esbuild').build({ entryPoints: [join(root, 'remix/scripts/editable-transfer-speed.browser.tsx')], bundle: true, format: 'esm', platform: 'browser',
-			tsconfig: join(root, 'remix/tsconfig.json'), outfile: join(dir, 'fixture.js'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.png': 'dataurl', '.svg': 'dataurl' }, logLevel: 'error' });
+			tsconfig: join(root, 'remix/tsconfig.json'), outfile: join(dir, 'fixture.js'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.png': 'dataurl', '.svg': 'dataurl', '.wasm': 'file' }, logLevel: 'error' });
 		const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: dir, TT_SPEED_WORKER: dir, TT_SPEED_EVIDENCE: evidence,
 			...(process.env.TT_PLAYWRIGHT_MODULE ? { TT_PLAYWRIGHT_MODULE: process.env.TT_PLAYWRIGHT_MODULE } : {}) };
 		await verifyAccountBackupIsolation(port, env);
@@ -49,6 +50,7 @@ if (!process.env.TT_SPEED_WORKER) {
                 await priority.screenshot({ path: join(evidence, `${name}-priority-${state}.png`) });
             }
         }
+        await enableCurrentPageBuilder(page);
         await priority.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await priority.locator('[data-block-id="sync-priority-readiness-title"]').click();
         for (const [field, text] of [['title', 'My priority readiness'], ['gate', 'Trusted gate: {sync.priorityGate}'],
@@ -88,11 +90,13 @@ if (!process.env.TT_SPEED_WORKER) {
 		await host.getByRole('button', { name: 'Save trackers', exact: true }).click();
         await host.getByRole('button', { name: 'Saving trackers…', exact: true }).waitFor();
         assert.ok(await host.getByRole('button', { name: 'Add tracker', exact: true }).isDisabled());
-        assert.ok(await host.getByRole('button', { name: 'Edit layout', exact: true }).isDisabled());
+        assert.equal(await host.getByRole('button', { name: 'Edit layout', exact: true }).count(), 0, 'Tracker settings work in view mode');
         assert.ok(await cards.nth(0).getByRole('button', { name: 'Apply tracker', exact: true }).isDisabled());
-		await host.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+		await host.getByRole('button', { name: 'Saving trackers…', exact: true }).waitFor({ state: 'detached' });
+		assert.equal(await host.getByText('Unsaved tracker settings.', { exact: false }).count(), 0);
 		await page.reload(); await host.getByText('Upload: 3 INodes/ps', { exact: true }).waitFor();
 		assert.equal(await cards.count(), 2);
+		await enableCurrentPageBuilder(page);
 		await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await host.locator('[data-block-id="tracker-default-upload"]').click();
 		for (const [id, text] of [['tracker-default-title', 'My editable tracker'], ['tracker-default-upload', 'Sent: {speed.readings.tracker-default.upload}'], ['tracker-default-download', 'Received: {speed.readings.tracker-default.download}'], ['tracker-default-window-label', 'Custom window'], ['tracker-default-apply', 'Apply custom tracker']]) {
@@ -111,7 +115,8 @@ if (!process.env.TT_SPEED_WORKER) {
 		await cards.nth(1).getByRole('button', { name: 'Remove tracker', exact: true }).click();
 		assert.equal(await cards.count(), 1);
 		await host.getByRole('button', { name: 'Save trackers', exact: true }).click();
-		await host.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+		await host.getByRole('button', { name: 'Saving trackers…', exact: true }).waitFor();
+		await host.getByRole('button', { name: 'Saving trackers…', exact: true }).waitFor({ state: 'detached' });
 		await page.reload(); await host.getByText('Sent: 3 INodes/ps', { exact: true }).waitFor();
 		assert.equal(await cards.count(), 1);
 		for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {

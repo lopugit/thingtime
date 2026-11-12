@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Thingtime",
-  "description": "Opt in to use your Thingtime vault for website passkeys.",
-  "version": "0.2.1",
+  "description": "Your Thingtime password workspace, explicit site autofill and passkeys.",
+  "version": "0.5.1",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage",
@@ -46,7 +46,9 @@
         "http://127.0.0.1/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "content-accounts.js",
+        "content-vault.js"
       ],
       "run_at": "document_start",
       "world": "ISOLATED"
@@ -61,5 +63,17 @@
     "32": "thingtime-icon-32.png",
     "48": "thingtime-icon-48.png",
     "128": "thingtime-icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "thingtime-icon-32.png"
+      ],
+      "matches": [
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ]
+    }
+  ]
 }

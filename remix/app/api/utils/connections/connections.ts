@@ -1,7 +1,14 @@
-import type { Binary } from 'mongodb';
+import { googleServiceOperation } from '../../../connections/googleServiceActions';
+import { googleServiceRequest, redactServiceResult } from './googleServiceRequests';
+import { oauthGrantMatches } from './oauthConfig';
+import { NAMED_CONNECTION_KIND, prepareNamedIntent, saveNamedConnection } from './namedConnections';
+import { namedAccess, namedOperationsFor, verifiedNamedScope, type NamedOperation } from '../../../connections/namedAccess';
+import { getDeploymentDataEnvironment } from '../deployment/dataEnvironment';
 
+import { randomUUID } from 'node:crypto';
 import { fromBin, toBin } from '../auth/users';
-import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
+import { packConnectionTokens, unpackConnectionTokens, hasConnectionTokenEnvelope, connectionVaultConfigured } from './tokenVault';
+import { getHomeThingsCollection, getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
   chronoCursorClause,
   parseChronoCursor,
@@ -11,9 +18,11 @@ import {
   type PublicPost
 } from '../things/things';
 import {
+  authedJson,
   connectionProviderById,
   oauthCredsFor,
   publicProviders,
+  readConnectionGoogleUserInfo,
   resolveYoutubeChannelQuery,
   sanitizeChannelList,
   webLink,
@@ -32,10 +41,10 @@ import { ACL_ALL, ACL_EXT_SOURCED, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from 
 
 // Third-party app connections (FUNDAMENTALS.md §3). Three protected kinds:
 //
-//   • `external-account` — ONE thing per (provider, external identity), shared
-//     by every Thingtime account that links it (deterministic shareId). Profile
-//     metadata lives in crystal; future OAuth tokens live in the root `secure`
-//     BinData blob, never crystal. HOME-pinned: a custom data-plane endpoint
+//   • `external-account` — public sources share a deterministic identity;
+//     authenticated identities are additionally scoped to their Thingtime owner.
+//     Profile metadata lives in crystal; credentials are AES-GCM encrypted in
+//     the root `secure` BinData blob, never crystal. HOME-pinned: a custom data-plane endpoint
 //     can never capture identities or credentials.
 //   • `external-account-link` — the many-to-many join: this Thingtime user ↔
 //     that external account. ownerId = the linking user. HOME-pinned.
@@ -64,20 +73,14 @@ export const EXTERNAL_LINK_KIND = 'external-account-link';
 export const EXTERNAL_POST_KIND = 'external-post';
 export const EXTERNAL_POST_SOURCE_KIND = 'external-post-source';
 
-const MAX_LINKS_PER_USER = 50;
-// Soft product limit on how many Thingtime accounts may share one external
-// identity. Since membership went relational (external-post-source rows), it
-// is no longer a structural safety rail — nothing on the post doc grows with
-// linkers any more — just a sane cap on credential sharing.
-const MAX_LINKS_PER_ACCOUNT = 100;
 // don't hammer providers: a per-account fetch at most once per window; reads
 // inside the window serve the already-synced posts
 const SYNC_COOLDOWN_MS = 60_000;
 const DEFAULT_FEED_PAGE = 20;
 const MAX_FEED_PAGE = 50;
 
-export const externalAccountShareId = (provider: string, providerAccountId: string): string =>
-  `ext-account-${sha48([provider, providerAccountId])}`;
+export const externalAccountShareId = (provider: string, providerAccountId: string, ownerId?: string): string =>
+  `ext-account-${sha48(ownerId ? [provider, providerAccountId, ownerId] : [provider, providerAccountId])}`;
 
 export const externalLinkShareId = (userId: string, accountShareId: string): string =>
   `ext-link-${sha48([userId, accountShareId])}`;
@@ -102,29 +105,6 @@ const postNamespaceOf = (provider: ConnectionProvider): string => provider.postN
 
 type SessionUser = { id: string; username: string };
 
-// --- secure token blob ------------------------------------------------------
-// OAuth token responses live under the account's root `secure` field as ONE
-// BinData blob (users.ts precedent: the $** wildcard text index tokenizes
-// string fields only, so a binary blob is entirely unsearchable). Never in
-// crystal, never projected, never sent to a client. Last connector wins —
-// several Thingtime users linking the same external account share its
-// freshest credentials, exactly like the shared profile crystal.
-type ConnectionSecurePayload = { tokens?: OAuthTokens | null };
-
-// shared builder from auth/users.ts — nothing hand-rolls the binary encoding
-const packConnectionSecure = (payload: ConnectionSecurePayload): Binary => toBin(JSON.stringify(payload));
-
-const unpackConnectionSecure = (value: unknown): ConnectionSecurePayload => {
-  const raw = fromBin(value as any);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as ConnectionSecurePayload) : {};
-  } catch {
-    return {};
-  }
-};
-
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 // --- projections ------------------------------------------------------------
@@ -136,6 +116,12 @@ export type PublicConnection = {
   providerIcon: string;
   contentVisibility: 'public' | 'personal';
   auth: 'none' | 'oauth2' | 'credential';
+  accountOnly: boolean;
+  credentialStatus: 'connected' | 'reconnect' | 'public';
+  scopes: string[];
+  authorization?: { requestedScopes: string[] | null; grantedScopes: string[] | null };
+  named?: { name: string; requestedScopes: string[]; grantedScopes: string[] | null; allowedOperations: NamedOperation[] };
+  expiresAt: string | null;
   account: {
     id: string;
     handle: string;
@@ -150,33 +136,56 @@ export type PublicConnection = {
   createdAt: string | null;
 };
 
-const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionProvider | null): PublicConnection => ({
+export const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionProvider | null): PublicConnection => {
+  const named = linkDoc?.thingtime?.includes(NAMED_CONNECTION_KIND);
+  const grant = named ? linkDoc : accountDoc;
+  return {
   id: String(linkDoc?.shareId || ''),
   provider: String(linkDoc?.crystal?.provider || ''),
   providerName: provider?.name || String(linkDoc?.crystal?.provider || ''),
   providerIcon: provider?.icon || '🔌',
   contentVisibility: provider?.contentVisibility === 'personal' ? 'personal' : 'public',
   auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
+  accountOnly: provider?.accountOnly === true,
+  credentialStatus: !provider || provider.auth === 'none' ? 'public' : grant?.ownerId === linkDoc?.ownerId && hasConnectionTokenEnvelope(grant) ? 'connected' : 'reconnect',
+  scopes: ['facebook', 'facebook-account'].includes(provider?.id || '')
+    ? (Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : [])
+    : Array.isArray(grant?.crystal?.scopes) ? grant.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
+  ...(['facebook', 'facebook-account'].includes(provider?.id || '') ? { authorization: {
+    requestedScopes: Array.isArray(grant?.crystal?.requestedScopes) ? grant.crystal.requestedScopes : null,
+    grantedScopes: Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : null
+  } } : {}),
+  ...(named ? { named: {
+    name: String(linkDoc.crystal?.name || ''),
+    requestedScopes: Array.isArray(linkDoc.crystal?.requestedScopes) ? linkDoc.crystal.requestedScopes : [],
+    grantedScopes: Array.isArray(linkDoc.crystal?.grantedScopes) ? linkDoc.crystal.grantedScopes : null,
+    allowedOperations: Array.isArray(linkDoc.crystal?.allowedOperations)
+      ? linkDoc.crystal.allowedOperations.filter((value: NamedOperation) => namedOperationsFor(provider?.id || '').includes(value)) : []
+  } } : {}),
+  expiresAt: typeof grant?.crystal?.expiresAt === 'string' ? grant.crystal.expiresAt : null,
   account: {
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
-    handle: String(accountDoc?.crystal?.handle || ''),
-    displayName: String(accountDoc?.crystal?.displayName || ''),
+    // A canonical account may carry metadata discovered by a different grant.
+    // Named consumers can retrieve provider fields only via their own operation.
+    handle: named ? '' : String(accountDoc?.crystal?.handle || ''),
+    displayName: named ? '' : String(accountDoc?.crystal?.displayName || ''),
     // Scheme-checked on the way out, exactly like the synced-post author links
     // above (and toPublicPosts' safeExternalLink): an account's crystal carries
     // provider-supplied values — RSS takes `profileUrl` straight from a feed's
     // <link href>, and that feed is any URL a user named — so a bare typeof
     // check would let a hostile source park a `javascript:` target in a field
     // the UI is free to render as an <a href>/<img src> later.
-    avatarUrl: webLink(accountDoc?.crystal?.avatarUrl),
-    profileUrl: webLink(accountDoc?.crystal?.profileUrl)
+    avatarUrl: named ? null : webLink(accountDoc?.crystal?.avatarUrl),
+    profileUrl: named ? null : webLink(accountDoc?.crystal?.profileUrl)
   },
   ...(provider?.id === 'youtube' ? { channels: sanitizeChannelList(accountDoc?.crystal?.config?.channels) } : {}),
   lastSyncedAt: accountDoc?.crystal?.lastSyncedAt instanceof Date ? accountDoc.crystal.lastSyncedAt.toISOString() : null,
   lastSyncError: typeof accountDoc?.crystal?.lastSyncError === 'string' && accountDoc.crystal.lastSyncError ? accountDoc.crystal.lastSyncError : null,
   createdAt: linkDoc?.createdAt instanceof Date ? linkDoc.createdAt.toISOString() : null
-});
+  };
+};
 
-export const listProviders = () => publicProviders();
+export const listProviders = (origin?: string) => publicProviders(origin);
 
 // --- connect / list / unlink ------------------------------------------------
 
@@ -190,125 +199,141 @@ export const upsertAccountAndLink = async (
   tokens?: OAuthTokens | null
 ): Promise<{ ok: true; connection: PublicConnection; alreadyLinked: boolean } | Fail> => {
   const home = await getHomeThingsCollection();
-  const accountShareId = externalAccountShareId(provider.id, account.providerAccountId);
-  const linkId = externalLinkShareId(user.id, accountShareId);
+  const persist = () =>
+    withHomeMongoTransaction(async (session) => {
+      const privateAccount = provider.auth !== 'none';
+      if (privateAccount && (!(tokens?.accessToken || (provider.id === 'chatgpt' && tokens?.idToken)) || !connectionVaultConfigured()))
+        return fail(503, 'Secure account storage is unavailable.');
+      const accountShareId = externalAccountShareId(provider.id, account.providerAccountId, privateAccount ? user.id : undefined);
+      const newLinkId = externalLinkShareId(user.id, accountShareId);
+      // Keep legacy connection IDs usable while moving only this owner's link to a private account.
+      const legacyLink = privateAccount
+        ? await home.findOne(
+            {
+              shareId: externalLinkShareId(user.id, externalAccountShareId(provider.id, account.providerAccountId)),
+              thingtime: EXTERNAL_LINK_KIND,
+              ownerId: user.id
+            },
+            { session }
+          )
+        : null;
+      const linkId = legacyLink?.shareId || newLinkId;
 
-  // idempotent reconnects (incl. SSO token reseals) must never trip the caps —
-  // only creating a NEW link counts against them
-  const existingLink = await home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND }, { projection: { _id: 1 } });
-  if (!existingLink) {
-    const [userLinks, accountLinks] = await Promise.all([
-      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id }),
-      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountShareId })
-    ]);
-    if (userLinks >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
-    if (accountLinks >= MAX_LINKS_PER_ACCOUNT) {
-      return fail(400, `That external account is already linked by ${MAX_LINKS_PER_ACCOUNT} Thingtime accounts — its limit is reached`);
-    }
-  }
-
-  // server-side-mutable config (the virtual channel list) merges on reconnect
-  // instead of being replaced, so re-connecting can never wipe managed state
-  const existingAccount: any = provider.mergeConfig
-    ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND }, { projection: { 'crystal.config': 1 } })
-    : null;
-  const config =
-    provider.mergeConfig && existingAccount?.crystal?.config
-      ? provider.mergeConfig(existingAccount.crystal.config, account.config)
-      : account.config;
-  // display fields derive from the MERGED state, not the fresh resolve
-  let handle = account.handle;
-  let avatarUrl = account.avatarUrl;
-  if (provider.id === 'youtube') {
-    const channels = sanitizeChannelList(config.channels);
-    handle = `${channels.length} channel${channels.length === 1 ? '' : 's'}`;
-    avatarUrl = channels[0]?.thumbnail || null;
-  }
-
-  const now = new Date();
-  // account first (shared across all linking users — refresh the public
-  // profile crystal and, for SSO, the sealed tokens on every connect;
-  // identity only on insert)
-  await home.updateOne(
-    { shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND },
-    {
-      $set: {
-        'crystal.displayName': account.displayName,
-        'crystal.handle': handle,
-        'crystal.avatarUrl': avatarUrl,
-        'crystal.profileUrl': account.profileUrl,
-        'crystal.config': config,
-        // a fresh sign-in clears any stale reconnect-needed state
-        ...(tokens ? { secure: packConnectionSecure({ tokens }), 'crystal.lastSyncError': null } : {}),
-        updatedAt: now
-      },
-      $setOnInsert: {
-        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-        shareId: accountShareId,
-        thingtime: [EXTERNAL_ACCOUNT_KIND],
-        'crystal.provider': provider.id,
-        'crystal.providerAccountId': account.providerAccountId,
-        ownerId: 'system',
-        acl: [],
-        storageClass: 'control',
-        targetId: null,
-        tags: [],
-        createdAt: now
+      // server-side-mutable config (the virtual channel list) merges on reconnect
+      // instead of being replaced, so re-connecting can never wipe managed state
+      const existingAccount: any = provider.mergeConfig
+        ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND }, { session, projection: { 'crystal.config': 1 } })
+        : null;
+      const config =
+        provider.mergeConfig && existingAccount?.crystal?.config
+          ? provider.mergeConfig(existingAccount.crystal.config, account.config)
+          : account.config;
+      // display fields derive from the MERGED state, not the fresh resolve
+      let handle = account.handle;
+      let avatarUrl = account.avatarUrl;
+      if (provider.id === 'youtube') {
+        const channels = sanitizeChannelList(config.channels);
+        handle = `${channels.length} channel${channels.length === 1 ? '' : 's'}`;
+        avatarUrl = channels[0]?.thumbnail || null;
       }
-    },
-    { upsert: true }
-  );
 
-  let alreadyLinked = true;
-  try {
-    const linked = await home.updateOne(
-      { shareId: linkId, thingtime: EXTERNAL_LINK_KIND },
-      {
-        // the linked ACCOUNT as the relational parent, so "who links this
-        // account" is a root-field compare on the (thingtime, createdAt,
-        // shareId) index's kind-bounded scan rather than a crystal reach —
-        // see the connections note in createThingsDataIndexes for why the
-        // (thingtime, parentId, …) prefix is deliberately NOT revived.
-        // $set (not $setOnInsert) heals
-        // links written by an earlier build; upsertedCount still reports
-        // whether THIS call created the link.
-        $set: { parentId: accountShareId },
-        $setOnInsert: {
-          schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-          shareId: linkId,
-          thingtime: [EXTERNAL_LINK_KIND],
-          crystal: {
-            provider: provider.id,
-            accountId: accountShareId,
-            userId: user.id,
-            username: user.username
+      const previous = tokens
+        ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND, ownerId: user.id }, { session })
+        : null;
+      const previousTokens = previous ? await unpackConnectionTokens(previous) : null;
+      const sameGrant = !provider.oauth || Boolean(tokens?.oauthBinding && tokens.oauthBinding === previousTokens?.oauthBinding);
+      const savedTokens = tokens ? { ...tokens, refreshToken: tokens.refreshToken || (sameGrant ? previousTokens?.refreshToken : null) || null } : null;
+      const now = new Date();
+      // Account and link commit together, serialized against disconnect. Public
+      // identities can be shared; authenticated identities are owner-private.
+      await home.updateOne(
+        { shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND },
+        {
+          $set: {
+            'crystal.displayName': account.displayName,
+            'crystal.handle': handle,
+            'crystal.avatarUrl': avatarUrl,
+            'crystal.profileUrl': account.profileUrl,
+            'crystal.config': config,
+            // a fresh sign-in clears any stale reconnect-needed state
+            ...(savedTokens
+              ? {
+                  secure: await packConnectionTokens(user.id, accountShareId, savedTokens),
+                  'crystal.scopes': savedTokens.scopes || [],
+                  'crystal.requestedScopes': savedTokens.requestedScopes ?? null,
+                  'crystal.grantedScopes': savedTokens.confirmedScopes ?? null,
+                  'crystal.expiresAt': savedTokens.expiresAt || null,
+                  'crystal.lastSyncError': null
+                }
+              : {}),
+            updatedAt: now
           },
-          ownerId: user.id,
-          acl: [ACL_OWNER],
-          storageClass: 'control',
-          targetId: null,
-          tags: [],
-          createdAt: now,
-          updatedAt: now
-        }
-      },
-      { upsert: true }
-    );
-    alreadyLinked = linked.upsertedCount === 0;
-  } catch (err: any) {
-    if (err?.code !== 11000) throw err; // lost the upsert race — link exists
-  }
+          $setOnInsert: {
+            schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+            shareId: accountShareId,
+            thingtime: [EXTERNAL_ACCOUNT_KIND],
+            'crystal.provider': provider.id,
+            'crystal.providerAccountId': account.providerAccountId,
+            ownerId: privateAccount ? user.id : 'system',
+            acl: [],
+            storageClass: 'control',
+            targetId: null,
+            tags: [],
+            createdAt: now
+          }
+        },
+        { upsert: true, session }
+      );
 
-  const [linkDoc, accountDoc] = await Promise.all([
-    home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND }),
-    home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND })
-  ]);
-  return { ok: true, connection: toPublicConnection(linkDoc, accountDoc, provider), alreadyLinked };
+      const linked = await home.updateOne(
+        { shareId: linkId, thingtime: EXTERNAL_LINK_KIND },
+        {
+          // the linked ACCOUNT as the relational parent, so "who links this
+          // account" is a root-field compare on the (thingtime, createdAt,
+          // shareId) index's kind-bounded scan rather than a crystal reach —
+          // see the connections note in createThingsDataIndexes for why the
+          // (thingtime, parentId, …) prefix is deliberately NOT revived.
+          // $set (not $setOnInsert) heals
+          // links written by an earlier build; upsertedCount still reports
+          // whether THIS call created the link.
+          $set: { parentId: accountShareId, 'crystal.accountId': accountShareId },
+          $setOnInsert: {
+            schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+            shareId: linkId,
+            thingtime: [EXTERNAL_LINK_KIND],
+            'crystal.provider': provider.id,
+            'crystal.userId': user.id,
+            'crystal.username': user.username,
+            ownerId: user.id,
+            acl: [ACL_OWNER],
+            storageClass: 'control',
+            targetId: null,
+            tags: [],
+            createdAt: now,
+            updatedAt: now
+          }
+        },
+        { upsert: true, session }
+      );
+      const alreadyLinked = linked.upsertedCount === 0;
+
+      const linkDoc = await home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND }, { session });
+      const accountDoc = await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND }, { session });
+      return { ok: true as const, connection: toPublicConnection(linkDoc, accountDoc, provider), alreadyLinked };
+    });
+  try {
+    return await persist();
+  } catch (error: any) {
+    // A concurrent first insert can abort with duplicate-key instead of a
+    // transient label. Retry the entire transaction, never the aborted session.
+    if (error?.code !== 11000) throw error;
+    return persist();
+  }
 };
 
 export const connectProvider = async (
   user: SessionUser,
-  input: { provider?: unknown; fields?: unknown }
+  input: { provider?: unknown; fields?: unknown; named?: unknown; origin?: string }
 ): Promise<{ ok: true; connection: PublicConnection; alreadyLinked: boolean } | Fail> => {
   const provider = connectionProviderById(input.provider);
   if (!provider) return fail(400, 'Unknown provider');
@@ -317,8 +342,13 @@ export const connectProvider = async (
   if (provider.oauth) {
     return fail(400, `${provider.name} links through its own sign-in — use POST /api/v1/connections/oauth/begin`);
   }
-  if (!provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
+  if (provider.auth !== 'none' && !connectionVaultConfigured()) return fail(503, 'Secure account storage is unavailable.');
+  if (!await provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
 
+  const environment = input.named !== undefined ? getDeploymentDataEnvironment() : null;
+  const prepared = input.named !== undefined && input.origin && environment ? await prepareNamedIntent(user, provider, input.named, input.origin) : null;
+  if (prepared?.ok === false) return prepared;
+  if (input.named !== undefined && !prepared) return fail(503, 'This connection origin is unavailable.');
   const rawFields = input.fields && typeof input.fields === 'object' && !Array.isArray(input.fields) ? (input.fields as Record<string, unknown>) : {};
   const fields: Record<string, string> = {};
   for (const field of provider.fields) {
@@ -332,12 +362,14 @@ export const connectProvider = async (
   if (resolved.ok === false) return resolved;
   // credential providers exchange the typed secret for session tokens —
   // sealed into the secure blob exactly like an OAuth token response
+  if (prepared?.ok && environment && input.origin) return saveNamedConnection(user, provider, resolved.account, resolved.account.tokens || null,
+    prepared.intent, [], input.origin, environment.id);
   return upsertAccountAndLink(user, provider, resolved.account, resolved.account.tokens || null);
 };
 
-const linksWithAccounts = async (userId: string, linkId?: string | null) => {
+const linksWithAccounts = async (userId: string, linkId?: string | null, includeNamed = false) => {
   const home = await getHomeThingsCollection();
-  const linkMatch: Record<string, any> = { thingtime: EXTERNAL_LINK_KIND, ownerId: userId };
+  const linkMatch: Record<string, any> = { thingtime: includeNamed ? { $in: [EXTERNAL_LINK_KIND, NAMED_CONNECTION_KIND] } : EXTERNAL_LINK_KIND, ownerId: userId };
   if (linkId) linkMatch.shareId = linkId;
   const links = await home.find(linkMatch).sort({ createdAt: 1 }).toArray();
   const accountIds = [...new Set(links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean))];
@@ -348,63 +380,61 @@ const linksWithAccounts = async (userId: string, linkId?: string | null) => {
   return links.map((link: any) => ({ link, account: accountsById.get(String(link?.crystal?.accountId || '')) || null }));
 };
 
-export const listConnections = async (user: SessionUser): Promise<{ ok: true; connections: PublicConnection[] }> => {
-  const pairs = await linksWithAccounts(user.id);
+export const listConnections = async (user: SessionUser, origin?: string, includeServiceOperations = false): Promise<{ ok: true; connections: PublicConnection[] }> => {
+  const environment = origin ? getDeploymentDataEnvironment() : null;
+  const pairs = await linksWithAccounts(user.id, null, !!environment);
   return {
     ok: true,
-    connections: pairs.map(({ link, account }) =>
-      toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider))
-    )
+    connections: pairs.filter(({ link }) => !link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
+      (link.crystal?.origin === origin && link.crystal?.environment === environment?.id))
+      .map(({ link, account }) => {
+        const result = toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider));
+        // Original named clients index operation labels exhaustively. They
+        // must never receive new enum members unless explicitly negotiated.
+        if (result.named && !includeServiceOperations) result.named.allowedOperations = result.named.allowedOperations.filter(operation =>
+          ['account.identity', 'google.profile', 'google.email'].includes(operation));
+        return result;
+      })
   };
 };
 
 export const unlinkConnection = async (
   user: SessionUser,
-  input: { id?: unknown }
+  input: { id?: unknown; origin?: string }
 ): Promise<{ ok: true; removed: boolean } | Fail> => {
   const linkId = typeof input.id === 'string' ? input.id.trim() : '';
   if (!linkId) return fail(400, 'id (the connection id) is required');
   const home = await getHomeThingsCollection();
-  const link: any = await home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
-  if (!link) return fail(404, 'Connection not found');
-  await home.deleteOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
-  const accountId = String(link?.crystal?.accountId || '');
-  if (accountId) {
-    // The LINK is the authorization: tt:extsourced resolves the viewer's
-    // links → their accounts → external-post-source rows, live, at every read.
-    // Deleting the link above already revoked this member's access to the
-    // account's personal posts, with no grant sweep to run. The membership
-    // rows stay — they describe the ACCOUNT's relationship to the posts, not
-    // this user's, and another linked user may still hold that account.
-    // Last link gone → retire the shared account thing (and any credentials
-    // in its secure blob); synced external posts stay — they are inert
-    // public/audience content other users' comments may hang off.
-    const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountId });
-    // `parentId` is the indexed denormalization of crystal.accountId, and it is
-    // healed on connect ($set above) rather than backfilled — so a link written
-    // by an earlier build carries the crystal field but no parentId until its
-    // owner happens to reconnect. Everywhere else that costs a stale count;
-    // HERE it would read "nobody else links this account" and take the
-    // destructive branch, deleting a live account thing (with its sealed
-    // credentials) and every membership row behind another user's feed. One
-    // confirming count on the authoritative field, only ever on the
-    // already-rare last-unlink path, keeps the irreversible step fail-closed.
-    const confirmed =
-      remaining === 0
-        ? await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId })
-        : remaining;
-    if (confirmed === 0) {
-      await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
-      // The account is gone, so no viewer can ever match its membership rows
-      // again — drain them rather than leaving dead index entries that every
-      // feed read still has to skip past. The POSTS survive (other sources
-      // and existing comment threads may reference them); only this account's
-      // claim on them disappears.
-      const things = await getThingsCollection();
-      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, parentId: accountId } as any);
+  const environment = input.origin ? getDeploymentDataEnvironment() : null;
+  return withHomeMongoTransaction(async session => {
+    const identity = { shareId: linkId, ownerId: user.id, $or: [
+      { thingtime: EXTERNAL_LINK_KIND },
+      ...(environment ? [{ thingtime: NAMED_CONNECTION_KIND, 'crystal.origin': input.origin, 'crystal.environment': environment.id }] : [])
+    ] };
+    const link: any = await home.findOne(identity, { session });
+    if (!link) return fail(404, 'Connection not found');
+    await home.deleteOne(identity, { session });
+    const accountId = String(link.crystal?.accountId || '');
+    if (accountId) {
+      const accountLinks = { $or: [{ parentId: accountId }, { 'crystal.accountId': accountId }] };
+      // Serialize retirement with creation and sibling removal on the shared
+      // identity. Snapshot-only link counts could otherwise strand a new grant.
+      await home.updateOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND }, { $inc: { connectionRevision: 1 } }, { session });
+      const legacyRemaining = await home.countDocuments({ ...accountLinks, thingtime: EXTERNAL_LINK_KIND }, { session });
+      if (!legacyRemaining) {
+        const namedRemaining = await home.countDocuments({ ...accountLinks, thingtime: NAMED_CONNECTION_KIND }, { session });
+        if (!namedRemaining) await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND }, { session });
+        else if (link.thingtime.includes(EXTERNAL_LINK_KIND)) {
+          await home.updateOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND, ownerId: user.id },
+            { $unset: { secure: '', credentialRefreshLease: '', 'crystal.scopes': '', 'crystal.expiresAt': '' } }, { session });
+        }
+      }
     }
-  }
-  return { ok: true, removed: true };
+    // Source rows are inert without the link. Keep them with the synced posts:
+    // cross-plane cleanup after commit could erase a concurrent reconnect's
+    // newly synchronized membership. No credential remains in these rows.
+    return { ok: true as const, removed: true };
+  });
 };
 
 // --- feed sync + read -------------------------------------------------------
@@ -633,39 +663,151 @@ export type ConnectionsFeedResult = {
   synced: { connectionId: string; provider: string; fetched: number; skipped: boolean; error: string | null }[];
 };
 
-// Unseal, and when near expiry re-mint, an SSO account's tokens. Refreshed
-// tokens persist back into the secure blob so every linked user benefits.
-const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Promise<OAuthTokens | null> => {
-  if (!provider.oauth && provider.auth !== 'credential') return null;
-  const tokens = unpackConnectionSecure(accountDoc?.secure).tokens || null;
-  if (!tokens?.accessToken) return null;
+// A database lease serializes rotating refresh grants across processes. A CAS
+// alone prevents stale writes but still sends the same single-use token twice.
+const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, ownerId: string, kind = EXTERNAL_ACCOUNT_KIND): Promise<OAuthTokens | null> => {
+  if ((!provider.oauth && provider.auth !== 'credential') || accountDoc?.ownerId !== ownerId) return null;
+  const tokens = await unpackConnectionTokens(accountDoc);
+  if (!tokens || (!tokens.accessToken && !(provider.id === 'chatgpt' && tokens.idToken))) return null;
+  // Background work uses the persisted origin; never guess a selected deployment.
+  const client = provider.oauth ? await oauthCredsFor(provider, tokens.oauthOrigin) : null;
+  if (provider.oauth && (!client || !oauthGrantMatches(tokens, client))) return null;
+  const creds = client || { clientId: '', clientSecret: '' };
+  const currentTokens = async (doc: any) => {
+    if (doc?.ownerId !== ownerId) return null;
+    const next = await unpackConnectionTokens(doc);
+    return next && (!provider.oauth || (client && oauthGrantMatches(next, client))) ? next : null;
+  };
+  // Lazily migrate only this exact legacy grant. A concurrent reconnect or
+  // disconnect wins; never resurrect or use a grant after losing the CAS.
+  if (JSON.parse(fromBin(accountDoc.secure)).version === 1) {
+    const secure = await packConnectionTokens(ownerId, String(accountDoc.shareId), tokens);
+    const migrated = await (await getHomeThingsCollection()).updateOne({ shareId: accountDoc.shareId,
+      thingtime: kind, ownerId, secure: accountDoc.secure }, { $set: { secure } });
+    if (!migrated.matchedCount) return null;
+    accountDoc = { ...accountDoc, secure };
+  }
   const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
-  // an unknown expiry counts as expiring — providers with a refresh grant get
-  // a chance to mint a token whose lifetime we DO know
   const expiring = !Number.isFinite(expiresAt) || expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
   const refreshFn = provider.oauth?.refreshTokens ?? provider.refreshTokens;
   if (!expiring || !refreshFn) return tokens;
-  // credential providers (Bluesky sessions) refresh with the token pair
-  // alone; OAuth refresh grants additionally need the client credentials
-  const creds = provider.oauth ? oauthCredsFor(provider) : { clientId: '', clientSecret: '' };
-  if (!creds) return tokens;
-  const refreshed = await refreshFn(tokens, creds);
-  if (!refreshed) return tokens; // expired + unrefreshable → the fetch's 401 surfaces "reconnect"
   const home = await getHomeThingsCollection();
-  // compare-and-set on the exact blob we read: providers that ROTATE refresh
-  // tokens (TikTok) invalidate the used one, so a lost concurrent-refresh race
-  // must never clobber the winner's fresh rotation with a dead token
-  const result = await home.updateOne(
-    { shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND, secure: accountDoc.secure },
-    { $set: { secure: packConnectionSecure({ tokens: refreshed }), updatedAt: new Date() } }
-  );
-  if (result.matchedCount === 0) {
-    // another refresh won — serve the winner's tokens
-    const current = await home.findOne({ shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND }, { projection: { secure: 1 } });
-    return unpackConnectionSecure(current?.secure).tokens || refreshed;
+  const identity = { shareId: String(accountDoc.shareId), thingtime: kind, ownerId };
+  const lease = randomUUID();
+  const claimed = await home.updateOne({ ...identity, secure: accountDoc.secure,
+    $or: [{ credentialRefreshLease: null }, { 'credentialRefreshLease.expiresAt': { $lte: new Date() } }]
+  }, { $set: { credentialRefreshLease: { id: lease, expiresAt: new Date(Date.now() + 60_000) } } });
+  if (!claimed.matchedCount) {
+    // Another request is refreshing. Still-live credentials can be used; an
+    // expired grant fails closed and the caller may retry after refresh finishes.
+    return currentTokens(await home.findOne(identity));
   }
-  return refreshed;
+  try {
+    const response = await refreshFn(tokens, creds);
+    if (!response) return currentTokens(await home.findOne(identity));
+    const refreshed = { ...tokens, ...response, refreshToken: response.refreshToken || tokens.refreshToken,
+      clientId: tokens.clientId, oauthBinding: tokens.oauthBinding, oauthOrigin: tokens.oauthOrigin, oauthEnvironment: tokens.oauthEnvironment };
+    const result = await home.updateOne({ ...identity, secure: accountDoc.secure, 'credentialRefreshLease.id': lease }, {
+      $set: { secure: await packConnectionTokens(ownerId, identity.shareId, refreshed), ...(kind === NAMED_CONNECTION_KIND ? { 'crystal.grantedScopes': refreshed.confirmedScopes ?? null, 'crystal.credentialVersion': randomUUID() } : { 'crystal.scopes': refreshed.scopes || [] }), 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
+    });
+    // A reconnect or disconnect wins over a refresh started with older credentials.
+    return result.matchedCount ? refreshed : currentTokens(await home.findOne(identity));
+  } finally {
+    await home.updateOne({ ...identity, 'credentialRefreshLease.id': lease }, { $unset: { credentialRefreshLease: '' } });
+  }
 };
+
+export const resolveConnectionCredential = async (user: SessionUser, connectionId: string) => {
+  const [pair] = await linksWithAccounts(user.id, connectionId);
+  if (!pair?.account) return fail(404, 'Connection not found');
+  const provider = connectionProviderById(pair.link.crystal.provider);
+  if (!provider || provider.auth === 'none') return fail(400, 'This connection has no saved authorization.');
+  const tokens = await liveTokensFor(provider, pair.account, user.id);
+  if (!tokens) return fail(401, 'Reconnect this account to authorize it.');
+  if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now()) return fail(401, 'This account authorization expired. Reconnect it.');
+  // An unlink during refresh must not release credentials from a retired account.
+  const home = await getHomeThingsCollection();
+  if (!await home.findOne({ shareId: connectionId, ownerId: user.id, thingtime: EXTERNAL_LINK_KIND, parentId: pair.account.shareId })) return fail(404, 'Connection not found');
+  return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
+};
+
+// Inspection never refreshes, rewrites credentials, syncs content or changes grants.
+export async function diagnoseConnection(user: SessionUser, id: string, origin: string) {
+  if (!id) return fail(400, 'Choose a connection.');
+  const [pair] = await linksWithAccounts(user.id, id, true);
+  if (!pair?.account || pair.account.ownerId !== user.id || pair.link.parentId !== pair.account.shareId)
+    return fail(404, 'Connection not found.');
+  const named = pair.link.thingtime?.includes(NAMED_CONNECTION_KIND);
+  const grant = named ? pair.link : pair.account;
+  const provider = connectionProviderById(pair.link.crystal?.provider);
+  if (!provider?.diagnose || !provider.oauth) return fail(400, 'This provider does not support connection diagnostics.');
+  const tokens = await unpackConnectionTokens(grant);
+  const client = await oauthCredsFor(provider, origin);
+  if (!tokens?.accessToken || !client || !oauthGrantMatches(tokens, client) || tokens.oauthOrigin !== origin ||
+      (named && (grant.crystal?.origin !== origin || grant.crystal?.environment !== client.environment)))
+    return fail(409, 'This authorization does not match the selected origin and environment.');
+  if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now()) return fail(401, 'This account authorization expired. Reconnect it.');
+  const home = await getHomeThingsCollection();
+  const stillCurrent = async () => Boolean(await home.findOne({ shareId: pair.link.shareId, ownerId: user.id,
+    thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_LINK_KIND, parentId: pair.account.shareId }) &&
+    await home.findOne({ shareId: grant.shareId, ownerId: user.id, secure: grant.secure,
+      thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_ACCOUNT_KIND }));
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  // No named content operation is registered today. An identity-only grant
+  // must not borrow broader provider consent or a sibling account's access.
+  const result = await provider.diagnose(tokens, { allowContentProbe: !named && provider.accountOnly !== true });
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  return { ok: true as const, connectionId: id, provider: provider.id, observedAt: new Date().toISOString(), ...result };
+}
+
+export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown; resourceId?: unknown; pageToken?: unknown }, origin: string, signal?: AbortSignal) {
+  const id = typeof input.id === 'string' ? input.id : '';
+  const operation = typeof input.operation === 'string' ? input.operation as NamedOperation : null;
+  if (!id || !operation || !Object.prototype.hasOwnProperty.call(namedAccess, operation)) return fail(400, 'Choose a connection and a supported operation.');
+  const service = googleServiceOperation(operation);
+  const request = service ? googleServiceRequest(service, input) : null;
+  if (request?.ok === false) return request;
+  if (!service && (input.resourceId !== undefined || input.pageToken !== undefined)) return fail(400, 'This operation does not accept service inputs.');
+  signal?.throwIfAborted();
+  const [pair] = await linksWithAccounts(user.id, id, true);
+  const environment = getDeploymentDataEnvironment();
+  if (!pair?.account || pair.account.ownerId !== user.id || !pair.link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
+      pair.link.parentId !== pair.account.shareId || pair.link.crystal?.origin !== origin ||
+      !environment || pair.link.crystal?.environment !== environment.id)
+    return fail(404, 'Connection not found on this origin.');
+  const provider = connectionProviderById(pair.link.crystal.provider);
+  const scope = namedAccess[operation].scope;
+  if (!provider || !namedOperationsFor(provider.id).includes(operation) || !pair.link.crystal.allowedOperations?.includes(operation))
+    return fail(403, 'That operation is not allowed by this connection.');
+  const tokens = await liveTokensFor(provider, pair.link, user.id, NAMED_CONNECTION_KIND);
+  if (!tokens || (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now())) return fail(401, 'Reconnect this account to authorize it.');
+  if (scope && !verifiedNamedScope(tokens.confirmedScopes || [], scope)) return fail(403, 'The provider has not granted this permission.');
+  // Recheck the selected record after refresh. Never substitute a sibling or
+  // an arbitrary endpoint, including when a saved Thing references the ID.
+  const home = await getHomeThingsCollection();
+  const stillAuthorized = () => home.findOne({ shareId: id, ownerId: user.id, thingtime: NAMED_CONNECTION_KIND, parentId: pair.account.shareId,
+    'crystal.origin': origin, 'crystal.environment': environment.id, 'crystal.allowedOperations': operation,
+    'crystal.grantRevision': pair.link.crystal.grantRevision,
+    ...(scope ? { 'crystal.grantedScopes': { $in: [scope, `https://www.googleapis.com/auth/userinfo.${scope}`] } } : {}) });
+  if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+  signal?.throwIfAborted();
+  if (request?.ok) {
+    const response = await authedJson(request.url, { token: tokens.accessToken, completeResponse: true, signal });
+    if (response.ok === false) return response;
+    signal?.throwIfAborted();
+    if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+    return { ok: true as const, result: redactServiceResult(response.data, [tokens.accessToken, tokens.refreshToken, tokens.idToken]) };
+  }
+  if (operation === 'account.identity') return { ok: true as const, result: { provider: provider.id, accountId: pair.account.shareId } };
+  const profile = await readConnectionGoogleUserInfo(tokens);
+  if (profile.ok === false || profile.data?.sub !== pair.account.crystal.providerAccountId)
+    return fail(502, 'Google could not verify the selected account.');
+  if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+  const result = operation === 'google.email'
+    ? { email: typeof profile.data.email === 'string' ? profile.data.email : null }
+    : { name: typeof profile.data.name === 'string' ? profile.data.name : null, picture: webLink(profile.data.picture) };
+  return { ok: true as const, result };
+}
 
 // Reduce a fetched page of membership ROWS to the distinct posts it yields
 // plus the cursor that resumes exactly after the last row consumed. Pure, and
@@ -763,7 +905,12 @@ export const readConnectionsFeed = async (
         synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
         return;
       }
-      const tokens = await liveTokensFor(provider, account);
+      const tokens = await liveTokensFor(provider, account, user.id);
+      if (provider.auth !== 'none' && !tokens) {
+        const error = 'This account needs a reconnect on this Thingtime origin.';
+        synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error });
+        return;
+      }
       const fetched = await provider.fetchFeed(
         { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
         { limit: FEED_FETCH_LIMIT, tokens, pages }

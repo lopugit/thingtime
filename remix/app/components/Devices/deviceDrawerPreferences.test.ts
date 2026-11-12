@@ -14,6 +14,8 @@ test('device drawer preferences collapse every section by default', () => {
 	assert.equal(preferences.version, 2);
 	assert.equal(preferences.drawerWidth, null);
 	assert.deepEqual(preferences.sections, {
+		overview: false,
+		watch: false,
 		node: false,
 		permissions: false,
 		'observed-state': false,
@@ -26,6 +28,7 @@ test('device drawer preferences collapse every section by default', () => {
 		screen: false,
 		files: false,
 		sync: false,
+		location: false,
 		approvals: false,
 		'command-activity': false
 	});

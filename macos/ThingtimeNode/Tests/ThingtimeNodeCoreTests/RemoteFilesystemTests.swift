@@ -5,13 +5,15 @@ import XCTest
 
 final class RemoteFilesystemTests: XCTestCase {
     private var root: URL!
+    private var base: URL!
     override func setUpWithError() throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-files-" + UUID().uuidString)
+        base = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-files-" + UUID().uuidString)
+        root = base.appendingPathComponent("home")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws { try FileManager.default.removeItem(at: base) }
     private func run(_ input: [String: JSONValue]) throws -> [String: JSONValue] {
-        let result = try RemoteFilesystem(root: root).execute(input)
+        let result = try RemoteFilesystem(root: root, transport: NativeRustFixture.transport(directory: base)).execute(input)
         return try XCTUnwrap(result.objectValue?["filesystem"]?.objectValue)
     }
     private func file(_ name: String) throws -> [String: JSONValue] {
@@ -77,6 +79,37 @@ final class RemoteFilesystemTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(old).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(fresh).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(".thingtime-upload-personal").path))
+    }
+    func testRustDirectoryPagesPreserveHiddenFiltersAndInertLinkMetadata() throws {
+        for index in 0..<30 {
+            let name = String(format: "item-%02d", index)
+            try Data().write(to: root.appendingPathComponent(name))
+        }
+        try Data().write(to: root.appendingPathComponent(".hidden"))
+        try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("outside").path, withDestinationPath: "../missing")
+        let page = try run(["op": .string("list"), "path": .string("")])
+        XCTAssertEqual(page["nextCursor"], .number(25))
+        let tail = try run(["op": .string("list"), "path": .string(""), "cursor": .number(25)])
+        XCTAssertEqual(tail["nextCursor"], .null)
+        let rows = try XCTUnwrap(tail["entries"]).decode([[String: JSONValue]].self)
+        XCTAssertEqual(rows.compactMap { $0["name"]?.stringValue }, ["item-25", "item-26", "item-27", "item-28", "item-29", "outside"])
+        XCTAssertEqual(rows.last?["type"], .string("symlink"))
+        let hidden = try run(["op": .string("list"), "path": .string(""), "hidden": .bool(true)])
+        XCTAssertEqual(try hidden["entries"]?.decode([[String: JSONValue]].self).first?["name"], .string(".hidden"))
+    }
+    func testLateOrdinalPageReflectsAnActualDirectoryChange() throws {
+        for i in 0..<1300 {
+            try Data().write(to: root.appendingPathComponent(String(format: "file-%04d", i)))
+        }
+        let query: [String: JSONValue] = ["op": .string("list"), "path": .string(""), "cursor": .number(1024)]
+        func first(_ result: [String: JSONValue]) throws -> String? {
+            try XCTUnwrap(result["entries"]).decode([[String: JSONValue]].self).first?["name"]?.stringValue
+        }
+        let initial = try run(query)
+        XCTAssertEqual(try first(initial), "file-1024")
+        XCTAssertEqual(try run(query), initial)
+        try Data().write(to: root.appendingPathComponent("before-all"))
+        XCTAssertEqual(try first(run(query)), "file-1023")
     }
     func testFilesystemActionsRespectLockAndRemoteApproval() {
         let action = SafeActionRequest(kind: .filesystem, parameters: ["op": .string("list"), "path": .string("")])

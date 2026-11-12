@@ -3,7 +3,8 @@
 On macOS, use the signed native Thingtime Password AutoFill provider first. Chrome
 can use the system provider without this extension. This optional browser adapter
 handles public WebAuthn requests through the existing Thingtime approval page; it
-does not communicate with the native host or fill password forms.
+does not communicate with the native host. Its explicit password-form flow is
+documented below.
 
 Unpacked Manifest V3 Chromium extension. It is **off by default**. Its action popup
 lets the user explicitly enable passkey interception, select their trusted Thingtime
@@ -68,7 +69,15 @@ when disabled, for unsupported request types/options, or after an explicit provi
 choice. Late responses and mismatched provider documents are ignored.
 
 Supported basic registration/assertion options are serialized with BufferSources
-as base64url. Creation supports `credProps: true`. Conditional mediation, other extension inputs (including PRF/largeBlob),
+as base64url. Creation supports `credProps: true`. Adapter 0.5.1 supports assertion `appid`
+only when empty/default or a same-site, credential-free HTTPS URL (using the private/public suffix list) without a
+fragment. It uses WebAuthn's documented same-site browser relaxation of FIDO authorization and preserves the
+normal RP-bound credential and RP hash; `getClientExtensionResults()` and JSON
+return `{appid:false}`. The hosted provider requires both modern and active
+same-origin `api.passwords` 1.9.1 before AppID vault operations. Other sites or
+legacy AppID-bound credentials require the native provider; no AppID URL is fetched.
+This is reusable protocol support, not an AWS-specific credential exception.
+Conditional mediation, other extension inputs (including PRF/largeBlob),
 hints, unsupported algorithms (no ES256 offer), non-none attestation, cross-platform
 authenticator attachment, unknown option fields and mixed credential requests
 delegate to native WebAuthn before opening the provider. Returned credentials
@@ -78,8 +87,9 @@ objects and `instanceof PublicKeyCredential` is not promised. Native authenticat
 hardware/UV/attestation semantics cannot be synthesized by this extension.
 
 Host access to HTTPS websites is required to install the WebAuthn hook there. The
-extension does not scrape forms, autofill passwords, inspect cookies or read vault
-contents. Public challenges, credential IDs and signatures transit memory only.
+WebAuthn path does not inspect form values, cookies or vault contents. Public
+challenges, credential IDs and signatures transit memory only. The separate
+explicit password-form flow below uses its owned authenticated provider page.
 
 ## Provider page contract (version 1)
 
@@ -168,6 +178,7 @@ for Testing binary:
 
 ```sh
 node browser-extension/test/workspace-browser.mjs --playwright /absolute/path/to/playwright/index.mjs
+node browser-extension/test/workspace-browser.mjs --catalog-only --playwright /absolute/path/to/playwright/index.mjs
 ```
 
 This creates and removes its own profile, extension fixture and browser windows;
@@ -178,8 +189,87 @@ text, keyboard navigation and stale website targeting. The fixture imports the p
 Chrome APIs; it does not click the OS toolbar. Installed acceptance must still
 verify the real toolbar event and originating tab. This is UI acceptance, not
 proof of a relying party accepting a passkey.
+Use `--catalog-only` for a headless check of delayed catalogs, cached search,
+pagination, retry and locking, without the native window focus checks.
 
 Chrome's [action documentation](https://developer.chrome.com/docs/extensions/reference/api/action)
 explains why `default_popup` is removed to receive toolbar clicks. Its
 [windows API](https://developer.chrome.com/docs/extensions/reference/api/windows)
 provides popup-window creation/focus/resize using the existing permissions.
+
+## Password workspace, explicit autofill and local QR (0.3)
+
+Saved accounts appear in the workspace Overview, with the saved username/email
+under each title. Matches for the selected website sort first; search covers the
+full catalog and can find other saved accounts. A refresh keeps the same
+account's cards searchable and shows one inline indicator while it runs.
+Account changes, origin changes and locking clear the old account list.
+Autofill stays unavailable for other sites. On-demand vault access opens an
+owned first-party Thingtime popup; credentials are obtained only there through
+the negotiated `api.passwords` 1.6.1 confirmation/fill contract. The extension
+never reads a browser cookie or makes an authenticated cross-origin vault fetch.
+
+On supported top-level login forms, the tree chip appears at the top center and
+inside username/password fields. Click it, choose an account, and complete any
+required Thingtime verification. Only the selected account is filled, with no
+extension-triggered submit. Cross-origin frames and off-origin form actions are
+refused; navigation, retargeting, changed field identities and account changes
+invalidate delivery. Config can disable account chips. Passkey approvals now use
+a dedicated resizable popup with the configured opening size/font; a returned
+request targets its original document/window, never another tab found by URL.
+
+The chooser remains within an active website modal's accessibility/focus scope,
+including transformed or clipped dialogs. Tab stays in the chooser and Escape
+closes it before the website handles its own Escape. If an already-open site
+retains an invalidated extension context after an update, it offers explicit
+**Reload website** guidance rather than a raw runtime error; reloading is never
+automatic and can discard unsaved site edits.
+
+The chooser refreshes the live provider catalog without moving focus if it
+already has a connection. It lists and searches all saved matches for this
+website. A temporary refresh failure keeps the same account's list available
+with a Retry button. Selecting a row takes priority over the background refresh
+and verifies the selected account through the live provider.
+Saved bare Website hosts mean HTTPS. Both extension surfaces use the
+server's exact saved origins, including scheme and port, when available.
+Older hostname-only catalogs suggest HTTPS default-port matches only. The
+server still verifies the exact saved origin with the live account/session and
+required approval. Wildcard or userinfo-bearing values are refused.
+
+The account catalog is allowlisted metadata held in memory while its owned
+provider document is live. Closing/locking that connection clears it. Passwords,
+private keys, account/device proofs, image bytes and decoded TOTP secrets are
+never written to extension storage. Screen QR scanning opens the browser's
+explicit screen/tab chooser and stops capture tracks immediately after taking
+one frame. Upload processing also stays local. A decoded TOTP setup is saved
+only after review in the owned Thingtime page; its optional website is explicit,
+not inferred from whichever tab happened to be selected. FIDO device-pairing QR
+codes are not TOTP secrets and do not perform passkey authentication here.
+
+Build the runnable adapter with `pnpm --dir remix run build:password-extension`
+and extract `remix/public/downloads/thingtime-passwords-extension.zip` before
+Load unpacked. The source folder is build input: `qr.js` is generated into the
+ZIP from the canonical web QR decoder, not maintained as a second decoder or
+checked-in vendor bundle. The permission inventory is unchanged. Browser screen
+sharing consent is requested only by Scan, not at startup.
+
+Run `node --test browser-extension/test/*.test.mjs` for transport/race/packaging
+checks. `test/workspace-browser.mjs --playwright <absolute-playwright-module>
+--provider-ui-origin=http://127.0.0.1:<fixture-port>` exercises the actual adapter,
+component/action path and local image decoding with disposable synthetic data.
+QR PNGs under `test/fixtures/` encode a public RFC 6238 test vector, not a user
+credential. Fixture API responses are not proof of real server authorization,
+OS acceptance or a site's login outcome; those require separate integration and
+installed-release checks.
+
+## Thingtime accounts
+
+Version 0.4 adds automatic discovery of already signed-in accounts on the exact
+Thingtime origin in Config. With no eligible open page, **Sign in** opens an owned
+Thingtime account window; **Add account** and **Switch account** reuse the existing
+first-party account switcher. Switching also changes this browser's Thingtime web
+tabs. **Lock** clears the extension connection without signing your account out. **Unlock** reuses its live session and preserves the configured verification policy.
+No account cookies or session tokens are copied into the extension. See
+[the account bridge contract](../docs/browser-extension-accounts.md).
+
+The hook source is `page-hook-source.ts`; `npm --prefix remix run build:password-extension` bundles the shared PSL-aware validator into `page-hook.js` and packages the archive. Rebuild before running extension tests after source changes. No global validator or additional browser permission is installed.

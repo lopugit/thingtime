@@ -54,6 +54,7 @@ import {
 	sendLopuMessage,
 	setLopuSettings,
   setLopuAiDefaults,
+  setLopuManagementDefault,
 	subscribeLopuStore,
 	takeLopuNavigation,
 	takeLopuNotices,
@@ -166,8 +167,8 @@ export type UseLopuChat = {
 	// id → label / name lookups for status lines
 	modelLabels: Record<string, string>;
 	providerNames: Record<string, string>;
-	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean };
-	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => void;
+	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean };
+	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean }>) => void;
 	contextLabel: string | null;
 	undoPatch: (toolId: string) => boolean;
 	canUndoPatch: (toolId: string) => boolean;
@@ -191,7 +192,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut } = useLopuSettings();
+	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut, setLauncher } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -258,7 +259,10 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
   // Keep the existing execution default for new chats without rewriting an
   // existing conversation. A personal plan is still forced to local execution.
+  // The store keeps the preference so a chat that never stored a placement of
+  // its own still runs where the viewer asked, instead of defaulting to local.
   React.useEffect(() => {
+    setLopuManagementDefault(prefs.management);
     if (!snapshot.activeChatId) setLopuSettings({ management: prefs.management });
   }, [userId, prefs.management, snapshot.activeChatId, snapshot.settings.providerId]);
 
@@ -337,13 +341,14 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const setSettings = React.useCallback((patch: Partial<LopuChatSettings>) => setLopuSettings(patch), []);
 
 	const setPreferences = React.useCallback(
-		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => {
+		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean }>) => {
+			if (typeof patch.launcher === 'boolean') setLauncher(patch.launcher);
 			if (typeof patch.hearMeOut === 'boolean') setHearMeOut(patch.hearMeOut);
 			if (typeof patch.enterSends === 'boolean') setEnterSends(patch.enterSends);
 			if (typeof patch.applyPatches === 'boolean') setApplyPatches(patch.applyPatches);
 			if (typeof patch.confirmDeletes === 'boolean') setConfirmDeletes(patch.confirmDeletes);
 		},
-		[setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut]
+		[setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut, setLauncher]
 	);
 
 	const selectChat = React.useCallback((chatId: string | null) => selectLopuChat(chatId), []);
@@ -385,7 +390,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		setSettings,
 		modelLabels,
 		providerNames,
-		preferences: { applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes, hearMeOut: prefs.hearMeOut },
+		preferences: { launcher: prefs.launcher, applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes, hearMeOut: prefs.hearMeOut },
 		setPreferences,
 		contextLabel,
 		undoPatch: undoLopuPatch,

@@ -37,6 +37,96 @@ the legacy latest-only contract, the client falls back to
 `https://thingtime.com/api/v1/vercel/deployments`; production builds use that
 stable endpoint directly.
 
+## Background device connection activity
+
+After a paired device is verified in the foreground, **Mobile device connection
+activity** also permits a native background presence refresh for that exact
+account and destination. Turning that setting off cancels the native refresh.
+iOS **Settings → General → Background App Refresh** also controls whether the
+system permits refreshes. Logout, account/destination changes and revocation
+invalidate the saved approval; foreground entry requires fresh verification.
+
+The app uses Apple's [BGAppRefreshTask](https://developer.apple.com/documentation/backgroundtasks/bgapprefreshtask)
+with an earliest requested opportunity 15 minutes later. iOS chooses whether
+and when it runs; this is no promised interval and does not keep the app awake
+or continuously online. Force-quitting, device power policy and system settings
+can prevent execution. Apple's [BGContinuedProcessingTask](https://developer.apple.com/documentation/backgroundtasks/bgcontinuedprocessingtask)
+is for finite work begun by the user, and is not used as an always-awake
+heartbeat. Scene [foreground notifications](https://developer.apple.com/documentation/uikit/uiscene/willenterforegroundnotification)
+clear old approval before active web callbacks can establish a new binding.
+
+Background requests negotiate `api.devices-node-state` 1.9.0 and send only the
+existing Keychain device credential to `/api/v1/devices/node/state`. They do not
+read WebView cookies, create a pairing or broaden Keychain accessibility.
+
+## Device location history
+
+Location history is off until the owning device user enables it. The web adapter
+accepts the legacy significant-change status from native `deviceLocationVersion`
+1.1 and the standard-update status from 1.2. Both versions fence authorization
+by owner and origin; launch, status checks and background restoration never
+prompt for permission. **While Using the App** supports a foreground fix.
+**Always** enables standard Core Location updates in the background once
+collection is enabled. The app targets one actual fix per five minutes when
+iOS supplies fixes, independent of the Filesync schedule. It persists the last
+recorded time so restart, retry and cached callbacks do not flood history.
+This setting does not wake iOS on a fixed timer. Core Location and system
+policies determine availability; gaps can occur with poor reception, force
+quit or system suspension. A separate [significant-change
+monitor](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
+supports eligible system relaunches. Standard updates use more battery than
+significant-change monitoring alone. The app preserves the measurement time,
+reported horizontal accuracy and approximate/precise permission status.
+
+Each offline observation is a separate protected local file. Retries keep its
+original ID, timestamp and collection generation. The app negotiates
+`api.devices-node-observations` 1.0.0 and verifies the selected device's enabled
+collection generation before uploading with its existing device credential.
+Account/destination changes, device revocation or a changed/disabled server
+collection stop the old binding. Authentication rechecks preserve the scoped
+opt-in and offline observations while durably withdrawing background authority;
+only verification of the same owner and origin resumes that saved preference.
+An unverified background relaunch cannot upload it. The server retains previously saved history
+according to the owner's retention setting; **Keep indefinitely** retains history until you delete it or choose a finite retention period. This adapter reports the iPhone's
+location only; it does not claim a paired Watch's location.
+
+The device descriptor sends the public `hw.machine` model identifier. It never
+reads or sends a hardware serial number.
+
+## Selected-device alerts and uploaded sounds
+
+The native alert adapter negotiates `api.devices-node-commands` 1.11.0 and the
+independently versioned `api.devices-node-push`, `api.devices-node-media` and
+`api.devices-node-alert-sounds` 1.0.0 contracts. A saved device credential binds
+APNs registration to the exact owning device and selected origin. Notification
+permission is requested only through an explicit **Allow notifications** action.
+Normal Focus, silent-mode and notification settings still apply; provider
+acceptance is not proof that a person saw or heard a notification.
+
+An uploaded sound remains an original attachment. The native `media.prepare`
+command downloads its server-pinned version through the protected media helper,
+converts a notification-compatible sound to PCM CAF shorter than 30 seconds,
+saves its account-scoped receipt, then confirms readiness to the server. The
+sound filename is `tt-<soundId>.caf` in `Library/Sounds`. Installation cache
+generation is stored in the app container, so a reinstall cannot reuse a stale
+ready receipt merely because device pairing survived in the Keychain. Unready,
+missing or invalid sounds are refused rather than silently choosing another
+sound. These are Apple's [custom notification sound constraints](https://developer.apple.com/documentation/usernotifications/unnotificationsound).
+
+`media.play` supports a pinned attachment version while the app is active.
+Arbitrary background MP3 playback, continuous keep-awake audio and critical
+alerts that override system settings are not promised. Native execution uses
+only the registered notification/media commands, checks approval and leases,
+renews a finite operation's lease, and records a protected receipt before an
+audible side effect. An uncertain started action requires review and is never
+automatically played again. Selected-device push uses one delivery path per
+operation to avoid both an APNs alert and a later duplicate local alert.
+
+Explicit account/origin teardown unregisters local push and requests removal of
+the matching remote binding. If offline, remote removal remains unconfirmed;
+it is not reported as a successful server change. Foreground transitions only
+pause native execution until the selected account is verified again.
+
 ## Setup
 
 ### Connect the Watch during preview testing
@@ -369,10 +459,12 @@ In Things, add this device, then choose **Choose folder → Photo library
 (backup)**. The native explanation precedes the system Photos permission dialog.
 Choose limited or full access; the selected scope is shown in the connection.
 Granting access alone starts no upload. Create an ordinary private file-sync
-connection, select a private cloud folder, unpause it and use Upload now while
-the app remains open. Photo connections are backup-only and keep saved cloud
-copies when device originals disappear. Downloads, deletes and device-Trash
-restoration cannot target a photo-library grant.
+connection, select a private cloud folder and enable it. On a compatible
+installed build and origin, an existing enabled backup starts or resumes when
+Thingtime opens and when verified conditions recover. Pause remains a durable
+local denial even while offline. Photo connections are backup-only and keep
+saved cloud copies when device originals disappear. Downloads, deletes and
+device-Trash restoration cannot target a photo-library grant.
 
 The shared Apple PhotoKit reader preserves every resource returned for each
 accessible photo/video (including original and edited resources and Live Photo
@@ -382,16 +474,169 @@ access includes hidden and burst assets exposed by PhotoKit. Original bytes can
 include embedded location metadata. Albums, captions, favorites and other Photos
 database metadata are not yet a portable library restoration contract.
 
-Current scans allow 10,000 resources and 4 MiB of inventory metadata. A scan
-rechecks the complete accessible resource inventory before returning success.
-One original is exported at a time into private temporary storage and reused for
-bounded reads under the same owner/grant; the temporary copy is cleared on
-suspension or failure. Available device storage must fit the largest original plus one upload part.
-Originals must currently be downloaded locally in Photos: the adapter refuses
-unavailable originals instead of starting iCloud traffic outside the sync network
-policy. Background jobs, large-library paging and controlled iCloud downloads
-remain pending. The shared reader and source selection also support Mac; installed signed-app
-PhotoKit acceptance remains pending.
+Paged iOS scans validate the accessible PhotoKit source before sealing its
+observations. One original is exported at a time into private
+temporary storage; the device needs enough free space for the largest original
+plus one upload part. Older inline clients have a bounded response envelope.
+The native adapter keeps completed observations across retry.
+
+File access 1.6.0 can back up locally available originals while explicitly
+recording iCloud-only resources, including Live Photo companions, as missing
+from this backup. That pass stays incomplete and the original gap returns to
+the normal plan when its bytes are available. Other export failures, storage
+errors, permission loss and membership changes still stop the scan. File
+access 1.7.0 downloads an iCloud-only original through PhotoKit when the saved
+connection explicitly allows cellular, after exact owner, device, grant, network
+and charging checks. PhotoKit has no public Wi-Fi-only transport switch, so a
+Wi-Fi-only connection keeps missing originals pending and asks to download them
+in Photos or review the connection's network choice. No setting changes
+automatically. File access 1.8.0 uses one newest-first queue: PhotoKit capture
+date orders each asset and its original resources and companions, with stable
+modification and identity tie breaks. A working batch contains up to four assets.
+An unavailable newer original is recorded and remains incomplete; it does not
+silently disappear or turn into an older local-first phase. A fresh membership
+check between batches lets newer arrivals preempt the remaining backlog.
+The Rust indexer reuses exact original observations and seals only the selected
+batch. The same file journal verifies and publishes each batch, and the native
+queue checks the published cloud fingerprints before advancing. Recent and
+interrupted queue outcomes survive retry; exhausted older epochs are cleaned
+up without deleting source photos or cloud files. The shared reader also supports
+Mac, where the existing strict behavior remains in effect.
+
+Native Photos automation 1.2.0 negotiates `api.file-sync-transfer-admissions`
+1.3.0 to use one native queue in front and in the background. The verified
+browser session opens an exact, revocable account/device/grant/connection/
+destination binding and observes status; it doesn't plan or upload individual
+files. The paired iPhone prepares and publishes newest-first batches. Returning
+to the app attaches to the same worker; after suspension or process termination,
+iOS execution resumes its protected asset selection and multipart cursor.
+The run recognizes unchanged cloud bytes. It can update an exact revision of a
+previous original from the same verified connection and preserves the earlier
+version. An unrelated file occupying that path stays untouched and needs review.
+Older compatible combinations retain their existing foreground/deferred behavior.
+
+Thingtime requests another processing opportunity after five minutes for
+unfinished work. iOS chooses when or whether to run it, including after lock,
+force quit, battery constraints and app refresh restrictions. Brief inactive
+transitions such as system prompts preserve the foreground request. A short
+UIKit continuation protects the existing worker across a minimize; a granted
+background processing task joins that same worker. On iOS 26 or later,
+continuation 1.1.0 lets **Back up now** request a system session for the same
+admitted run. **Run in Background** can also request one for a backup that is
+already preparing. The system presentation reports measured discovery work,
+originals checked and bytes sent for the current original. The session ends
+when this check finishes. iOS uses the same callback for its resource limit
+and Cancel on the system UI. Either ends that session and retains the
+automatic backup and its checkpoint. The ordinary scheduler or next permitted
+foreground run can retry after the backoff. A new continued session requires
+an explicit foreground action. **Pause sync** durably stops automatic backup until the
+owner resumes. Existing system-only holds recover with fresh authorization
+for the same connection. Charging, network and budget waits still obey the
+saved transfer settings.
+
+Photos automation 1.7.0 adds a closed, timestamped background-session ending
+(`system-ended`, `execution-expired`, `worker-cancelled`, `worker-failed`,
+`completed`, or `checkpointed-wait`) with the last measured progress time and
+units. This is session history, not proof that automatic backup is stopped or
+that the whole library is complete. Foreground reentry refreshes native status
+without requesting a new continued session. Known discovery/index counts remain
+visible as historical values outside indexing, and owner/origin/device/plane/
+generation changes immediately hide the prior protected view.
+
+Photos automation 1.8.0 adds `wake-photo-run` for opening the app or a page and
+returning it to the foreground. The request binds the current owner, origin,
+device, source grant and saved configuration revision. It reuses the existing
+run and receipts, and can retire only proven local check/interruption delays.
+Explicit Pause, server or unknown retry barriers, hourly budgets and saved
+network/charging conditions remain binding. Ordinary status reads and periodic
+or connectivity callbacks do not request a new continued-processing session.
+An admitted foreground-entry action can ask the existing finite-work
+continued-processing slot to accompany the run. Queued work and OS refusal
+remain explicitly distinct from an active system lease; background URLSession
+transfers and opportunistic processing retain their existing recovery paths.
+The web app's shared startup receipt drives the editable sync-page status and
+one Lopu notification after all eligible local configurations acknowledge
+startup. It is presentation state, not new native execution authority.
+The negotiated `photos-startup-v1` control lane accepts only folder listing,
+Photos status and foreground wake. It uses independent request identities and
+fresh paired-device checks so a long folder scan cannot block startup; it never
+owns or cancels the serialized data-operation lane. Old clients retain the
+existing request serialization.
+
+Prepared Photos originals are reused across concurrent uploads and lookahead.
+The reader keeps a bounded cache scoped to the owner, root and exact resource
+revision, and still checks current provider access and the staged file's native
+stamp before reading. Its reusable-byte budget is a cache policy, not a maximum
+file size: a sole larger original remains available for consecutive part reads.
+Eviction cleans only owned temporary files; borrowed iCloud preparations retain
+their own lifetime. This avoids re-exporting and hashing an unchanged full
+original every time another upload takes its turn.
+
+System Progress uses a finite denominator for known library discovery, known
+originals and their preparation, with one final verification/checkpoint unit.
+Undiscovered original backlog is not invented; newly discovered real work may
+extend that denominator. Negative totals would keep fractionCompleted at zero.
+
+Measured iCloud progress belongs to one serialized original resource. Late
+callbacks cannot advance a replacement resource. Each concurrent original keeps
+its own byte fraction when a sibling publishes; no heartbeat or elapsed-time
+progress is reported. The scheduler still decides actual background execution.
+
+Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
+the latest photo or video capture time when available. The scoped **Backup
+activity** also shows measured file counts, the selected batch, iCloud download
+progress, cloud verification, and recent steps. The native queue starts with the newest asset
+group, including its companions, then prepares batches of up to ten groups and
+uploads up to five originals concurrently while preparing lookahead work. The remaining original count stays unknown while
+unseen asset records can still contribute originals. The queue keeps exact
+selections and receipts across interruption. When PhotoKit proves the library
+is unchanged and full access is current, discovery can resume at a saved
+date-group boundary. Assets tied on capture and modification dates use
+PhotoKit’s order for that fetch. If the library changed or the cursor cannot be
+verified, discovery rechecks the ordered library against those receipts. Reported network traffic can include retry bytes.
+Measure saved data from verified current Files in the exact destination.
+
+Photos automation 1.5.0 records an unavailable original against its exact asset
+revision. While one authorized iCloud original is fetching, the same backup
+continues preparing and uploading available originals in date-ordered groups.
+The activity panel can show measured iCloud progress alongside the upload
+stage. A deferred original remains pending across interruption. Retries give
+untried originals and older attempts a turn, with newest asset dates first
+among equally eligible items. Wi-Fi-only policy permits a local recheck after
+Photos has made an original available. Completion requires resolving all
+deferred originals visible to the current Photos grant.
+
+Photos automation 1.6.0 exposes upload settings on the device, Photo library
+folder, and each saved sync config without opening its Edit form. Device and
+folder policies are stored by the native app for the exact origin, owner,
+paired device and folder grant; the config policy remains part of its ordinary
+saved Thing. Changing a limit does not reset recorded usage. Device and folder
+ceilings are shared across their configs, and each config also enforces its own
+ceiling. Blank device/folder fields add no ceiling; a blank config speed retains
+625,000 bytes/s (5 Mbps). MB/s and Mbps are explicit, convertible display units.
+
+Hourly allowances include observed payload bytes from failed attempts and
+uncertain reservations after interruption. Existing unscoped usage is charged
+conservatively until its original window expires. Limits are checked before
+new admissions; already-admitted transfers may finish. Foreground writes are
+paced and background URLSession transfers use a persistent average admission
+schedule, which cannot guarantee an instantaneous wire-speed ceiling. Up to five
+durable daemon jobs can reserve future starts within their signed URL lifetime,
+so a paced batch does not depend on the app waking between parts. Foreground
+retries preserve a known pacing deadline instead of extending it to five minutes;
+unknown transient failures retain the five-minute backoff. iOS still controls
+background scheduling. If a single
+required provider part is larger than the allowance, the connection reports
+the minimum part size instead of exceeding the budget. A file may span multiple
+budget windows at its confirmed part boundaries. iCloud downloads use Apple's
+PhotoKit transport and aren't subject to Thingtime's upload rate or budget.
+
+When iOS notifications are allowed, the configured reporting interval defaults
+to 30 minutes. Pending notifications report confirmed PhotoKit assets and the
+measured Wi-Fi, mobile or unknown-network upload bytes that produced them.
+A Live Photo counts once when its original and companion are verified.
+Background scheduling and system notification delivery remain separate from
+the successful cloud publication receipt.
 
 Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
 then `xcodegen generate`. No photo-service credentials or private configuration
@@ -400,13 +645,43 @@ and simulator, retaining the ordinary native Photos dialogs:
 
 ```sh
 DEST='platform=iOS Simulator,id=<simulator-uuid>' \
-THINGTIME_PHOTO_BACKUP_TEST=1 \
+THINGTIME_PHOTO_BACKUP_TEST=1 THINGTIME_PHOTO_UI_AUTOMATION=1 \
 iOS/scripts/test-mobile-sync-installed.sh /path/to/disposable-account.json
 ```
 
+The UI automation flag uses a separate `ThingtimeUITests` runner to operate the
+ordinary source-selection, explanation and system Photos dialogs. The hosted
+unit-test fixture first verifies its disposable loopback account, then reuses
+that same account/origin's actual native grant for original-byte verification.
+It neither injects a grant nor changes Simulator privacy settings. Without the
+flag, the existing visible manual-consent fixture remains available.
+
+Add `THINGTIME_PHOTO_POLICY_TEST=1` to exercise the installed native bridge's
+device and folder policy set/read/clear operations after ordinary consent and
+pairing. The fixture checks exact scope and values, refuses an unpaired device,
+and keeps high fixture-only limits for the subsequent original-byte test. Its
+policy pass marker does not establish upload success; the original-byte phase
+must independently finish and verify published bytes. Local storage fixtures do
+not advertise the direct S3 background transport, and Simulator scheduling
+refusals are not physical-device background acceptance.
+
 Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
-compares downloaded cloud hashes, and moves only those test assets to Recently
-Deleted. Follow the `IOS_PHOTO_*` prompts and confirm the system deletion prompts.
+compares downloaded cloud hashes and reopens the same saved backup.
+Automated mode retains generated originals until its owned simulator is cleaned up;
+manual mode separately exercises new-original discovery and deletion/retention through the ordinary system prompt.
+The harness verifies canonical storage readiness before and after consent and transfer,
+and refuses zero/skipped test results. It never repairs a writer failure silently.
+To resume only a failed reopen check, supply `THINGTIME_PHOTO_REOPEN_RECEIPT`
+with a mode-0600 JSON file containing the exact connection `id`, `name`, `rootId`,
+`localRootId`, and `files` map of cloud path to revision, read from the same
+disposable fixture API. The runner checks the real grant, then reopens the saved
+backup and verifies unchanged revisions with zero native uploads.
+
+On iOS hosts without native resource-limit support, legacy connections with no
+explicit saved connection or device limits use the existing native path. Native CPU, scan and transfer
+limits are unavailable there; renderer pacing cannot constrain whole-file native
+uploads. Explicit saved connection and device limits remain unchanged and block
+transfer until supported.
 See [Apple's resource manager](https://developer.apple.com/documentation/photos/phassetresourcemanager)
 for the original-resource API.
 
@@ -496,21 +771,60 @@ remain active. Custom shared mutation policies retain the per-part path unless
 a native policy explicitly covers them. Only increasing canonical byte-progress
 messages extend the bridge inactivity deadline; no payload bytes cross WebKit.
 
-No new fork configuration or secrets are required. The opt-in installed photo
-acceptance now requires whole-file handoffs, native part progress, downloaded
-original hashes and released cache entries. See continued uploads below for the
-iOS 26+ lifecycle extension; real background completion, OS relaunch, force-quit/
-reboot recovery and physical-device throughput remain unverified. Apple's background URLSession follows redirects
-unconditionally, so it cannot replace the current plaintext transport without
-revisiting destination protection.
+No new fork secrets are required. The installed Photos fixture verifies genuine
+PhotoKit bytes and canonical folder receipts separately from operating-system
+background execution. See the tests below; a compiled app or injected task is
+not proof that iOS granted a continued-processing lease.
+
+### Deferred Photos transfers
+
+The native queue retains one date-ordered selection of up to ten asset groups,
+with at most five originals preparing/uploading concurrently. The first newest
+asset starts separately. Companion resources remain in the same acknowledged
+asset group, and a selection advances only after all available originals have
+verified canonical publication receipts. A separate bounded read-only lookahead
+can warm the next page's local hashes while current uploads run; it never writes
+a second selection or advances its durable cursor. These are processing windows,
+not library limits. Cloud-only and unreadable originals retain exact source
+identity and typed retry reasons while other available originals proceed.
+
+The selected origin's `api.file-sync-transfer-admissions` is negotiated before
+work. Compatible older servers retain the foreground, redirect-refusing sender.
+At 1.5.0 or later, native Photos can explicitly request `background-file-v1`.
+Only the canonical direct S3 signer emits that descriptor, bound to the exact
+HTTPS host/path, PUT method and signed grant expiry. Background URLSession always
+follows redirects; that provider-managed behavior is accepted only for this
+negotiated canonical destination. Arbitrary, custom and legacy targets retain
+redirect refusal. No ambient cookies or credential headers reach either PUT.
+
+The daemon uses from-file uploads and stable sessions separated by cellular
+policy. Its protected journal retains immutable part identities and copied bytes,
+not signed URLs or device credentials. Foreground streams share one quantum
+pacer. Daemon tasks use a persisted aggregate admission calendar and full-byte
+rolling allowance reservations; their rate setting is an average scheduling
+rate, not an instantaneous network cap. iOS may defer starts. A grant that cannot
+fit the planned delay and transfer window is retried, and rates too low for that
+window retain the paced foreground path. Uncertain live daemon tasks retain their
+full reserved allowance across restart.
+
+Expiration ends the app execution slice while an already-authorized daemon PUT
+can continue. Explicit Pause, sign-out, grant or saved-policy changes cancel the
+matching daemon work; cancellation is persisted before invoking URLSession.
+Relaunch reattaches exact task identities, rejects stale bindings and preserves
+unsettled bytes. Background-session completion gives the native queue a bounded
+opportunity to reauthorize, verify and publish. The completion handler is retained
+through that work's durable checkpoint, or ended on expiration. Canonical folder
+and Timeline receipts remain the completion authority. Force-quit cancels system
+transfers; a Live Activity does not grant indefinite execution.
 
 ### Continued uploads on iOS 26+
 
-Upload capability 1.3.0 requests `BGContinuedProcessingTask` on iOS 26+ for the
-current user-started whole-file job. One static identifier is registered once;
-submission uses the fail strategy. The native job retains its redirect-refusing
-file-backed transport, live owner/configuration/pairing/grant checks and bounded
-part cache. This does not persist cookies or create another history store.
+Upload capability 1.4.0 requests `BGContinuedProcessingTask` on iOS 26+ only
+for the current explicitly user-started whole-file job. Automatic retries and
+scheduled backup do not request a continued-processing lease. One static identifier is registered once;
+submission uses the fail strategy. The native job retains live
+owner/configuration/pairing/grant checks and a bounded part cache, using the
+negotiated transport described above. This does not persist cookies or create another history store.
 Older systems, refused submissions and launch timeouts retain foreground behavior.
 A timed-out request keeps its identifier slot until a late system launch is
 rejected, preventing that launch from acquiring another job's authorization.
@@ -519,9 +833,12 @@ Only an exact, capability-negotiated native start acknowledgement allows the web
 runner to survive visibility changes. Its inactivity deadline pauses while the
 accepted job is hidden; navigation, account changes and explicit cancellation
 still abort. System progress reports verified part bytes and reserves one unit
-for attachment completion. System/user expiry cancels the job. Successful native
-completion waits for the app to become active, rechecks the owner, then hands
-back to the shared stored-fingerprint check and canonical Timeline publication.
+for attachment completion. Expiration records an interruption and durable
+automatic retry; it does not invent another user-initiated lease or override a
+deliberate Pause. A finite pass that saved available originals and durably deferred
+remaining work settles with a retry subtitle and measured partial progress, rather
+than reporting the whole backup complete. Actual errors and expiration remain
+failed/interrupted outcomes. Duplicate delivery of one system task is idempotent.
 
 The simulator declined continued processing in the opt-in installed background
 acceptance; the subsequent diagnostic run reported `BGTaskSchedulerErrorDomain`
@@ -539,3 +856,13 @@ use Simulator Home after its readiness marker, verify the attachment changes fro
 pending to ready using the local fixture account while the app is backgrounded,
 then return to Thingtime and verify Timeline publication. Never infer background
 completion from an upload that was already finished before leaving the app.
+
+### LiDAR scanner
+
+The native drawer includes **Scan — Open LiDAR Scanner**. On compatible devices,
+Start records ARKit's available depth, images, geometry and calibration into a
+local original-data archive. Finish automatically saves it as a private File
+Thing; pending uploads retain their original identity and local bytes for retry.
+The web UI can invoke the same scanner through its independently versioned
+native bridge or hand off from Safari. See [capture format and lifecycle](../docs/native-lidar-scans.md)
+and the LiDAR checklist in [TESTING](../TESTING.md).

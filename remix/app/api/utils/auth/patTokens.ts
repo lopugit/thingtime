@@ -308,7 +308,8 @@ const resolvePatSessionActor = async (
   session: SessionDoc,
   sub: string,
   scope: string | string[],
-  consumeUse = true
+  consumeUse = true,
+  allowExhaustedAdmission = false
 ): Promise<ThingsActorResult | null> => {
   const scopes = patSessionScopes(session.meta);
   for (const required of Array.isArray(scope) ? scope : [scope]) {
@@ -317,7 +318,8 @@ const resolvePatSessionActor = async (
     }
   }
 
-  if (consumeUse && !(await consumePatUse(session))) {
+  const remaining = session.meta?.usesRemaining;
+  if ((!consumeUse && !allowExhaustedAdmission && typeof session.meta?.maxUses === 'number' && !(typeof remaining === 'number' && remaining > 0)) || (consumeUse && !(await consumePatUse(session)))) {
     return { ok: false, status: 401, error: 'This token has no uses remaining 🔋' };
   }
 
@@ -406,7 +408,7 @@ export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntros
 // credentials degrade to anonymous exactly like getCurrentUser, so browser
 // tabs with stale cookies keep their logged-out UX; PAT-specific failures the
 // caller can act on (missing scope, uses exhausted) return explicit errors.
-const resolveThingsActorInternal = async (request: Request, scope: string | string[], admittedPat?: PatContext): Promise<ThingsActorResult> => {
+const resolveThingsActorInternal = async (request: Request, scope: string | string[], admittedPat?: PatContext, inspectOnly = false): Promise<ThingsActorResult> => {
   const anonymous: ThingsActorResult = request.headers.has(CHARACTER_HEADER)
     ? { ok: false, status: 401, error: 'Session or Character unavailable' }
     : { ok: true, actor: { user: null, pat: null } };
@@ -433,7 +435,7 @@ const resolveThingsActorInternal = async (request: Request, scope: string | stri
     // the token's own allowGet tick — resolveGetBridgeActor below.)
     const header = request.headers.get('Authorization');
     if (!header?.startsWith('Bearer ')) return anonymous;
-    const resolved = await resolvePatSessionActor(session, claims.sub, scope, !admittedPat);
+    const resolved = await resolvePatSessionActor(session, claims.sub, scope, !admittedPat && !inspectOnly, !!admittedPat);
     return resolved ?? anonymous;
   }
 
@@ -479,6 +481,11 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   if (result.ok && result.actor.pat) admittedThingsActors.set(result.actor.pat, { request, scope: scopeIdentity(scope) });
   return result;
 };
+
+/** Pre-body permission check; no token use or write admission. The route must
+ * resolve the exact parsed operation again before any effects. */
+export const inspectThingsActor = (request: Request, scope: string | string[]) =>
+  resolveThingsActorInternal(request, scope, undefined, true);
 
 export const revalidateThingsActor = async (request: Request, scope: string | string[], admittedPat: PatContext): Promise<ThingsActorResult> => {
   const admission = admittedThingsActors.get(admittedPat);

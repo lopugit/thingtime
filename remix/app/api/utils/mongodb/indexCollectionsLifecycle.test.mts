@@ -144,3 +144,24 @@ test('one HTTP request shares one mutation admission and reads perform none', as
   await collections.withIndexReadinessRequest(async () => { await users.insertOne({ username: 'next-request' }); });
   assert.equal(markerReads, before + 2);
 });
+
+
+test('warm home handles still attribute each API feature without creating another client', async () => {
+  const { mongoConnectionTracker, runWithMongoConnectionFeature } = await import('./connectionTracker');
+  await collections.getUsersCollection(); // ensure the database is already warm outside a request
+  const beforeConnections = connections;
+  for (const feature of ['auth', 'admin', 'things']) {
+    await runWithMongoConnectionFeature(feature, async () => {
+      await collections.getUsersCollection();
+      await collections.getHomeThingsCollection();
+    });
+  }
+  const source = mongoConnectionTracker.snapshot().reverse().find(source => source.purpose === 'home')!;
+  for (const feature of ['auth', 'admin', 'things']) {
+    const usage = source.featureUsage!.find(row => row.feature === feature)!;
+    assert.ok(usage, feature);
+    assert.equal(usage.accesses, 1, 'repeated collection handles within one request are deduplicated');
+    assert.ok(Number.isFinite(Date.parse(usage.lastUsedAt)));
+  }
+  assert.equal(connections, beforeConnections, 'attribution reuses the existing client');
+});

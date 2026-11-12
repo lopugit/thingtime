@@ -39,6 +39,16 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
+For authorized provider provisioning, use the Thingtime checkout's
+`docs/agent-credential-workflows.md`. From that checkout run
+`npm --silent --prefix remix run credentials:import -- --preflight --origin <origin> --format <format>`
+before opening the credential source. Use `google-oauth` for a Google web
+client export and `oauth-client` for a scoped Meta Connections client update.
+The root administrator reviews the exact destination and revision in the
+assigned Thingtime browser. Provider bytes go directly from an authorized
+file or protected pipe to the encrypted vault. Connected Things permissions
+do not grant vault access. Keep secrets out of MCP arguments and saved Things.
+
 Private agent task lifecycle reporting has dedicated tools:
 `prepare_thingtime_agent_task`, `get_thingtime_agent_task`, and
 `report_thingtime_agent_task`. Select the exact connected account and preserve
@@ -55,14 +65,17 @@ resuming. Report only actual progress, verification, blockers, artifacts and
 measured values. Keep secrets and private source content out of summaries. A
 failed capability, membership or saved workspace check means reporting remains
 unavailable; continue independent authorized work and state the precise gap.
-This exception applies only to the bounded private lifecycle tools. Generic
-mutations, composed previews/apply, sharing and security operations retain their
-confirmation rules below.
+This exception applies only to the bounded private lifecycle tools.
 
-Read/search actions may proceed when the user asks. Before any create, update,
-delete, comment, reaction, save, or share action, show the intended account,
-target, and effect and obtain clear confirmation. Treat delete and disconnect
-as irreversible from the current ChatGPT connection.
+Read/search actions may proceed when the user asks. For direct mutations,
+call `get_thingtime_confirmation_requirements` for the selected account and
+follow its current Thingtime settings. If required, state the intended account,
+target, and effect and obtain clear confirmation before passing
+`confirmed: true`. Omit `confirmed` when the account does not require it.
+Treat `confirmation_required` as a request for approval and never fabricate
+it. The user can adjust Thingtime's prompts under Settings → Connections →
+Thingtime connector confirmations; the AI app's own approval, permission, and
+credential rules still apply.
 
 For more than one exact ID, use `get_thingtime_things`; preserve its ordered
 per-ID found/not-found results. Discover and validate schemas before creating
@@ -70,14 +83,14 @@ typed data. Use `list_thingtime_related` for target, parent, folder, backlink,
 or bounded thread traversal, and `list_thingtime_changes` for resumable polling
 (it is not a deletion change stream).
 
-For a composed mutation or Capability workflow, always call the preview/start
-tool first. Explain the selected account and complete before/after plan, then
-stop for clear confirmation. Apply only the returned signed receipt. If a
-precondition is stale, build a new preview; never bypass it. Set `confirmed:
-true` only after that confirmation. Undo also creates
-a fresh preview and requires a second confirmation. Capability Things may only
-compose the published bounded mutation grammar — never invent URLs, API paths,
-database queries, operator objects, or executable code.
+For composed mutations, workflows, and undo, always obtain a fresh signed
+preview first. Inspect the complete plan, following preview pages when needed,
+and apply only its exact receipt. If `confirmationRequired` is true, obtain
+explicit approval for that account and plan and pass `confirmed: true`. If it
+is false, omit `confirmed`. Apply rechecks current settings and preconditions:
+rebuild a stale preview and never skip account, revision, or scope checks.
+Capability Things may only compose the published mutation grammar — never
+invent URLs, API paths, database queries, operator objects, or executable code.
 
 When the user or task supplies an exact Thing ID, always call
 `get_thingtime_thing`. Never rely on `list_thingtime_things`, a recent page, or
@@ -86,9 +99,12 @@ discovery when the exact ID is unknown. When a Thing or comment ID is already
 known and its attached comments are needed, call `list_thingtime_comments` with
 that `targetId`; do not fetch a global Things page and discard unrelated rows.
 
-If a tool says the token lacks a scope, explain the minimum missing Thingtime
-scope and ask the user to reconnect, open Advanced connection settings, and
-regenerate the scoped credential with that access rule. Removing the final
+If a tool lacks an independent OAuth scope, first call `login_thingtime` with
+the exact selected `accountId` and `requiredScopes`, such as `["agents.report"]`.
+Use the invoking host's supported OAuth prompt for explicit permission and
+verify the same owner and origin plus the live scope on the new account ID
+before retrying any write. Use Advanced connection settings only as a supported
+host fallback. Removing the final
 account revokes every bridge and refresh credential in that ChatGPT connection.
 Do not suggest an unrestricted account-session credential.
 

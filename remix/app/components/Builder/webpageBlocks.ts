@@ -1,3 +1,7 @@
+import type { PageCollectionBinding } from '~/schemas/pageCollections';
+import type { WebpageActivation } from '~/schemas/webpageActivation';
+import type { SourceInputValue } from '~/schemas/sourceInputs';
+
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
 
@@ -9,8 +13,11 @@ export type WebpageMediaKind = 'image' | 'video' | 'audio';
 
 export interface WebpageBlockSource {
 	action: string;
-	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
-	inputs?: Record<string, string | number | boolean>;
+	// Bind data without creating a local form, click or event boundary.
+	passive?: boolean;
+	collection?: PageCollectionBinding;
+	// Scalar values, string tokens or a ttArg binding with an optional fallback.
+	inputs?: Record<string, SourceInputValue>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
@@ -28,6 +35,7 @@ export interface WebpageBlock {
 	// component
 	component?: string;
 	args?: Record<string, string | number | boolean>;
+	argBindings?: Record<string, string | number | boolean>;
 	// container
 	direction?: WebpageContainerDirection;
 	gap?: number;
@@ -66,6 +74,7 @@ export interface WebpageCrystal {
 	version?: number;
 	forkOf?: string;
 	previewBg?: string;
+	activationAction?: WebpageActivation;
 	// the behaviour suite (installable app bundle) this page belongs to
 	suiteKey?: string;
 	blocks: WebpageBlock[];
@@ -368,11 +377,14 @@ export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
 }
 
 /** New intrinsic element boundaries accepted by the saved Webpage writer. */
-export function requiresEditableIntrinsicContract(blocks: WebpageBlock[]): boolean {
+export function requiresEditableIntrinsicContract(
+ blocks: WebpageBlock[],
+ tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload', 'tt-menu', 'tt-rich-text']
+): boolean {
  const pending = [...blocks];
  while (pending.length) {
   const block = pending.pop()!;
-  if (block.type === 'element' && ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox'].includes(block.tag || '')) return true;
+  if (block.type === 'element' && tags.includes(block.tag || '')) return true;
   if (block.children) pending.push(...block.children);
  }
  return false;

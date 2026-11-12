@@ -35,6 +35,11 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		// Dialog contents are authored blocks; only the browser's focus/top-layer
 		// capability is native. Builder edit mode keeps them ordinary open panels.
 		if (!enabled) return;
+		// Native checkboxes need a DOM property for the accessible mixed state.
+		// Use the authored ARIA binding only within this adapter's boundary.
+		for (const input of host.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][aria-checked][data-tt-action="$transient"]') || []) {
+			if (input.closest('[data-tt-transient-boundary]') === host.current) input.indeterminate = input.getAttribute('aria-checked') === 'mixed';
+		}
 		for (const dialog of host.current?.querySelectorAll<HTMLDialogElement>('dialog[data-tt-action="$transient"]') || []) {
 			const binding = parseTransientBinding(dialog.getAttribute('data-tt-action-inputs'));
 			const desired = binding?.inputs.open === true || binding?.inputs.open === 'true';
@@ -79,6 +84,7 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 			// Invoke synchronously so explicit browser-open/download gestures retain
 			// user activation. Do not retain or publish the operation's return value.
 			const result = action({ inputs: binding.inputs, value, signal: lifetime.signal,
+				setValidity: message => { lifetime.assertActive(); if (field && root.contains(control)) (control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).setCustomValidity(message); },
 				readField: name => transientFieldValue(read(name)),
 				readFile: name => {
 					const input = read(name) as HTMLInputElement | null;

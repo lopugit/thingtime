@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends nftables libcur
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --build-from-source && npm cache clean --force
 COPY --from=database /usr/bin/mongod /usr/local/bin/mongod
-COPY install.mjs runtime.cjs application.cjs browser-driver.cjs prepare-native.cjs ./
+COPY install.mjs runtime.cjs application.cjs browser-driver.cjs prepare-native.cjs renderer-server.cjs ./
 COPY --chown=pwuser:pwuser app /opt/thingtime-app
 # Repair and load native packages using the app's actual module resolver.
 RUN node prepare-native.cjs

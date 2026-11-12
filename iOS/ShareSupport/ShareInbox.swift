@@ -147,6 +147,39 @@ final class ShareInbox {
         }
         if failures > 0 { throw Failure.waitingBatches(failures) }
     }
+    func composerDirectory(id: UUID) throws -> URL {
+        let directory = root.appendingPathComponent("ready/\(id.uuidString)", isDirectory: true)
+        guard (try? String(contentsOf: directory.appendingPathComponent("receipt"), encoding: .utf8)) == id.uuidString else { throw Failure.unavailable }
+        return directory
+    }
+    /// Dismissing hides only the reminder; the draft stays recoverable.
+    /// A separate marker cannot overwrite an open composer's newer metadata.
+    func dismissComposerReminder(id: UUID, origin: URL) throws {
+        let directory = try composerDirectory(id: id)
+        let metadata = try ShareComposerMetadata.read(from: directory)
+        guard metadata.origin == ShareComposerSession.origin(origin), !metadata.completed else {
+            throw Failure.unavailable
+        }
+        try Data().write(to: directory.appendingPathComponent(".reminder-dismissed"), options: .atomic)
+    }
+    func pendingComposers(origin: URL, includeDismissed: Bool = true) throws -> [UUID] {
+        let ready = root.appendingPathComponent("ready", isDirectory: true)
+        guard files.fileExists(atPath: ready.path) else { return [] }
+        return try files.contentsOfDirectory(at: ready, includingPropertiesForKeys: [.creationDateKey])
+            .sorted {
+                let left = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let right = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return left == right ? $0.lastPathComponent < $1.lastPathComponent : left < right
+            }
+            .compactMap { directory in
+                guard let id = UUID(uuidString: directory.lastPathComponent),
+                      let metadata = try? ShareComposerMetadata.read(from: directory),
+                      metadata.origin == ShareComposerSession.origin(origin), !metadata.completed,
+                      includeDismissed || !files.fileExists(atPath: directory.appendingPathComponent(".reminder-dismissed").path)
+                else { return nil }
+                return id
+            }
+    }
     private func drainBatch(_ source: URL, to sharedDirectory: URL) throws {
             guard let id = UUID(uuidString: source.lastPathComponent),
                   try String(contentsOf: source.appendingPathComponent("receipt"), encoding: .utf8) == id.uuidString else {
@@ -171,6 +204,9 @@ final class ShareInbox {
                     try files.moveItem(at: incoming, to: destination)
                 } catch { try? files.removeItem(at: incoming); throw error }
             }
+            // Keep an unfinished composer available across extension termination,
+            // while still exposing the independent local copy in Files.
+            if let metadata = try? ShareComposerMetadata.read(from: source), !metadata.completed { return }
             try files.removeItem(at: source)
     }
 }

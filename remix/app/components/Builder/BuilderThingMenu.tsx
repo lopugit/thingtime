@@ -115,7 +115,7 @@ function BuilderThingActions({
 							isDisabled={!ownerId || busy || !!disabledReason}
 							onClick={() =>
 								void run(async () => {
-									await requireThingtimeCapability('api.things-fork', '1.6.0');
+									await requireThingtimeCapability('api.things-fork', '1.7.1');
 									if (!active.current) return false;
 									const response = await fetch('/api/v1/things/fork', {
 										method: 'POST',

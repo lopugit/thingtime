@@ -64,7 +64,7 @@ export const shouldProxyApiToFallback = (request: Request) => {
 
 /** Negotiate the selected deployment, not the bundled GUI's own manifest,
  * before forwarding any ChatGPT connection action or encrypted handoff. */
-export const selectedRuntimeSupportsPlan = async (origin = getApiFallbackOrigin(), signal?: AbortSignal) => {
+export const selectedRuntimeSupportsFeature = async (feature: string, version: string, origin = getApiFallbackOrigin(), signal?: AbortSignal) => {
   if (!origin || origin !== getApiFallbackOrigin() || process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return false;
   try {
     const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, origin), {
@@ -87,9 +87,11 @@ export const selectedRuntimeSupportsPlan = async (origin = getApiFallbackOrigin(
     const manifest = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     return origin === getApiFallbackOrigin() && process.env.THINGTIME_DESKTOP_API_MODE === 'remote' &&
       !signal?.aborted && manifest?.schemaVersion === 1 && manifest.origin === origin &&
-      capabilitySatisfies(manifest.features?.['api.ai-chatgpt-plan']?.version ?? '', '1.1.0');
+      capabilitySatisfies(manifest.features?.[feature]?.version ?? '', version);
   } catch { return false; }
 };
+export const selectedRuntimeSupportsPlan = (origin = getApiFallbackOrigin(), signal?: AbortSignal) =>
+  selectedRuntimeSupportsFeature('api.ai-chatgpt-plan', '1.1.0', origin, signal);
 
 export const unavailableLocalApiResponse = () => Response.json({
   ok: false,

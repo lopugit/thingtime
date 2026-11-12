@@ -2,7 +2,7 @@ import { journalScope, type JournalAccess } from './journalScope';
 import { JOURNAL_RETENTION_STORE, JOURNAL_KINDS, metadataKey, retireJournalMetadata, type JournalKind, type ManagedJournalMetadata } from './journalRetention';
 import { INVENTORY_STORES, INVENTORY_PIN_STORE, INVENTORY_PAGE_ENTRIES, INVENTORY_PAGE_BYTES, inventoryIdentity, validateInventoryHeader, type InventoryHeader } from './inventoryJournal';
 import { PLAN_STORES, PLAN_PIN_STORE, parsePagedPlanSpec, validatePagedPlanHeader, type PagedPlanHeader } from './pagedPlanJournal';
-import { PAGED_RUN_STORES, PAGED_RUN_HEADS, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader } from './pagedRunJournal';
+import { PAGED_RUN_STORES, PAGED_RUN_HEADS, streamReconciliationKey, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader } from './pagedRunJournal';
 import { PAGED_CHECKPOINT_DRAFTS, validatePagedCheckpointHeader, type PagedCheckpointHeader } from './pagedCheckpointJournal';
 import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead, type PagedCheckpointHead } from './checkpoint';
 import { REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES, parseReviewDraftSpec, validateReviewDraftHeader, type ReviewDraftHeader } from './pagedReviewDraft';
@@ -43,7 +43,8 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 			throw Error('Invalid cleanup cursor.');
 		return transaction(stores, 'readwrite', (tx, done, fail) => {
 			const activePlans = new Set<string>(), activeInputs = new Set<string>();
-			let active: string | undefined, retained: string | undefined, review: string | undefined, baseline: PagedCheckpointHead | undefined, ready = 4;
+			const earlyProgressRuns = new Set<string>();
+			let active: string | undefined, retained: string | undefined, review: string | undefined, baseline: PagedCheckpointHead | undefined, ready = 5;
 			const result: MaintenanceProgress = { examined: 0, deleted: 0, retired: 0, done: false, next: after ?? null };
 			const get = <T>(store: string, id: IDBValidKey, next: (v: T) => void) => {
 				const request = tx.objectStore(store).get(id);
@@ -64,9 +65,10 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					case 'checkpoint': next(row.id !== active && row.id !== baseline?.runId && h.phase === 'published'); return;
 					case 'run': {
 						const run = h as PagedRunHeader;
-						if (row.id === active || row.id === retained || row.id === baseline?.runId) { next(false); return; }
+						if (row.id === active || row.id === retained || row.id === baseline?.runId || row.id === early || earlyProgressRuns.has(row.id)) { next(false); return; }
 						if (row.retiring) { next(true); return; }
 						if (run.phase !== 'complete') { next(false); return; }
+						if (run.spec.streaming && (run.confirmed || run.spec.streaming.source === 'both')) { next(true); return; }
 						if (run.retained) { next(true); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, row.id], c => {
 							if (!c) { next(false); return; }
@@ -152,7 +154,7 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 			const scanRun = () => {
 				// Durable roots protect both recovery and the latest completed
 				// progress view, even after publication releases input pins.
-				const roots = [...new Set([active, baseline?.runId, retained].filter((id): id is string => !!id))];
+				const roots = [...new Set([active, baseline?.runId, retained, early].filter((id): id is string => !!id))];
 				const visit = (index: number) => {
 					const id = roots[index]; if (!id) { scanRows(); return; }
 					get<PagedRunHeader>(PAGED_RUN_STORES[0], [key, id], run => {
@@ -160,6 +162,7 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						if (run.spec.id !== id || (id === baseline?.runId && run.phase !== 'complete') || (id === retained && !run.retained))
 							throw Error('Protected sync run identity changed.');
 						const plan = run.spec.plan; activePlans.add(plan.id);
+						if (plan.earlyRunId) earlyProgressRuns.add(plan.earlyRunId);
 						for (const input of [plan.local, plan.remote, plan.baseline.local, plan.baseline.remote]) activeInputs.add(input.id);
 						if (id !== active) { visit(index + 1); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, id], draft => {
@@ -185,6 +188,8 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					scanRun();
 				});
 			};
+			let early: string | undefined;
+			get<string | undefined>(PAGED_RUN_HEADS, streamReconciliationKey(key), value => { if (value !== undefined && !identifier(value)) throw Error('Invalid early sync identity.'); early = value; scan(); });
 			get<string | undefined>(PAGED_RUN_HEADS, key, value => { if (value !== undefined && !identifier(value)) throw Error('Invalid active sync identity.'); active = value; scan(); });
 			get<string | undefined>(RETAINED_HEADS, key, value => { if (value !== undefined && !identifier(value)) throw Error('Invalid retained sync identity.'); retained = value; scan(); });
 			get<PagedCheckpointHead | undefined>(PAGED_CHECKPOINT_HEADS, key, value => { if (value) validatePagedCheckpointHead(value, key); baseline = value; scan(); });

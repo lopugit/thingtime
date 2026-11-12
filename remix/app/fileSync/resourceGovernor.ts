@@ -1,9 +1,10 @@
 import type { FileSyncResourceLimits } from './configuration';
 
 export type SyncResourceStatus = {
-	version: 1; cpuPercent: number | null; cpuStatus: 'measured' | 'unavailable';
+	version: 1; cpuScopes?: ('source-thread' | 'indexer-process' | 'transport-process')[]; cpuPercent: number | null; cpuStatus: 'measured' | 'unavailable';
 	effectiveTransferConcurrency: number; effectiveIndexingConcurrency: number;
 	uploadBytesPerSecond?: number; downloadBytesPerSecond?: number;
+	currentUploadBytesPerSecond?: number | null; currentDownloadBytesPerSecond?: number | null; transferBytesPerSecond?: number | null; scanBytesPerSecond?: number | null; scanBytes?: number; scanElapsedSeconds?: number; memoryBytes?: number | null; measuredAt?: number;
 };
 export function parseSyncResourceStatus(value: unknown): SyncResourceStatus {
 	const s = value as SyncResourceStatus;
@@ -12,9 +13,10 @@ export function parseSyncResourceStatus(value: unknown): SyncResourceStatus {
 		![s.effectiveTransferConcurrency, s.effectiveIndexingConcurrency].every(n => Number.isSafeInteger(n) && n > 0) ||
 		[s.uploadBytesPerSecond, s.downloadBytesPerSecond].some(n => n !== undefined && (typeof n !== 'number' || !Number.isFinite(n) || n <= 0)))
 		throw Error('Invalid sync resource measurement.');
-	return { version: 1, cpuPercent: s.cpuPercent, cpuStatus: s.cpuStatus, effectiveTransferConcurrency: s.effectiveTransferConcurrency,
+	return { version: 1, ...(Array.isArray(s.cpuScopes) ? { cpuScopes: [...new Set(s.cpuScopes.filter(scope => ['source-thread', 'indexer-process', 'transport-process'].includes(scope)))] } : {}), cpuPercent: s.cpuPercent, cpuStatus: s.cpuStatus, effectiveTransferConcurrency: s.effectiveTransferConcurrency,
 		effectiveIndexingConcurrency: s.effectiveIndexingConcurrency, ...(s.uploadBytesPerSecond === undefined ? {} : { uploadBytesPerSecond: s.uploadBytesPerSecond }),
-		...(s.downloadBytesPerSecond === undefined ? {} : { downloadBytesPerSecond: s.downloadBytesPerSecond }) };
+		...(s.downloadBytesPerSecond === undefined ? {} : { downloadBytesPerSecond: s.downloadBytesPerSecond }),
+		...Object.fromEntries((['currentUploadBytesPerSecond', 'currentDownloadBytesPerSecond', 'transferBytesPerSecond', 'scanBytesPerSecond', 'scanBytes', 'scanElapsedSeconds', 'memoryBytes', 'measuredAt'] as const).filter(key => s[key] === null || (typeof s[key] === 'number' && Number.isFinite(s[key]) && s[key]! >= 0)).map(key => [key, s[key]])) };
 }
 function wait(ms: number, signal?: AbortSignal) {
 	signal?.throwIfAborted();
@@ -33,7 +35,7 @@ export class SyncResourceGovernor {
 	private active = 0;
 	private wake = new Set<() => void>();
 	private lanes: Record<'upload' | 'download', Promise<void>> = { upload: Promise.resolve(), download: Promise.resolve() };
-	constructor(readonly limits: FileSyncResourceLimits, private now = () => performance.now(), private sleep = wait) {}
+	constructor(readonly limits: FileSyncResourceLimits, private now = () => performance.now(), private sleep = wait, private shared?: SyncResourceGovernor, private totalBytesPerSecond?: () => number) {}
 	observe(value: SyncResourceStatus) {
 		const s = parseSyncResourceStatus(value);
 		this.cpu = s.cpuStatus === 'measured' ? s.cpuPercent : null;
@@ -69,10 +71,12 @@ export class SyncResourceGovernor {
 	}
 	async pace(direction: 'upload' | 'download', bytes: number, signal?: AbortSignal) {
 		if (!Number.isSafeInteger(bytes) || bytes < 0) throw Error('Invalid transfer byte count.');
+		if (this.shared) await this.shared.pace(direction, bytes, signal);
 		const key = direction === 'upload' ? 'uploadBytesPerSecond' : 'downloadBytesPerSecond';
-		if (!this.limits[key]) { signal?.throwIfAborted(); if (this.factor < 1) await this.sleep(Math.min(250, (1 / this.factor - 1) * 10), signal); return; }
-		const prior = this.lanes[direction]; let release!: () => void;
-		this.lanes[direction] = new Promise<void>(resolve => { release = resolve; });
+		if (!this.limits[key] && !this.totalBytesPerSecond) { signal?.throwIfAborted(); if (this.factor < 1) await this.sleep(Math.min(250, (1 / this.factor - 1) * 10), signal); return; }
+		const lane = this.totalBytesPerSecond ? 'upload' : direction;
+		const prior = this.lanes[lane]; let release!: () => void;
+		this.lanes[lane] = new Promise<void>(resolve => { release = resolve; });
 		let abort: (() => void) | undefined;
 		try {
 			// Abort waiting in the lane as well as in an active timer.
@@ -83,7 +87,7 @@ export class SyncResourceGovernor {
 			let remaining = bytes;
 			while (remaining > 0) {
 				signal?.throwIfAborted();
-				const rate = this.status()[key]!, amount = Math.min(remaining, Math.max(1, rate / 10));
+				const rate = this.totalBytesPerSecond?.() ?? this.status()[key]!, amount = Math.min(remaining, Math.max(1, rate / 10));
 				const deadline = this.now() + amount / rate * 1000;
 				while (this.now() < deadline) await this.sleep(Math.min(100, Math.ceil(deadline - this.now())), signal);
 				remaining -= amount;
@@ -114,5 +118,5 @@ export class SyncResourceGovernor {
 /** Only governed payload calls may outlive a fixed bridge wall deadline. Native
  * transports still own bounded network inactivity and cancellable waits. */
 export function syncRequestHasPacing(action: string, limits?: FileSyncResourceLimits): boolean {
- return !!limits && ((['upload-batch', 'upload-file', 'upload-part'].includes(action) && !!(limits.uploadBytesPerSecond || limits.cpuPercent)) || (action === 'stage-download' && !!(limits.downloadBytesPerSecond || limits.cpuPercent)) || (['stage-finish', 'publish'].includes(action) && !!limits.cpuPercent));
+ return !!limits && ((['upload-batch', 'upload-file', 'upload-part', 'upload-single'].includes(action) && !!(limits.uploadBytesPerSecond || limits.cpuPercent)) || (action === 'stage-download' && !!(limits.downloadBytesPerSecond || limits.cpuPercent)) || (['stage-finish', 'publish'].includes(action) && !!limits.cpuPercent));
 }

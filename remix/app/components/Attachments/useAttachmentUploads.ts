@@ -1,10 +1,12 @@
+import { attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
 import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
 import React from 'react';
 
-import { useApi } from '~/hooks/useApi';
+import { useApi, type ThingRequestOptions } from '~/hooks/useApi';
+import { resolveDesktopFileUpload } from './desktopAttachmentUpload';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import {
 	attachmentCleanupAction,
@@ -139,9 +141,10 @@ type QueueEntry = {
 	attempt: number;
 	completeOnly?: boolean;
 	resumeExisting?: boolean;
+	signal?: AbortSignal;
 };
 
-type UploadPlan = { uploadId: string; partSizeBytes: number; partCount: number };
+type UploadPlan = { uploadId: string; partSizeBytes: number; partCount: number; scope?: ThingRequestOptions };
 
 export const useAttachmentUploads = (
 	ownerId: string | null | undefined,
@@ -190,7 +193,9 @@ export const useAttachmentUploads = (
 	);
 	const [uploads, setUploads] = React.useState<ComposerAttachmentUpload[]>(seedEntries);
 	const uploadsRef = React.useRef(uploads);
-	uploadsRef.current = uploads;
+	// Mutators advance this queue synchronously before publishing React state.
+	// A concurrent render may observe an older state snapshot; copying that
+	// snapshot back here would resurrect Waiting/Verifying after completion.
 	const mountedRef = React.useRef(true);
 	const ownerRef = React.useRef(ownerId ?? null);
 	const attemptsRef = React.useRef(new Map<string, number>(seedEntries.map((entry) => [entry.localId, 1])));
@@ -208,7 +213,7 @@ export const useAttachmentUploads = (
 		if (prepareLocalImage) return null;
 		const action = attachmentCleanupAction(upload, committedAttachmentIdsRef.current);
 		if (action?.kind === 'delete') return apiRef.current.remove({ id: action.attachmentId });
-		if (action?.kind === 'abort') return apiRef.current.uploads.abort({ uploadId: action.uploadId });
+		if (action?.kind === 'abort') return apiRef.current.uploads.abort({ uploadId: action.uploadId }, uploadPlansRef.current.get(upload.localId)?.scope);
 		return null;
 	}, [prepareLocalImage]);
 
@@ -228,7 +233,7 @@ export const useAttachmentUploads = (
 		async (localId: string, uploadId: string, attempt: number, signal?: AbortSignal) => {
 			patchUpload(localId, attempt, { status: 'finalizing', progress: 100, error: null, failedAt: null });
 			try {
-				const response = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.complete({ uploadId }, { signal }), signal);
+				const response = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.complete({ uploadId }, { ...uploadPlansRef.current.get(localId)?.scope, signal }), signal);
 				if (!isCurrent(localId, attempt)) return;
 				const attachment = normalizePublicAttachment(response?.attachment);
 				if (!attachment) throw new Error('invalid attachment projection');
@@ -249,14 +254,17 @@ export const useAttachmentUploads = (
 	);
 
 	const runUpload = React.useCallback(
-		async ({ localId, file, attempt, completeOnly, resumeExisting }: QueueEntry) => {
-			if (!isCurrent(localId, attempt)) return;
+		async ({ localId, file, attempt, completeOnly, resumeExisting, signal }: QueueEntry) => {
+			if (!isCurrent(localId, attempt) || signal?.aborted) return;
 			const controller = new AbortController();
+			const abort = () => controller.abort(signal?.reason);
+			signal?.addEventListener('abort', abort, { once: true });
 			activeRequestsRef.current.set(localId, controller);
 			const existing = uploadsRef.current.find((upload) => upload.localId === localId);
 			const purpose = existing?.purpose ?? uploadPurpose;
 			if (completeOnly && existing?.uploadId) {
 				await completeUpload(localId, existing.uploadId, attempt, controller.signal);
+				signal?.removeEventListener('abort', abort);
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 				return;
 			}
@@ -274,7 +282,13 @@ export const useAttachmentUploads = (
 			let partSizeBytes = canResume ? savedPlan.partSizeBytes : 0;
 			let partCount = canResume ? savedPlan.partCount : 0;
 			try {
-				if (convertHeic && !prepareLocalImage && isHeicImage(file)) {
+				if (isAttachmentSourceFile(file) && !existing?.previewUrl) {
+					// A native preview is a bounded thumbnail, never the original file.
+					const preview = await attachmentSourcePreview(file).catch(() => null);
+					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
+					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview) });
+				}
+				if (convertHeic && !prepareLocalImage && !isAttachmentSourceFile(file) && isHeicImage(file)) {
 					file = await prepareHeicImage(file);
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
 					if (maxBytesPerFile && file.size > maxBytesPerFile)
@@ -293,6 +307,10 @@ export const useAttachmentUploads = (
 					patchUpload(localId, attempt, { file, previewUrl, status: 'ready', progress: 100 });
 					return;
 				}
+				const desktop = purpose === 'file' && ownerId ? await resolveDesktopFileUpload(ownerId) : null;
+				controller.signal.throwIfAborted();
+				if (canResume && savedPlan?.scope?.expectedApiOrigin !== desktop?.scope.expectedApiOrigin)
+					throw new Error('The selected API server changed.');
 				if (!canResume) {
           if (purpose === 'subspace-icon' || purpose === 'subspace-banner') {
             await requireSubspaceMediaCapabilities();
@@ -306,18 +324,19 @@ export const useAttachmentUploads = (
 							sizeBytes: file.size,
 							...(purpose === 'post' ? {} : { purpose })
 						},
-						{ signal: controller.signal }
+						{ ...desktop?.scope, signal: controller.signal }
 					), controller.signal);
 					const prepared = response?.upload;
 					uploadId = typeof prepared?.id === 'string' ? prepared.id : null;
 					partSizeBytes = Number(prepared?.partSizeBytes);
 					partCount = Number(prepared?.partCount);
-					if (!uploadId || !Number.isSafeInteger(partSizeBytes) || partSizeBytes <= 0 || !Number.isSafeInteger(partCount) || partCount <= 0) {
+					const readyEmptyFile = file.size === 0 && prepared?.state === 'ready' && partCount === 0;
+					if (!uploadId || !Number.isSafeInteger(partSizeBytes) || partSizeBytes <= 0 || !Number.isSafeInteger(partCount) || (partCount <= 0 && !readyEmptyFile)) {
 						throw new Error('invalid upload plan');
 					}
-					uploadPlansRef.current.set(localId, { uploadId, partSizeBytes, partCount });
+					uploadPlansRef.current.set(localId, { uploadId, partSizeBytes, partCount, scope: desktop?.scope });
 					if (!isCurrent(localId, attempt)) {
-						void apiRef.current.uploads.abort({ uploadId }).catch(() => {});
+						void apiRef.current.uploads.abort({ uploadId }, desktop?.scope).catch(() => {});
 						return;
 					}
 					patchUpload(localId, attempt, { uploadId, status: 'uploading' });
@@ -329,44 +348,53 @@ export const useAttachmentUploads = (
 
 				let committedBytes = 0;
 				const progressState = { lastReported: -1 };
-				for (let first = 1; first <= partCount; first += PART_SIGNATURE_BATCH) {
-					const last = Math.min(partCount, first + PART_SIGNATURE_BATCH - 1);
-					const requested: Array<{ partNumber: number; checksumSha256: string }> = [];
-					const bodies = new Map<number, Blob>();
-					for (let partNumber = first; partNumber <= last; partNumber += 1) {
-						if (!isCurrent(localId, attempt)) return;
+				const reportProgress = (loaded: number) => {
+					const progress = Math.min(99, Math.round(((committedBytes + loaded) / file.size) * 100));
+					if (progress === progressState.lastReported) return;
+					progressState.lastReported = progress;
+					patchUpload(localId, attempt, { progress });
+				};
+				if (desktop) {
+					for (let partNumber = 1; partNumber <= partCount; partNumber++) {
 						const range = multipartPartRange(partNumber, partSizeBytes, file.size);
-						const body = file.slice(range.start, range.end, '');
-						bodies.set(partNumber, body);
-						requested.push({ partNumber, checksumSha256: await sha256Base64(body) });
-					}
-
-					const signedResponse = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.parts({ uploadId: uploadId!, parts: requested }, { signal: controller.signal }), controller.signal);
-					const signedParts = Array.isArray(signedResponse?.parts) ? (signedResponse.parts as SignedUploadPart[]) : [];
-					if (signedParts.length !== requested.length) throw new Error('invalid signed parts');
-					const signedByNumber = new Map(signedParts.map((part) => [part.partNumber, part]));
-
-					for (let partNumber = first; partNumber <= last; partNumber += 1) {
-						if (!isCurrent(localId, attempt)) return;
-						const body = bodies.get(partNumber);
-						const signed = signedByNumber.get(partNumber);
-						if (!body || !signed) throw new Error('missing signed part');
-						const beforePart = committedBytes;
-						await putSignedPart(
-							signed,
-							body,
-							(loaded) => {
-								const progress = file.size > 0 ? Math.min(99, Math.round(((beforePart + loaded) / file.size) * 100)) : 99;
-								if (progress === progressState.lastReported) return;
-								progressState.lastReported = progress;
-								patchUpload(localId, attempt, { progress });
-							},
-							(xhr) => {
-								if (xhr) activeXhrsRef.current.set(localId, xhr);
-								else activeXhrsRef.current.delete(localId);
-							}
-						);
+						const body = await readAttachmentSlice(file, range.start, range.end, controller.signal);
+						await desktop.put(uploadId!, partNumber, body, controller.signal, reportProgress);
 						committedBytes += body.size;
+					}
+				} else {
+					for (let first = 1; first <= partCount; first += PART_SIGNATURE_BATCH) {
+						const last = Math.min(partCount, first + PART_SIGNATURE_BATCH - 1);
+						const requested: Array<{ partNumber: number; checksumSha256: string }> = [];
+						const bodies = new Map<number, Blob>();
+						for (let partNumber = first; partNumber <= last; partNumber += 1) {
+							if (!isCurrent(localId, attempt)) return;
+							const range = multipartPartRange(partNumber, partSizeBytes, file.size);
+							const body = await readAttachmentSlice(file, range.start, range.end, controller.signal);
+							bodies.set(partNumber, body);
+							requested.push({ partNumber, checksumSha256: await sha256Base64(body) });
+						}
+
+						const signedResponse = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.parts({ uploadId: uploadId!, parts: requested }, { signal: controller.signal }), controller.signal);
+						const signedParts = Array.isArray(signedResponse?.parts) ? (signedResponse.parts as SignedUploadPart[]) : [];
+						if (signedParts.length !== requested.length) throw new Error('invalid signed parts');
+						const signedByNumber = new Map(signedParts.map((part) => [part.partNumber, part]));
+
+						for (let partNumber = first; partNumber <= last; partNumber += 1) {
+							if (!isCurrent(localId, attempt)) return;
+							const body = bodies.get(partNumber);
+							const signed = signedByNumber.get(partNumber);
+							if (!body || !signed) throw new Error('missing signed part');
+							await putSignedPart(
+								signed,
+								body,
+								reportProgress,
+								(xhr) => {
+									if (xhr) activeXhrsRef.current.set(localId, xhr);
+									else activeXhrsRef.current.delete(localId);
+								}
+							);
+							committedBytes += body.size;
+						}
 					}
 				}
 
@@ -383,10 +411,11 @@ export const useAttachmentUploads = (
 					failedAt: attachmentUploadFailurePhase(error, phase)
 				});
 			} finally {
+				signal?.removeEventListener('abort', abort);
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 			}
 		},
-		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose]
+		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose, ownerId]
 	);
 
 	pumpRef.current = () => {
@@ -407,7 +436,7 @@ export const useAttachmentUploads = (
 	}, []);
 
 	const addFilesInternal = React.useCallback(
-		(files: File[], replaceExisting: boolean) => {
+		(files: File[], replaceExisting: boolean, signal?: AbortSignal) => {
 			const current = replaceExisting ? [] : uploadsRef.current;
 			const eligible = files.filter(
 				(file) =>
@@ -439,8 +468,8 @@ export const useAttachmentUploads = (
 					activeXhrsRef.current.get(upload.localId)?.abort();
 					activeXhrsRef.current.delete(upload.localId);
 					if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
-					uploadPlansRef.current.delete(upload.localId);
 					const cleanup = preserveReadyOnUnmountRef.current && upload.attachment ? null : cleanupUpload(upload);
+					uploadPlansRef.current.delete(upload.localId);
 					void cleanup
 						?.then((result: any) => {
 							if (result?.deferred === true) onCleanupDeferred?.();
@@ -453,7 +482,7 @@ export const useAttachmentUploads = (
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
 				const mediaKind = localFileMediaKind(file);
-				const previewUrl = !isHeicImage(file) && (mediaKind === 'image' || mediaKind === 'video') ? URL.createObjectURL(file) : null;
+				const previewUrl = !isAttachmentSourceFile(file) && !isHeicImage(file) && (mediaKind === 'image' || mediaKind === 'video') ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
 					purpose: purposeForFileRef.current?.(file) ?? uploadPurpose,
@@ -472,13 +501,13 @@ export const useAttachmentUploads = (
 			const nextUploads = [...current, ...next];
 			uploadsRef.current = nextUploads;
 			setUploads(nextUploads);
-			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
+			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1, signal });
 		},
 		[allowedContentTypes, cleanupUpload, convertHeic, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
 	);
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);
-	const replaceFiles = React.useCallback((files: File[]) => addFilesInternal(files, true), [addFilesInternal]);
+	const replaceFiles = React.useCallback((files: File[], signal?: AbortSignal) => addFilesInternal(files, true, signal), [addFilesInternal]);
 
 	// Add media by external URL: append a linked entry, probe extensionless
 	// URLs (image-or-file), mint through /api/v1/attachments/link, and land it
@@ -614,11 +643,11 @@ export const useAttachmentUploads = (
 			activeXhrsRef.current.get(localId)?.abort();
 			activeXhrsRef.current.delete(localId);
 			if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
-			uploadPlansRef.current.delete(localId);
 			const next = uploadsRef.current.filter((entry) => entry.localId !== localId);
 			uploadsRef.current = next;
 			setUploads(next);
 			const cleanup = preserveReadyOnUnmountRef.current && upload.attachment ? null : cleanupUpload(upload);
+			uploadPlansRef.current.delete(localId);
 			void cleanup
 				?.then((result: any) => {
 					if (result?.deferred === true) onCleanupDeferred?.();
@@ -715,6 +744,12 @@ export const useAttachmentUploads = (
 		const uploadPlans = uploadPlansRef.current;
 		return () => {
 			mountedRef.current = false;
+			// React StrictMode replays this effect in the same turn. A ref-based
+			// incoming selection may already be uploading; abort only a real
+			// unmount, after allowing that same instance to re-establish its effect.
+			// isCurrent is false immediately; owner changes still abort synchronously.
+			queueMicrotask(() => {
+			if (mountedRef.current) return;
 			queueRef.current = [];
 			// Teardown intentionally reads the latest upload snapshot, not the one
 			// captured when this mount-only effect was installed.
@@ -730,6 +765,7 @@ export const useAttachmentUploads = (
 			activeRequests.clear();
 			activeXhrs.clear();
 			uploadPlans.clear();
+			});
 		};
 	}, [cleanupUpload]);
 

@@ -6,6 +6,7 @@ import type { LopuPageReference } from '~/utils/lopuPageContext';
 
 import { aiTaskFetch } from './aiTasks.client';
 import { recordApiCall } from '~/hooks/apiRequestLog';
+import { isDeviceAiProvider } from '~/utils/deviceAiProvider';
 import { isLopuChatEvent, type LopuChatEvent } from './lopuTurnCore';
 
 export const LOPU_REPLY_PATH = '/api/v1/lopu/chats/reply';
@@ -83,18 +84,29 @@ export class LopuStreamError extends Error {
  * Fire the streamed turn. Returns the RAW Response (NDJSON body) — readNdjson
  * consumes it. Recorded in the DevKit request log like every useApi call.
  */
-export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
+export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal; ownerId?: string; dataPlane?: string | null }): Promise<Response> => {
+	const device = isDeviceAiProvider(body.providerId);
 	{ // Includes Astra's Responses transport and the checkpoint-capable contract.
-		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', body.providerId?.startsWith('chatgpt-plan-') ? '1.21.1' : '1.20.0');
+		const { requireThingtimeCapability, requireActiveThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+		await requireThingtimeCapability('api.lopu-chats-reply', !device && body.providerId !== null && !body.providerId?.startsWith('chatgpt-plan-') ? '1.23.2' : device ? '1.22.0' : body.providerId?.startsWith('chatgpt-plan-') ? '1.21.1' : '1.23.0');
+		// The frontend may be newer than its selected environment API gateway.
+		if (!device && body.providerId !== null && !body.providerId?.startsWith('chatgpt-plan-'))
+			await requireActiveThingtimeCapability('api.lopu-chats-reply', '1.23.2');
 	}
 	const started = performance.now();
 	let response: Response;
 	try {
-		response = await aiTaskFetch(LOPU_REPLY_PATH, {
+		const owner = device ? options?.ownerId : null;
+		if (device && !owner) throw new LopuStreamError(401, 'Sign in to send a desktop ChatGPT message.');
+		if (device && options?.dataPlane !== 'home') throw new LopuStreamError(409, 'Use your home Thingtime storage for desktop chat.');
+		const transport = device ? fetch : aiTaskFetch;
+		response = await transport(LOPU_REPLY_PATH, {
 			method: 'POST',
 			credentials: 'include',
-			headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+			headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...(owner ? {
+				'X-Thingtime-Device-Inference': '1', 'X-Thingtime-Expected-Actor': owner, 'X-Thingtime-Expected-User': owner,
+				'X-Thingtime-Expected-Data-Plane': options!.dataPlane!
+			} : {}) },
 			body: JSON.stringify(body),
 			signal: options?.signal
 		});

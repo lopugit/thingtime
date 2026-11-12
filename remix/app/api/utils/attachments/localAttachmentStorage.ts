@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileTypeFromBuffer } from 'file-type';
 
 import { PrivateS3ConfigError } from './config';
+import { MAX_ATTACHMENT_RANGE_BYTES } from './attachmentRanges';
 import type { AttachmentObjectHead, AttachmentS3, AttachmentUploadedPart } from './privateS3';
 
 // A laptop stand-in for the private S3 bucket.
@@ -118,7 +119,6 @@ const assertPartNumber = (value: number): number => {
 const newVersionId = () => `v${Date.now().toString(36)}-${randomBytes(8).toString('hex')}`;
 const sha256Base64 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('base64');
 const etagFor = (checksumSha256: string) => `"${createHash('md5').update(checksumSha256).digest('hex')}"`;
-const expiresAt = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
 const isEnoent = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
 
 type UploadRecord = { objectKey: string; attachmentId: string; createdAt: string };
@@ -313,20 +313,25 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			return { uploadId };
 		},
 
-		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength }) {
+		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength, expiresInSeconds = PART_URL_TTL_SECONDS }) {
 			assertObjectKey(objectKey);
 			await readUpload(uploadId);
 			assertPartNumber(partNumber);
 			if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw invalid('Invalid part length');
-			const exp = String(Math.floor(now() / 1000) + PART_URL_TTL_SECONDS);
+			const expiresIn = Math.min(expiresInSeconds, PART_URL_TTL_SECONDS);
+			const exp = String(Math.floor(now() / 1000) + expiresIn);
 			const fields = ['part', objectKey, uploadId, String(partNumber), checksumSha256, String(contentLength), exp];
 			const params = new URLSearchParams({ op: 'part', key: objectKey, upload: uploadId, part: String(partNumber), checksum: checksumSha256, length: String(contentLength), exp, sig: await sign(fields) });
-			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(PART_URL_TTL_SECONDS), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
+			return { url: `${urlPrefix}?${params}`, expiresAt: new Date(Number(exp) * 1000).toISOString(), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
 		},
 
-		async listParts({ objectKey, uploadId }) {
+		async listParts({ objectKey, uploadId, partNumber }) {
 			assertObjectKey(objectKey);
 			await readUpload(uploadId);
+			if (partNumber !== undefined) {
+				const part = await readJson<PartRecord>(partMeta(uploadId, partNumber));
+				return part ? [part] : [];
+			}
 			let names: string[] = [];
 			try {
 				names = await readdir(path.join(uploadDir(uploadId), 'parts'));
@@ -477,7 +482,17 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			const type = encodeParam(contentType);
 			const fields = ['get', objectKey, versionId, disposition, type, exp];
 			const params = new URLSearchParams({ op: 'get', key: objectKey, version: versionId, disposition, type, exp, sig: await sign(fields) });
-			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(DOWNLOAD_URL_TTL_SECONDS) };
+			return { url: `${urlPrefix}?${params}`, expiresAt: new Date(Number(exp) * 1000).toISOString() };
+		},
+
+		async signDownloadRange({ objectKey, versionId, offset, length }) {
+			assertObjectKey(objectKey);
+			if (typeof versionId !== 'string' || !versionId || /[\p{Cc}]/u.test(versionId) || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > MAX_ATTACHMENT_RANGE_BYTES || !Number.isSafeInteger(offset + length)) throw invalid('Invalid signed download range');
+			const range = `bytes=${offset}-${offset + length - 1}`;
+			const exp = String(Math.floor(now() / 1000) + 60);
+			const fields = ['get-range', objectKey, versionId, range, exp];
+			const params = new URLSearchParams({ op: 'get-range', key: objectKey, version: versionId, range, exp, sig: await sign(fields) });
+			return { url: `${urlPrefix}?${params}`, expiresAt: new Date(Number(exp) * 1000).toISOString() };
 		},
 
 		isNoSuchUpload(error) {
@@ -521,12 +536,15 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 				const record = await storePart(upload, Number(part), request.body as unknown as AsyncIterable<Uint8Array>, { checksumSha256: checksum, contentLength: Number(length) });
 				return new Response(null, { status: 200, headers: { ETag: record.etag, 'x-amz-checksum-sha256': record.checksumSha256, 'Cache-Control': 'private, no-store, max-age=0' } });
 			}
-			if (op === 'get') {
+			if (op === 'get' || op === 'get-range') {
 				const key = url.searchParams.get('key') || '';
 				const version = url.searchParams.get('version') || '';
 				const disposition = url.searchParams.get('disposition') || '';
 				const type = url.searchParams.get('type') || '';
-				if (!(await verify(['get', key, version, disposition, type, exp], signature))) return jsonResponse(403, { ok: false, error: 'Signature does not match' });
+				const signedRange = op === 'get-range' ? url.searchParams.get('range') || '' : null;
+				const fields = signedRange !== null ? ['get-range', key, version, signedRange, exp] : ['get', key, version, disposition, type, exp];
+				if (!(await verify(fields, signature))) return jsonResponse(403, { ok: false, error: 'Signature does not match' });
+				if (signedRange !== null && (Number(exp) <= Math.floor(now() / 1000) || request.method !== 'GET' || request.headers.get('range') !== signedRange || !/^bytes=\d+-\d+$/.test(signedRange))) return jsonResponse(403, { ok: false, error: 'Request does not match the signed range' });
 				if (request.method !== 'GET' && request.method !== 'HEAD') return jsonResponse(405, { ok: false, error: 'Method not allowed' }, { Allow: 'GET, HEAD' });
 				const id = assertObjectKey(key);
 				const record = await readObject(key, version);
@@ -537,9 +555,9 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 				// Exact versions are immutable, so validators are cheap and exact: the
 				// browser revalidates a preview instead of refetching every byte.
 				const headers: Record<string, string> = {
-					'Content-Type': decodeParam(type) || 'application/octet-stream',
-					'Content-Disposition': decodeParam(disposition) || 'attachment',
-					'Cache-Control': 'private, max-age=0, must-revalidate',
+					'Content-Type': signedRange !== null ? 'application/octet-stream' : decodeParam(type) || 'application/octet-stream',
+					'Content-Disposition': signedRange !== null ? 'attachment' : decodeParam(disposition) || 'attachment',
+					'Cache-Control': signedRange !== null ? 'private, no-store, max-age=0' : 'private, max-age=0, must-revalidate',
 					ETag: etagFor(record.checksumSha256),
 					'Last-Modified': new Date(record.createdAt).toUTCString(),
 					'Accept-Ranges': 'bytes',
@@ -547,7 +565,7 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 					'Referrer-Policy': 'no-referrer',
 					'x-amz-version-id': record.versionId
 				};
-				if (request.headers.get('if-none-match') === headers.ETag) return new Response(null, { status: 304, headers: { ETag: headers.ETag, 'Cache-Control': headers['Cache-Control'] } });
+				if (signedRange === null && request.headers.get('if-none-match') === headers.ETag) return new Response(null, { status: 304, headers: { ETag: headers.ETag, 'Cache-Control': headers['Cache-Control'] } });
 				let start = 0;
 				let end = record.sizeBytes - 1;
 				let status = 200;
@@ -561,6 +579,7 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 						start = Number(match[1]);
 						if (match[2] !== '') end = Math.min(end, Number(match[2]));
 					}
+					if (signedRange !== null && Number(/^bytes=\d+-(\d+)$/.exec(signedRange)![1]) >= record.sizeBytes) return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${record.sizeBytes}` } });
 					if (start > end || start >= record.sizeBytes) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${record.sizeBytes}` } });
 					status = 206;
 					headers['Content-Range'] = `bytes ${start}-${end}/${record.sizeBytes}`;

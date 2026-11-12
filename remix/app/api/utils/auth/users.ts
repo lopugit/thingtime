@@ -1,9 +1,12 @@
+import { normalizeImagePresentation, type ImagePresentation } from '~/components/Media/imagePresentation';
+import { effectiveConnectorConfirmations, type ConnectorConfirmationPatch, type ConnectorConfirmations } from '../chatgpt/connectorProtections';
+import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { Binary, ObjectId, type ClientSession } from 'mongodb';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -59,6 +62,8 @@ export type UserDoc = {
 	bio?: string | null;
 	avatarUrl?: string | null;
 	bannerUrl?: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId?: string | null;
 	bannerAttachmentId?: string | null;
 	emailVerified: boolean;
@@ -87,6 +92,8 @@ export type PublicUser = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId: string | null;
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
@@ -143,6 +150,8 @@ export type PublicProfile = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	createdAt: string;
 	temporary?: boolean;
 };
@@ -193,6 +202,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		bio: typeof user.bio === 'string' ? user.bio : null,
 		avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 		bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+		...projectProfilePresentation(user, 'avatar'),
+		...projectProfilePresentation(user, 'banner'),
 		avatarAttachmentId: profileAttachmentIdFromRecord(user, 'avatar'),
 		bannerAttachmentId: profileAttachmentIdFromRecord(user, 'banner'),
 		avatarLinkedUrl: linkedProfileMediaUrl(user, 'avatar'),
@@ -225,6 +236,12 @@ export const toPublicUserWithStorage = async (user: any): Promise<PublicUser> =>
 	return toPublicUser(user, await getSubscription('user', userId));
 };
 
+export const projectProfilePresentation = (user: any, slot: 'avatar' | 'banner'): Partial<Record<'avatarPresentation' | 'bannerPresentation', ImagePresentation>> => {
+	const key = slot === 'avatar' ? 'avatarPresentation' : 'bannerPresentation';
+	const presentation = effectiveProfileMediaUrl(user, slot) && normalizeImagePresentation(user.crystal?.[key] ?? user[key]);
+	return presentation ? { [key]: presentation } : {};
+};
+
 export const toPublicProfile = (user: any): PublicProfile => ({
 	id: String(user._id),
 	username: user.username,
@@ -232,6 +249,8 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 	bio: typeof user.bio === 'string' ? user.bio : null,
 	avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 	bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+	...projectProfilePresentation(user, 'avatar'),
+	...projectProfilePresentation(user, 'banner'),
 	createdAt: new Date(user.createdAt).toISOString(),
 	temporary: user.meta?.temporary === true
 });
@@ -326,6 +345,8 @@ const userThingToDoc = (thing: any): any => {
 		bio: thing.crystal?.bio ?? null,
 		avatarUrl: thing.crystal?.avatarUrl ?? null,
 		bannerUrl: thing.crystal?.bannerUrl ?? null,
+		avatarPresentation: thing.crystal?.avatarPresentation,
+		bannerPresentation: thing.crystal?.bannerPresentation,
 		avatarAttachmentId: thing.avatarAttachmentId ?? null,
 		bannerAttachmentId: thing.bannerAttachmentId ?? null,
 		email: secure.email || '',
@@ -427,6 +448,58 @@ export const findUserById = async (id: string) => {
 	if (thing) return userThingToDoc(thing);
 	return legacy;
 };
+
+/**
+ * Serialize a credential import with changes to the authoritative admin record.
+ * A dedicated private stamp acquires the document write fence without changing
+ * profile data, edit timestamps, or a legacy twin's authorization.
+ */
+export const fenceCurrentAdminCredentialImport = async (userId: string, session: ClientSession): Promise<boolean> => {
+	const things = await getThingsCollection();
+	const thing = await things.findOne({ thingtime: 'user', shareId: userId }, {
+		session, projection: { secureAdmin: 1, 'crystal.username': 1, secureCredentialImportAt: 1 }
+	});
+	const stamp = (previous: unknown) => new Date(Math.max(Date.now(), previous instanceof Date ? previous.getTime() + 1 : 0));
+	if (thing) {
+		if (thing.secureAdmin !== true && !isEnvAdmin(thing.crystal?.username)) return false;
+		const updated = await things.updateOne({ _id: thing._id }, {
+			$set: { secureCredentialImportAt: stamp(thing.secureCredentialImportAt) }
+		}, { session });
+		return updated.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(userId)) return false;
+	const users = await getUsersCollection();
+	const legacy = await users.findOne({ _id: new ObjectId(userId) }, {
+		session, projection: { username: 1, 'meta.admin': 1, secureCredentialImportAt: 1 }
+	});
+	if (!legacy || !isAdminDoc(legacy)) return false;
+	const updated = await users.updateOne({ _id: legacy._id }, {
+		$set: { secureCredentialImportAt: stamp(legacy.secureCredentialImportAt) }
+	}, { session });
+	return updated.matchedCount === 1;
+};
+
+/** A delegated private upload publication must serialize with the current
+ * account's upload-permission change or deletion, as well as session revoke.
+ * Keep the same Things-first identity and permission policy as ordinary auth. */
+export async function fencePrivateUploadPermission(id: string, token: string, session: any, signal: AbortSignal) {
+	if (!session?.inTransaction()) throw Error('Upload authorization requires the publication transaction');
+	const options = { session, signal };
+	const things = await getThingsCollection();
+	const filter = { shareId: id, thingtime: 'user' };
+	const row = await things.findOne(filter, options);
+	const eligible = (user: any) => user && user.accountKind !== 'service' && userPrivateUploadsEnabled(user);
+	if (row) {
+		if (!eligible(userThingToDoc(row))) return false;
+		const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { fileSyncPublicationFence: token } }, options);
+		return result.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(id)) return false;
+	const legacy = await getUsersCollection(), legacyFilter = { _id: new ObjectId(id) };
+	if (!eligible(await legacy.findOne(legacyFilter, options))) return false;
+	const result = await legacy.updateOne(legacyFilter, { $set: { fileSyncPublicationFence: token } }, options);
+	return result.matchedCount === 1;
+}
 
 // Batch form for bounded admin directories. Preserve caller order and the
 // same Things-first migration precedence as findUserById, while replacing up
@@ -1881,6 +1954,10 @@ export type UpdateProfileInput = {
 	bannerUrl?: unknown;
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
+	avatarPresentation?: unknown;
+	bannerPresentation?: unknown;
+	avatarPresentationSource?: unknown;
+	bannerPresentationSource?: unknown;
 	birthday?: unknown;
 	hideEmailOnProfile?: unknown;
 };
@@ -1985,6 +2062,25 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
+		const presentationUpdates: Partial<Record<'avatar' | 'banner', ImagePresentation | null>> = {};
+		const presentationSources: Partial<Record<'avatar' | 'banner', string>> = {};
+		for (const slot of ['avatar', 'banner'] as const) {
+			const key = `${slot}Presentation` as const;
+			const sourceKey = `${slot}PresentationSource` as const;
+			if (hasOwn(input, sourceKey)) {
+				const source = input[sourceKey];
+				if (!hasOwn(input, key) || media[slot].touched || typeof source !== 'string' || !source) {
+					return { ok: false, status: 400, error: 'An expected image source can only accompany an edit to the current image' };
+				}
+				presentationSources[slot] = source;
+			}
+			if (!hasOwn(input, key)) continue;
+			const presentation = normalizeImagePresentation(input[key]);
+			if (presentation === undefined) return { ok: false, status: 400, error: 'Invalid image presentation' };
+			presentationUpdates[slot] = presentation;
+		}
+		const touchesPresentation = Object.keys(presentationUpdates).length > 0;
+
 		// Birthday and email visibility are PRIVATE state — both live in the secure
 		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
@@ -2002,7 +2098,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			hideEmailOnProfile = input.hideEmailOnProfile;
 		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && !touchesPresentation && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
@@ -2035,7 +2131,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 
 		// Private-only updates never touch the crystal or attachments, so the
 		// transactional write below is skipped entirely for them.
-		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
+		if (Object.keys(set).length || media.avatar.touched || media.banner.touched || touchesPresentation) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {
 					const things = await dependencies.getThings();
@@ -2062,6 +2158,13 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 						user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
 						if (!user) return false;
 						kind = 'legacy';
+					}
+
+					for (const slot of ['avatar', 'banner'] as const) {
+						const expected = presentationSources[slot];
+						if (expected !== undefined && expected !== effectiveProfileMediaUrl(user, slot)) {
+							throw new AttachmentBindingError(409, 'Profile image changed while it was being edited');
+						}
 					}
 
 					const current: ProfileAttachmentRefs = {
@@ -2095,6 +2198,19 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 					const rootSet: Record<string, unknown> = {};
 					const rootUnset: Record<string, ''> = {};
 					const profileSet: Record<string, unknown> = { ...set };
+					const previousProfile = kind === 'thing' ? user.crystal || {} : user;
+					for (const slot of ['avatar', 'banner'] as const) {
+						const urlKey = `${slot}Url` as const;
+						const previousUrl = previousProfile[urlKey] ?? null;
+						const nextUrl = hasOwn(externalUrlUpdates, slot) ? externalUrlUpdates[slot] : previousUrl;
+						const sourceChanged = current[slot] !== desired[slot] || (!desired[slot] && previousUrl !== nextUrl);
+						const next = presentationUpdates[slot];
+						if (next && !desired[slot] && !nextUrl) throw new AttachmentBindingError(400, 'Choose an image before applying its presentation');
+						if (next !== undefined || (sourceChanged && previousProfile[`${slot}Presentation`])) {
+							profileSet[`${slot}Presentation`] = next ?? null;
+						}
+					}
+
 					for (const slot of ['avatar', 'banner'] as const) {
 						if (!media[slot].touched) continue;
 						if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
@@ -2143,6 +2259,36 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 
 export const updateUserProfile = createUpdateUserProfile();
 
+// Connector protections are private account metadata. Updating a subset
+// merges it in the same CAS path as other secure account preferences.
+export const getUserConnectorConfirmations = async (userId: string): Promise<ConnectorConfirmations> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+  if (thing) return effectiveConnectorConfirmations(unpackSecure((thing as any).secure).meta?.connectorConfirmations);
+  const legacy = ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.connectorConfirmations': 1 } }) : null;
+  return effectiveConnectorConfirmations(legacy?.meta?.connectorConfirmations);
+};
+
+export const setUserConnectorConfirmations = async (
+  userId: string, patch: ConnectorConfirmationPatch
+): Promise<ConnectorConfirmations> => {
+  let next = effectiveConnectorConfirmations();
+  const result = await mutateUserThingSecure(userId, secure => {
+    next = { ...effectiveConnectorConfirmations(secure.meta!.connectorConfirmations), ...patch };
+    secure.meta!.connectorConfirmations = next;
+  });
+  if (result === 'mutated') return next;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    { $set: { ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [`meta.connectorConfirmations.${key}`, value])), updatedAt: new Date() } },
+    { projection: { 'meta.connectorConfirmations': 1 }, returnDocument: 'after' }
+  );
+  if (!legacy) throw new Error('Account not found.');
+  return effectiveConnectorConfirmations(legacy.meta?.connectorConfirmations);
+};
+
 // Personal instructions are private secure metadata: never part of a profile,
 // Thing crystal, search index, admin roster, or another viewer's prompt.
 export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
@@ -2178,4 +2324,28 @@ export const setCharacterIdentity = async (userId: string, expectedOwner: string
     secure.meta!.character = next;
   });
   if (result !== 'mutated') throw new Error('Character update did not complete');
+};
+
+// Private password-confirmation preference; omitted from every public user projection.
+export const getUserPasswordVerification = async (userId: string): Promise<{window: VerificationWindow; revision:string|null;changedAt?:number;reuseRecentDeviceVerification:boolean;epoch:string|null}> => {
+  const thing=await(await getThingsCollection()).findOne({shareId:userId,thingtime:'user'} as any,{projection:{secure:1,passwordVerificationEpoch:1}});
+  const legacy=!thing&&ObjectId.isValid(userId)?await(await getUsersCollection()).findOne({_id:new ObjectId(userId)},{projection:{'meta.passwordVerification':1,passwordVerificationEpoch:1}}):null;
+  const stored=(thing?unpackSecure((thing as any).secure).meta:legacy?.meta)?.passwordVerification;
+  const {verificationWindow}=await import('~/passwords/verificationPolicy');
+  return {window:verificationWindow(stored?.window??'5m'),revision:stored?.revision??null,changedAt:stored?.changedAt??0,reuseRecentDeviceVerification:stored?.reuseRecentDeviceVerification===undefined?true:stored.reuseRecentDeviceVerification===true,epoch:(thing as any)?.passwordVerificationEpoch??legacy?.passwordVerificationEpoch??null};
+};
+
+export const setUserPasswordVerification = async (userId: string, window: VerificationWindow, expectedRevision: string | null, reuseRecentDeviceVerification=true) => {
+  const { verificationWindow } = await import('~/passwords/verificationPolicy');
+  const settings = { window: verificationWindow(window), revision: crypto.randomUUID(), changedAt: Date.now(),reuseRecentDeviceVerification };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta?.passwordVerification?.revision ?? null) !== expectedRevision) throw new Error('Password confirmation settings changed. Reload before saving.');
+    secure.meta ??= {}; secure.meta.passwordVerification = settings;
+  });
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (result === 'mutated') return settings;
+  if (!ObjectId.isValid(userId)) throw new Error('Password confirmation settings could not be saved.');
+  const legacy = await (await getUsersCollection()).updateOne({_id:new ObjectId(userId),'meta.passwordVerification.revision':expectedRevision} as any,{$set:{'meta.passwordVerification':settings,updatedAt:new Date()}});
+  if (!legacy.matchedCount) throw new Error('Password confirmation settings changed. Reload before saving.');
+  return settings;
 };

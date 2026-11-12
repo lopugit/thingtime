@@ -47,7 +47,9 @@ export const DIAGNOSTIC_REASONS = [
   'Unsupported WebAuthn extensions use the native provider.', 'Unsupported algorithms use the native provider.',
   'Requested attestation uses the native provider.', 'Requested authenticator attachment uses the native provider.',
   'The extension delegated to the browser’s native provider.', 'WebAuthn is unavailable in this document.',
-  'The page did not allow a Thingtime hook to be installed.'
+  'The page did not allow a Thingtime hook to be installed.',
+  'An invalid AppID uses the native provider.',
+  'An AppID outside the requesting site uses the native provider.'
 ];
 export function hookDiagnostics(value) {
   if (value?.available !== true) return {available: false};
