@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Thingtime",
   "description": "Your Thingtime password workspace, explicit site autofill and passkeys.",
-  "version": "0.4.3",
+  "version": "0.5.1",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage",

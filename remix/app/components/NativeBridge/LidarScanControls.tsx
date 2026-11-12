@@ -25,12 +25,12 @@ const blocks: WebpageBlock[] = [{
 		'border-radius': '12px', background: 'var(--tt-card, white)', 'overflow-wrap': 'anywhere' },
 	children: [
 		{ id: 'lidar-title', type: 'element', tag: 'h2', text: 'LiDAR scan', css: { margin: '0', 'font-weight': '600' } },
-		{ id: 'lidar-description', type: 'element', tag: 'p', text: 'Capture a space with Thingtime on an iPhone or iPad with LiDAR. Your scan saves to the device first, then to your private Things.',
+		{ id: 'lidar-description', type: 'element', tag: 'p', text: 'Capture a space with Thingtime on an iPhone or iPad with LiDAR. Your scans stay on this device until you choose Device only or Cloud in the scan library.',
 			css: { margin: '0', color: 'var(--tt-muted, #64646d)' } },
 		{ id: 'lidar-controls', type: 'container', direction: 'row', gap: 8, css: { 'flex-wrap': 'wrap', 'align-items': 'center' }, children: [
 			when('lidar-start-visible', 'showStart', button('lidar-start', 'Scan with LiDAR', 'start')),
 			when('lidar-handoff-visible', 'showHandoff', button('lidar-handoff', 'Open Thingtime scanner', 'start')),
-			when('lidar-retry-visible', 'showRetry', button('lidar-retry', 'Retry save', 'retry')),
+			when('lidar-retry-visible', 'showRetry', button('lidar-retry', 'Save to Cloud', 'retry')),
 			when('lidar-check-visible', 'showCheck', button('lidar-check', 'Check scanner status', 'check')),
 			when('lidar-saved-visible', 'hasFile', { id: 'lidar-saved', type: 'element', tag: 'a',
 				text: 'Open saved scan', props: { href: '{scan.fileHref}' }, css: buttonStyle }),
@@ -56,25 +56,26 @@ export function LidarScanControls({ onSaved }: { onSaved?: () => void }) {
 		if (fileId && controls?.ownerId === user?.id) savedRef.current?.();
 	}, [fileId, controls?.ownerId, user?.id]);
 	if (!controls || !user?.id || controls.ownerId !== user.id) return null;
-	const { mode, snapshot, handoff, generation, start, retry, check } = controls;
+	const { mode, snapshot, handoff, generation, start, retry, check, library } = controls;
 	const { result, waiting, connectionError } = snapshot;
 	const busy = mode === 'native' && (!!waiting || result?.state === 'saving' || (!result && !connectionError));
 	const busyLabel = result?.state === 'saving' || waiting === 'retry' ? 'Saving LiDAR scan' : 'Connecting to LiDAR scanner';
-	const message = mode === 'outdated' ? 'Update the Thingtime iOS app to use LiDAR scanning.' :
+	const message = (mode === 'outdated' || (mode === 'native' && !library)) ? 'Update the Thingtime iOS app to use LiDAR scanning.' :
 		mode === 'browser' && handoff ? 'Use the signed-in account shown in the app. If it did not open, install or update the Thingtime iOS app.' :
 		connectionError || (result?.supported === false ? 'LiDAR scanning requires a supported iPhone or iPad.' :
 			result?.state === 'capturing' ? 'The scanner is open in Thingtime.' :
+			result?.state === 'device-saved' ? 'Saved to Thingtime on this device only.' :
 			result?.state === 'saved' ? (result.isPartial ? 'Partial scan saved to your private Things.' : 'Saved to your private Things.') :
-			result?.state === 'pending' ? (result.isPartial ? 'Partial scan saved on this device. Retry to save it to Things.' :
-				result.error || 'Saved on this device. Retry to finish saving to Things.') :
+			result?.state === 'pending' ? (result.isPartial ? 'Partial scan kept on this device. Choose where to save it in the library.' :
+				result.error || 'Scan kept on this device. Choose Device only or Cloud in the library.') :
 			result?.state === 'cancelled' ? 'Scan cancelled.' :
 			result?.state === 'error' ? result.error || 'Could not open the scanner. Try again.' : '');
 	const fileHref = fileId ? `/thing/${encodeURIComponent(fileId)}?from=things` : '';
 	const scopeKey = `${user.id}:${generation}`;
 	const scan = {
 		busy, busyLabel, fileHref, message: [message, result?.detail].filter(Boolean).join(' '), hasMessage: !!message, hasFile: !!fileHref,
-		showStart: mode === 'native' && result?.supported === true && result.state !== 'pending' && result.state !== 'capturing' && !connectionError,
-		showHandoff: mode === 'browser', showRetry: !connectionError && result?.state === 'pending', showCheck: !!connectionError
+		showStart: mode === 'native' && result?.supported === true && library && result.state !== 'capturing' && result.state !== 'saving' && !connectionError,
+		showHandoff: mode === 'browser', showRetry: !library && !connectionError && result?.state === 'pending', showCheck: !!connectionError
 	};
 	return <SettingsDocumentHost documentKey="lidar-scan-controls" defaultDocument={blocks} scopeKey={scopeKey} title="LiDAR scan layout"
 		editLayoutLabel="Edit scan layout" layoutEditingDisabled={busy || result?.state === 'capturing'}>

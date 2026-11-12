@@ -22,6 +22,13 @@ test('queue-only remote enrollment accepts only an exact timed start', () => {
 		assert.throws(() => validateRemoteSyncCommand({ ...start, ...fields }), /Invalid remote sync command/);
 });
 
+test('saved-intent recovery is an additive exact timed start and cannot combine with queue-only', () => {
+ const start = { action: 'start', connectionId: 'connection', expectedUpdatedAt: '2026-10-23T00:00:00Z', intervalMs: 300_000, recoverSavedIntent: true };
+ assert.deepEqual(validateRemoteSyncCommand(start), start);
+ for (const patch of [{ recoverSavedIntent: false }, { recoverSavedIntent: 'true' }, { intervalMs: undefined }, { queueOnly: true }, { ownerId: 'foreign' }])
+  assert.throws(() => validateRemoteSyncCommand({ ...start, ...patch }), /Invalid remote sync command/);
+});
+
 test('remote conflict approvals bind the exact review and observed revision', () => {
 	const base = { action: 'review', connectionId: 'connection', reviewId: 'review' };
 	assert.deepEqual(validateRemoteSyncCommand({ ...base, operation: 'finish', resolution: 'resolve', revision: 4 }), { ...base, operation: 'finish', resolution: 'resolve', revision: 4 });

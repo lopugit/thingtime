@@ -1,5 +1,6 @@
 import AppleFileSync
 import CryptoKit
+import CoreFoundation
 import WebKit
 
 /// Request-owned native byte transport shared by explicit exports and sync.
@@ -7,6 +8,10 @@ import WebKit
 /// changes cancel in-flight work; caller owns navigation/foreground/grant checks.
 @MainActor
 final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
+    struct PartRetry: LocalizedError {
+        var errorDescription: String? { "[folder_upload_retry] Cloud part verification is temporarily unavailable. The original upload and source were retained for retry." }
+    }
+    nonisolated static func retryablePartStatus(_ status: Int) -> Bool { status == 408 || status == 429 || (500...599).contains(status) }
     private let session: URLSession
     let scope: FileSyncOwnerScope
     private let cookieStore: WKHTTPCookieStore
@@ -110,6 +115,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     }
     func json(_ path: String, body: [String: Any]? = nil, statuses: Set<Int> = [200]) async throws -> [String: Any] {
         let data = try await read(path, limit: 512 * 1024, body: body) {
+            if path == "/api/v1/attachments/uploads/parts", Self.retryablePartStatus($0.statusCode) { throw PartRetry() }
             guard statuses.contains($0.statusCode) else { throw MobileFolderStore.Failure.unavailable }
         }
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
@@ -118,15 +124,18 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     /// The destination comes only from the authenticated selected server. Never
     /// attach account cookies, origin headers or bearer credentials to a PUT.
     func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool) async throws {
-        try await uploadPart(part, uploadId: uploadId, partNumber: partNumber, allowsCellular: allowsCellular,
+        _ = try await uploadPart(part, uploadId: uploadId, partNumber: partNumber, allowsCellular: allowsCellular,
                              photoAuthorization: nil, conditions: nil)
     }
+    @discardableResult
     func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool,
-                    photoAuthorization: NativeUploadAuthorization?, conditions: NativePhotoDownloadConditions?) async throws {
+                    photoAuthorization: NativeUploadAuthorization?, conditions: NativePhotoDownloadConditions?, legacyDeviceId: String? = nil, legacyRootId: String? = nil) async throws -> Int64 {
         try await verifyOwner(); try checkActive()
-        let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
+        try await require([("api.attachment-upload-parts", [1,3,0])])
+        let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId, "reconcileAcceptedParts": true,
             "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])
         var request = try Self.signedUploadRequest(signed, origin: scope.origin, checksum: part.checksumSha256, length: part.length, partNumber: partNumber)
+        if try Self.alreadyUploaded(signed) { try await verifyOwner(); try checkActive(); return 0 }
         request.allowsCellularAccess = allowsCellular
         try await verifyOwner(); try checkActive()
         let sender = NativeFileUpload(); upload = sender
@@ -136,7 +145,11 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         do {
             if let photoAuthorization, let conditions {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
-                    scope: scope, authorization: photoAuthorization, conditions: conditions, sender: sender)
+                    scope: scope, authorization: photoAuthorization, conditions: conditions, signedExpiry: try Self.signedUploadExpiry(signed, partNumber: partNumber), sender: sender)
+            } else if let legacyDeviceId, let legacyRootId, let conditions {
+                try await NativeManagedPhotoPartTransfer.shared.sendLegacy(request, file: part.url, length: part.length, configuration: configuration,
+                    scope: scope, deviceId: legacyDeviceId, rootId: legacyRootId,
+                    signedExpiry: try Self.signedUploadExpiry(signed, partNumber: partNumber), sender: sender, conditions: conditions)
             } else {
                 try await sender.send(request, file: part.url, configuration: configuration)
             }
@@ -145,6 +158,23 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
             throw NativeUploadAuthorization.Wait.wifi
         }
         try checkActive(); try await verifyOwner()
+        return part.length
+    }
+    /// Scheduling uses the exact authenticated signer receipt, never a new
+    /// relative lifetime inferred after signing or from an arbitrary PUT URL.
+    static func signedUploadExpiry(_ signed: [String: Any], partNumber: Int, now: Date = Date()) throws -> Date {
+        guard signed["ok"] as? Bool == true, let parts = signed["parts"] as? [[String: Any]], parts.count == 1,
+              parts[0]["partNumber"] as? Int == partNumber, let raw = parts[0]["expiresAt"] as? String,
+              let expiry = MobileDevicePairing.date(raw) else { throw MobileFolderStore.Failure.invalid }
+        guard expiry > now else { throw NativePhotoUploadBudget.Wait(retryAt: now.addingTimeInterval(1)) }
+        return expiry
+    }
+    /// Call only after validating the echoed part number/checksum/URL contract.
+    static func alreadyUploaded(_ signed: [String: Any]) throws -> Bool {
+        guard let parts = signed["parts"] as? [[String: Any]], parts.count == 1 else { throw MobileFolderStore.Failure.invalid }
+        guard let value = parts[0]["alreadyUploaded"] else { return false }
+        guard let flag = value as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID() else { throw MobileFolderStore.Failure.invalid }
+        return flag.boolValue
     }
     static func signedUploadRequest(_ signed: [String: Any], origin: URL, checksum: String, length: Int64, partNumber: Int) throws -> URLRequest {
         guard signed["ok"] as? Bool == true, let parts = signed["parts"] as? [[String: Any]], parts.count == 1,

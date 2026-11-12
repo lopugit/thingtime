@@ -1588,3 +1588,40 @@ test('Console stream failures discard malicious provider bodies before events, s
   }
  } finally {console.error = previous;}
 });
+
+test('Console known billing rejection reaches saved chat diagnostics without upstream text or credential echoes', async () => {
+ rewriteToFake('https://api.anthropic.com');
+ const logs: unknown[] = []; const previous = console.error; console.error = (...values: unknown[]) => { logs.push(values); };
+ try {
+  anthropicPlans.push({ status: 400, errorMessage: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.' });
+  const { events, outcome } = await collect(turn('Connectivity only', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', model: 'claude-haiku-4-5' }) }));
+  assert.match(events.find(event => event.type === 'error')?.message || '', /billing or credit problem.*HTTP 400/);
+  assert.match(outcome.error || '', /billing or credit problem.*HTTP 400/);
+  assert.doesNotMatch(JSON.stringify({ events, outcome, logs }), /Your credit balance|Plans & Billing|vault-token-xyz|server-bearer-secret/);
+  assert.equal(anthropicRequests.length, 1); assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+ } finally { console.error = previous; }
+});
+
+test('Console Haiku omits unsupported inherited effort without changing key, model or billing', async () => {
+ rewriteToFake('https://api.anthropic.com');
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'Haiku reply' }], stopReason: 'end_turn' });
+ const { events, outcome } = await collect(turn('Reply minimally', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', model: 'claude-haiku-4-5', effort: 'high' }) }));
+ assert.equal(text(events), 'Haiku reply'); assert.equal(outcome.provider, 'vault');
+ assert.equal(outcome.model, 'claude-haiku-4-5'); assert.equal(meta(events).effort, null);
+ assert.equal(anthropicRequests.length, 1);
+ const request = anthropicRequests[0];
+ assert.equal(request.headers['x-api-key'], 'vault-token-xyz'); assert.equal(request.headers.authorization, undefined);
+ assert.equal(request.body.model, 'claude-haiku-4-5'); assert.equal(request.body.max_tokens, 16000);
+ assert.equal(request.body.output_config, undefined); assert.equal(request.body.thinking, undefined);
+ assert.equal(request.body.budget_tokens, undefined);
+ assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+});
+
+test('Console supported model keeps its selected effort', async () => {
+ rewriteToFake('https://api.anthropic.com');
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'Opus reply' }], stopReason: 'end_turn' });
+ const { events, outcome } = await collect(turn('Reply minimally', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', model: 'claude-opus-4-6', effort: 'high' }) }));
+ assert.equal(text(events), 'Opus reply'); assert.equal(outcome.provider, 'vault');
+ assert.equal(meta(events).effort, 'high'); assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'high' });
+ assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+});

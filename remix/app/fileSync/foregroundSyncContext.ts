@@ -1,5 +1,5 @@
 import { deviceResourceKey, deviceSyncGovernor } from './deviceResourcePolicy';
-import { parseFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
+import { parseFileSyncConfiguration, FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
 import { assertConfiguredSyncApproval, planConfiguredFileSync, readOwnedFileSyncConfiguration, type SyncConditions, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
@@ -39,6 +39,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const authorize = async (observe?: () => Promise<SyncConditions>) => {
 		check();
+		if (configuration.uploadPolicy) for (const [feature, minimum] of Object.entries(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.photoAutomation) for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.resourceLimits) for (const [feature, minimum] of Object.entries(FILE_SYNC_RESOURCE_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);
@@ -91,6 +92,20 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		if (entry !== null && (!validSyncEntry(entry) || entry.path !== path)) throw Error('Native path observation changed.');
 		return entry === null ? null : structuredClone(entry);
 	};
+	const readLocalUploadSource = async (expected: SyncEntry) => {
+		check();
+		if (!validSyncEntry(expected) || expected.kind !== 'file' || !validSyncPath(expected.path)) throw Error('Invalid saved upload source.');
+		if (!input.inspectLocalStamp || !expected.fingerprint || expected.symbolicLink) return readLocal(expected.path);
+		// A matching native stamp validates the saved capture's source identity,
+		// not its bytes. The canonical upload still requires its original digest
+		// from uploaded bytes or a verified retained content object.
+		await authorize();
+		const stamp = await input.inspectLocalStamp(expected.path);
+		check();
+		if (stamp === null || stamp.path !== expected.path || stamp.id !== expected.id || stamp.version !== expected.version ||
+			stamp.kind !== 'file' || stamp.size !== expected.size) return null;
+		return structuredClone(expected);
+	};
 	const observeLocal = input.observeLocal ? async (path: string, parent: string) => {
 		check();
 		if (!validSyncPath(path) || parent !== path.split('/').slice(0, -1).join('/')) throw Error('Invalid observation paths.');
@@ -140,5 +155,5 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		stage: async (...args: Parameters<typeof input.localTarget.stage>) => { await authorize(); return input.localTarget!.stage(...args); },
 		publish: async (...args: Parameters<typeof input.localTarget.publish>) => { await authorize(); return input.localTarget!.publish(...args); }
 	} : undefined;
-	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, observeLocal, openSource, runtime, localTarget };
+	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, readLocalUploadSource, observeLocal, openSource, runtime, localTarget };
 }

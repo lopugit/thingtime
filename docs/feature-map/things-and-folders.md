@@ -1,9 +1,19 @@
 # Things and folders
 
-Archive and Restore in the owner library use the canonical bulk endpoint to
-change protected library placement metadata only. Explicit list and search
-filters apply before pagination. The Archived view finds items across folders;
-restoring keeps the original folder, links and audience. See [the manual
+Archive and Restore use the shared Thing action registry, `PersistedThingContextMenu`
+and exact-subject `/things/actions` availability/mutation contract. The canonical
+server predicate owns authorization; a page, content kind or stale parent projection
+must not independently decide permission. Batch library operations reuse that predicate.
+Extended reads require `LIBRARY_ARCHIVE_READ_REQUIREMENTS` (`api.things` 1.63),
+independent of Component argument bindings at 1.62. The shared Archive checker
+negotiates both the origin manifest and fixed active API source; action/search/
+bulk gates retain their own 1.1/1.7/1.9 contracts.
+This is private owner library placement, not unpublishing: original content, links,
+folder relationships and audiences remain unchanged. Explicit list filters apply before
+pagination. The Archived view can restore across folders, including static metadata
+cards for dedicated protected content whose body is unavailable to generic Things reads.
+Those cards expose Restore only. Builder Apps retains its root/app-only filter;
+Builder library folders share Archive/Restore. See [the manual
 checklist](../../TESTING.md#things-library-archive).
 
 ## Thing storage choices
@@ -721,6 +731,32 @@ Timeline publication stays in the shared runner. Scheduler refusal falls back to
 foreground; actual background completion and relaunch acceptance remain open.
 
 
+Photos automation 1.7.0 records closed background-session endings and actual
+last-progress measurements. `NativePhotoContinuedProgress` preserves all five
+siblings' measured work as exact publication receipts arrive; cloud preparation
+uses resource-fenced real download fractions. The existing activity row renders
+ending cause/time and retains last discovery/index values outside indexing.
+`nativePhotoProgressLifecycle` invalidates lease-active certainty on resume/focus;
+the hook scopes cached counts by owner, origin, device, plane and generation.
+Regressions: `NativeUploadBackgroundTests`, `NativeFileUploadJobTests`,
+`nativePhotoRunProgress.test.ts`, and the `native-lifecycle`, `native-scope`,
+`native-history` scenarios in `test-explicit-sync-start-ui.mjs`. Simulator and
+browser fixtures do not establish a physical iOS background guarantee.
+
+Photos automation 1.8.0 adds the exact-scope `wake-photo-run` foreground-entry
+operation. `NativeSyncBootstrap` uses the existing discovery/worker path across
+app pages, and `syncStartup` keeps only scoped presentation receipts for the
+editable status and canonical Lopu notification. Local cadence may wake early;
+explicit Pause, server/unknown retry barriers and transfer budgets remain
+binding. Repeated navigation must preserve active runs and receipts. The native
+reply distinguishes running, queued, waiting and refused work, independently
+of a continued-processing lease. See `iOS/README.md` and the app-entry checklist
+under **iOS Photos launch and retry** in `TESTING.md`.
+`MobileFolderControlRequests` isolates only negotiated startup list/status/wake
+requests from the serialized scan/upload lane. Its token cancellation and
+fresh paired-device checks are covered by `MobileFolderControlTests` and the
+client `mobileFolders.client.test.ts` regressions.
+
 ### Android current-file upload continuation
 
 `NativeUploadContinuation.java` owns one nonpersistent, token-scoped OS lease.
@@ -1164,3 +1200,26 @@ shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry
 Existing explicit limits/drafts remain intact; ordinary connection progress is
 independent from native CPU/scan telemetry. The paused-start browser harness
 exercises unsupported iOS capabilities and retained controls at both widths.
+
+Prepared Photos originals reuse the scoped reader cache in
+`apple/FileSync/Sources/AppleFileSync/PhotoLibraryReader.swift`. Preserve live
+provider/revision and staged-file checks across concurrent part reads; cache
+budgets never impose a file-size limit. `PhotoOriginalCacheTests` covers sibling
+lookahead reuse, invalidation, ownership cleanup and oversized originals, alongside
+the shared `PhotoLibraryTests` suite.
+
+### Device and scan library navigation — 2026-11-12
+
+`ThingsPage.tsx` routes `/things?lidar=1` to `LidarScanLibraryPage`, using the
+shared Thing browser cards and action slots. The Things context/settings menus
+link LiDAR scans and Unfiled files; New also links the scanner. Setup belongs
+beneath the device item and is shown only after native status confirms setup
+is needed. `MobileDeviceSetupEntry.tsx` subscribes to origin/owner/generation
+scoped pairing observations. Device Show Folder remains a context action.
+`deviceLocation.client.ts` requests ten newest observations per cursor; the
+saved `/devices/location` composition owns the inline Show more control and
+collapsed filters/locate controls. See `docs/native-lidar-scans.md` and the
+Device location / LiDAR sections of `TESTING.md` for acceptance requirements.
+
+Rendered regression entry points: `remix/scripts/device-details.browser.mjs`
+and `remix/scripts/lidar-scan.browser.mjs` (isolated synthetic fixtures).

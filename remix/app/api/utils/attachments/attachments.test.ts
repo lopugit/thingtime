@@ -2,6 +2,10 @@ import { createCanViewHomeAttachmentTarget } from './attachmentAccess';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createLocalAttachmentStorage } from './localAttachmentStorage';
 
 import {
 	ATTACHMENT_MIN_PART_BYTES,
@@ -1068,6 +1072,39 @@ test('part signing passes the server-derived exact length for every checksum-loc
 	assert.equal(result.ok, true);
 	assert.deepEqual(lengths, [8 * 1024 * 1024, 2 * 1024 * 1024]);
 	assert.equal(partsIssuedAt, now);
+});
+
+test('native background byte grants are bounded by admission and reservation expiry and cannot be requested in a client body', async () => {
+	const calls: { seconds?: number; background?: boolean }[] = [];
+	const fingerprint = { algorithm: 'sha256-parts-v1' as const, partCount: 2, partSizeBytes: 8 * 1024 * 1024,
+		sha256: createHash('sha256').update(Buffer.concat([Buffer.alloc(32, 1), Buffer.alloc(32, 2)])).digest('hex') };
+	let reservationSeconds = 900, refused = false, checks = 0;
+	const service = createAttachmentService({
+		now: () => now,
+		store: { getOwned: async () => attachmentDoc({ attachmentPurpose: 'file',
+			attachmentExpiresAt: new Date(now.getTime() + reservationSeconds * 1000) }), markPartsIssued: async () => {} } as any,
+		getS3: () => noopS3({ signUploadPart: async ({ expiresInSeconds, backgroundFileTransport, checksumSha256 }) => {
+			calls.push({ seconds: expiresInSeconds, background: backgroundFileTransport });
+			return { url: 'https://s3.example/part', headers: { 'x-amz-checksum-sha256': checksumSha256 },
+				expiresAt: new Date(now.getTime() + (expiresInSeconds || 0) * 1000).toISOString() };
+		} })
+	});
+	const body = { uploadId: 'attachment-1', parts: [{ partNumber: 1, checksumSha256: checksum(1) }] };
+	const authority = { expiresAt: new Date(now.getTime() + 1200_000), expectedFingerprint: fingerprint,
+		check: async () => { checks++; return refused ? { ok: false as const, status: 410, error: 'Revoked' } : null; } };
+	assert.equal((await service.signParts('user-1', body, authority)).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true,
+		expiresAt: new Date(now.getTime() + 300_000) })).ok, true);
+	reservationSeconds = 60;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.deepEqual(calls, [{ seconds: 120, background: undefined }, { seconds: 600, background: true },
+		{ seconds: 300, background: true }, { seconds: 60, background: true }]);
+	assert.equal(checks, 8, 'legacy authority checked before signing and before returning grants');
+	assert.equal((await service.signParts('user-1', { ...body, backgroundFileTransport: true }, authority)).ok, false);
+	refused = true;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, false);
+	assert.equal(calls.length, 4, 'no byte grants after refusal or client-supplied override');
 });
 
 test('post preflight is owner-bound, ready, unexpired and unattached, then atomic bind remains separate', async () => {
@@ -2994,4 +3031,75 @@ test('a legacy file finalizer cannot delete a version that consolidation moved b
     assert.ok(result.ok === false && result.code === 'finalization_lease_lost');
     assert.equal(deletions, 0);
   }
+});
+
+test('provider-confirmed parts survive budget rounds and host reconstruction using real stored bytes', async () => {
+ const directory = await mkdtemp(join(tmpdir(), 'tt-resume-parts-'));
+ try {
+  let storage = createLocalAttachmentStorage({directory},()=>now.getTime()); const objectKey='objects/attachment-1';
+  const {uploadId}=await storage.createMultipartUpload({objectKey,attachmentId:'attachment-1'});
+  const chunks=[Buffer.alloc(8*1024*1024,17),Buffer.alloc(8*1024*1024,29),Buffer.alloc(71,43)];
+  const doc=attachmentDoc({uploadId,objectSizeBytes:chunks.reduce((n,b)=>n+b.length,0)}),sent:number[]=[],charged:number[]=[];
+  for(let round=0;round<3;round++) {
+   storage=createLocalAttachmentStorage({directory},()=>now.getTime());
+   const service=createAttachmentService({now:()=>now,getS3:()=>storage,store:{getOwned:async(owner:string,id:string)=>owner==='user-1'&&id===doc.shareId?doc:null,markPartsIssued:async()=>attachmentDoc()} as any});
+   let remaining=8*1024*1024;
+   for(const [i,bytes] of chunks.entries()) {
+    const r=await service.signParts('user-1',{uploadId:doc.shareId,reconcileAcceptedParts:true,parts:[{partNumber:i+1,checksumSha256:createHash('sha256').update(bytes).digest('base64')}]});
+    assert.equal(r.ok,true);if(!r.ok)throw Error('Reconciliation failed');const p=r.parts[0];
+    if(p.alreadyUploaded===true)continue;
+    if(bytes.length>remaining)break;
+    const response=await storage.handleRequest(new Request(new URL(p.url as string,'http://storage.test'),{method:'PUT',headers:{...(p.headers as Record<string,string>),'content-length':String(bytes.length)},body:bytes}));
+    assert.equal(response.status,200);sent.push(i+1);charged.push(bytes.length);remaining-=bytes.length;
+   }
+  }
+  assert.deepEqual(sent,[1,2,3],'no accepted part is retransmitted across allowance waits or reconstructed hosts');
+  assert.deepEqual(charged,chunks.map(b=>b.length),'verified skips add zero payload bytes');
+  const legacyService=createAttachmentService({now:()=>now,getS3:()=>storage,store:{getOwned:async()=>doc,markPartsIssued:async()=>doc} as any});
+  const legacy=await legacyService.signParts('user-1',{uploadId:doc.shareId,parts:[{partNumber:1,checksumSha256:createHash('sha256').update(chunks[0]).digest('base64')}]});
+  assert.equal(legacy.ok,true);if(!legacy.ok)throw Error('Legacy signing refused');
+  assert.equal(legacy.parts[0].alreadyUploaded,undefined);
+  // A pre-upgrade caller ignores the additive flag. Its unchanged full-size
+  // signed grant still accepts the full PUT; no zero-byte admission was issued.
+  const oldPut=await storage.handleRequest(new Request(new URL(legacy.parts[0].url as string,'http://storage.test'),{method:'PUT',headers:{...(legacy.parts[0].headers as Record<string,string>),'content-length':String(chunks[0].length)},body:chunks[0]}));
+  assert.equal(oldPut.status,200);
+  const parts=await storage.listParts({objectKey,uploadId});const completed=await storage.completeMultipartUpload({objectKey,uploadId,parts});
+  const signed=await storage.signDownload({objectKey,versionId:completed.versionId,contentType:'application/octet-stream',contentDisposition:'attachment'});
+  const result=await storage.handleRequest(new Request(new URL(signed.url,'http://storage.test')));assert.equal(result.status,200);
+  assert.equal(createHash('sha256').update(Buffer.from(await result.arrayBuffer())).digest('hex'),createHash('sha256').update(Buffer.concat(chunks)).digest('hex'));
+ } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+test('reconciliation fails closed for malformed or unavailable proof and reservation changes', async()=>{
+ const row={partNumber:1,sizeBytes:8*1024*1024,checksumSha256:checksum(1),etag:'one'},body={uploadId:'attachment-1',reconcileAcceptedParts:true,parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ for(const rows of [[row,row],[{...row,sizeBytes:1}],[{...row,checksumSha256:''}]]){
+  let signed=0;const service=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>rows,signUploadPart:async()=>{signed++;throw Error('must not sign');}})});
+  assert.equal((await service.signParts('user-1',body)).ok,false);assert.equal(signed,0);
+ }
+ let live=true,signed=0;
+ const service=createAttachmentService({now:()=>now,store:{getOwned:async()=>live?attachmentDoc():null,markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{live=false;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign');}})});
+ assert.equal((await service.signParts('user-1',body)).ok,false);assert.equal(signed,0);
+ const unavailable=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{throw Error('provider unavailable')}})});
+ const result=await unavailable.signParts('user-1',body);assert.equal(result.ok,false);if(!result.ok)assert.equal(result.status,503);
+});
+
+test('legacy signing remains available without provider proof while opt-in lookup failures are retryable',async()=>{
+ let lookups=0;const service=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{lookups++;throw Error('ListParts unavailable')}})});
+ const body={uploadId:'attachment-1',parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ const legacy=await service.signParts('user-1',body);assert.equal(legacy.ok,true);assert.equal(lookups,0);
+ if(legacy.ok){assert.equal(legacy.parts[0].alreadyUploaded,undefined);assert.equal(typeof legacy.parts[0].url,'string');}
+ const guarded=await service.signParts('user-1',{...body,reconcileAcceptedParts:true});assert.equal(guarded.ok,false);assert.equal(lookups,1);if(!guarded.ok)assert.equal(guarded.status,503);
+ for(const flag of [null,'true',1])assert.equal((await service.signParts('user-1',{...body,reconcileAcceptedParts:flag})).ok,false);
+});
+
+test('opted-in acceptance refuses expiry and revoked authority after provider awaits',async()=>{
+ const row={partNumber:1,sizeBytes:8*1024*1024,checksumSha256:checksum(1),etag:'one'};
+ const body={uploadId:'attachment-1',reconcileAcceptedParts:true,parts:[{partNumber:1,checksumSha256:checksum(1)}]};
+ let clock=now.getTime(),signed=0;
+ const expired=createAttachmentService({now:()=>new Date(clock),store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{clock=now.getTime()+60001;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign')}})});
+ const expiry=await expired.signParts('user-1',body);assert.equal(expiry.ok,false);if(!expiry.ok)assert.equal(expiry.status,410);assert.equal(signed,0);
+ let revoked=false;
+ const denied=createAttachmentService({now:()=>now,store:{markPartsIssued:async()=>attachmentDoc()} as any,getS3:()=>noopS3({listParts:async()=>{revoked=true;return[row]},signUploadPart:async()=>{signed++;throw Error('must not sign')}})});
+ const authority={expiresAt:new Date(now.getTime()+60000),expectedFingerprint:{algorithm:'sha256-parts-v1' as const,partSizeBytes:8*1024*1024,partCount:2,sha256:'a'.repeat(64)},check:async()=>revoked?{ok:false as const,status:403,error:'revoked'}:undefined};
+ const result=await denied.signParts('user-1',body,authority);assert.equal(result.ok,false);if(!result.ok)assert.equal(result.status,403);assert.equal(signed,0);
 });

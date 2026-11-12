@@ -1,6 +1,26 @@
 # API endpoints and capabilities
 
-Device sync control 1.5.0 adds config-scoped activity and paged receipt history
+`api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
+for recognized structured billing, spend-limit, model-access and unsupported
+parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;
+unknown errors retain status only. No raw upstream body is returned or logged.
+Personal-provider chat clients negotiate this patch. Run `test:anthropic-api-key`,
+`test:lopu-chat-streaming`, and `test:api-capabilities`.
+
+Connections feed 2.0.2 identifies exact Facebook Graph HTTP 400 code 200/subcode
+2069030 as a New Pages Experience endpoint/account restriction using fixed copy.
+Diagnostics 1.0.1 retains `permission-denied` for that restriction independently
+of confirmed grants. Existing client shapes and minimum ranges remain compatible.
+Run `test:connections` and the compiled Connections smoke after building.
+
+Device sync control 1.6.0 adds an optional exact saved-intent recovery command
+for an idle worker with a retained strict scanner. The browser requires both the
+selected origin's compatible feature, the executing worker's independent
+recovery advertisement and an owner-private strictCapturePending job hint;
+earlier workers and first-time intents keep queue-only enrollment. The worker
+rechecks pause, config revision, original job and scanner under the root lock
+before native cleanup and preserves the original receipts and job ID. Version
+1.5.0 added config-scoped activity and paged receipt history
 to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
 same native receipt journal used locally; `api/utils/devices/` enforces pairing,
 owning account and private-config authorization. Closed result validation and
@@ -8,6 +28,15 @@ client requirement maps must stay aligned. Attachment upload deduplication and
 its activation/consolidation migrations use the canonical attachment lifecycle;
 see [device sync configs](../device-sync-configs.md) for rollout and deletion
 invariants, and the `TESTING.md` checklist for real API acceptance.
+`api.files` 1.13.0 adds a terminal no-effect response to the existing Files
+operation lookup and a same-route POST fence for the original file upload ID.
+The canonical Timeline event identity resolves races against late commits;
+complete-first returns the immutable original receipt. `cloudTransport.ts`
+negotiates 1.13.0 only for this recovery action, and `pagedRunJournal.ts`
+requires the exact receipt before retiring a dispatched row. A null lookup
+alone is never proof that an old write cannot still commit. Run the focused
+file sync tests and `test-cloud-inventory-pages.mjs --empty-files` for its
+real-route replica-set race.
 
 `api.agent-overview` 2.1.0 adds optional multi-select task level, status and
 project filters to `GET /api/v1/agent-overview`. The read adapter applies them
@@ -962,3 +991,48 @@ The additive saved-provider kind `anthropic-api-key` is published by
 records retain their original Claude Code runtime; Console keys never infer
 subscription access or fall back to platform billing. Both manifests derive
 these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
+
+## Shared owner-library Archive actions
+
+`api.things-actions` 1.1.0 adds same-origin full-user-session GET availability
+and POST Archive/Restore at `/api/v1/things/actions`. The existing Nitro
+`actionDataRoutes` registration serves both methods. The canonical helper in
+`api/utils/things/things.ts` and the pure `libraryArchiveEligibility.ts`
+predicate serve single actions, bulk placement and archived lists. Dedicated
+message/community/subspace content uses static private library descriptors;
+source bodies, participants, media bindings and credential/control Things stay
+behind their own APIs. Full-content inherited Things retain the canonical
+ancestor ACL check. Versions Things 1.63.0, Things search 1.7.0 and Things bulk
+1.9.0 advertise the expanded placement and safe projection contracts. The
+Archive read minimum is 1.63, while upstream Component argument bindings keep
+their 1.62 floor; `libraryArchiveCapabilities.client.ts` composes canonical
+origin and active-API checks to prevent mixed-deployment false positives.
+Run the Things actions, owner-library predicate, comment projection and both
+capability suites, plus the real API/Chrome library Archive acceptance script.
+
+Protected metadata cards are discoverable through the owner Archived list and
+kind filters. Generic structured search retains normal content authority and
+excludes these metadata-only kinds, so body predicates cannot reveal private
+message text through result existence.
+
+## Google service actions on named grants
+
+The existing Connections list contract is 2.3.0, named-action contract 1.1.0,
+and OAuth begin/callback 2.2.0. Current clients negotiate the selected origin and
+request `includeNamed=1&includeServiceOperations=1`; original clients receive
+only original named-operation IDs. POST named accepts typed `resourceId` and
+opaque `pageToken` for fixed allowlisted Google operations. Routes remain in the
+canonical registry/import map; both manifests derive from their explicit
+versions. Run Connections and capability tests, the compiled Connections
+manifest smoke, and the isolated desktop/mobile OAuth-tab fixture. See
+[service actions](../google-service-actions.md) for the exact operations/scopes.
+
+The canonical client checker also exposes the fixed same-origin `active-api`
+source. Connections requires modern and active API capability maps; an older
+shared API behind a newer frontend cannot enable service actions. Neither
+manifest-supplied foreign URLs nor frontend-only versions establish support.
+
+Photos source discovery extends the existing sync-transfer-admissions route at
+1.8.0; both manifest generators consume its canonical docs entry. Scoped native
+writes, owner reads/discard and watermark pagination share that route; no generic
+Things permission is delegated. See [source index](../sync-source-index.md).

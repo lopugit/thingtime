@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useInRouterContext } from 'react-router';
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
 
 import { Icon } from '../../Icon/Icon';
 import type { ThingContextAction, ThingContextMenuModel, ThingContextSection } from './contextMenuModel';
@@ -42,6 +42,8 @@ export type ThingContextMenuAction = {
 
 export interface ThingContextMenuProps {
 	model: ThingContextMenuModel;
+  busyLabel?: string;
+  keepOpenCommands?: readonly string[];
 	open: boolean;
 	presentation?: ThingContextMenuPresentation;
 	// thing being acted on; rendered in the header. zone names which virtual
@@ -399,11 +401,11 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 
 			onAction?.({ action, section, path: currentPath });
 
-			if (closeOnAction && !pinned) {
+			if (closeOnAction && !pinned && !props.keepOpenCommands?.includes(action.command || '')) {
 				onClose?.();
 			}
 		},
-		[onAction, currentPath, closeOnAction, pinned, onClose]
+		[onAction, currentPath, closeOnAction, pinned, onClose, props.keepOpenCommands]
 	);
 
 	const onItemActivate = React.useCallback(
@@ -661,6 +663,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 						>
 							{meta?.path || 'thingtime'}
 						</Text>
+						{props.busyLabel && <Spinner size="xs" label={props.busyLabel} sx={{ '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }} />}
 						{meta?.zone && meta.zone !== 'thing' && (
 							<Text
 								flexShrink={0}

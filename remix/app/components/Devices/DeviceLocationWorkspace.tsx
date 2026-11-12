@@ -8,6 +8,8 @@ import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
+import type { WebpageBlock } from '../Builder/webpageBlocks';
+
 import { deviceModelArtwork } from './deviceModelArtwork';
 import { useDeviceLocateActions } from './useDeviceLocateActions';
 import type { MobileLocationAction } from './mobileDeviceLocationBridge';
@@ -19,6 +21,15 @@ import {
 	type DeviceLocationPage,
 	type DeviceLocationScope
 } from './deviceLocation.client';
+
+// Wrap existing authored controls without flattening their individually editable blocks.
+const collapsedLocationSettings = (blocks: WebpageBlock[]): WebpageBlock[] =>
+	!blocks.length || blocks.some(block => block.id === 'device-location-settings-disclosure') ? blocks : [{
+		id: 'device-location-settings-disclosure', type: 'element', tag: 'details', children: [
+			{ id: 'device-location-settings-heading', type: 'element', tag: 'summary', text: 'Location settings', css: { 'min-height': '44px', padding: '12px 0', cursor: 'pointer', 'font-weight': '600' } },
+			...blocks
+		]
+	}];
 
 /** Data/permission adapter only. The map, marker, legend and settings layouts
  * remain private authored Things; this host never seeds a product template. */
@@ -58,12 +69,14 @@ function LocationSession({ scope, model, platform }: { scope: DeviceLocationScop
 	const running = React.useRef(false),
 		filter = React.useRef({ from: '', to: '' });
 	const load = async (append = false) => {
-		const next = await readDeviceLocations(scope, lifetime.current.signal, {
+		// Capture this request lifetime: StrictMode or an identity change may replace the ref.
+		const signal = lifetime.current.signal;
+		const next = await readDeviceLocations(scope, signal, {
 			...(filter.current.from ? { from: filter.current.from } : {}),
 			...(filter.current.to ? { to: filter.current.to } : {}),
 			...(append && page?.nextCursor ? { cursor: page.nextCursor } : {})
 		});
-		lifetime.current.signal.throwIfAborted();
+		signal.throwIfAborted();
 		setPage((previous) =>
 			append && previous
 				? { ...next, observations: [...new Map([...previous.observations, ...next.observations].map((row) => [row.id, row])).values()] }
@@ -73,6 +86,7 @@ function LocationSession({ scope, model, platform }: { scope: DeviceLocationScop
 	React.useEffect(() => {
 		const controller = new AbortController();
 		lifetime.current = controller;
+		running.current = true;
 		setBusy(true);
 		void Promise.all([readDeviceLocations(stableScope, controller.signal), resolveWebpageClient({ kind: 'path', path: '/devices/location' })])
 			.then(
@@ -87,7 +101,7 @@ function LocationSession({ scope, model, platform }: { scope: DeviceLocationScop
 				}
 			)
 			.finally(() => {
-				if (!controller.signal.aborted) setBusy(false);
+				if (!controller.signal.aborted) { running.current = false; setBusy(false); }
 			});
 		return () => controller.abort();
 	}, [stableScope]); // The enclosing keyed scope owns origin, account, plane and device.
@@ -247,6 +261,7 @@ function LocationSession({ scope, model, platform }: { scope: DeviceLocationScop
 				)}
 				<SettingsDocumentHost
 					documentKey="device-location-settings"
+					migrateBlocks={collapsedLocationSettings}
 					defaultDocument={[]}
 					scopeKey={scopeKey}
 					title="Location settings"

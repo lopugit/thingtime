@@ -35,6 +35,15 @@ export type AttachmentObjectHead = {
 	versionId: string;
 };
 
+export type AttachmentBackgroundFileTransport = {
+	kind: 'background-file-v1';
+	origin: string;
+	path: string;
+	method: 'PUT';
+	redirects: 'provider-managed';
+	expiresAt: string;
+};
+
 export type AttachmentS3 = {
     putEmptyObject(input: { objectKey: string; attachmentId: string }): Promise<{ versionId: string }>;
 	copyUploadPart(input: {
@@ -51,8 +60,10 @@ export type AttachmentS3 = {
 		checksumSha256: string;
 		contentLength: number;
 		expiresInSeconds?: number;
-	}): Promise<{ url: string; expiresAt: string; headers: Record<string, string> }>;
-	listParts(input: { objectKey: string; uploadId: string }): Promise<AttachmentUploadedPart[]>;
+		/** Internal, current Photos admission only; never accepted from an upload body. */
+		backgroundFileTransport?: boolean;
+	}): Promise<{ url: string; expiresAt: string; headers: Record<string, string>; transport?: AttachmentBackgroundFileTransport }>;
+	listParts(input: { objectKey: string; uploadId: string; partNumber?: number }): Promise<AttachmentUploadedPart[]>;
 	completeMultipartUpload(input: { objectKey: string; uploadId: string; parts: AttachmentUploadedPart[] }): Promise<{ versionId: string }>;
 	headObject(input: { objectKey: string; versionId?: string }): Promise<AttachmentObjectHead>;
 	detectContentType(input: { objectKey: string; versionId: string }): Promise<string | undefined>;
@@ -149,7 +160,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			return { uploadId: result.UploadId };
 		},
 
-		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength, expiresInSeconds = PART_URL_TTL_SECONDS }) {
+		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength, expiresInSeconds = PART_URL_TTL_SECONDS, backgroundFileTransport = false }) {
 			const command = new UploadPartCommand({
 				...common,
 				Key: objectKey,
@@ -165,16 +176,48 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 				unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
 				signableHeaders: new Set(['content-length', 'x-amz-checksum-sha256'])
 			});
+			let expiration = expiresAt(Math.min(expiresInSeconds, PART_URL_TTL_SECONDS));
+			let transport: AttachmentBackgroundFileTransport | undefined;
+			if (backgroundFileTransport) {
+				// Background URLSession always follows redirects. Only our canonical
+				// direct regional S3 signer can opt into that provider trust boundary;
+				// custom/local adapters and arbitrary URL-shaped values cannot do so.
+				const target = new URL(url);
+				const query = target.searchParams;
+				const signedDate = query.get('X-Amz-Date') || '';
+				const date = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(signedDate);
+				const start = date ? Date.parse(`${date[1]}-${date[2]}-${date[3]}T${date[4]}:${date[5]}:${date[6]}Z`) : NaN;
+				const seconds = Number(query.get('X-Amz-Expires'));
+				const fields = ['X-Amz-Date', 'X-Amz-Expires', 'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Signature', 'X-Amz-SignedHeaders', 'partNumber', 'uploadId', 'x-amz-expected-bucket-owner'];
+				if (target.origin !== `https://${config.bucket}.s3.${config.region}.amazonaws.com` ||
+					target.username || target.password || target.hash ||
+					target.pathname !== '/' + objectKey.split('/').map(encodeURIComponent).join('/') ||
+					!/^objects\/[A-Za-z0-9_-]+$/.test(objectKey) || fields.some(key => query.getAll(key).length !== 1) ||
+					query.get('X-Amz-Algorithm') !== 'AWS4-HMAC-SHA256' ||
+					!query.get('X-Amz-Credential')?.endsWith(`/${config.region}/s3/aws4_request`) ||
+					!/^[a-f0-9]{64}$/.test(query.get('X-Amz-Signature') || '') ||
+					query.get('X-Amz-SignedHeaders') !== 'content-length;host;x-amz-checksum-sha256' ||
+					query.get('partNumber') !== String(partNumber) || query.get('uploadId') !== uploadId ||
+					query.get('x-amz-expected-bucket-owner') !== config.expectedBucketOwner ||
+					!Number.isFinite(start) || !Number.isInteger(seconds) || seconds <= 0 ||
+					seconds > Math.min(expiresInSeconds, PART_URL_TTL_SECONDS) || start + seconds * 1000 <= Date.now()) {
+					throw new Error('Invalid canonical background upload target');
+				}
+				expiration = new Date(start + seconds * 1000).toISOString();
+				transport = { kind: 'background-file-v1', origin: target.origin, path: target.pathname,
+					method: 'PUT', redirects: 'provider-managed', expiresAt: expiration };
+			}
 			return {
 				url,
-				expiresAt: expiresAt(Math.min(expiresInSeconds, PART_URL_TTL_SECONDS)),
-				headers: { 'x-amz-checksum-sha256': checksumSha256 }
+				expiresAt: expiration,
+				headers: { 'x-amz-checksum-sha256': checksumSha256 },
+				...(transport ? { transport } : {})
 			};
 		},
 
-		async listParts({ objectKey, uploadId }) {
+		async listParts({ objectKey, uploadId, partNumber }) {
 			const parts: AttachmentUploadedPart[] = [];
-			let marker: string | undefined;
+			let marker: string | undefined = partNumber === undefined ? undefined : String(partNumber - 1);
 			do {
 				const page = await client.send(
 					new ListPartsCommand({
@@ -182,7 +225,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 						Key: objectKey,
 						UploadId: uploadId,
 						PartNumberMarker: marker,
-						MaxParts: 1000
+						MaxParts: partNumber === undefined ? 1000 : 1
 					})
 				);
 				for (const part of page.Parts || []) {
@@ -196,6 +239,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 						checksumSha256: part.ChecksumSHA256
 					});
 				}
+				if (partNumber !== undefined) return parts.filter(part => part.partNumber === partNumber);
 				marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
 				if (page.IsTruncated && !marker) throw new Error('S3 returned an invalid multipart cursor');
 			} while (marker);

@@ -138,6 +138,8 @@ export type AttachmentTransferAuthority = {
 	expiresAt: Date;
 	expectedFingerprint: ContentFingerprint;
 	check: () => Promise<AttachmentFail | null>;
+	/** Server-derived native Photos grant. Other delegated transfers stay at 120 seconds. */
+	backgroundFileTransport?: boolean;
 };
 
 const matchesTransferFingerprint = (head: AttachmentObjectHead, authority: AttachmentTransferAuthority): boolean => {
@@ -1047,7 +1049,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid upload part request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => key !== 'uploadId' && key !== 'parts')) {
+			if (Object.keys(raw).some((key) => key !== 'uploadId' && key !== 'parts' && key !== 'reconcileAcceptedParts') ||
+				(raw.reconcileAcceptedParts !== undefined && typeof raw.reconcileAcceptedParts !== 'boolean')) {
 				return fail(400, 'Invalid upload part request');
 			}
 			const id = normalizeId(raw.uploadId);
@@ -1061,7 +1064,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const plan = attachmentPartPlan(doc.objectSizeBytes);
 			const requested = exactPartRequest(raw.parts, plan.partCount);
-			const expiresInSeconds = authority ? Math.min(120, Math.floor((authority.expiresAt.getTime() - dependencies.now().getTime()) / 1000)) : undefined;
+			const expiresInSeconds = authority ? Math.min(authority.backgroundFileTransport ? 600 : 120,
+				Math.floor((Math.min(authority.expiresAt.getTime(), doc.attachmentExpiresAt.getTime()) - dependencies.now().getTime()) / 1000)) :
+				raw.reconcileAcceptedParts === true ? Math.min(600, Math.floor((doc.attachmentExpiresAt.getTime() - dependencies.now().getTime()) / 1000)) : undefined;
 			if (expiresInSeconds !== undefined && expiresInSeconds < 1) return fail(410, 'Transfer admission expired');
 			// A one-part object's entire committed source can be verified before
 			// giving storage any URL. Multipart objects are verified before Complete.
@@ -1072,9 +1077,35 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
           return fail(409, 'Upload part does not match the admitted source');
 			}
 			const s3 = dependencies.getS3();
+			// Provider acceptance survives client/process loss. A payload cache or
+			// local progress never proves that the exact remote part was accepted.
+			const retained = raw.reconcileAcceptedParts === true ? await Promise.all(requested.map(async part => {
+				const rows = await s3.listParts({ objectKey: doc.objectKey, uploadId: doc.uploadId!, partNumber: part.partNumber });
+				const seen = new Set<number>();
+				for (const row of rows) {
+					if (!Number.isInteger(row.partNumber) || row.partNumber < 1 || row.partNumber > plan.partCount ||
+						seen.has(row.partNumber) || row.sizeBytes !== attachmentExpectedPartBytes(doc.objectSizeBytes, row.partNumber) ||
+						typeof row.etag !== 'string' || !row.etag || !isCanonicalSha256(row.checksumSha256))
+						throw new Error('Storage returned invalid multipart acceptance metadata');
+					seen.add(row.partNumber);
+				}
+				return rows.some(row => row.partNumber === part.partNumber && row.checksumSha256 === part.checksumSha256);
+			})) : [];
+			const currentUpload = async () => {
+				const current = await dependencies.store.getOwned(ownerId, id);
+				if (!current || current.attachmentState !== 'pending' || current.uploadId !== doc.uploadId ||
+					current.objectKey !== doc.objectKey || current.objectSizeBytes !== doc.objectSizeBytes)
+					return fail(409, 'Attachment upload changed during part reconciliation');
+				if (!current.attachmentExpiresAt || current.attachmentExpiresAt.getTime() <= dependencies.now().getTime())
+					return fail(410, 'Attachment upload expired');
+				return await authority?.check();
+			};
+			const afterLookup = raw.reconcileAcceptedParts === true ? await currentUpload() : undefined;
+			if (afterLookup) return afterLookup;
 			const parts = await Promise.all(
-				requested.map(async (part) => ({
+				requested.map(async (part, index) => ({
 					partNumber: part.partNumber,
+					...(retained[index] ? { alreadyUploaded: true } : {}),
 					...(await s3.signUploadPart({
 						objectKey: doc.objectKey,
 						uploadId: doc.uploadId!,
@@ -1083,14 +1114,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						// Signed Content-Length closes the cost bypass where a tiny quota
 						// reservation could otherwise accept an oversized incomplete part.
 						contentLength: attachmentExpectedPartBytes(doc.objectSizeBytes, part.partNumber),
-						...(expiresInSeconds === undefined ? {} : { expiresInSeconds })
+						...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
+						...(authority?.backgroundFileTransport ? { backgroundFileTransport: true } : {})
 					}))
 				}))
 			);
 			await dependencies.store.markPartsIssued(ownerId, id, dependencies.now());
-			const changed = await authority?.check();
+			const changed = raw.reconcileAcceptedParts === true ? await currentUpload() : await authority?.check();
 			if (changed) return changed;
 			if (authority && parts.some(part => Date.parse(part.expiresAt) > authority.expiresAt.getTime())) return fail(410, 'Transfer admission expired');
+			if (raw.reconcileAcceptedParts === true && parts.some(part => !Number.isFinite(Date.parse(String(part.expiresAt))) || Date.parse(String(part.expiresAt)) > doc.attachmentExpiresAt!.getTime())) return fail(410, 'Attachment upload grant outlived its reservation');
 			return { ok: true, parts };
 		} catch (error) {
 			return knownFailure(error) || unavailable('sign parts', error);

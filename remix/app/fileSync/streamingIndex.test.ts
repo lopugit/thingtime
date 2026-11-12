@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readNativeIndexChanges, type NativeIndexChangesPage } from './streamingIndex';
+import { readNativeIndexChanges, NativeStreamingIndexInterrupted, type NativeIndexChangesPage } from './streamingIndex';
 import { assertNativeScanExclusions, parseMobileFolderResult, supportsNativeStreamingIndex, supportsNativeStreamingBatches, type FolderRequest } from './mobileFolders.client';
 const id = crypto.randomUUID(),
 	entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, size: 0, sha256: 'a'.repeat(64) };
@@ -13,6 +13,20 @@ const page = (sequence: number, state: NativeIndexChangesPage['state'], changes:
 	nextSequence: sequence,
 	hasMore: false,
 	totalSkipped: 0
+});
+test('validated interrupted native stream has a distinct recovery reason and keeps its cursor', async () => {
+	const actions: string[] = [];
+	const iterator = readNativeIndexChanges({ ownerId: 'owner', deviceId: 'device', rootId: 'root', captureId: id,
+		afterSequence: 3, signal: new AbortController().signal,
+		request: async (_owner, request) => {
+			actions.push(request.action);
+			if (request.action === 'scan-stream') return { roots: [], changesPage: page(3, 'running') };
+			assert.equal(request.action, 'scan-changes');
+			assert.equal(request.afterSequence, 3);
+			return { roots: [], changesPage: page(3, 'interrupted') };
+		} });
+	await assert.rejects(iterator.next(), NativeStreamingIndexInterrupted);
+	assert.deepEqual(actions, ['scan-stream', 'scan-changes']);
 });
 test('native streaming capability and every scoped result negotiate independently from sealed inventory', () => {
 	const request: FolderRequest = {

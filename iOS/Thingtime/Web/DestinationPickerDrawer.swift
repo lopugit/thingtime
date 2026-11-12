@@ -63,8 +63,8 @@ struct DestinationPickerDrawer: View {
                 HStack(spacing: 12) {
                     Image(systemName: "viewfinder")
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Scan").font(.body.weight(.medium))
-                        Text("Open LiDAR Scanner").font(.caption).foregroundStyle(.secondary)
+                        Text("LiDAR scans").font(.body.weight(.medium))
+                        Text("Browse scans and capture a space").font(.caption).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }

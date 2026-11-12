@@ -189,3 +189,11 @@ test('editable images reuse bounded PNG thumbnails while arbitrary blob/data URL
  assert.doesNotMatch(renderToStaticMarkup(React.createElement(HtmlBlockElement,{tag:'a',attributes:{href:png},children:'Link'})),/ href=/);
  const bytes=Buffer.from(png.slice(22),'base64');bytes.writeUInt32BE(65,16);assert.doesNotMatch(image('data:image/png;base64,'+bytes.toString('base64')),/ src=/);
 });
+
+test('private hydration markers are inert names and cannot introduce an image source', () => {
+  for (const prop of ['data-tt-private-control', 'data-tt-private-text']) assert.ok(ALLOWED_PROPS.has(prop));
+  assert.equal(ALLOWED_PROPS.has('data-tt-private-image'), false);
+  const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, { tag: 'input', attributes: { name: 'private-field', 'data-tt-private-control': '' }, editorProps: {}, children: null }));
+  assert.match(markup, /data-tt-private-control=""/);
+  assert.doesNotMatch(markup, /value=/);
+});

@@ -3,7 +3,7 @@ import type { SavedFileSyncConfiguration } from './configuredPlan';
 import type { openSyncJournal } from './journal.client';
 import type { JournalAccess } from './journalScope';
 import type { PreviousPhotoSettings } from './photoSettingsJournal';
-import { photoSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
+import { backupSettingsChanged, sameRecoverableBackupSource, sameFolderUploadPolicySource } from './photoSettingsPolicy';
 import { SyncJobConfigurationChanged } from './syncJobFailure';
 import type { SyncJob } from './syncJobJournal';
 
@@ -17,15 +17,15 @@ export async function preparePhotoSettingsRecovery(
 	port: { verify(): Promise<void>; disarm(): Promise<void>; check(): void }
 ): Promise<Recovery | undefined> {
 	const current = parseFileSyncConfiguration(saved.configuration);
-	if (current.sourceKind !== 'photos' || current.paused) return;
+	if (current.paused || (current.sourceKind !== 'photos' && !sameFolderUploadPolicySource(prior?.reviewed.configuration ?? current, current))) return;
 	const [active, draft, legacy] = await Promise.all([
 		journal.pagedRuns(access).active(), journal.reviewDrafts(access).active(), journal.read(access.scope)
 	]);
 	port.check();
 	const same = (configuration: FileSyncConfiguration | undefined) => JSON.stringify(configuration) === JSON.stringify(current);
-	const reviewedChanged = !!prior && photoSettingsChanged(prior.reviewed, { ...saved, configuration: current });
+	const reviewedChanged = !!prior && backupSettingsChanged(prior.reviewed, { ...saved, configuration: current });
 	const park = (configuration: FileSyncConfiguration | undefined) => !!configuration &&
-		samePhotoBackupSource(configuration, current) && (reviewedChanged || !same(configuration));
+		sameRecoverableBackupSource(configuration, current) && (reviewedChanged || !same(configuration));
 	const previous = prior?.reviewed.configuration;
 	const pagedConfig = active?.spec.configuration, draftConfig = draft?.spec.configuration;
 	let legacyConfig: FileSyncConfiguration | undefined;

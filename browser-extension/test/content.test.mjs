@@ -23,3 +23,11 @@ test('content bridge reports absent main hook after one bounded query',async()=>
 });
 
 test('general content listener does not steal the asynchronous account bridge reply',()=>{const query=setup();let replies=0;assert.equal(query.receive()({action:'accounts-discover',nonce:'request'},{},()=>replies++),false);assert.equal(replies,0);});
+
+test('fixed AppID diagnostics cross the content bridge without request values',async()=>{
+ for(const fallbackReason of [13,14]){
+  const result=await setup({version:1,fallbackReason,appid:'private',challenge:'private'})();
+  assert.equal(result.hook.fallbackReason,fallbackReason);assert.equal(JSON.stringify(result).includes('private'),false);
+ }
+ assert.equal((await setup({version:1,fallbackReason:15})()).hook.fallbackReason,0);
+});

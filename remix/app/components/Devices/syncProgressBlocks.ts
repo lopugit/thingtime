@@ -12,6 +12,17 @@ const button = (id: string, text: string, operation: string, inputs: Record<stri
 	element(id, 'button', text, { type: 'button', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs }, ...props },
 		{ 'min-height': '40px', padding: '6px 10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%' });
 
+/** Separate editable details keep operation IDs out of the ordinary status. */
+export const syncRecoveryBlocks: WebpageBlock[] = [{ id: 'sync-recovery', type: 'element', tag: 'section',
+	props: { 'aria-label': 'Sync recovery details' }, css: { 'min-width': '0', 'overflow-wrap': 'anywhere' }, children: [
+		element('sync-recovery-status', 'p', '{sync.recoveryStatus}', {}, { 'font-size': '12px' }),
+		when('sync-recovery-reserved', 'sync.hasReservation', [
+			element('sync-recovery-operation', 'p', 'Operation: {sync.operationId}', {}, { 'font-size': '12px' }),
+			when('sync-recovery-file', 'sync.hasFileId', [element('sync-recovery-binding', 'p', 'File: {sync.fileId}', {}, { 'font-size': '12px' })]),
+			element('sync-recovery-effect', 'p', '{sync.effect}', {}, { 'font-size': '12px' })
+		])
+	] }];
+
 /** Every label, count, progress bar, control and repeated row field remains
  * an ordinary selectable Builder block. The document stores no runtime paths. */
 export const syncProgressBlocks: WebpageBlock[] = [{ id: 'sync-progress', type: 'element', tag: 'section',
@@ -113,6 +124,8 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}`
 		: liveIndex ? `${progress?.indexState === 'watching' ? 'Initial scan finished. Watching for new and changed files.' : 'Indexing while files transfer. Total still being discovered.'}${progress?.indexed === undefined ? '' : ` ${progress.indexed.toLocaleString()} index observations saved.`}`
 		: progress?.indexState === 'complete' && progress.totalFinal === false ? 'Initial scan finished. Preparing remaining indexed entries while files transfer.'
+		: hasIndex && state === 'running' && progress?.stage === 'scanning' && progress.indexed !== undefined
+			? `Current scan: ${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal !== undefined && progress.coverage !== 'partial' ? ` of ${progress.indexTotal.toLocaleString()}.` : '. Total still being discovered.'} Saved hierarchy remains visible below.`
 		: hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
 		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}.${preparation ? '' : ' Validating structure…'}`}`
 		: preparation ? 'Preparing saved index.'

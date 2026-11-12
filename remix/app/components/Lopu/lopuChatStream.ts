@@ -87,8 +87,11 @@ export class LopuStreamError extends Error {
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal; ownerId?: string; dataPlane?: string | null }): Promise<Response> => {
 	const device = isDeviceAiProvider(body.providerId);
 	{ // Includes Astra's Responses transport and the checkpoint-capable contract.
-		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', device ? '1.22.0' : body.providerId?.startsWith('chatgpt-plan-') ? '1.21.1' : '1.23.0');
+		const { requireThingtimeCapability, requireActiveThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+		await requireThingtimeCapability('api.lopu-chats-reply', !device && body.providerId !== null && !body.providerId?.startsWith('chatgpt-plan-') ? '1.23.2' : device ? '1.22.0' : body.providerId?.startsWith('chatgpt-plan-') ? '1.21.1' : '1.23.0');
+		// The frontend may be newer than its selected environment API gateway.
+		if (!device && body.providerId !== null && !body.providerId?.startsWith('chatgpt-plan-'))
+			await requireActiveThingtimeCapability('api.lopu-chats-reply', '1.23.2');
 	}
 	const started = performance.now();
 	let response: Response;

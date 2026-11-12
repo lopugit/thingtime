@@ -89,6 +89,78 @@ Images are decoded locally and discarded; streams stop after the capture.
 screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
 
+### Native companion keyboard editing
+
+The accessory companion installs a standard AppKit Edit menu so Command-V,
+Command-A, Cut, Copy and Undo/Redo reach the focused WebKit responder. Menu
+items use standard selectors and nil targets; there is no custom clipboard
+reader, event monitor or JavaScript credential delivery.
+
+Installed acceptance on 1.0.9/build10 found that Command-V left the login
+password empty, while the password field's native context-menu Paste inserted
+masked text and normal login succeeded with the same saved credential. The
+login error handler does not itself clear the controlled password. The missing
+accessory-app Edit menu was the source defect; this does not establish a bad
+saved credential. The 1.0.10/build11 fix preserves the companion's identity,
+entitlements, destination/account checks and transient authenticator inbox.
+
+Run `swift test --package-path apple/Passwords` for the actual host menu's
+selectors, command modifiers and responder-chain targets. The macOS host compiles
+the same menu source; it is excluded from the production core library and iOS.
+After signed installation, verify Command-V into a focused synthetic password
+field, Command-A, Cut/Copy and Undo/Redo in ordinary editable text, and normal
+sign-in using supported credential delivery. Never read or log the clipboard to
+test shortcut delivery. Context-menu Paste remains a supported normal fallback.
+The native header shows only the configured destination during normal use;
+verified readiness clears stale native sign-in copy. Web review/save/cancel
+messages stay in the web surface. Native setup or authentication errors remain
+visible when the webpage cannot initialize, until verification succeeds.
+
+### Native authenticator setup links
+
+The macOS Passwords companion and iOS shell register `otpauth` and validate only
+`otpauth://totp` setup links. HOTP, migration payloads, malformed Base32 and
+unsupported/duplicate URI parameters are refused without logging the input.
+The pending URI is memory-only, expires after ten minutes and is consumed once.
+It is never put into navigation URLs, local storage, saved layouts or a generic
+Action. Opening another setup preserves the current pending request and draft.
+
+The companion uses a separate nonpersistent browser session: sign in normally
+to its displayed configured HTTPS origin and linked owning account. It never
+copies the native AutoFill session into that browser. A locked or unreadable
+linked destination cannot fall back to another origin. Destination/account
+changes cancel setup and replace that ephemeral browser session.
+
+The narrow `thingtimeAuthenticatorSetup` bridge is independently versioned at
+1.0.0. It verifies the exact main-frame `/passwords` document, origin, live
+account, home data plane and document nonce before one-use delivery. Existing
+`api.passwords` compatible 1.2+ is required; the current API remains 1.9.1.
+The web bundle must also contain the matching review bridge. No HTTP endpoint
+or server permission is added. Logout, navigation, cancellation and scope changes
+retire pending delivery. Setup enters the ordinary controlled draft only after
+**Create new entry** or **Add to current draft**; **Save entry** remains a separate
+explicit action through the existing encrypted vault API. Passkey entries cannot
+receive an authenticator field.
+
+Review status, labels and buttons are separate editable Password Workspace
+blocks. No seed is passed into their saved layout or binding scope. QR import
+and passkey device ceremonies retain their existing separate paths.
+
+Build the companion through the existing `build-native-passwords.mjs` tooling;
+use its complete isolated host/provider/Keychain/build/staging overrides for
+development. An isolated helper's optional `ThingtimeDesktopBundleIdentifier`
+metadata may select its corresponding development desktop app; it never opens
+the production app by default. Keep stable signed app replacement separate.
+
+Run `pnpm --dir remix run test:passwords`, `swift test --package-path apple/Passwords`
+and `node remix/scripts/test-authenticator-setup-ui.mjs` (optional absolute
+`TT_PLAYWRIGHT_MODULE` for an existing Playwright installation). The browser
+harness uses a disposable profile and synthetic in-memory API transport; it
+checks review, explicit save, draft preservation and desktop/mobile layout.
+It does not prove installed OS menu selection, real-account sign-in or provider
+acceptance. Complete those through the final signed app, compare a saved code
+with an independent authenticator and exercise cancel/reload/account changes.
+
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
 key. Importing its image does not register a passkey. Native passkey creation
 is implemented by the signed Apple credential provider described below. A passkey
@@ -206,8 +278,27 @@ while accepting the writer's normal field-property ordering.
 
 The extension is off by default and requires explicit installation and enablement.
 It is a Chromium MV3 integration, not a browser-store release or an OS provider.
-Basic ES256 registration/assertion and registration `credProps` are supported;
-conditional mediation, other WebAuthn extensions and unsupported options use the
+Basic ES256 registration/assertion and registration `credProps` are supported.
+Browser adapter 0.5.1 with both frontend and active same-origin `api.passwords`
+1.9.1 additionally supports assertion `appid` for an empty/default AppID or a
+credential-free HTTPS URL at the same requesting site (registrable domain, including private public suffixes). This implements the
+same-host/empty no-network [FIDO facet authorization](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-appid-and-facets-v2.0-id-20180227.html#determining-if-a-callers-facetid-is-authorized-for-an-appid).
+The WebAuthn specification documents the browser same-site relaxation of FIDO
+step 3; parent and sibling hosts with the same registrable domain are accepted
+without fetching. Same-host ports are insignificant to FIDO authorization.
+The shared PSL-aware validator is bundled lexically into the MAIN-world hook;
+invalid and outside-site AppIDs have fixed diagnostics with no request values.
+It signs only the existing RP-bound WebAuthn credential: RP-ID hashing, allowlist,
+verification and request/session binding remain unchanged, and the result reports
+`appid: false` per [WebAuthn 10.1.1](https://www.w3.org/TR/webauthn-3/#sctn-appid-extension).
+No legacy U2F credential is retargeted or claimed. Cross-site AppIDs, malformed
+values, unknown extensions and registration AppID requests remain native or
+unsupported; the adapter never fetches AppID URLs or trusted-facet lists.
+The [public AWS sign-in constructor](https://signin.aws.amazon.com/v2/assets/_next/static/chunks/4399.a1d04a6db629497a.js) conditionally requests AppID, but its dynamic value and
+account-specific RP/allowlist are not established by public source inspection.
+A successful synthetic fixture does not establish AWS sign-in acceptance.
+
+Conditional mediation and other unsupported options use the
 browser's native path. Returned credentials are compatible objects, so sites
 requiring native `PublicKeyCredential` internal slots may not interoperate.
 Firefox, Safari and mobile extension interoperability are unverified. A supported
@@ -268,8 +359,14 @@ link. Explicit Disconnect saves an account/origin opt-out until Connect; automat
 work never replaces a foreign or independently linked companion session. A local
 runtime returns `unsupportedOrigin` and directs macOS users to **Thingtime →
 API Endpoint → Production** in the menu bar, then account sign-in. It leaves an
-existing provider untouched. Canonical installation updates both the
-nested and standalone signed companion from the same verified source.
+existing provider untouched. Canonical installation verifies the nested and
+standalone signed companions. If the standalone companion has the same bundle,
+team, Keychain group, AutoFill entitlement and provisioning identity, and a
+strictly newer compatible app/build version, installation preserves that
+running standalone app without replacing it. Equal or older versions retain
+the normal quit-and-replace guard; incompatible or uncertain identity fails
+closed. This local no-downgrade rule does not establish native bridge API
+compatibility, which is negotiated at runtime.
 
 Only a matching connection shows Disconnect; disconnected or different-session
 states show Connect. Unavailable status shows Retry, and older app bridges show
