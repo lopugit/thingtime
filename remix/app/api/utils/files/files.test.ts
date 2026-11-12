@@ -58,6 +58,48 @@ test('a failed history transaction cannot bind uploads, charge metadata or publi
  const f = fixture(); const create = input(f.upload('att1')); f.failAppend(); assert.equal((await f.service.commit('owner', create)).ok, false);
  assert.equal(f.docs().has(create.id), false); assert.equal(f.docs().get('att1').targetId, undefined); assert.equal(f.charged(), 0);
 });
+test('a terminal file fence occupies the original operation without publishing bytes or a file revision', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const fence = { kind: 'terminal-no-effect', id: create.id, operationId: create.operationId, expectedRevision: null };
+	const first: any = await f.service.fence('owner', fence);
+	assert.deepEqual(first, { ok: true, status: 'terminal', fence, replayed: false });
+	assert.deepEqual(await f.service.fence('owner', fence), { ok: true, status: 'terminal', fence, replayed: true });
+	assert.deepEqual(await f.service.read('owner', create.id, create.operationId), { ok: true, receipt: null, terminal: fence });
+	assert.equal(f.docs().has(create.id), false);
+	assert.equal(f.docs().get('att1').targetId, undefined);
+	const charged = f.charged(), fingerprints = f.fingerprints();
+	assert.equal((await f.service.commit('owner', create)).ok, false);
+	assert.equal(f.fingerprints(), fingerprints, 'the late original writer stops before byte lookup');
+	assert.equal(f.charged(), charged);
+	assert.equal(f.docs().has(create.id), false);
+	assert.equal(f.events().size, 1);
+	assert.equal((await f.service.fence('owner', { ...fence, expectedRevision: 'different' })).ok, false);
+});
+test('an already committed file wins the terminal fence without another effect or charge', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const committed: any = await f.service.commit('owner', create);
+	assert.equal(committed.ok, true);
+	const charged = f.charged(), count = f.events().size;
+	const result: any = await f.service.fence('owner', { kind: 'terminal-no-effect', id: create.id,
+		operationId: create.operationId, expectedRevision: create.expectedRevision });
+	assert.equal(result.status, 'complete');
+	assert.deepEqual(result.receipt.file, committed.file);
+	assert.equal(result.replayed, true);
+	assert.equal(f.charged(), charged);
+	assert.equal(f.events().size, count);
+	assert.deepEqual((await f.service.read('owner', create.id, create.operationId) as any).receipt.file, committed.file);
+	assert.equal((await f.service.fence('other', { kind: 'terminal-no-effect', id: create.id,
+		operationId: create.operationId, expectedRevision: null })).ok, false);
+});
+test('a forged terminal payload cannot impersonate the original file or operation identity', async () => {
+	const f = fixture(), create = input(f.upload('att1'));
+	const fence = { kind: 'terminal-no-effect' as const, id: create.id, operationId: create.operationId, expectedRevision: null };
+	assert.equal((await f.service.fence('owner', fence)).ok, true);
+	const event = [...f.events().values()][0];
+	event.after.value.id = randomUUID();
+	assert.equal((await f.service.read('owner', create.id, create.operationId)).ok, false);
+	assert.equal((await f.service.fence('owner', fence)).ok, false);
+});
 test('foreign, bound, blocked, expiring, linked or unaccounted bytes cannot be published', async () => {
  for (const patch of [{ ownerId: 'other' }, { targetId: 'other-file' }, { moderation: { status: 'blocked' } }, { attachmentExpiresAt: new Date() },
   { attachmentLinked: true }, { sandboxSpace: 'isolated' }, { thingtime: ['attachment', 'file'] }, { storageAccountingVersion: -1 }, { attachmentPurpose: 'post' }, { attachmentState: 'deleting' }]) {

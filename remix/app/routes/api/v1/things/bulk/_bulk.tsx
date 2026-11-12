@@ -28,13 +28,15 @@ export const action = async ({ request }: { request: Request }) => {
 
   const body = await readJsonBody(request, 64 * 1024);
   const libraryPlacement = body?.op === 'archive' || body?.op === 'restore';
+  const fetchSite = request.headers.get('Sec-Fetch-Site')?.toLowerCase();
+  const sameOrigin = isSameOriginAttachmentRequest(request) && (!fetchSite || fetchSite === 'same-origin' || fetchSite === 'none');
   // getCurrentUser is the unscoped account-session resolver; PATs and app
   // credentials cannot resolve on this route.
   const libraryOwnerId = libraryPlacement && user.accountKind === 'user' &&
-    !user.temporary && isSameOriginAttachmentRequest(request) ? user.id : undefined;
+    !user.temporary && sameOrigin ? user.id : undefined;
   const result = await bulkThings({ id: user.id, username: user.username }, body, {}, {
     libraryOwnerId,
-    archiveOwnerId: user.accountKind === 'user' && isSameOriginAttachmentRequest(request) ? user.id : undefined
+    archiveOwnerId: user.accountKind === 'user' && sameOrigin ? user.id : undefined
   });
 
   if (result.ok === false) {

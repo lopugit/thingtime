@@ -7,6 +7,8 @@ import { createNativeSyncHost, type NativeSyncAdapter } from './nativeSyncHost.c
 import { photoSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
 import { syncScopeKey, type SyncScope } from './reconcile';
 import { syncJobDue, type SyncJob } from './syncJobJournal';
+import type { NativePhotoRunStatus } from './nativePhotoRunProgress';
+import { photoStartupOutcome, type SyncStartupOutcome } from './syncStartup';
 
 export function shouldRunAutomaticPhoto(saved: SavedFileSyncConfiguration, job: SyncJob | undefined, now: number, wakeConditions: boolean, legacyInactive = false) {
 	if (!samePhotoBackupSource(saved.configuration, saved.configuration)) return false;
@@ -23,8 +25,10 @@ export function shouldRunAutomaticPhoto(saved: SavedFileSyncConfiguration, job: 
 
 export async function discoverAutomaticPhotos(input: {
 	ownerId: string; adapter: NativeSyncAdapter; signal: AbortSignal; assertCurrent(): void;
-	jobs: SyncJob[]; wakeConditions: boolean; nativeOnly?: boolean;
-	run(saved: SavedFileSyncConfiguration, scope: SyncScope, prior: SyncJob | undefined): Promise<void>;
+	jobs: SyncJob[]; wakeConditions: boolean; nativeOnly?: boolean; foregroundStart?: boolean;
+	run(saved: SavedFileSyncConfiguration, scope: SyncScope, prior: SyncJob | undefined): Promise<NativePhotoRunStatus | void>;
+	observe?(scope: SyncScope, outcome: SyncStartupOutcome): void;
+	checking?(scope: Omit<SyncScope, 'rootId'>): void;
 	paused(scope: SyncScope): boolean;
 }) {
 	const { ownerId, signal, assertCurrent } = input;
@@ -33,10 +37,11 @@ export async function discoverAutomaticPhotos(input: {
 	const deviceId = status.deviceId;
 	const host = await createNativeSyncHost({ ownerId, deviceId, adapter: input.adapter, signal, assertCurrent });
 	const origin = host.origin();
+	input.checking?.({ origin, ownerId, deviceId, dataPlane: 'home' });
 	for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await host.requireCapability(feature, minimum);
 	const { roots } = await host.request(ownerId, { action: 'list' }, signal); assertCurrent();
 	const grants = new Set(roots.filter(root => root.sourceKind === 'photos' && (root.photoAccess === 'full' || root.photoAccess === 'limited')).map(root => root.id));
-	if (!grants.size) return;
+	if (!grants.size && !input.foregroundStart) return;
 	const byScope = new Map(input.jobs.map(job => [job.key, job]));
 	let cursor: string | undefined;
 	const seenCursors = new Set<string>();
@@ -53,16 +58,27 @@ export async function discoverAutomaticPhotos(input: {
 			let saved: SavedFileSyncConfiguration;
 			try { saved = readOwnedFileSyncConfiguration(row, ownerId); } catch { continue; }
 			const c = saved.configuration;
-			if (c.deviceId !== deviceId || !grants.has(c.localRootId)) continue;
+			if (c.deviceId !== deviceId || !samePhotoBackupSource(c, c)) continue;
 			const scope: SyncScope = { origin, ownerId, dataPlane: 'home', rootId: saved.id, deviceId };
 			const key = syncScopeKey(scope), prior = byScope.get(key);
+			if (input.paused(scope) || prior?.state === 'paused') continue;
+			if (!grants.has(c.localRootId)) {
+				if (input.foregroundStart) input.observe?.(scope, 'error');
+				continue;
+			}
 			const legacyInactive = prior?.state === 'attention' &&
 				readStampedCache<{ message?: string }>('tt:sync-progress:' + key)?.message === LEGACY_NATIVE_INACTIVE_MESSAGE;
 			const eligible = input.nativeOnly ? samePhotoBackupSource(c, c) &&
-				(!prior || (prior.state !== 'paused' && samePhotoBackupSource(prior.reviewed.configuration, c))) :
+				(!prior || samePhotoBackupSource(prior.reviewed.configuration, c)) :
 				shouldRunAutomaticPhoto(saved, prior, Date.now(), input.wakeConditions, legacyInactive);
 			if (input.paused(scope) || !eligible) continue;
-			await input.run(saved, scope, prior).catch(error => { if (!input.nativeOnly) throw error; assertCurrent(); });
+			input.observe?.(scope, 'checking');
+			await input.run(saved, scope, prior).then(status => {
+				assertCurrent(); input.observe?.(scope, input.nativeOnly ? photoStartupOutcome(status || undefined, input.foregroundStart) : 'complete');
+			}).catch(error => {
+				assertCurrent(); input.observe?.(scope, 'error');
+				if (!input.nativeOnly) throw error;
+			});
 			assertCurrent();
 		}
 		const next = value.nextCursor;

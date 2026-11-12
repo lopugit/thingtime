@@ -7,6 +7,7 @@ import { streamForegroundSync } from './streamingForegroundSync';
 import { SyncVolumeRemounted } from './syncConnectionWait';
 import type { NativeIndexChangesPage } from './streamingIndex';
 import { recoverRemountedNativeFeed } from './nativeFeedRecovery';
+import { NativeStreamingIndexInterrupted } from './streamingIndex';
 
 function inputFor(f: Awaited<ReturnType<typeof foregroundFixture>>): ForegroundSyncInput {
 	const input: ForegroundSyncInput = f.input();
@@ -101,5 +102,18 @@ test('explicit Pause abort wins over remount recovery without closing the retain
 		controller.signal
 	);
 	await assert.rejects(iterator.next(), (error) => error === paused);
+	assert.equal(transitions, 0);
+});
+
+test('explicit Pause abort wins over an interrupted native producer', async () => {
+	const controller = new AbortController(), paused = new DOMException('Paused', 'AbortError');
+	let transitions = 0;
+	const iterator = recoverRemountedNativeFeed((async function* () {
+		yield 'saved hint';
+		controller.abort(paused);
+		throw new NativeStreamingIndexInterrupted('Old capture stopped.');
+	})(), async () => { transitions++; }, controller.signal);
+	assert.equal((await iterator.next()).value, 'saved hint');
+	await assert.rejects(iterator.next(), error => error === paused);
 	assert.equal(transitions, 0);
 });

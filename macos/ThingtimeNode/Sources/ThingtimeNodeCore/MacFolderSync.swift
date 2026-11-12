@@ -5,8 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.21.0"
-    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "observe-path", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    public static let version = "1.22.0"
+    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "inspect-stamp", "observe-path", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -995,6 +995,12 @@ public final class MacFolderSync {
                     }
                     result["path"] = .string(path); result["complete"] = .bool(true)
                     result["entry"] = try entry.map { try value($0) } ?? .null
+                } else if r.action == "inspect-stamp" {
+                    guard let path = r.path, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
+                    inspectedGrant = grant
+                    let stamp = try await worker { try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: path) }
+                    result["path"] = .string(path); result["complete"] = .bool(true)
+                    result["stamp"] = try stamp.map { try value($0) } ?? .null
                 } else if r.action == "scan" {
                     if grant.sourceKind != "photos" { inspectedGrant = grant }
                     let inventories = inventories

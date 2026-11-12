@@ -25,7 +25,7 @@ export type RemoteSyncCommand =
 	| { action: 'resources'; operation: 'read' }
 	| { action: 'resources'; operation: 'save'; deviceResourceLimits: DeviceSyncResourcePolicy }
 	| { action: 'folders'; request: RemoteFolderRequest }
-	| { action: 'start'; connectionId: string; expectedUpdatedAt: string; intervalMs?: number; queueOnly?: true }
+	| { action: 'start'; connectionId: string; expectedUpdatedAt: string; intervalMs?: number; queueOnly?: true; recoverSavedIntent?: true }
 	| { action: 'pause'; connectionId: string }
 	| { action: 'review'; connectionId: string; reviewId: string; operation: 'reload' | 'next' | 'previous' | 'choose' | 'finish' | 'cancel'; path?: string; from?: 'local' | 'remote' | null; revision?: number; resolution?: 'resolve' | 'retain' }
 	| RemoteSyncDetailsCommand;
@@ -36,7 +36,8 @@ export type RemoteSyncStatus = {
  directionalProgressVersion?: '1.0.0';
  connectionActivityVersion?: '1.0.0';
  folderEnrollmentVersion?: '1.0.0';
-	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number; pendingFolderValidation?: true; failureReason?: SyncJobFailure; activity?: SyncActivityRecord; progress?: Pick<ForegroundSyncProgress, 'directions' | 'totalFinal' | 'indexState' | 'statisticsObservedAt' | 'stage'> }[];
+ folderEnrollmentRecoveryVersion?: string;
+	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number; pendingFolderValidation?: true; strictCapturePending?: true; failureReason?: SyncJobFailure; activity?: SyncActivityRecord; progress?: Pick<ForegroundSyncProgress, 'directions' | 'totalFinal' | 'indexState' | 'statisticsObservedAt' | 'stage'> }[];
 	task: null | { connectionId: string; active: boolean; stopping?: boolean; status?: 'running' | 'paused' | 'error' | 'complete'; waiting?: boolean;
 		progress: ForegroundSyncProgress & { message?: string }; transferRates?: { upload: SpeedReading; download: SpeedReading };
 		activity?: SyncActivitySnapshot; progressDescriptor?: SyncProgressDescriptor; inventoryDescriptor?: SyncInventoryDescriptor;
@@ -46,6 +47,7 @@ export type RemoteSyncStatus = {
 export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
 export const REMOTE_SYNC_DIRECTION_REQUIREMENTS = { 'api.devices-sync-control': '1.3.0' } as const;
 export const REMOTE_SYNC_ENROLLMENT_REQUIREMENTS = { 'api.devices-sync-control': '1.5.0' } as const;
+export const REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS = { 'api.devices-sync-control': '1.6.0' } as const;
 export const REMOTE_SYNC_ACTIVITY_REQUIREMENTS = { 'api.devices-sync-control': '1.5.0' } as const;
 export const REMOTE_SYNC_HISTORY_REQUIREMENTS = { 'api.devices-sync-control': '1.4.0' } as const;
 export const REMOTE_SYNC_RESOURCE_REQUIREMENTS = { 'api.devices-sync-control': '1.2.0' } as const;
@@ -120,11 +122,12 @@ export function validateRemoteSyncCommand(value: unknown): RemoteSyncCommand {
 			break;
 		case 'status': if (!exact(value, ['action', 'cursor']) || (value.cursor !== undefined && (typeof value.cursor !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value.cursor) || !Number.isSafeInteger(Number(value.cursor))))) throw invalid(); break;
 		case 'start':
-			if (!exact(value, ['action', 'connectionId', 'expectedUpdatedAt', 'intervalMs', 'queueOnly']) || !id(value.connectionId) ||
+			if (!exact(value, ['action', 'connectionId', 'expectedUpdatedAt', 'intervalMs', 'queueOnly', 'recoverSavedIntent']) || !id(value.connectionId) ||
 				typeof value.expectedUpdatedAt !== 'string' || value.expectedUpdatedAt.length > 40 || !Number.isFinite(Date.parse(value.expectedUpdatedAt)) ||
 				(value.intervalMs !== undefined && ![60_000, 300_000, 900_000, 3_600_000].includes(Number(value.intervalMs))) ||
 				(value.intervalMs !== undefined && typeof value.intervalMs !== 'number') ||
-				(value.queueOnly !== undefined && (value.queueOnly !== true || value.intervalMs === undefined))) throw invalid();
+				(value.queueOnly !== undefined && (value.queueOnly !== true || value.intervalMs === undefined)) ||
+				(value.recoverSavedIntent !== undefined && (value.recoverSavedIntent !== true || value.intervalMs === undefined || value.queueOnly !== undefined))) throw invalid();
 			break;
 		case 'pause': if (!exact(value, ['action', 'connectionId']) || !id(value.connectionId)) throw invalid(); break;
 		case 'review': {

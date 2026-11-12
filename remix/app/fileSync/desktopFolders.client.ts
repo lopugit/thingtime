@@ -1,5 +1,6 @@
 import { syncRequestHasPacing } from './resourceGovernor';
 import { SyncConnectionWait, SyncVolumeRemounted } from './syncConnectionWait';
+import { NativePathObservationUnavailable } from './nativePathObservation';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -10,7 +11,7 @@ import {
 	supportsFolderAccess,
 	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
-	supportsNativePathInspection, supportsNativePathObservation,
+	supportsNativePathInspection, supportsNativePathObservation, supportsNativePathStamp,
 	supportsNativeInventoryPages,
 	supportsNativeUploadBatches,
 	supportsNativeFolderBatches,
@@ -81,7 +82,7 @@ export async function createDesktopFolderHost(input: {
 		input.assertCurrent();
 		if (input.rendererOrigin() !== localOrigin) throw changed();
 	};
-	const send = async (request: FolderRequest | { action: 'context' }, signal: AbortSignal) => {
+	const send = async (request: FolderRequest | { action: 'context'; refreshApiCapabilities?: true }, signal: AbortSignal) => {
 		check();
 		signal.throwIfAborted();
 		const payload = structuredClone(request);
@@ -111,6 +112,11 @@ export async function createDesktopFolderHost(input: {
 						// Electron wraps rejected IPC messages and discards custom error
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
+						const observationDeadline = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+						if (request.action === 'observe-path' && error instanceof Error &&
+							(error.message === observationDeadline ||
+								error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${observationDeadline}`))
+							throw new NativePathObservationUnavailable();
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
 						const volumeOffline = '[folder_volume_offline] The granted volume is offline. Saved sync will retry.';
 						const volumeRemounted = '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.';
@@ -169,8 +175,8 @@ export async function createDesktopFolderHost(input: {
 				.finally(() => combined.removeEventListener('abort', abort));
 		});
 	};
-	const negotiate = async (signal: AbortSignal): Promise<ContextReply> => {
-		const { value, expected } = await send({ action: 'context' }, signal);
+	const negotiate = async (signal: AbortSignal, refreshApiCapabilities = false): Promise<ContextReply> => {
+		const { value, expected } = await send({ action: 'context', ...(refreshApiCapabilities ? { refreshApiCapabilities: true as const } : {}) }, signal);
 		const capabilities = { ...value.capabilities, platform: 'macos' } as FolderCapabilities;
 		const manifest = value.apiCapabilities;
 		if (
@@ -188,6 +194,8 @@ export async function createDesktopFolderHost(input: {
 			...(parsed ? { authorization: { roots: parsed.roots, conditions: parsed.conditions! } } : {}) };
 	};
 	let context = await negotiate(input.signal);
+	let capabilityEpoch = 0;
+	let capabilityRefresh: Promise<void> | null = null;
 	origin = context.origin;
 	if (input.resourcePolicy?.deviceResourceLimits && (!capabilitySatisfies(context.capabilities?.fileAccessVersion, '1.16.0') || !capabilitySatisfies(context.capabilities?.fileResourceLimitsVersion, '1.1.0'))) throw Error('Update Thingtime before using device-wide sync resource limits.');
 	if (input.resourcePolicy && !supportsNativeResourceLimits(context.capabilities)) throw Error('Update Thingtime before using sync resource limits.');
@@ -237,6 +245,7 @@ export async function createDesktopFolderHost(input: {
 			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');
 			if (request.action === 'observe-path' && !supportsNativePathObservation(context.capabilities)) throw Error('Update Thingtime Desktop for compound path observations.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
+			if (request.action === 'inspect-stamp' && !supportsNativePathStamp(context.capabilities)) throw Error('Update Thingtime Desktop to inspect current file stamps.');
 			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
 				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))
 				throw Error('Native upload batches require a compatible desktop host and selected server.');
@@ -250,21 +259,38 @@ export async function createDesktopFolderHost(input: {
 		...(supportsNativeAuthorizationContext(context.capabilities) ? {
 			authorizeContext: async (expectedOwner: string, expectedDevice: string, signal: AbortSignal) => {
 				if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
+				const epoch = capabilityEpoch;
 				const next = await negotiate(signal);
-				if (JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities) || !next.authorization) throw changed();
-				context = next;
+				if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities) || !next.authorization) throw changed();
+				// An older authorized reply may finish after a public-manifest refresh.
+				// Its roots are still bound, but it must not restore the older manifest.
+				if (epoch === capabilityEpoch) context = next;
 				return structuredClone(next.authorization);
 			}
 		} : {}),
 		authorizeDevice: async (expectedOwner, expectedDevice, signal) => {
 			if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
+			const epoch = capabilityEpoch;
 			const next = await negotiate(signal);
-			if (JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
-			context = next;
+			if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
+			if (epoch === capabilityEpoch) context = next;
 		},
 		requireCapability: async (feature, minimumVersion) => {
 			check();
-			const version = context.apiCapabilities.features[feature]?.version;
+			let version = context.apiCapabilities.features[feature]?.version;
+			if (typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion)) {
+				const pending = capabilityRefresh ??= (async () => {
+					const next = await negotiate(input.signal, true);
+					check();
+					if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
+					context = next;
+					capabilityEpoch++;
+				})();
+				try { await pending; }
+				finally { if (capabilityRefresh === pending) capabilityRefresh = null; }
+				check();
+				version = context.apiCapabilities.features[feature]?.version;
+			}
 			if (typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion))
 				throw Error(`Thingtime capability ${feature} is incompatible`);
 		}

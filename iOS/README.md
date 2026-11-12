@@ -529,17 +529,65 @@ when this check finishes. iOS uses the same callback for its resource limit
 and Cancel on the system UI. Either ends that session and retains the
 automatic backup and its checkpoint. The ordinary scheduler or next permitted
 foreground run can retry after the backoff. A new continued session requires
-an explicit action. **Pause sync** durably stops automatic backup until the
+an explicit foreground action. **Pause sync** durably stops automatic backup until the
 owner resumes. Existing system-only holds recover with fresh authorization
 for the same connection. Charging, network and budget waits still obey the
 saved transfer settings.
 
+Photos automation 1.7.0 adds a closed, timestamped background-session ending
+(`system-ended`, `execution-expired`, `worker-cancelled`, `worker-failed`,
+`completed`, or `checkpointed-wait`) with the last measured progress time and
+units. This is session history, not proof that automatic backup is stopped or
+that the whole library is complete. Foreground reentry refreshes native status
+without requesting a new continued session. Known discovery/index counts remain
+visible as historical values outside indexing, and owner/origin/device/plane/
+generation changes immediately hide the prior protected view.
+
+Photos automation 1.8.0 adds `wake-photo-run` for opening the app or a page and
+returning it to the foreground. The request binds the current owner, origin,
+device, source grant and saved configuration revision. It reuses the existing
+run and receipts, and can retire only proven local check/interruption delays.
+Explicit Pause, server or unknown retry barriers, hourly budgets and saved
+network/charging conditions remain binding. Ordinary status reads and periodic
+or connectivity callbacks do not request a new continued-processing session.
+An admitted foreground-entry action can ask the existing finite-work
+continued-processing slot to accompany the run. Queued work and OS refusal
+remain explicitly distinct from an active system lease; background URLSession
+transfers and opportunistic processing retain their existing recovery paths.
+The web app's shared startup receipt drives the editable sync-page status and
+one Lopu notification after all eligible local configurations acknowledge
+startup. It is presentation state, not new native execution authority.
+The negotiated `photos-startup-v1` control lane accepts only folder listing,
+Photos status and foreground wake. It uses independent request identities and
+fresh paired-device checks so a long folder scan cannot block startup; it never
+owns or cancels the serialized data-operation lane. Old clients retain the
+existing request serialization.
+
+Prepared Photos originals are reused across concurrent uploads and lookahead.
+The reader keeps a bounded cache scoped to the owner, root and exact resource
+revision, and still checks current provider access and the staged file's native
+stamp before reading. Its reusable-byte budget is a cache policy, not a maximum
+file size: a sole larger original remains available for consecutive part reads.
+Eviction cleans only owned temporary files; borrowed iCloud preparations retain
+their own lifetime. This avoids re-exporting and hashing an unchanged full
+original every time another upload takes its turn.
+
+System Progress uses a finite denominator for known library discovery, known
+originals and their preparation, with one final verification/checkpoint unit.
+Undiscovered original backlog is not invented; newly discovered real work may
+extend that denominator. Negative totals would keep fractionCompleted at zero.
+
+Measured iCloud progress belongs to one serialized original resource. Late
+callbacks cannot advance a replacement resource. Each concurrent original keeps
+its own byte fraction when a sibling publishes; no heartbeat or elapsed-time
+progress is reported. The scheduler still decides actual background execution.
+
 Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
 the latest photo or video capture time when available. The scoped **Backup
 activity** also shows measured file counts, the selected batch, iCloud download
-progress, cloud verification, and recent steps. The native queue prepares and
-uploads one newest asset group, including its companions, then discovers and
-uploads successive groups. The remaining original count stays unknown while
+progress, cloud verification, and recent steps. The native queue starts with the newest asset
+group, including its companions, then prepares batches of up to ten groups and
+uploads up to five originals concurrently while preparing lookahead work. The remaining original count stays unknown while
 unseen asset records can still contribute originals. The queue keeps exact
 selections and receipts across interruption. When PhotoKit proves the library
 is unchanged and full access is current, discovery can resume at a saved
@@ -558,11 +606,26 @@ among equally eligible items. Wi-Fi-only policy permits a local recheck after
 Photos has made an original available. Completion requires resolving all
 deferred originals visible to the current Photos grant.
 
-Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
-by default. An optional hourly budget uses the measured payload bytes from all
-managed Photos transfers on that account/origin/device, including failed
-attempts. Each capped connection checks that shared usage against its own cap;
-an uncapped connection does not inherit another connection's cap. If a single
+Photos automation 1.6.0 exposes upload settings on the device, Photo library
+folder, and each saved sync config without opening its Edit form. Device and
+folder policies are stored by the native app for the exact origin, owner,
+paired device and folder grant; the config policy remains part of its ordinary
+saved Thing. Changing a limit does not reset recorded usage. Device and folder
+ceilings are shared across their configs, and each config also enforces its own
+ceiling. Blank device/folder fields add no ceiling; a blank config speed retains
+625,000 bytes/s (5 Mbps). MB/s and Mbps are explicit, convertible display units.
+
+Hourly allowances include observed payload bytes from failed attempts and
+uncertain reservations after interruption. Existing unscoped usage is charged
+conservatively until its original window expires. Limits are checked before
+new admissions; already-admitted transfers may finish. Foreground writes are
+paced and background URLSession transfers use a persistent average admission
+schedule, which cannot guarantee an instantaneous wire-speed ceiling. Up to five
+durable daemon jobs can reserve future starts within their signed URL lifetime,
+so a paced batch does not depend on the app waking between parts. Foreground
+retries preserve a known pacing deadline instead of extending it to five minutes;
+unknown transient failures retain the five-minute backoff. iOS still controls
+background scheduling. If a single
 required provider part is larger than the allowance, the connection reports
 the minimum part size instead of exceeding the budget. A file may span multiple
 budget windows at its confirmed part boundaries. iCloud downloads use Apple's
@@ -592,6 +655,15 @@ unit-test fixture first verifies its disposable loopback account, then reuses
 that same account/origin's actual native grant for original-byte verification.
 It neither injects a grant nor changes Simulator privacy settings. Without the
 flag, the existing visible manual-consent fixture remains available.
+
+Add `THINGTIME_PHOTO_POLICY_TEST=1` to exercise the installed native bridge's
+device and folder policy set/read/clear operations after ordinary consent and
+pairing. The fixture checks exact scope and values, refuses an unpaired device,
+and keeps high fixture-only limits for the subsequent original-byte test. Its
+policy pass marker does not establish upload success; the original-byte phase
+must independently finish and verify published bytes. Local storage fixtures do
+not advertise the direct S3 background transport, and Simulator scheduling
+refusals are not physical-device background acceptance.
 
 Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
 compares downloaded cloud hashes and reopens the same saved backup.
@@ -699,58 +771,60 @@ remain active. Custom shared mutation policies retain the per-part path unless
 a native policy explicitly covers them. Only increasing canonical byte-progress
 messages extend the bridge inactivity deadline; no payload bytes cross WebKit.
 
-No new fork configuration or secrets are required. The opt-in installed photo
-acceptance now requires whole-file handoffs, native part progress, downloaded
-original hashes and released cache entries. See continued uploads below for the
-iOS 26+ lifecycle extension; real background completion, OS relaunch, force-quit/
-reboot recovery and physical-device throughput remain unverified. Apple's background URLSession follows redirects
-unconditionally, so it cannot replace the current plaintext transport without
-revisiting destination protection.
+No new fork secrets are required. The installed Photos fixture verifies genuine
+PhotoKit bytes and canonical folder receipts separately from operating-system
+background execution. See the tests below; a compiled app or injected task is
+not proof that iOS granted a continued-processing lease.
 
 ### Deferred Photos transfers
 
-Native upload 1.5.0 negotiates `api.file-sync-transfer-admissions` 1.0.0
-on the selected origin. Once Photos inventory and destination bindings are
-sealed, the foreground runner admits up to four upcoming original file
-reservations. Four is the rolling lookahead, not a backup size limit. Each
-admission binds the exact owner/session, device, connection revision, private
-destination, grant, source and original request/upload identities. Scheduling
-uses `BGProcessingTask` with the `.file-sync-processing` identifier and
-the `processing` background mode. iOS decides when to run it.
+The native queue retains one date-ordered selection of up to ten asset groups,
+with at most five originals preparing/uploading concurrently. The first newest
+asset starts separately. Companion resources remain in the same acknowledged
+asset group, and a selection advances only after all available originals have
+verified canonical publication receipts. A separate bounded read-only lookahead
+can warm the next page's local hashes while current uploads run; it never writes
+a second selection or advances its durable cursor. These are processing windows,
+not library limits. Cloud-only and unreadable originals retain exact source
+identity and typed retry reasons while other available originals proceed.
 
-The protected native checkpoint keeps no session cookie, device credential or
-signed URL. The background worker revalidates the local grant and source,
-reads the paired credential through Keychain, obtains scoped part URLs, refuses
-redirects, and honors saved Wi-Fi and charging policy. Expiry retains the verified
-part cursor; retry uses the same original reservation. Pause disarms the exact
-queue before revoking server authority. Sign-out, a destination change and
-foreground reauthorization cannot borrow the previous account's queue.
+The selected origin's `api.file-sync-transfer-admissions` is negotiated before
+work. Compatible older servers retain the foreground, redirect-refusing sender.
+At 1.5.0 or later, native Photos can explicitly request `background-file-v1`.
+Only the canonical direct S3 signer emits that descriptor, bound to the exact
+HTTPS host/path, PUT method and signed grant expiry. Background URLSession always
+follows redirects; that provider-managed behavior is accepted only for this
+negotiated canonical destination. Arbitrary, custom and legacy targets retain
+redirect refusal. No ambient cookies or credential headers reach either PUT.
 
-Deferred processing can finish already admitted attachments without the WebView.
-The cloud folder and Timeline update only after the normal foreground runner
-verifies the stored fingerprints and publishes the original operations. When
-the queue drains, reopen Thingtime for more preparation or publication. This
-does not discover new Photos in the background or promise OS delivery after
-force-quit. Automatic iCloud original retrieval is a foreground preparation
-step under the explicitly permitted network policy. A Live Activity does not grant
-background execution.
+The daemon uses from-file uploads and stable sessions separated by cellular
+policy. Its protected journal retains immutable part identities and copied bytes,
+not signed URLs or device credentials. Foreground streams share one quantum
+pacer. Daemon tasks use a persisted aggregate admission calendar and full-byte
+rolling allowance reservations; their rate setting is an average scheduling
+rate, not an instantaneous network cap. iOS may defer starts. A grant that cannot
+fit the planned delay and transfer window is retried, and rates too low for that
+window retain the paced foreground path. Uncertain live daemon tasks retain their
+full reserved allowance across restart.
 
-Use the ordinary disposable Photos consent fixture with
-`THINGTIME_PHOTO_DEFERRED_TEST=1` to prove the installed native runner. It
-withholds the first WebView upload, injects a processing task, expires it after
-one verified part, and verifies multiple stored originals before Timeline
-publication. It then reopens the app and verifies those exact reservations
-without duplicate revisions. Actual iOS scheduling and phone Wi-Fi/lock behavior
-remain separate physical-device checks.
+Expiration ends the app execution slice while an already-authorized daemon PUT
+can continue. Explicit Pause, sign-out, grant or saved-policy changes cancel the
+matching daemon work; cancellation is persisted before invoking URLSession.
+Relaunch reattaches exact task identities, rejects stale bindings and preserves
+unsettled bytes. Background-session completion gives the native queue a bounded
+opportunity to reauthorize, verify and publish. The completion handler is retained
+through that work's durable checkpoint, or ended on expiration. Canonical folder
+and Timeline receipts remain the completion authority. Force-quit cancels system
+transfers; a Live Activity does not grant indefinite execution.
 
 ### Continued uploads on iOS 26+
 
 Upload capability 1.4.0 requests `BGContinuedProcessingTask` on iOS 26+ only
 for the current explicitly user-started whole-file job. Automatic retries and
 scheduled backup do not request a continued-processing lease. One static identifier is registered once;
-submission uses the fail strategy. The native job retains its redirect-refusing
-file-backed transport, live owner/configuration/pairing/grant checks and bounded
-part cache. This does not persist cookies or create another history store.
+submission uses the fail strategy. The native job retains live
+owner/configuration/pairing/grant checks and a bounded part cache, using the
+negotiated transport described above. This does not persist cookies or create another history store.
 Older systems, refused submissions and launch timeouts retain foreground behavior.
 A timed-out request keeps its identifier slot until a late system launch is
 rejected, preventing that launch from acquiring another job's authorization.
@@ -759,9 +833,12 @@ Only an exact, capability-negotiated native start acknowledgement allows the web
 runner to survive visibility changes. Its inactivity deadline pauses while the
 accepted job is hidden; navigation, account changes and explicit cancellation
 still abort. System progress reports verified part bytes and reserves one unit
-for attachment completion. System/user expiry cancels the job. Successful native
-completion waits for the app to become active, rechecks the owner, then hands
-back to the shared stored-fingerprint check and canonical Timeline publication.
+for attachment completion. Expiration records an interruption and durable
+automatic retry; it does not invent another user-initiated lease or override a
+deliberate Pause. A finite pass that saved available originals and durably deferred
+remaining work settles with a retry subtitle and measured partial progress, rather
+than reporting the whole backup complete. Actual errors and expiration remain
+failed/interrupted outcomes. Duplicate delivery of one system task is idempotent.
 
 The simulator declined continued processing in the opt-in installed background
 acceptance; the subsequent diagnostic run reported `BGTaskSchedulerErrorDomain`

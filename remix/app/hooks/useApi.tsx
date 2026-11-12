@@ -1,3 +1,4 @@
+import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
 import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
 import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
@@ -5,7 +6,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -40,7 +41,7 @@ import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
 import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
-import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
+import { requireActiveThingtimeCapability, requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
 import { requireSubspaceImagePresentation } from '~/utils/subspaceMediaCapabilities';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -186,8 +187,9 @@ export function useApi() {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', usesExpandedWebpageAuthoring(blocks)
-          ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
+        await requireThingtimeCapability('api.webpages-resolve', usesComponentArgumentBindings(blocks)
+          ? COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve'] : usesExpandedWebpageAuthoring(blocks)
+            ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -1215,7 +1217,7 @@ export function useApi() {
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
           await requireSharedContentCapability('api.things-search', options);
-          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things-search', '1.5.0', options?.expectedApiOrigin);
+          if (args?.libraryArchive !== undefined) await requireLibraryArchiveCapability('api.things-search', '1.7.0', options?.expectedApiOrigin);
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
@@ -1283,7 +1285,7 @@ export function useApi() {
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           await requireSharedContentCapability('api.things', options);
-          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things', '1.59.0', options?.expectedApiOrigin);
+          if (args?.libraryArchive !== undefined) await requireLibraryArchiveRead(options?.expectedApiOrigin);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1343,6 +1345,7 @@ export function useApi() {
           }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things-update', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things-update', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
             : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
@@ -1411,12 +1414,20 @@ export function useApi() {
         await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
+      describeActions: useCallback(async (args: { id: string }, options?: ThingRequestOptions) => {
+        await requireLibraryArchiveCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/things/actions${toQuery(args)}`, options);
+      }, [getJson]),
+      runAction: useCallback(async (args: { id: string; action: 'archive' | 'restore' }, options?: ThingRequestOptions) => {
+        await requireLibraryArchiveCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(args, { ...options, action: '/api/v1/things/actions' });
+      }, [asyncFetcher]),
       // Multi-select library operations — see /docs/api things-bulk.
       bulk: useCallback(
         async (args, options?: ThingRequestOptions) => {
           await requireSharedContentCapability('api.things-bulk', options);
           if (args?.op === 'archive' || args?.op === 'restore')
-            await requireThingtimeCapability('api.things-bulk', '1.8.0', options?.expectedApiOrigin);
+            await requireLibraryArchiveCapability('api.things-bulk', '1.9.0', options?.expectedApiOrigin);
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1437,6 +1448,7 @@ export function useApi() {
           if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
             await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things']);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
@@ -1468,6 +1480,7 @@ export function useApi() {
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
             await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
@@ -1585,8 +1598,9 @@ export function useApi() {
     connections: {
       providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
       list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
-        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
-        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.3.0' : '2.0.0', options?.expectedApiOrigin);
+        if (includeNamed) await requireActiveThingtimeCapability('api.connections', '2.3.0', options?.expectedApiOrigin);
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1&includeServiceOperations=1' : ''), options);
       }, [getJson]),
       connect: useCallback(
         async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
@@ -1600,16 +1614,21 @@ export function useApi() {
           { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
       }, [asyncFetcher]),
       useNamed: useCallback(async (args) => {
-        await requireThingtimeCapability('api.connections-named', '1.0.0');
-        return asyncFetcher.submit({ id: args.id, operation: args.operation, expectedOwnerId: args.expectedOwnerId },
+        await requireThingtimeCapability('api.connections-named', '1.1.0', args.expectedApiOrigin);
+        await requireActiveThingtimeCapability('api.connections-named', '1.1.0', args.expectedApiOrigin);
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, resourceId: args.resourceId, pageToken: args.pageToken, expectedOwnerId: args.expectedOwnerId },
           { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
       }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
-          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.2.0' : '2.0.0', args?.expectedApiOrigin);
+          if (args?.named) {
+            await requireThingtimeCapability('api.connections-oauth-callback', '2.2.0', args?.expectedApiOrigin);
+            await requireActiveThingtimeCapability('api.connections-oauth-begin', '2.2.0', args.expectedApiOrigin);
+            await requireActiveThingtimeCapability('api.connections-oauth-callback', '2.2.0', args.expectedApiOrigin);
+          }
           return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
             { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
         },

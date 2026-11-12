@@ -57,7 +57,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 }
 
 async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal, early: PagedRunSpec | null) {
-	const { configuration, check, authorize, scanCloud, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, check, authorize, scanCloud, readLocal, readLocalUploadSource, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
 	let earlyProgress: PagedRunProgress | undefined;
@@ -471,6 +471,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		currentScope: input.currentScope, signal, localTarget,
 		transfer: input.transfer,
 		readLocal,
+		readLocalUploadSource,
 		openSource,
 		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...coverageProgress }); }
 	}, runtime);

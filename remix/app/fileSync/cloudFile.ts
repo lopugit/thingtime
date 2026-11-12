@@ -14,11 +14,20 @@ export type CloudFileCommit = {
 	attachmentId: string; contentVersion: string; trashed: boolean; symbolicLink?: SymbolicLink; syncDestination?: CloudSyncDestination;
 };
 export type CloudFileRetention = CloudFileCommit & { kind: 'retained-version'; expectedRevision: string; trashed: false };
+/** Occupies the original commit identity after its staged bytes cannot be
+ * recovered. It is an effect receipt, never a file revision or byte binding. */
+export type CloudFileNoEffectFence = { kind: 'terminal-no-effect'; id: string; operationId: string; expectedRevision: string | null };
 export const CLOUD_FILE_RETENTION_REQUIREMENTS = { 'api.files': '1.3.0' } as const;
 const object = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
 const hex = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
+export function parseCloudFileNoEffectFence(value: unknown): CloudFileNoEffectFence {
+	if (!object(value) || Object.keys(value).length !== 4 || value.kind !== 'terminal-no-effect' ||
+		!uuid(value.id) || !uuid(value.operationId) ||
+		(value.expectedRevision !== null && !identifier(value.expectedRevision))) throw Error('Invalid file publication fence');
+	return { kind: 'terminal-no-effect', id: value.id, operationId: value.operationId, expectedRevision: value.expectedRevision };
+}
 export const validFileName = (v: unknown): v is string => typeof v === 'string' && !!v.trim() && !/[\\/\p{Cc}\p{Cf}]/u.test(v) && v !== '.' && v !== '..';
 export function parseCloudFileCommit(value: unknown): CloudFileCommit {
 	if (!object(value) || Object.keys(value).some(k => !['id', 'operationId', 'expectedRevision', 'name', 'folderId', 'attachmentId', 'contentVersion', 'trashed', 'symbolicLink', 'syncDestination'].includes(k)) ||

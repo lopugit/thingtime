@@ -80,7 +80,7 @@ export type AttachmentDoc = {
 	attachmentRequestFingerprint?: string;
 	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	// Canonical scoped publication records the verified native source separately from reservation input.
-	fileSyncSourceGrant?: { localRootId: string; grantRevision: string };
+	fileSyncSourceGrant?: { localRootId: string; grantRevision: string; sourceVersion?: string };
 	attachmentPurpose?: AttachmentPurpose;
 	// Server-only import lifecycle marker; never copied from portable content.
 	attachmentImportDraft?: true;

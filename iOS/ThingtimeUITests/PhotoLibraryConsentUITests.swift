@@ -30,7 +30,7 @@ final class PhotoLibraryConsentUITests: XCTestCase {
             print("IOS_PHOTO_UI_EXISTING_GRANT: previously granted native source is visible")
             return
         }
-        let choose = app.buttons["Choose folder"]
+        let choose = app.buttons.matching(NSPredicate(format: "label IN %@", ["Add folder", "Choose folder"])).firstMatch
         XCTAssertTrue(choose.waitForExistence(timeout: 30))
         choose.tap()
         let source = app.alerts["Choose backup source"]

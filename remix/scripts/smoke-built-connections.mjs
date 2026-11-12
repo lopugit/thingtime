@@ -16,9 +16,9 @@ if (process.argv[2] !== '--worker') {
   const bundle = resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs');
   const { default: app } = await import(pathToFileURL(bundle).href);
   assert.equal(typeof app.fetch, 'function');
-  const features = { 'connections-providers': '2.0.0', connections: '2.1.0', 'connections-unlink': '2.1.0',
-    'connections-feed': '2.0.1', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
-    'connections-oauth-callback': '2.1.0', 'connections-named': '1.0.0', 'connections-provider-icon': '1.0.0' };
+  const features = { 'connections-providers': '2.0.0', connections: '2.3.0', 'connections-unlink': '2.1.0',
+    'connections-feed': '2.0.2', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.2.0',
+    'connections-oauth-callback': '2.2.0', 'connections-diagnostics': '1.0.1', 'connections-named': '1.1.0', 'connections-provider-icon': '1.0.0' };
   for (const path of ['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']) {
     const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
     assert.equal(response.status, 200, path);
@@ -30,6 +30,9 @@ if (process.argv[2] !== '--worker') {
       assert.equal(typeof version === 'string' ? version : version.version, expected);
     }
   }
+  const diagnostic = await app.fetch(new Request('https://thingtime.test/api/v1/connections/diagnostics?connectionId=synthetic&expectedOwnerId=synthetic'), { waitUntil() {} });
+  assert.equal(diagnostic.status, 401, 'Diagnostic path must reach its owner-authenticated handler.');
+  assert.equal(diagnostic.headers.get('cache-control'), 'private, no-store');
   const unknownIcon = await app.fetch(new Request('https://thingtime.test/api/v1/connections/provider-icon?provider=https://127.0.0.1/'), { waitUntil() {} });
   assert.equal(unknownIcon.status, 404, 'Unknown icon IDs must reach the real handler and reject URL input.');
   console.log('PASS: both compiled Vercel manifest handlers return JSON and all Connections contracts; synthetic runtime only.');

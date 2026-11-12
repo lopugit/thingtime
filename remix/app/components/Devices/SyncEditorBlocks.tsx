@@ -45,7 +45,7 @@ export const syncFolderEditorBlocks: WebpageBlock[] = [
 	syncWhen('folders-loading-visible', 'editor.cold', [
 		syncElement('folders-loading', 'progress', '', { 'aria-label': 'Loading folders and sync configs' }, { display: 'block', width: '64px', height: '4px', 'margin-block': '8px' })
 	]),
-	present('folders-notice-visible', 'editor.notice', syncElement('folders-notice', 'p', '{editor.notice}', { role: 'status' }, muted)),
+	syncElement('folders-notice', 'p', '{editor.notice}', { role: 'status', 'aria-atomic': true }, { ...muted, 'min-height': '1.5em' }),
 	present('folders-error-visible', 'editor.error', syncElement('folders-error', 'p', '{editor.error}', { role: 'alert' }, muted))
 ];
 
@@ -113,6 +113,7 @@ export const syncConfigBasicsBlocks: WebpageBlock[] = [
 ];
 export const syncConfigDirectionBlocks: WebpageBlock[] = [
 	stack('config-mode-field', [label('mode', 'Direction'), field('mode', 'select', { disabled: '{form.modeDisabled}', 'aria-label': 'Direction' }, options('mode', syncConfigModes)),
+		syncWhen('config-upload-direction-note-visible', 'form.uploadPolicyBackupOnly', [syncElement('config-upload-direction-note', 'p', 'This iPhone supports upload limits for Backup (keep deleted files). The saved direction and limits are retained.', undefined, muted)]),
 		syncWhen('config-backup-note-visible', 'form.isBackup', [syncElement('config-backup-note', 'p', 'Keep cloud copies when files are deleted from this device.', undefined, muted)])])
 ];
 export const syncConfigTransferBlocks: WebpageBlock[] = [{

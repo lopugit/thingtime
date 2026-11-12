@@ -37,16 +37,25 @@ export function parseMobileDeviceResult(value: unknown, expected: { requestId: s
 // Serialize UI polling and foreground checks without sharing results across
 // callers or letting one caller cancel another caller's identity check.
 let deviceRequests: Promise<unknown> = Promise.resolve();
-export function requestMobileDevice(ownerId: string, action: 'status' | 'pair' | 'presence', signal: AbortSignal): Promise<MobileDeviceStatus> {
+export function requestMobileDevice(ownerId: string, action: 'status' | 'pair' | 'presence', signal: AbortSignal,
+    binding?: { expectedDeviceId: string; assertCurrent(): void }): Promise<MobileDeviceStatus> {
     if (signal.aborted) return Promise.reject(new DOMException('Device request cancelled', 'AbortError'));
     const bridge = getNativeBridge();
     if (!supportsMobileDevice(bridge)) return Promise.reject(new Error('Mobile device pairing requires an updated Thingtime app.'));
     if (action === 'presence' && !supportsMobileBackgroundPresence(bridge)) return Promise.reject(new Error('Background presence requires an updated Thingtime iOS app.'));
     const origin = window.location.origin;
-    const run = deviceRequests.then(() => {
+    const check = () => {
         if (signal.aborted || window.location.origin !== origin || getNativeBridge() !== bridge)
             throw new DOMException('Device request cancelled', 'AbortError');
-        return requestMobileDeviceNow(ownerId, action, signal);
+        binding?.assertCurrent();
+    };
+    const run = deviceRequests.then(async () => {
+        check();
+        const result = await requestMobileDeviceNow(ownerId, action, signal);
+        check();
+        if (binding && result.state === 'paired' && result.deviceId !== binding.expectedDeviceId)
+            throw Error('Reconnect this device before transferring files.');
+        return result;
     });
     deviceRequests = run.catch(() => {});
     return new Promise((resolve, reject) => {

@@ -1,17 +1,39 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { supportsMobileDevice } from './mobileDeviceBridge';
+import { requestMobileDevice, supportsMobileDevice, type MobileDeviceStatus } from './mobileDeviceBridge';
+import { mobileDeviceScope, observeMobileDevice, publishMobileDeviceObservation, readMobileDeviceObservation } from './mobileDeviceObservations';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { nativeBridgeReadyEvent } from '~/utils/nativeBridge';
 import { MobileDeviceSetupCard } from './MobileDeviceSetupCard';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 const blocks: WebpageBlock[] = [{ id: 'mobile-device-setup-link', type: 'element', tag: 'a', text: 'Device setup', props: { href: '/things?deviceSetup=1' }, css: { display: 'inline-flex', 'min-height': '44px', 'align-items': 'center', padding: '8px 12px', border: '1px solid var(--tt-border, #d4d4d8)', 'border-radius': '8px', 'text-decoration': 'none' } }];
-export function MobileDeviceSetupEntry() {
- const user = useCurrentUser(), [available, setAvailable] = React.useState(supportsMobileDevice);
+export function useMobileDeviceSetupStatus(enabled = true) {
+ const user = useCurrentUser();
+ const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+ const [available, setAvailable] = React.useState(supportsMobileDevice);
+ const scope = enabled && available && user?.id && user.accountKind === 'user' && !user.temporary && !identity.pending
+  ? mobileDeviceScope(window.location.origin, user.id, identity.generation) : null;
+ const [observation, setObservation] = React.useState<{ scope: string; status: MobileDeviceStatus } | null>(null);
  React.useEffect(() => { const ready = () => setAvailable(supportsMobileDevice()); window.addEventListener(nativeBridgeReadyEvent, ready); return () => window.removeEventListener(nativeBridgeReadyEvent, ready); }, []);
- if (!available || !user?.id || user.accountKind !== 'user' || user.temporary) return null;
+ React.useEffect(() => {
+  if (!scope || !user?.id) return;
+  const controller = new AbortController();
+  const observed = readMobileDeviceObservation(scope);
+  if (observed) setObservation({ scope, status: observed });
+  const unsubscribe = observeMobileDevice(scope, status => setObservation({ scope, status }));
+  if (!observed) void requestMobileDevice(user.id, 'status', controller.signal).then(status => {
+   if (!controller.signal.aborted && rootIdentity.read().generation === identity.generation && !rootIdentity.read().pending) publishMobileDeviceObservation(scope, status);
+  }).catch(() => { /* Unknown pairing must not offer setup for an already paired device. */ });
+  return () => { controller.abort(); unsubscribe(); };
+ }, [scope, user?.id, identity.generation]);
+ return scope ? (observation?.scope === scope ? observation.status : readMobileDeviceObservation(scope)) ?? null : null;
+}
+export function MobileDeviceSetupEntry() {
+ const user = useCurrentUser();
+ if (!user?.id) return null;
  return <SettingsDocumentHost documentKey="native-device-setup-entry" defaultDocument={blocks} scopeKey={user.id} title="Device setup" showLayoutControls={false}>{({ blocks, chrome }) => <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />}</SettingsDocumentHost>;
 }
 export function MobileDeviceSetupPage() {

@@ -19,6 +19,7 @@ export type ThingtimeNativeBridge = {
   fileSymbolicLinksVersion?: string;
   fileResourceLimitsVersion?: string;
   filePhotoAutomationVersion?: string;
+  fileUploadPolicyVersion?: string;
   filePhotoContinuationVersion?: string;
   fileDownloadVersion?: string;
   fileUploadVersion?: string;
@@ -42,6 +43,7 @@ export type ThingtimeNativeBridge = {
 declare global {
   interface Window {
     thingtimeNativeBridge?: ThingtimeNativeBridge;
+    thingtimeAuthenticatorSetup?: { version: string; postMessage: (message: Record<string, string>) => void };
   }
 }
 

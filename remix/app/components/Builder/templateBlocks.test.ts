@@ -2,11 +2,35 @@ import { compositionAttachmentIds } from '../../api/utils/actions/compositionMed
 import { rewriteComposition } from '../../api/utils/actions/forkCompositionCore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { expandedComponentBlock, templateEachRows, templateEachRowScope, templateToBlocks, resolveBlockProps } from './templateBlocks';
+import { expandedComponentBlock, resolveBlockArguments, templateEachRows, templateEachRowScope, templateToBlocks, resolveBlockProps } from './templateBlocks';
 import { copyBoundedJson } from '../../utils/boundedJson';
 import { sanitizeWebpageBlocks } from '../../schemas/registry';
 import { compositionReferences } from '../../api/utils/actions/sharedCompositionCore';
 import { duplicateBlock, moveBlock, findBlock, requiresEditableIntrinsicContract } from './webpageBlocks';
+
+test('explicit argument bindings preserve literal values, expansion and missing-row resets', () => {
+ const block: any = { id: 'instance', type: 'component', component: 'record-view',
+  args: { id: 'fallback', literal: '{item.id}' }, argBindings: { id: '{item.id}', enabled: false, index: 0 } };
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-a' } }),
+  { id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-b' } }),
+  { id: 'record-b', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, {}).id, '');
+ assert.equal(resolveBlockArguments(block, { item: { id: '{viewer.id}' }, viewer: { id: 'protected' } }).id, '{viewer.id}');
+ assert.deepEqual(resolveBlockArguments({ ...block, args: {}, argBindings: { enabled: '{item.enabled}', index: '{item.index}' } },
+  { item: { enabled: false, index: 0 } }), { enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, { item: { id: { executable: true } } }).id, '');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }).literal, '{item.id}');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }, true).literal, 'record-a');
+ const expanded = expandedComponentBlock(block, { savedArgs: { saved: '{item.id}' },
+  args: [{ name: 'defaultLiteral', type: 'string', default: '{item.id}' }] }, []);
+ assert.deepEqual(expanded.argBindings, block.argBindings);
+ assert.deepEqual(resolveBlockArguments(expanded, { item: { id: 'record-a' } }),
+  { defaultLiteral: '{item.id}', saved: '{item.id}', id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(sanitizeWebpageBlocks([expanded]).ok, true);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { id: { executable: true } } }]).ok, false);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { constructor: 'unsafe' } }]).ok, false);
+});
 let next = 0;
 const id = (kind: string) => `${kind}-${++next}`;
 

@@ -8,23 +8,29 @@ import { readNativePhotoRunProgress } from '~/fileSync/mobileFolders.client';
 import type { NativePhotoActivityPhase, NativePhotoRunActivity } from '~/fileSync/nativePhotoRunProgress';
 import { SYNC_JOBS_CHANGED_EVENT } from '~/fileSync/syncJobJournal';
 import { nativeBridgeMessageEvent } from '~/utils/nativeBridge';
+import { nativePhotoProgressLifecycle } from '~/fileSync/nativePhotoProgressLifecycle';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { photoSyncWaitingMessage } from './photoSyncPresentation';
 
 type NativeStatus = Awaited<ReturnType<typeof readNativePhotoRunProgress>>;
 type NativeProgress = NonNullable<NativeStatus['photoRunProgress']>;
 export type NativePhotoRunView = { revision: string; progress: NativeProgress | null; stale: boolean; previousRevision?: boolean };
+const noNativePhotoProgress = new Map<string, NativePhotoRunView>();
 
 export function useNativePhotoRunProgress(
 	scope: ConfigurationEditorScope, generation: number, enabled: boolean, connections: SavedFileSyncConfiguration[],
 ) {
-	const [observed, setObserved] = useState(() => new Map<string, NativePhotoRunView>());
 	const { ownerId, origin, deviceId, dataPlane } = scope;
+    const observationScope = JSON.stringify([origin, ownerId, deviceId, dataPlane, generation]);
+    const [observed, setObservation] = useState(() => ({ scope: observationScope, rows: new Map<string, NativePhotoRunView>() }));
 	useEffect(() => {
 		if (!enabled || dataPlane !== 'home') return;
 		const photos = connections.filter(row => row.configuration.sourceKind === 'photos');
 		if (!photos.length) return;
 		const lifetime = new AbortController();
+        const setObserved = (update: (previous: Map<string, NativePhotoRunView>) => Map<string, NativePhotoRunView>) =>
+            setObservation(previous => ({ scope: observationScope,
+                rows: update(previous.scope === observationScope ? previous.rows : new Map()) }));
 		let pending: AbortController | undefined;
 		let hintTimer: ReturnType<typeof setTimeout> | undefined;
 		const current = () => {
@@ -58,13 +64,17 @@ export function useNativePhotoRunProgress(
 				}
 			} finally { if (pending === attempt) pending = undefined; }
 		});
-		const visible = () => {
-			if (document.visibilityState === 'visible') refresh.request();
-			else { clearTimeout(hintTimer); hintTimer = undefined; pending?.abort(); }
-		};
+        const invalidate = () => {
+            pending?.abort();
+            setObserved(previous => new Map([...previous].map(([id, view]) => [id, { ...view, stale: true }])));
+        };
+        const disposeLifecycle = nativePhotoProgressLifecycle({ window, document,
+            visible: () => document.visibilityState === 'visible', invalidate, refresh: refresh.request,
+            hidden: () => { clearTimeout(hintTimer); hintTimer = undefined; pending?.abort(); } });
 		const nativeUpdate = (event: Event) => {
 			const message = (event as CustomEvent).detail;
 			if (message?.type !== 'mobile-files-photo-progress' || document.visibilityState !== 'visible') return;
+            if (message.payload?.lifecycle === true) invalidate();
 			if (message.payload?.immediate === true) {
 				clearTimeout(hintTimer);
 				hintTimer = undefined;
@@ -74,8 +84,6 @@ export function useNativePhotoRunProgress(
 			}
 		};
 		refresh.request();
-		document.addEventListener('visibilitychange', visible);
-		window.addEventListener('pageshow', visible);
 		window.addEventListener(SYNC_JOBS_CHANGED_EVENT, refresh.request);
 		window.addEventListener(nativeBridgeMessageEvent, nativeUpdate);
 		return () => {
@@ -83,18 +91,19 @@ export function useNativePhotoRunProgress(
 			clearTimeout(hintTimer);
 			pending?.abort();
 			refresh.dispose();
-			document.removeEventListener('visibilitychange', visible);
-			window.removeEventListener('pageshow', visible);
+			disposeLifecycle();
 			window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, refresh.request);
 			window.removeEventListener(nativeBridgeMessageEvent, nativeUpdate);
 		};
-	}, [origin, ownerId, deviceId, dataPlane, generation, enabled, connections]);
-	return observed;
+	}, [origin, ownerId, deviceId, dataPlane, generation, enabled, connections, observationScope]);
+    // Derive this synchronously during render. Waiting for an effect would
+    // expose the previous owner's cached counts for one protected paint.
+	return enabled && dataPlane === 'home' && observed.scope === observationScope ? observed.rows : noNativePhotoProgress;
 }
 
 export function nativePhotoRunActive(view?: NativePhotoRunView) {
 	const stage = view?.progress?.stage;
-	return view?.progress?.continuation !== 'held' && (stage === 'preparing' || stage === 'uploading');
+	return !view?.stale && view?.progress?.continuation !== 'held' && (stage === 'preparing' || stage === 'uploading');
 }
 
 export function nativePhotoRunLabel(view?: NativePhotoRunView): string {
@@ -157,6 +166,12 @@ const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string
 	'photo-read': 'An original could not be read from the Photos library.',
 	'cloud-request': 'The cloud request could not finish.',
 	'saved-settings': 'Waiting for the current saved backup settings.',
+	'transfer-permission': 'The paired device could not authorize the cloud transfer. The current connection will be checked again.',
+	'transfer-expired': 'Cloud transfer authorization expired or was revoked. The current connection will be checked again.',
+	'transfer-missing': 'The exact cloud transfer authorization is no longer available. The current connection will be checked again.',
+	'transfer-state': 'The cloud transfer state changed. Its saved checkpoint was kept and the current connection will be checked again.',
+	'grant-changed': 'The selected Photos permission changed. Review access to this library.',
+	'queue-changed': 'The prepared Photos queue changed. Its saved checkpoint was kept for review.',
 	'destination-review': 'Review the backup’s cloud destination.',
 	retry: 'Waiting to retry the backup.'
 };
@@ -164,39 +179,60 @@ const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string
 export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['backgroundRequest'], reason?: NativePhotoRunActivity['reason']) {
 	switch (status) {
 		case 'active': return 'Background processing requested for this backup.';
-		case 'declined': return 'iOS didn’t start background processing. You can keep Thingtime open or try again.';
-		case 'waiting': return reason === 'interrupted' ? 'iOS ended this background session. Automatic backup will retry.' :
+		case 'declined': return 'iOS didn’t start continued processing. Automatic backup will retry when iOS allows.';
+		case 'waiting': return reason === 'interrupted' ? 'This background session ended. Automatic backup will retry.' :
 			'This backup is waiting for its saved transfer conditions.';
 		case 'complete': return 'This backup check has finished.';
 		default: return '';
 	}
 }
 
+const failureOperationLabels: Record<NonNullable<NativePhotoRunActivity['failureOperation']>, string> = {
+    manifest: 'Checking server support', 'check-photo-run': 'Checking backup permission',
+    'reserve-photo-original': 'Reserving an original', parts: 'Preparing an upload part',
+    complete: 'Verifying uploaded bytes', publish: 'Saving the cloud file', revoke: 'Stopping an upload',
+    'revoke-photo-run': 'Stopping backup authorization', 'local-grant': 'Checking Photos access', queue: 'Checking the prepared queue'
+};
+
 const count = (value: number, singular: string, plural = singular + 's') =>
 	`${value.toLocaleString()} ${value === 1 ? singular : plural}`;
 const eventTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
 const captureTime = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
+const backgroundEndLabels: Record<NonNullable<NativePhotoRunActivity['backgroundEnd']>['cause'], string> = {
+    'system-ended': 'iOS ended or cancelled processing',
+    'execution-expired': 'Execution time expired',
+    'worker-cancelled': 'The backup worker was cancelled',
+    'worker-failed': 'The backup worker stopped after a failure',
+    completed: 'The background pass finished',
+    'checkpointed-wait': 'Progress was saved for upload limits'
+};
 const discoveryLabel = (item: NonNullable<NativePhotoRunActivity['latestFound']>, index?: number) =>
 	`Found ${index === undefined ? 'a ' + item.kind : index === 1 ? '1 ' + item.kind : item.kind + ' ' + index.toLocaleString()}${item.capturedAt ? ` taken at ${captureTime.format(new Date(item.capturedAt))}` : ''}`;
 
-export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false) {
+export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false, reserve = false) {
 	const activity = view?.progress?.activity;
-	if (!view?.progress || !activity || view.previousRevision) return undefined;
+	if (!view?.progress || !activity || view.previousRevision) return reserve ? {
+		phase: paused ? 'Paused' : nativePhotoRunLabel(view), reason: 'No additional details reported.', indexed: 'Not reported yet', indexing: 'Index progress not reported yet',
+		latestFound: 'Latest discovery not reported yet', prepared: 'Not reported yet', backlog: 'Not reported yet',
+		downloadLabel: 'iCloud download progress not reported', downloadPercent: undefined, events: []
+	} : undefined;
 	const { continuation } = view.progress;
 	const phase = paused ? 'Paused' : continuation === 'held' ? 'Background processing stopped' : phaseLabels[activity.phase];
 	const { indexed, indexing, latestFound, prepared, backlogOriginals: backlog } = activity;
+    const indexingNow = !paused && !view.stale && activity.phase === 'indexing';
 	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction ?? activity.cloudPreparationFraction : undefined;
 	return {
 		phase: view.stale ? `Last reported · ${phase}` : phase,
-		reason: activity.reason ? reasonLabels[activity.reason] : '',
-		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : '',
-		indexing: !paused && !view.stale && activity.phase === 'indexing' && indexing ?
-			`${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : '',
-		latestFound: !paused && !view.stale && activity.phase === 'indexing' && latestFound ?
-			discoveryLabel(latestFound, indexed?.[latestFound.kind === 'photo' ? 'photos' : 'videos']) : '',
-		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : '',
-		backlog: backlog === undefined ? '' : count(backlog, 'original'),
+		reason: (activity.reason ? reasonLabels[activity.reason] : 'No additional details reported.') +
+			(activity.failureOperation ? ` ${failureOperationLabels[activity.failureOperation]}.` : '') +
+            (activity.backgroundEnd ? ` Last background session: ${backgroundEndLabels[activity.backgroundEnd.cause]} at ${eventTime.format(new Date(activity.backgroundEnd.at))}.` : ''),
+		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : 'Not reported yet',
+		indexing: indexing ? `${indexingNow ? '' : 'Last indexed · '}${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : 'Index progress not reported yet',
+		latestFound: latestFound ? `${indexingNow ? '' : 'Last discovery · '}${discoveryLabel(latestFound, indexed?.[latestFound.kind === 'photo' ? 'photos' : 'videos'])}` : 'Latest discovery not reported yet',
+		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : 'Not reported yet',
+		backlog: backlog === undefined ? 'Not reported yet' : count(backlog, 'original'),
 		downloadPercent: fraction === undefined ? undefined : Math.floor(fraction * 100),
+		downloadLabel: fraction === undefined ? 'iCloud download progress not reported' : `Current iCloud download · ${Math.floor(fraction * 100)}%`,
 		events: activity.events?.map(({ phase, at, item, discovered }, index) => ({
 			id: `${at}:${phase}:${index}`, label: item && discovered ? `${discoveryLabel(item)} · item ${discovered.toLocaleString()}` : phaseLabels[phase],
 			at, time: eventTime.format(new Date(at))
@@ -212,14 +248,15 @@ export function nativePhotoRunGlance(view?: NativePhotoRunView) {
 	const uploading = progress?.stage === 'uploading' && (!progress.activity || progress.activity.phase === 'uploading');
 	const rate = view?.stale || progress?.uploadBytesPerSecond === undefined || !uploading || progress.continuation === 'held' ? 'Upload speed unavailable' :
 		`${(progress.uploadBytesPerSecond / 125_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} Mbps live`;
-	if (!confirmed) return { ...base, upload: { ...base.upload, rate, progress: 'Progress unavailable' } };
+	if (!confirmed) return { ...base, upload: { ...base.upload, rate, progress: 'Progress unavailable',
+		bytes: 'Transfer traffic not reported', remaining: 'Network totals not reported', operations: 'Confirmed counts not reported' } };
 	const { photos, videos, other, wifiBytes, mobileBytes, unknownBytes } = confirmed;
 	const totalBytes = BigInt(wifiBytes) + BigInt(mobileBytes) + BigInt(unknownBytes);
 	const file = !progress.activity || uploading ? progress.currentFile : undefined;
 	return { ...base, upload: {
 		...base.upload,
 		rate,
-		progress: file ? `Current original: ${bytes(file.sentBytes)} of ${bytes(file.totalBytes)} sent` : '',
+		progress: file ? `Current original: ${bytes(file.sentBytes)} of ${bytes(file.totalBytes)} sent` : 'Current original not reported',
 		bytes: `${formatSyncBytes(String(totalBytes))} transfer traffic`,
 		remaining: `Wi-Fi ${bytes(wifiBytes)} · Mobile data ${bytes(mobileBytes)}${unknownBytes ? ` · Network unknown ${bytes(unknownBytes)}` : ''}`,
 		operations: `${photos.toLocaleString()} ${photos === 1 ? 'photo' : 'photos'} · ${videos.toLocaleString()} ${videos === 1 ? 'video' : 'videos'}${other ? ` · ${other.toLocaleString()} other` : ''} confirmed`

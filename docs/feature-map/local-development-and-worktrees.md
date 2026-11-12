@@ -155,7 +155,8 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 `remix/scripts/local-api-isolation-smoke.mjs` exercises built Nitro and Vite under
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
-Keep backend/browser network isolation and dedicated test credentials in place.
+Keep dedicated test credentials in place. Backend/browser network isolation is
+optional and is not required for AI-agent work.
 
 
 ## Commander native background indexing
@@ -200,3 +201,10 @@ Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
 `Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
 must drain before success/resume while leaving the consumer unblocked. Shipping
 Swift sources, authorization, rates and native active-slot policy are unchanged.
+
+## Encrypted attachment download CORS regression
+
+`remix/scripts/test-password-file-download.mjs` exercises the real password
+attachment UI against a separate synthetic storage origin. It rejects missing
+GET CORS, then verifies an exact-origin response downloads decrypted bytes at
+desktop and mobile widths. See TESTING.md for invocation and production checks.

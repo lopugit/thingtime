@@ -255,6 +255,11 @@ the protected password input; never put it in an ordinary Thing or agent notes.
 The selected provider uses the official Anthropic Messages API at
 `https://api.anthropic.com`, with separate Console billing. Choose a model the
 Console account can use; the template catalog does not prove account entitlement.
+Personal-provider chat clients require `api.lopu-chats-reply` 1.23.1 for
+model-resolved effort normalization. The saved connection's actual model governs
+the effective effort: Haiku 4.5 sends no unsupported effort parameter; supported
+model choices stay intact and unknown custom models retain explicit tuning.
+This does not invent a thinking budget or change the saved credential/billing.
 Select that saved connection in Lopu, verify a real reply, reload, and separately
 verify independent removal when testing multiple keys. Existing Claude Code
 OAuth records retain their original mode and cannot be reinterpreted as API keys.

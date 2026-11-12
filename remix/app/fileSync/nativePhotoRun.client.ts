@@ -1,15 +1,17 @@
 import { rootIdentity } from '../utils/rootIdentity';
-import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS } from './configuration';
+import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
 import { assertConfiguredSyncApproval, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { openSyncJournal, syncScopeKey, withSyncRootLock } from './journal.client';
-import { readNativePhotoRunProgress, supportsNativePhotoContinuation } from './mobileFolders.client';
+import { readNativePhotoRunProgress, supportsNativePhotoContinuation, supportsNativePhotoForegroundWake, wakeNativePhotoRun } from './mobileFolders.client';
+import type { NativePhotoRunStatus } from './nativePhotoRunProgress';
 import { createNativeSyncHost, isNativeSyncAdapterCurrent, type NativeSyncAdapter } from './nativeSyncHost.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { samePhotoBackupSource } from './photoSettingsPolicy';
 import type { SyncScope } from './reconcile';
 
 const pendingArms = new Map<string, AbortController>();
+const authorityRetryAt = new Map<string, number>();
 export function cancelAllPendingNativePhotoArms() { for (const arm of pendingArms.values()) arm.abort(); }
 export function cancelPendingNativePhotoArm(scope: SyncScope) { pendingArms.get(syncScopeKey(scope))?.abort(); }
 
@@ -17,8 +19,8 @@ export function cancelPendingNativePhotoArm(scope: SyncScope) { pendingArms.get(
  * prepares a file operation or transfers an original on this entry point. */
 export async function armNativePhotoRun(input: {
 	reviewed: SavedFileSyncConfiguration; scope: SyncScope; generation: number; adapter: NativeSyncAdapter;
-	automatic: boolean; discoverySignal?: AbortSignal; isPaused(scope: SyncScope): boolean; resumeScope(scope: SyncScope): void;
-}) {
+	automatic: boolean; foregroundStart?: boolean; discoverySignal?: AbortSignal; isPaused(scope: SyncScope): boolean; resumeScope(scope: SyncScope): void;
+}): Promise<NativePhotoRunStatus | undefined> {
 	const { reviewed, scope, generation, adapter, automatic } = input;
 	const key = syncScopeKey(scope), controller = new AbortController();
 	if (automatic && pendingArms.has(key)) return;
@@ -35,7 +37,7 @@ export async function armNativePhotoRun(input: {
 	const unsubscribe = rootIdentity.subscribe(() => { if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) stop(); });
 	window.addEventListener('pagehide', stop);
 	try {
-		await withSyncRootLock(scope, async () => {
+		return await withSyncRootLock(scope, async () => {
 			check();
 			if (automatic && input.isPaused(scope)) return;
 			const journal = await openSyncJournal();
@@ -50,6 +52,7 @@ export async function armNativePhotoRun(input: {
 				await host.requireCapability('api.file-sync-transfer-admissions', '1.3.0');
 				const { localRootId, remoteFolderId } = reviewed.configuration;
 				const statusScope = { rootId: localRootId, configurationId: reviewed.id, deviceId: scope.deviceId };
+                let existingStatus: NativePhotoRunStatus | undefined;
 				if (automatic) {
 					const status = await readNativePhotoRunProgress(scope.ownerId, statusScope, signal, host.request); check();
 					const progress = status.photoRunProgress;
@@ -59,7 +62,23 @@ export async function armNativePhotoRun(input: {
 						// idempotent, and native retains the same checkpoint on renewal.
 						const needsAuthorityCheck = progress.stage === 'waiting' && progress.retryAt === undefined &&
 							progress.minimumPartBytes === undefined && progress.continuation === undefined;
-						if (progress.continuation === 'held' || (progress.stage !== 'paused' && !needsAuthorityCheck)) return;
+						// A saved-settings hold describes lost authority, not a user
+						// decision. Recheck the current grant and saved Thing below;
+						// native/server authorization still decides whether it may run.
+						const savedSettingsHold = progress.stage === 'needs-review' && ['saved-settings', 'transfer-permission', 'transfer-expired', 'transfer-missing', 'transfer-state'].includes(progress.activity?.reason ?? '');
+                        if (progress.continuation === 'held') return status;
+                        if (progress.stage !== 'paused' && !needsAuthorityCheck && !savedSettingsHold) {
+                            if (!input.foregroundStart) return status;
+                            existingStatus = status;
+                        }
+						if (savedSettingsHold) {
+							const now = Date.now();
+							if (now < (authorityRetryAt.get(key) ?? 0) || (progress.retryAt && now < Date.parse(progress.retryAt))) return;
+							// Condition/page wakes must not turn a persistent refusal into
+							// a tight authorization loop. Failed checks retain this cooldown.
+							for (const [scopeKey, retryAt] of authorityRetryAt) if (retryAt <= now) authorityRetryAt.delete(scopeKey);
+							authorityRetryAt.set(key, now + PHOTO_AUTOMATION_INTERVAL_MS);
+						}
 					}
 				}
 				const { roots } = await host.request(scope.ownerId, { action: 'list' }, signal); check();
@@ -80,11 +99,23 @@ export async function armNativePhotoRun(input: {
 					input.resumeScope(scope);
 				}
 				if (input.isPaused(scope)) return;
+                const foregroundStatus = async (status: NativePhotoRunStatus) => {
+                    if (!input.foregroundStart || adapter.platform !== 'ios' || !supportsNativePhotoForegroundWake(adapter.bridge)) return status;
+                    const woke = await wakeNativePhotoRun(scope.ownerId,
+                        { ...statusScope, configurationRevision: reviewed.updatedAt }, signal, host.request);
+                    check();
+                    if (input.isPaused(scope)) return;
+                    return woke;
+                };
+                if (existingStatus) return foregroundStatus(existingStatus);
 				const continueInBackground = !automatic && adapter.platform === 'ios' && supportsNativePhotoContinuation(adapter.bridge, '1.1.0');
-				await host.request(scope.ownerId, { action: 'arm-photo-run', rootId: localRootId,
+				const armed = await host.request(scope.ownerId, { action: 'arm-photo-run', rootId: localRootId,
 					authorization: { ...reviewed, scope }, execution: 'native', ...(!automatic ? { resume: true as const } : {}),
 					...(continueInBackground ? { continueInBackground: true as const } : {}) }, signal);
 				check();
+                const status = armed.photoRunStatus ?? await readNativePhotoRunProgress(scope.ownerId, statusScope, signal, host.request);
+                check();
+                return foregroundStatus(status);
 			} finally { journal.close(); }
 		}, undefined, signal);
 	} finally {
