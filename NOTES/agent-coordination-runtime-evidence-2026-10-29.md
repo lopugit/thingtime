@@ -1,9 +1,9 @@
 # Agent coordination runtime evidence
 
-**Evidence snapshot:** 2026-10-29, Australia/Melbourne
+**Evidence snapshot:** baseline 2026-10-29; connected-host addendum 2026-11-13, Australia/Melbourne
 
 **Repository revision checked:** `origin/develop` at
-`018233fef` (the integration tip fetched for this review)
+`ea10b72f88` (integration tip fetched 2026-11-13)
 
 **Scope:** repository docs, package scripts, and recorded acceptance for
 Character coordination and private Agent overview reporting. This note does
@@ -21,7 +21,7 @@ missing. That observation is now stale for the integration target. The current
 | --- | --- | --- |
 | [`docs/characters.md`](../docs/characters.md) | Character sign-in modes, task identity, private coordination, and separation between public capability discovery and authenticated membership are documented. | A discoverable runbook exists; it does not prove a Character session or subspace membership is available to a particular agent. |
 | [`docs/agent-overview.md`](../docs/agent-overview.md) | The 2.0.0 read adapter, saved-Thing workspace contract, measurement provenance, and authored-Thing boundary are documented. | Framework/API behavior and saved-page ownership boundaries are described; the adapter does not create the private dashboard Things. |
-| [`docs/agent-reporting.md`](../docs/agent-reporting.md) | The gateway requires `api.agent-reporting` 1.0.0, `api.auth-characters` 1.0.0, `api.agent-overview` 2.0.0, and an independent `agents.report` grant. | Authorization is deliberately separate from ordinary `things` access and public capability discovery. |
+| [`docs/agent-reporting.md`](../docs/agent-reporting.md) | The gateway requires the origin-scoped reporting, Character, and Agent overview contracts and an independent `agents.report` grant. | Authorization is deliberately separate from ordinary `things` access and public capability discovery. |
 | `remix/package.json` | `characters:preflight`, `test:characters-preflight`, `test:characters`, `test:agent-reporting`, and `test:agent-overview` scripts are present. | There are named local checks to run; script presence is not a passing test result. |
 | [`docs/agent-overview.md`](../docs/agent-overview.md), Developer acceptance | Records a local 2026-10-19 acceptance using externally authored synthetic Things, including saved views, streaming, readback, and editable Builder blocks. | This is a dated repository record, not a rerun in this review or proof of production/host acceptance. |
 
@@ -49,6 +49,23 @@ write retries reuse the original request identity and immutable inputs.
   workspace contents, credentials, and personal account scope out of public
   notes.
 
+## Connected-host gateway attempt — 2026-11-13, Australia/Melbourne
+
+During a connected-host attempt, the reporting gateway rejected
+`prepare_thingtime_agent_task` with HTTP 403 and the message that the existing
+private Thingtime Agents subspace requires owner or moderator access. No
+successful preparation receipt or binding was returned, so the task
+prepare/report/readback/reuse cycle remains unaccepted. The refusal is
+consistent with the documented distinction between an independent reporting
+grant and authority to administer the existing private subspace; it does not
+establish which specific membership or role record is missing. No identity,
+workspace, or visibility fallback was used.
+
+Next step: verify the required role through the supported authorized
+Thingtime workflow, then resume the same stable task identity and prove
+preparation, one measured report, exact readback, and idempotent reuse. Do not
+create a replacement workspace or infer access from the reporting grant.
+
 ## Related planning
 
 - [Agent coordination and task reporting roadmap](../PLAN/agent-coordination-and-task-reporting-roadmap.md)
@@ -62,5 +79,6 @@ write retries reuse the original request identity and immutable inputs.
 
 Refresh this note after changes to the capability manifest, reporting
 permission, runbooks, named test scripts, saved workspace contract, or selected
-host integration. Recheck the exact `origin/develop` revision before repeating
-any status claim.
+host integration. This connected-host attempt is a dated gateway observation,
+not proof of a successful saved-workspace write or a general production status.
+Recheck the exact `origin/develop` revision before repeating any status claim.

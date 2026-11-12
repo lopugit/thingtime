@@ -44,6 +44,14 @@ test scope distinguishes local API/Builder evidence from production behavior.
 
 Run only through the intended authorized Thingtime account and selected origin.
 
+**Latest attempt:** On 2026-11-13, the gateway returned HTTP 403 during task
+preparation because the existing private Thingtime Agents subspace requires
+owner or moderator access. This did not return a successful preparation
+receipt; the connected-host acceptance gate remains open. The refusal does not
+identify which role or membership record is absent. Verify that boundary
+through the supported authorized workflow before retrying the same stable task
+identity.
+
 1. Negotiate `api.agent-reporting` 1.0.0, `api.auth-characters` 1.0.0, and
    `api.agent-overview` 2.0.0 at that origin.
 2. Verify the independent `agents.report` permission, the current private

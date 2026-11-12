@@ -3,14 +3,16 @@
 **Status:** Foundation documented and locally exercised; authorized connected-host
 acceptance remains open.
 
-**Evidence checkpoint:** 2026-10-29, Australia/Melbourne. The fetched integration
-tree `origin/develop` at `018233fef` contains `docs/characters.md`,
+**Evidence checkpoint:** 2026-11-13, Australia/Melbourne. The fetched integration
+tree `origin/develop` at `ea10b72f88` contains `docs/characters.md`,
 `docs/agent-overview.md`, `docs/agent-reporting.md`, the origin-bound
 `characters:preflight` script, and named Character/Agent test scripts. This
 supersedes the 2026-10-19 checkpoint that said the docs and preflight were
-missing. The runbooks record local synthetic acceptance, but this documentation
-pass did not rerun those checks or verify a live connected host, private saved
-workspace, Character session, or membership.
+missing. The runbooks record local synthetic acceptance. A connected-host
+preparation attempt on 2026-11-13 returned HTTP 403 because the existing private
+Thingtime Agents subspace requires owner or moderator access; no successful
+preparation receipt was returned. This does not identify which role or
+membership record is missing and does not prove the lifecycle reporting flow.
 
 Read the [dated evidence note](../../NOTES/agent-coordination-runtime-evidence-2026-10-29.md)
 and [roadmap](../../PLAN/agent-coordination-and-task-reporting-roadmap.md)
@@ -54,6 +56,10 @@ test cannot stand in for any of the later proofs.
 - [ ] Verify the independent `agents.report` grant, the exact saved workspace
   references, and membership in the existing private Thingtime Agents
   subspace. Ordinary `things` access does not imply the reporting grant.
+- [ ] Resolve the reported private-subspace owner/moderator access gate through
+  the supported authorized workflow, without changing visibility or creating a
+  replacement workspace. Resume the same stable identity only after that
+  access is independently verified.
 - [ ] Prepare a stable external task identity, record one actually observed
   progress update, read back the exact task/progress Things, and repeat
   preparation to confirm the same Character and binding are reused.
@@ -85,11 +91,14 @@ test cannot stand in for any of the later proofs.
 
 Run the documented public preflight from a checkout that contains the current
 script, then verify host authorization and private saved-Thing access through
-the supported reporting tools. If the intended connection lacks the separate
-`agents.report` permission or any exact saved reference, stop only that
-dependent reporting action and keep unrelated task work moving. Do not upgrade
-ordinary Things access silently, copy a credential, post as the owner, or
-interpret local test success as production acceptance.
+the supported reporting tools. The latest connected-host attempt reached the
+gateway but was refused at the existing subspace's owner/moderator boundary.
+Verify the required role through the supported authorized workflow before
+retrying. If the intended connection lacks the separate `agents.report`
+permission or any exact saved reference, stop only that dependent reporting
+action and keep unrelated task work moving. Do not upgrade ordinary Things
+access silently, copy a credential, post as the owner, or interpret local test
+success as production acceptance.
 
 Related developer-ecosystem context: [baseline](../../NOTES/trusted-developer-ecosystem-baseline.md)
 and [roadmap](../../PLAN/trusted-developer-ecosystem-roadmap.md).

@@ -5,7 +5,9 @@
 - **Complete authorized connected-host acceptance for Character coordination and Agent overview reporting.**
   The current integration tree now contains the Character, Agent overview, and
   Agent reporting runbooks, an origin-bound preflight, and focused test scripts;
-  see the [2026-10-29 evidence note](../NOTES/agent-coordination-runtime-evidence-2026-10-29.md).
+  see the [runtime evidence note](../NOTES/agent-coordination-runtime-evidence-2026-10-29.md),
+  which now records the 2026-11-13 connected-host refusal at the private-subspace
+  owner/moderator boundary.
   Those artifacts and the recorded local synthetic acceptance do not prove the
   selected deployed origin, connected host, independent `agents.report` grant,
   saved workspace references, or private-subspace membership are available
