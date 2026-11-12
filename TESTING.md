@@ -12674,6 +12674,15 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS Photos launch and retry
 
+- Exercise five concurrent originals with preparation lookahead and multiple
+  upload parts. Count real resource exports and inventory observations: unchanged
+  originals must be reused between verification and part reads instead of being
+  exported and hashed again after each sibling switch. Preserve provider access,
+  exact resource revision and native file-stamp checks on cache hits. Test edits,
+  removal, revoked access, tampered staging bytes, owner/root changes and cleanup.
+  Exceed the reusable cache byte budget with one large video: consecutive reads
+  must retain that valid original without rejecting its size or rebuilding it
+  for every part; competing resources may evict reusable entries safely.
 - Open an unrelated Thingtime page first with enabled local Photos and folder
   sync configs. Without visiting Device setup or pressing Retry, verify the
   app-wide lifecycle wake admits each eligible config and starts its existing

@@ -563,6 +563,15 @@ fresh paired-device checks so a long folder scan cannot block startup; it never
 owns or cancels the serialized data-operation lane. Old clients retain the
 existing request serialization.
 
+Prepared Photos originals are reused across concurrent uploads and lookahead.
+The reader keeps a bounded cache scoped to the owner, root and exact resource
+revision, and still checks current provider access and the staged file's native
+stamp before reading. Its reusable-byte budget is a cache policy, not a maximum
+file size: a sole larger original remains available for consecutive part reads.
+Eviction cleans only owned temporary files; borrowed iCloud preparations retain
+their own lifetime. This avoids re-exporting and hashing an unchanged full
+original every time another upload takes its turn.
+
 System Progress uses a finite denominator for known library discovery, known
 originals and their preparation, with one final verification/checkpoint unit.
 Undiscovered original backlog is not invented; newly discovered real work may
@@ -576,9 +585,9 @@ progress is reported. The scheduler still decides actual background execution.
 Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
 the latest photo or video capture time when available. The scoped **Backup
 activity** also shows measured file counts, the selected batch, iCloud download
-progress, cloud verification, and recent steps. The native queue prepares and
-uploads one newest asset group, including its companions, then discovers and
-uploads successive groups. The remaining original count stays unknown while
+progress, cloud verification, and recent steps. The native queue starts with the newest asset
+group, including its companions, then prepares batches of up to ten groups and
+uploads up to five originals concurrently while preparing lookahead work. The remaining original count stays unknown while
 unseen asset records can still contribute originals. The queue keeps exact
 selections and receipts across interruption. When PhotoKit proves the library
 is unchanged and full access is current, discovery can resume at a saved

@@ -160,6 +160,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Reuse prepared Photos originals across concurrent uploads to avoid repeated full-original export and hashing between parts; retain source validation and large-file support. See [PR #1491](../PRs/1491-codex-device-sync-app-start-start-saved-device-sync-across-app-routes.md).
+
 - 2026-11-12: Start eligible device file-sync configs from the shared app
   lifecycle, show immediate sync-page feedback, and report acknowledged startup
   through Lopu without a Retry tap. Preserve explicit Pause, transfer settings,

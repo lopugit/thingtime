@@ -1200,3 +1200,10 @@ shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry
 Existing explicit limits/drafts remain intact; ordinary connection progress is
 independent from native CPU/scan telemetry. The paused-start browser harness
 exercises unsupported iOS capabilities and retained controls at both widths.
+
+Prepared Photos originals reuse the scoped reader cache in
+`apple/FileSync/Sources/AppleFileSync/PhotoLibraryReader.swift`. Preserve live
+provider/revision and staged-file checks across concurrent part reads; cache
+budgets never impose a file-size limit. `PhotoOriginalCacheTests` covers sibling
+lookahead reuse, invalidation, ownership cleanup and oversized originals, alongside
+the shared `PhotoLibraryTests` suite.
