@@ -30,7 +30,7 @@ try {
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
   for (const scenario of process.env.TT_PHOTO_DESTINATION_TEST ? ['photo-destination'] : process.env.TT_SYNC_UI_SCENARIOS?.split(',') ??
    ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination', 'photo-policy', 'remote-iphone', 'paired-iphone',
-    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause', 'native-only', 'native-activity']) {
+    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause', 'native-only', 'native-activity', 'native-lifecycle', 'native-scope', 'native-history']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
@@ -41,6 +41,58 @@ try {
      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
      results.push({ viewport: label, scenario, passed: true });
     };
+    if (scenario === 'native-history') {
+     await page.goto(origin + '/?nativeOnly=1&nativeActivity=1');
+     const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
+     for (const stage of ['uploading', 'complete', 'paused', 'stale']) {
+      await page.evaluate(stage => window.remoteSyncFixture.setNativePhotoHistoricalState(stage), stage);
+      if (stage === 'stale') await card.getByText('Native backup status is unavailable. Showing last reported progress.', { exact: true }).waitFor();
+      else if (stage === 'paused') await card.getByText('Paused', { exact: true }).first().waitFor();
+      else if (stage === 'complete') await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
+      else await card.getByText('Uploading originals', { exact: true }).first().waitFor();
+      await card.getByText('Last indexed · 13 of 13 assets found', { exact: true }).waitFor();
+      await card.getByText(/Last discovery · Found photo 12 taken at/).waitFor();
+      assert.equal(await card.getByText(/Index progress not reported/).count(), 0);
+      await page.screenshot({ path: join(evidence, `${label}-history-${stage}.png`), fullPage: true });
+     }
+     await finish(); continue;
+    }
+    if (scenario === 'native-scope') {
+     await page.goto(origin + '/?nativeOnly=1&nativeActivity=1&progressScopeProbe=1');
+     const probe = page.getByTestId('native-scope-probe');
+     for (const field of ['owner', 'origin', 'device', 'plane', 'generation']) {
+      await probe.filter({ hasText: 'wifiBytes' }).waitFor();
+      await page.evaluate(field => window.changeNativeProgressScope(field), field);
+      await probe.filter({ hasText: /^\[\]$/ }).waitFor();
+      await page.evaluate(() => window.changeNativeProgressScope('reset'));
+     }
+     await finish(); continue;
+    }
+    if (scenario === 'native-lifecycle') {
+     await page.goto(origin + '/?nativeOnly=1&nativeActivity=1');
+     const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoDiscovery(1));
+     const action = card.getByRole('button', { name: 'Run in Background', exact: true });
+     await action.click(); await card.getByText(/iOS didn’t start /).waitFor();
+     await action.click();
+     await card.getByText('Continuing this backup with iOS background processing.', { exact: true }).waitFor();
+     const before = await page.evaluate(() => window.remoteSyncFixture.nativeOnlyState());
+     await page.evaluate(() => window.remoteSyncFixture.endNativePhotoLeaseWithoutHint());
+     // Model a native background callback dropped while WebKit was suspended,
+     // followed by focus without a DOM visibilitychange or pageshow event.
+     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+     await card.getByText('This background session ended. Automatic backup will retry.', { exact: true }).waitFor();
+     await card.getByText(/Last background session: The backup worker was cancelled at/).waitFor();
+     assert.equal(await card.getByText('Continuing this backup with iOS background processing.', { exact: true }).count(), 0);
+     const after = await page.evaluate(() => window.remoteSyncFixture.nativeOnlyState());
+     assert.deepEqual(after.nativeRun.progress.confirmed, before.nativeRun.progress.confirmed);
+     assert.equal(after.nativeRun.queueId, before.nativeRun.queueId);
+     assert.equal(after.nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 2,
+      'a status refresh cannot create a new user-initiated continued request');
+     await finish(); continue;
+    }
     if (scenario === 'native-activity') {
      await page.goto(origin + '/?nativeOnly=1&nativeActivity=1');
      const state = () => page.evaluate(() => window.remoteSyncFixture.nativeOnlyState());

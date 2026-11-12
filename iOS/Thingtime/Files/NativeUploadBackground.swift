@@ -89,6 +89,8 @@ final class NativeUploadBackgroundLease {
     private let cancel: () -> Void
     private let expired: () -> Void
     private let released: (NativeUploadBackgroundLease) -> Void
+    private(set) var measuredUnits: Int64 = 0
+    private(set) var lastProgressAt: Date?
     var canContinue: Bool { state == .active }
     init(presentation: Presentation, cancel: @escaping () -> Void, expired: @escaping () -> Void,
          released: @escaping (NativeUploadBackgroundLease) -> Void) {
@@ -113,7 +115,10 @@ final class NativeUploadBackgroundLease {
             return
         }
         state = .active; systemTask = task
-        task.progress.totalUnitCount = presentation.bytes.map { $0 + 1 } ?? -1
+        // A continued task needs finite Progress. With no known payload yet,
+        // its sole known unit is final verification; real discovery replaces
+        // this denominator before reporting its first measured completed work.
+        task.progress.totalUnitCount = presentation.bytes.map { $0 + 1 } ?? 1
         task.progress.completedUnitCount = 0
         task.expiration = { [weak self] in
             guard let self, self.canContinue else { return }
@@ -130,13 +135,15 @@ final class NativeUploadBackgroundLease {
         guard let size = presentation.bytes, canContinue, let task = systemTask,
               bytes >= task.progress.completedUnitCount, bytes <= size else { return }
         task.progress.completedUnitCount = bytes
+        if bytes > measuredUnits { measuredUnits = bytes; lastProgressAt = Date() }
         task.update(subtitle: bytes == size ? "Verifying upload…" : "\(Int(Double(bytes) / Double(size) * 100))% uploaded")
     }
     func work(completed: Int64, total: Int64?, subtitle: String) {
         guard presentation.bytes == nil, canContinue, let task = systemTask,
-              completed >= task.progress.completedUnitCount, total.map({ $0 >= completed && $0 > 0 }) ?? true else { return }
-        if let total { task.progress.totalUnitCount = total }
+              let total, completed >= task.progress.completedUnitCount, total > completed else { return }
+        task.progress.totalUnitCount = total
         task.progress.completedUnitCount = completed
+        if completed > measuredUnits { measuredUnits = completed; lastProgressAt = Date() }
         task.update(subtitle: subtitle)
     }
     func finish(success: Bool, settledSubtitle: String? = nil) {
