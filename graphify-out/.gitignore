@@ -4,10 +4,11 @@
 # Internal pipeline temp files
 .graphify_*.json
 .needs_update
-# Extraction cache: semantic/ is tracked (content-addressed -> merge-safe, keeps
-# fresh-clone rebuilds LLM-free); ast/ + stat-index.json are regenerable and
-# machine-local (stat-index is keyed by absolute paths)
+# Extraction cache: mutable semantic/, ast/, and stat-index.json stay local.
+# Only semantic-cas/ is tracked: input keys and content hashes make concurrent
+# variants immutable and merge-safe while keeping fresh-clone rebuilds LLM-free.
 cache/*
-!cache/semantic/
+!cache/semantic-cas/
+!cache/semantic-cas/**
 # Deterministic local reflection scratch output
 reflections/

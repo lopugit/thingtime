@@ -189,6 +189,15 @@ export const Icon = (props) => {
       return "🌀"
     }
     if (["thingtime"]?.includes(name)) {
+      // 🔮 (claude-todo/10) seasonal first — deterministic by date, everyone
+      // sees it together — then an ultra-rare 🦄 roll, then the everyday flip
+      const today = new Date()
+      if (today.getMonth() === 11 && today.getDate() === 25) {
+        return "🎄"
+      }
+      if (Math.random() < 0.01) {
+        return "🦄"
+      }
       if (Math.random() > 0.5) {
         return "🌳"
       }
@@ -216,6 +225,15 @@ export const Icon = (props) => {
 
     if (["random"]?.includes(name)) {
       return emojis[Math.floor(Math.random() * emojis.length)]
+    }
+
+    // 🔮 secret names (claude-todo/10) — rewards for the curious, caught just
+    // before the shrug
+    if (["lopu"]?.includes(name)) {
+      return "🦄"
+    }
+    if (["wish"]?.includes(name)) {
+      return "🌠"
     }
 
     // question mark

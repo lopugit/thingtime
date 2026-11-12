@@ -39,6 +39,14 @@ Build a signed Release archive (.ipa)
 
 Build and upload to TestFlight
 
+### ios upload
+
+```sh
+[bundle exec] fastlane ios upload
+```
+
+Upload an already-built IPA to TestFlight (IPA_PATH overrides the default build output)
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

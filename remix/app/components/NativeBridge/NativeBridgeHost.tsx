@@ -1,4 +1,6 @@
 import React from 'react';
+import { WidgetBridgeHost } from './WidgetBridgeHost';
+import { PasswordBridgeHost } from './PasswordBridgeHost';
 
 import {
   nativeBridgeMessageEvent,
@@ -49,5 +51,5 @@ export function NativeBridgeHost() {
     };
   }, []);
 
-  return null;
+  return <><WidgetBridgeHost /><PasswordBridgeHost /></>;
 }

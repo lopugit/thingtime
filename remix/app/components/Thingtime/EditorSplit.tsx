@@ -1,3 +1,4 @@
+import { ThingDraftPicker } from '~/drafts/ThingDrafts';
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
 import { ArrowDown, ArrowUp, Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
@@ -610,8 +611,14 @@ const SkeletonWindow = (props: { label?: string }) => (
 	</Flex>
 );
 
-const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context: WindowContext; dropSide?: DropSide | null }) => {
-	const { leaf, actions, context } = props;
+const EditorWindow = (props: {
+	leaf: EditorLeaf;
+	actions: WindowActions;
+	context: WindowContext;
+	dropSide?: DropSide | null;
+	chromeless?: boolean;
+}) => {
+	const { leaf, actions, context, chromeless } = props;
 	const { getThingtime, thingtime } = useThingtime();
 
 	// stable identity per path — Thingtime's memos key on this prop, and a
@@ -680,6 +687,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 		>
 			{/* window toolbar: traffic lights + path + collapsed controls ("…").
 			The empty middle is the drag handle for moving the window. */}
+			{!chromeless && (
 			<Flex
 				className="editor-window-toolbar"
 				alignItems="center"
@@ -841,6 +849,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 					</Flex>
 				</Flex>
 			</Flex>
+			)}
 
 			{/* window body: its own scroll context. Aa and {} are the same
 			Thingtime tree — {} adds developer chrome via codeView */}
@@ -856,6 +865,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 					// left-gutter caret, so no gutter inset is needed)
 					pathPl="0px"
 					debugId={`EditorWindow-${leaf.id}`}
+					hideRootPath={chromeless}
 				/>
 			</Box>
 
@@ -887,8 +897,9 @@ const EditorNodeView = (props: {
 	onRatio: (id: string, ratio: number) => void;
 	context: WindowContext;
 	dropTarget?: DropTarget;
+	chromeless?: boolean;
 }) => {
-	const { node, actions, onRatio, context, dropTarget } = props;
+	const { node, actions, onRatio, context, dropTarget, chromeless } = props;
 
 	const startDividerDrag = React.useCallback(
 		(e: React.PointerEvent, branch: EditorBranch) => {
@@ -915,7 +926,7 @@ const EditorNodeView = (props: {
 	if (node.kind === 'leaf') {
 		const dropSide = dropTarget && dropTarget.kind === 'leaf' && dropTarget.leafId === node.id ? dropTarget.side : null;
 
-		return <EditorWindow leaf={node} actions={actions} context={context} dropSide={dropSide} />;
+		return <EditorWindow leaf={node} actions={actions} context={context} dropSide={dropSide} chromeless={chromeless} />;
 	}
 
 	const isRow = node.direction === 'row';
@@ -923,7 +934,7 @@ const EditorNodeView = (props: {
 	return (
 		<Flex flexDirection={isRow ? 'row' : 'column'} width="100%" height="100%" minWidth={0} minHeight={0}>
 			<Box flex={node.ratio} minWidth={0} minHeight={0} overflow="hidden">
-				<EditorNodeView node={node.a} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} />
+				<EditorNodeView node={node.a} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} chromeless={chromeless} />
 			</Box>
 			<Box
 				className="editor-split-divider"
@@ -938,7 +949,7 @@ const EditorNodeView = (props: {
 				onPointerDown={(e) => startDividerDrag(e, node)}
 			/>
 			<Box flex={1 - node.ratio} minWidth={0} minHeight={0} overflow="hidden">
-				<EditorNodeView node={node.b} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} />
+				<EditorNodeView node={node.b} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} chromeless={chromeless} />
 			</Box>
 		</Flex>
 	);
@@ -1053,6 +1064,10 @@ export type EditorSplitProps = {
 	// the current window into a floating frame — the docked editor stays).
 	// Called with null on unmount so hosts never hold a stale api.
 	onApi?: (api: { popOutDuplicate: () => void } | null) => void;
+	// composer mode: the docked window drops its toolbar (traffic lights +
+	// path) and the tree hides its root key — the value IS the editor. Popped
+	// out / floating windows keep their chrome.
+	chromeless?: boolean;
 };
 
 export const EditorSplit = (props: EditorSplitProps) => {
@@ -1203,8 +1218,10 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			applyLayout(config);
 		}
 
-		// always clear the flag — a stale name must not re-fire on the next mount
-		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true });
+		// always clear the flag — a stale name must not re-fire on the next mount.
+		// Tab-local for the same reason the write is: consuming this tab's intent
+		// must not erase an intent another tab set and has not navigated to yet.
+		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true, tabLocal: true });
 	}, [pendingConfigName, applyLayout]);
 
 	// mirror the live layout into settings for the drawer: first write lands
@@ -1244,7 +1261,18 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			}
 
 			lastMirrorRef.current = serialized;
-			setThingtimeRef.current('settings.editor.live', payload, { namespace: 'editor', ignoreUndoRedo: true });
+			// tabLocal: `live` IS this viewport — the windows open in THIS editor,
+			// keyed by ids this mount generated. EditorDrawerSection renders it as
+			// that tab's own window list, so broadcasting swaps a peer's list for
+			// this tab's: its real windows vanish from its drawer (nothing there
+			// can close or minimise a row it can no longer see) and the foreign
+			// rows it does show act on ids absent from its tree, so they do
+			// nothing. A peer cannot correct it either — this effect depends on
+			// tree/floating/minimised, which a remote write does not touch, and
+			// lastMirrorRef still holds that peer's own payload, so its list stays
+			// wrong until its layout happens to change. Persisted as before, and
+			// the first mirror after mount rewrites it from the local layout.
+			setThingtimeRef.current('settings.editor.live', payload, { namespace: 'editor', ignoreUndoRedo: true, tabLocal: true });
 		};
 
 		if (firstMirrorRef.current) {
@@ -1901,12 +1929,13 @@ export const EditorSplit = (props: EditorSplitProps) => {
 	const draggingDocked = windowDrag?.kind === 'docked' && windowDrag.active;
 
 	return (
-		<>
+		<Flex direction="column" width="100%" minWidth={0} height={props.embedded ? props.height || "100%" : undefined}>
+      {!props.embedded && <ThingDraftPicker />}
 			<Box
 				ref={rootRef}
 				className="editor-split-root"
 				width="100%"
-				height={props.height || 'calc(100vh - 92px)'}
+				height={props.height || 'calc(100vh - 132px)'}
 				minHeight={props.embedded ? undefined : '440px'}
 				border="1px solid var(--tt-border, #ececef)"
 				borderRadius="var(--tt-radius-md, 12px)"
@@ -1917,7 +1946,7 @@ export const EditorSplit = (props: EditorSplitProps) => {
 				{maximisedLeaf ? (
 					<EditorWindow leaf={maximisedLeaf} actions={actions} context="maximised" />
 				) : tree ? (
-					<EditorNodeView node={tree} actions={actions} onRatio={onRatio} context="main" dropTarget={dropTarget} />
+					<EditorNodeView node={tree} actions={actions} onRatio={onRatio} context="main" dropTarget={dropTarget} chromeless={props.embedded ? props.chromeless : undefined} />
 				) : (
 					<Flex
 						alignItems="center"
@@ -2027,6 +2056,6 @@ export const EditorSplit = (props: EditorSplitProps) => {
 					)}
 				</Flex>
 			)}
-		</>
+		</Flex>
 	);
 };

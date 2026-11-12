@@ -7,7 +7,9 @@ import {
   verifyJwtInput,
   verifySignedMessageInput
 } from '~/api/utils/crypto/cryptoTools.server';
+import { hashPasswordForStorage } from '~/api/utils/crypto/passwordHasher.server';
 import { safeErrorText } from '~/api/utils/errors/safeError';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 export const loader = async () => {
   return json({
@@ -39,6 +41,21 @@ export const action = async ({ request }: { request: Request }) => {
 
     if (intent === 'match-key-pair') {
       return json({ ok: true, result: matchKeyPairInput(body) });
+    }
+
+    // Password hasher — anonymous by design (being locked out is the reason to
+    // reach for it) and pure (no DB access), but bcrypt is deliberately slow,
+    // so it gets its own tight per-IP budget: the CPU cost is the abuse
+    // surface, not the output.
+    if (intent === 'hash-password') {
+      const limit = await enforceRateLimit(request, 'crypto.hashPassword', null);
+      if (!limit.allowed) {
+        return json(
+          { ok: false, error: 'Hashing is CPU-heavy — take a breather 🌸' },
+          rateLimitedResponseInit(limit)
+        );
+      }
+      return json({ ok: true, result: await hashPasswordForStorage(body) });
     }
 
     return json({ ok: false, error: 'Unknown crypto action.' }, { status: 400 });

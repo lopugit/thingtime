@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "transport": "built-nitro",
+  "registration": true,
+  "authCookies": true,
+  "crossSiteRefused": true,
+  "writes": true,
+  "promotion": true,
+  "rollback": true,
+  "followerMongoDials": 0,
+  "initializedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "unchangedColdIndexCommands": {
+    "creates": 0,
+    "drops": 0,
+    "peak": 0
+  },
+  "testedSourceCommit": "a375627c1357384d612f16dc5de4cb368fee9792",
+  "observedAt": "2026-10-26T04:38:16.042152+00:00"
+}

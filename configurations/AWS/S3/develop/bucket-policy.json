@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::thingtime-develop",
+        "arn:aws:s3:::thingtime-develop/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false",
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyTLSBelow12",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::thingtime-develop",
+        "arn:aws:s3:::thingtime-develop/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false"
+        },
+        "NumericLessThan": {
+          "s3:TlsVersion": "1.2"
+        }
+      }
+    }
+  ]
+}

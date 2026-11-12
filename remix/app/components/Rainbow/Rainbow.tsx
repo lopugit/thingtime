@@ -209,6 +209,8 @@ export const Rainbow = (allProps: any): React.JSX.Element => {
           },
         }}
         position={props?.position || "relative"}
+        top={props?.position === "absolute" ? 0 : undefined}
+        left={props?.position === "absolute" ? 0 : undefined}
         overflow={overflow}
         width={props?.expand ? "100%" : ""}
         height={props?.expand ? "100%" : ""}
