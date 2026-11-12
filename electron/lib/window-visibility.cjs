@@ -1,0 +1,42 @@
+'use strict';
+
+// ready-to-show is not guaranteed after every renderer/relaunch path. A healthy
+// local backend must not leave a show:false window permanently inaccessible.
+function ensureWindowVisible(window, { setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+ // Electron rejects window.webContents after the window has been destroyed.
+ // Keep the EventEmitter handle for cleanup from the closed event.
+ const webContents = window.webContents;
+ let disposed = false;
+ let timer;
+ const show = () => {
+  if (disposed || window.isDestroyed()) return;
+  if (timer) clearTimer(timer);
+  window.show();
+ };
+ const failed = (_event, _code, _description, _url, isMainFrame) => { if (isMainFrame !== false) show(); };
+ const cleanup = () => {
+  disposed = true;
+  if (timer) clearTimer(timer);
+  window.removeListener('ready-to-show', show);
+  webContents.removeListener('did-finish-load', show);
+  webContents.removeListener('did-fail-load', failed);
+  webContents.removeListener('render-process-gone', show);
+ };
+ window.once('ready-to-show', show);
+ webContents.once('did-finish-load', show);
+ webContents.on('did-fail-load', failed);
+ webContents.once('render-process-gone', show);
+ window.once('closed', cleanup);
+ timer = setTimer(show, 5000);
+ timer?.unref?.();
+ return cleanup;
+}
+// Closing a window or its local server rejects an in-flight loadURL. A modal
+// error dialog at that point can keep Quit alive after all services stop.
+async function loadWindow(window, url, { isClosing, onError }) {
+ try { await window.loadURL(url); }
+ catch (error) {
+  if (!isClosing() && !window.isDestroyed()) onError(error);
+ }
+}
+module.exports = { ensureWindowVisible, loadWindow };

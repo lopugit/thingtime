@@ -42,6 +42,30 @@ const MAX_REPORTED_ERRORS = 12;
 // comment, reaction → either): depth is tiny in practice
 const MAX_TARGET_ROUNDS = 5;
 
+// Wall-clock fence for one pass. MAX_SYNC_OPS_PER_RUN bounds how MANY remote
+// calls a pass makes, not how long they take: every remoteFetch waits up to
+// REMOTE_TIMEOUT_MS (15s), so 40 ops against a merely slow deployment — a cold
+// serverless remote doing a Mongo upsert per write is enough — outlive the
+// platform's function limit long before the op budget runs out.
+//
+// Being killed mid-pass is the outcome worth avoiding: the writes that already
+// landed stay landed, but the route never reaches its updateUserDeploymentLink
+// call, so lastSyncAt/lastSyncSummary never record them and the caller gets a
+// platform 504 instead of the report. Stopping early costs nothing by
+// comparison — the pass is already resumable, and whatever is left is counted
+// in `remaining`, which is exactly what the UI tells the user to run again.
+const SYNC_WALL_CLOCK_BUDGET_MS = 45_000;
+
+// true = stop scheduling ops. One op is ALWAYS attempted before the fence can
+// fire: if the scans alone ate the budget, a pure elapsed-time check would
+// return "0 done, N remaining" forever and no re-run would ever advance. Every
+// pass settling at least one op keeps progress monotonic.
+export const syncBudgetSpent = (
+  settled: number,
+  elapsedMs: number,
+  budgetMs: number = SYNC_WALL_CLOCK_BUDGET_MS
+): boolean => settled > 0 && elapsedMs >= budgetMs;
+
 export type SyncSummary = {
   mode: DeploymentSyncMode;
   dryRun: boolean;
@@ -60,7 +84,7 @@ export type SyncSummary = {
 };
 
 type SyncSide = 'local' | 'remote';
-type NormalizedThing = {
+export type NormalizedThing = {
   id: string;
   thingtime: string[];
   crystal: Record<string, any>;
@@ -71,7 +95,7 @@ type NormalizedThing = {
   updatedAt: string;
 };
 
-type SyncOp = {
+export type SyncOp = {
   direction: 'push' | 'pull';
   source: NormalizedThing;
   conflict: boolean;
@@ -87,7 +111,7 @@ const stableStringify = (value: unknown): string => {
     .join(',')}}`;
 };
 
-const contentKey = (thing: NormalizedThing): string =>
+export const contentKey = (thing: NormalizedThing): string =>
   stableStringify({
     thingtime: [...thing.thingtime].sort(),
     crystal: thing.crystal,
@@ -96,7 +120,7 @@ const contentKey = (thing: NormalizedThing): string =>
     targetId: thing.targetId
   });
 
-const normalize = (thing: PublicThing | RemoteThing): NormalizedThing => ({
+export const normalize = (thing: PublicThing | RemoteThing): NormalizedThing => ({
   id: thing.id,
   thingtime: Array.isArray(thing.thingtime) ? thing.thingtime : [],
   crystal: thing.crystal && typeof thing.crystal === 'object' ? thing.crystal : {},
@@ -109,7 +133,7 @@ const normalize = (thing: PublicThing | RemoteThing): NormalizedThing => ({
 
 // mode for a thing: first path rule naming one of its kinds wins, then the
 // catch-all 'things' rule, then the link's overall mode
-const modeForThing = (link: SavedDeploymentLink, thingtime: string[]): DeploymentSyncMode => {
+export const modeForThing = (link: SavedDeploymentLink, thingtime: string[]): DeploymentSyncMode => {
   for (const rule of link.pathRules) {
     if (!rule.path.startsWith('things/')) continue;
     if (thingtime.includes(rule.path.slice('things/'.length))) return rule.mode;
@@ -118,7 +142,7 @@ const modeForThing = (link: SavedDeploymentLink, thingtime: string[]): Deploymen
   return catchAll ? catchAll.mode : link.syncMode;
 };
 
-const modeForProfile = (link: SavedDeploymentLink): DeploymentSyncMode => {
+export const modeForProfile = (link: SavedDeploymentLink): DeploymentSyncMode => {
   const rule = link.pathRules.find((entry) => entry.path === 'profile');
   return rule ? rule.mode : link.syncMode;
 };
@@ -139,17 +163,28 @@ const collectLocalThings = async (
   return { things: things.slice(0, MAX_SYNC_THINGS), truncated: true };
 };
 
-const collectRemoteThings = async (
-  link: SavedDeploymentLink
+export const collectRemoteThings = async (
+  link: SavedDeploymentLink,
+  // injected in tests: the pager below is driven by a cursor the REMOTE picks,
+  // so its termination has to hold against answers we don't control
+  lister: typeof remoteListThings = remoteListThings
 ): Promise<{ things: NormalizedThing[]; truncated: boolean } | Fail> => {
   const things: NormalizedThing[] = [];
   let cursor: string | null = null;
   while (things.length < MAX_SYNC_THINGS) {
-    const page = await remoteListThings(link.baseUrl, link.token, { cursor, limit: SYNC_PAGE_LIMIT });
+    const page = await lister(link.baseUrl, link.token, { cursor, limit: SYNC_PAGE_LIMIT });
     if (isFail(page)) return page;
     things.push(...page.things.map(normalize));
     cursor = page.nextCursor;
     if (!cursor) return { things, truncated: false };
+    // Progress guard. Unlike the local scan — whose cursor comes from our own
+    // collection and always advances — `nextCursor` here is whatever the linked
+    // deployment says. A remote answering { things: [], nextCursor: <non-null> }
+    // never grows `things`, so the length bound above alone would spin this
+    // loop (one remote request per turn) until the function times out. Every
+    // turn must now either collect a thing or stop, which bounds the scan at
+    // MAX_SYNC_THINGS requests no matter what the remote returns.
+    if (!page.things.length) return { things, truncated: true };
   }
   return { things: things.slice(0, MAX_SYNC_THINGS), truncated: true };
 };
@@ -157,7 +192,7 @@ const collectRemoteThings = async (
 // PUT body for either side. acl is omitted for audience-inheriting things —
 // their audience is the target's, and both createThing and updateThing would
 // reject an explicit acl for them.
-const putBodyFor = (thing: NormalizedThing): Record<string, unknown> => ({
+export const putBodyFor = (thing: NormalizedThing): Record<string, unknown> => ({
   // both spellings: the remote HTTP route maps id → shareId, while the local
   // upsertThing util takes shareId directly
   id: thing.id,
@@ -173,7 +208,7 @@ const putBodyFor = (thing: NormalizedThing): Record<string, unknown> => ({
 // Execution order inside a run: standalone things first (schemas before the
 // data things that may cite them via crystal.schemaId), then target-attached
 // things in dependency rounds so a comment never lands before its post.
-const orderOps = (ops: SyncOp[], destinationHas: (direction: 'push' | 'pull', id: string) => boolean): SyncOp[] => {
+export const orderOps = (ops: SyncOp[], destinationHas: (direction: 'push' | 'pull', id: string) => boolean): SyncOp[] => {
   const standalone = ops.filter((op) => !op.source.targetId);
   standalone.sort((a, b) => {
     const aSchema = a.source.thingtime.includes('schema') ? 0 : 1;
@@ -212,7 +247,8 @@ export const runDeploymentSync = async (
   options: { dryRun?: boolean } = {}
 ): Promise<SyncSummary | Fail> => {
   const dryRun = !!options.dryRun;
-  const startedAt = new Date().toISOString();
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
   const errors: string[] = [];
   const pushError = (message: string) => {
     if (errors.length < MAX_REPORTED_ERRORS) errors.push(message);
@@ -340,6 +376,9 @@ export const runDeploymentSync = async (
     const viewer = viewerOf({ id: user.id, username: user.username });
     for (const op of ordered) {
       if (executed >= MAX_SYNC_OPS_PER_RUN) break;
+      // the other half of the budget: ops left after this fires are reported as
+      // `remaining`, same as ops left by MAX_SYNC_OPS_PER_RUN
+      if (syncBudgetSpent(opsSettled, Date.now() - startedAtMs)) break;
       executed += 1;
       if (op.direction === 'push') {
         const result = await remotePutThing(link.baseUrl, link.token, putBodyFor(op.source));

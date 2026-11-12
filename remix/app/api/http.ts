@@ -15,46 +15,72 @@ export const json = (data: unknown, init: JsonInit = {}) => {
   });
 };
 
-// Read + parse a JSON request body while enforcing a real byte cap (the
-// Content-Length header can be absent or wrong). Returns {} on malformed
-// JSON — routes do their own field validation — and throws a 413 json()
-// Response when the body exceeds maxBytes (the API catch-all passes thrown
-// Responses through).
-export const readJsonBody = async (request: Request, maxBytes: number): Promise<any> => {
-  const tooLarge = () => json({ ok: false, error: 'Request body too large' }, { status: 413 });
+/** Convert an HTTP Request facade while adding cancellation. Nitro/H3 facades
+ * cannot be passed to Undici's private-state clone constructor. This preserves
+ * the one original body stream; it neither buffers nor transfers server-only
+ * WeakMap authorization, which callers must bind explicitly when permitted. */
+export function requestWithSignal(request: Request, signal: AbortSignal): Request {
+  const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers: request.headers, signal };
+  if (!['GET', 'HEAD'].includes(request.method) && request.body !== null) {
+    init.body = request.body;
+    init.duplex = 'half';
+  }
+  return new Request(request.url, init);
+}
 
+/** Shared user content has no application byte ceiling. Fixed control messages
+ * retain their caller's numeric budget. Storage/provider admission is separate. */
+export const JSON_BODY_WITHOUT_APPLICATION_LIMIT = 'without-application-limit' as const;
+export type JsonBodyBudget = number | typeof JSON_BODY_WITHOUT_APPLICATION_LIMIT;
+
+// Read incrementally (one outstanding pull), then parse once. JSON requires a
+// complete value in memory; this does not override runtime or storage limits.
+export const readJsonBody = async (request: Request, budget: JsonBodyBudget): Promise<any> => {
+  const maxBytes = typeof budget === 'number' ? budget : Infinity;
+  const tooLarge = () => json({ ok: false, error: 'Request body too large' }, { status: 413 });
   const declared = Number(request.headers.get('content-length') || 0);
   if (declared > maxBytes) throw tooLarge();
-
   const reader = request.body?.getReader();
   if (!reader) return {};
-
-  const chunks: Uint8Array[] = [];
+  const chunks: string[] = [];
+  const decoder = new TextDecoder();
   let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      received += value.byteLength;
-      if (received > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw tooLarge();
-      }
-      chunks.push(value);
-    }
-  }
-
+  const aborted = () => { void reader.cancel(request.signal.reason).catch(() => {}); };
+  request.signal.addEventListener('abort', aborted, { once: true });
   try {
-    const merged = new Uint8Array(received);
-    let offset = 0;
-    chunks.forEach((chunk) => {
-      merged.set(chunk, offset);
-      offset += chunk.byteLength;
-    });
-    return JSON.parse(new TextDecoder().decode(merged));
-  } catch {
-    return {};
+    if (request.signal.aborted) aborted();
+    request.signal.throwIfAborted();
+    for (;;) {
+      const { done, value } = await reader.read();
+      request.signal.throwIfAborted();
+      if (done) break;
+      if (value) {
+        received += value.byteLength;
+        if (received > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw tooLarge();
+        }
+        chunks.push(decoder.decode(value, { stream: true }));
+      }
+    }
+    chunks.push(decoder.decode());
+    const source = chunks.join('');
+    try { return JSON.parse(source); }
+    catch (error) { if (error instanceof SyntaxError) return {}; throw error; }
+  } finally {
+    request.signal.removeEventListener('abort', aborted);
+    reader.releaseLock();
   }
+};
+
+// Cookie-authenticated mutations only accept JSON bodies: a cross-origin form
+// (or a fetch with a safelisted content type) cannot send application/json
+// without a preflight, so the header doubles as the CSRF fence. Every Lopu
+// POST applies it before reading the body — the reply and voice streams and
+// the vault included, since a session cookie is all they need otherwise.
+export const requireJsonContentType = (request: Request): Response | null => {
+  const mediaType = request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase();
+  return mediaType === 'application/json' ? null : json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
 };
 
 export const redirect = (url: string, init: number | ResponseInit = 302) => {

@@ -114,12 +114,12 @@ export const action = async ({ request }: { request: Request }) => {
       : sanitiseMongoHost(url) || 'MongoDB endpoint';
 
   const probe = await probeMongoUrl(url);
-  if (!probe.ok) {
+    if (probe.ok === false) {
     return json({ ok: false, error: probe.error }, { status: 422 });
   }
 
   const result = await addUserMongoEndpoint(user.id, { name, url });
-  if (!result.ok) {
+    if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: 400 });
   }
   return json({ ok: true, endpoint: toPublicEndpoint(result.endpoint, null) });

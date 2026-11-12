@@ -3,6 +3,7 @@ import { json } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getUserDeploymentLinks, updateUserDeploymentLink } from '~/api/utils/auth/users';
 import { runDeploymentSync } from '~/api/utils/deployments/sync';
+import { isFail } from '~/api/utils/things/things';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { toPublicLink } from '../_deployment-links';
 
@@ -40,7 +41,10 @@ export const action = async ({ request }: { request: Request }) => {
   if (!link) return json({ ok: false, error: 'Link not found' }, { status: 404 });
 
   const report = await runDeploymentSync(user, link, { dryRun: !!body?.dryRun });
-  if ('status' in report && report.ok === false) {
+  // the shared guard, so the compiler actually narrows the Fail branch away —
+  // an ad-hoc `'status' in report` check reads the same but leaves `report`
+  // typed as the union below, hiding any future mishandling of a failed pass
+  if (isFail(report)) {
     return json({ ok: false, error: report.error }, { status: report.status });
   }
 

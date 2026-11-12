@@ -16,7 +16,7 @@ export {
 	resolveKindRender,
 	resolveKindRenderer
 } from './kindRegistry';
-export type { KindRenderContext, KindRenderer, RenderThingProps } from './kindRegistry';
+export type { KindRenderContext, KindRenderer, PollRenderPollContext, RenderThingProps } from './kindRegistry';
 export { HtmlThingRenderer } from './HtmlThingRenderer';
 export type { HtmlThingNode } from './HtmlThingRenderer';
 export { ChakraThingRenderer, isChakraThingNode } from './ChakraThingRenderer';

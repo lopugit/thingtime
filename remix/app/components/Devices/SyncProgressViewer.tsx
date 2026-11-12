@@ -1,0 +1,182 @@
+import React from 'react';
+import { SyncUploadPriorities, useUploadPriorities, type UploadPriorityOptions } from './SyncUploadPriorities';
+import { TransferSpeedTrackers, type TransferSpeedTrackersProps } from './TransferSpeedTrackers';
+import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
+import { parseSyncProgressDescriptor, projectSyncProgress, type SyncProgressDescriptor, type SyncProgressSource, type SyncProgressState, type SyncProgressRequest, type SyncProgressPage } from '~/fileSync/progressProjection';
+import { createJournalSyncProgressSource, readReservedSyncPublication } from '~/fileSync/progressProjection.client';
+import type { SyncScope } from '~/fileSync/reconcile';
+import { TransientBlockHost } from '../Builder/TransientBlockHost';
+import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
+import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
+import { SyncDetailsSection } from './SyncDetailsSection';
+import { syncRecoveryBlocks, syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
+
+export type SyncProgressViewerProps = {
+	speedDraftState?: TransferSpeedTrackersProps['draftState'];
+	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
+	uploadPriorities?: UploadPriorityOptions; currentScope(): SyncScope; status?: SyncProgressState; message?: string;
+	accountTransport?: SettingsDocumentHostProps['accountTransport'];
+	/** Isolated fixtures may supply bounded synthetic metadata. */
+	source?: SyncProgressSource;
+	/** A paired device may project its own journal and return one metadata page. */
+	readPage?(request: SyncProgressRequest): Promise<SyncProgressPage>;
+};
+const MAX_OPEN_BRANCHES = 8;
+export function SyncProgressViewer(props: SyncProgressViewerProps) {
+	// Native snapshots may recreate this small descriptor on every byte event.
+	// Keep the journal source stable until its actual identity changes.
+	const descriptorJson = JSON.stringify(props.descriptor ?? null);
+	const parsed = React.useMemo(() => { try { const value = JSON.parse(descriptorJson); return { descriptor: value ? parseSyncProgressDescriptor(value) : null, invalid: false }; }
+		catch { return { descriptor: null, invalid: true }; } }, [descriptorJson]);
+	return <SyncProgressSession key={`${props.scopeKey}:${parsed.descriptor?.run.id ?? 'indexing'}`} {...props} descriptor={parsed.descriptor}
+		invalidDescriptor={parsed.invalid} />;
+}
+function SyncProgressSession({ scopeKey, series, descriptor, progress, currentScope, uploadPriorities, status = 'running', message, accountTransport, speedDraftState, source: suppliedSource, readPage, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
+	const priorities = useUploadPriorities(progress?.direction === 'download' ? undefined : uploadPriorities, currentScope);
+	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
+	const progressRef = React.useRef(progress); progressRef.current = progress;
+	const source = React.useMemo(() => suppliedSource || (descriptor && !readPage ? createJournalSyncProgressSource(descriptor, () => scopeRef.current()) : null), [descriptor, suppliedSource, readPage]);
+	const readable = !!source || !!readPage;
+	const [branches, setBranches] = React.useState<Record<string, SyncProgressBranch>>({ '': { history: [], busy: false } });
+	const [focusedFolder, setFocusedFolder] = React.useState('');
+	const focusRef = React.useRef(focusedFolder); focusRef.current = focusedFolder;
+	const latest = React.useRef(branches); latest.current = branches;
+	const requests = React.useRef(new Map<string, AbortController>());
+	const read = React.useCallback(async (parent: string, history?: (string | null)[], quiet=false) => {
+		if (!readable) return;
+		requests.current.get(parent)?.abort();
+		const controller = new AbortController(); requests.current.set(parent, controller);
+		const trail = history ?? latest.current[parent]?.history ?? [];
+		setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: quiet && previous[parent]?.page ? false : true, error: '' } }));
+		try {
+			const request = { parent, after: trail.at(-1) ?? null, activePath: progressRef.current?.path, signal: controller.signal };
+			const page = readPage ? await readPage(request) : await projectSyncProgress(source!, request);
+			if (!controller.signal.aborted) setBranches(previous => {
+				if (!previous[parent]) return previous;
+				return { ...previous, [parent]: { page, history: trail, busy: false } };
+			});
+		} catch (error) {
+			if (!controller.signal.aborted) setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: false,
+				error: error instanceof RangeError ? error.message : 'Saved hierarchy is unavailable. The last displayed totals are preserved. Retry progress or resume sync; older completed metadata may have been cleaned up.' } }));
+		} finally { if (requests.current.get(parent) === controller) requests.current.delete(parent); }
+	}, [source, readable, readPage]);
+	React.useEffect(() => {
+		void read(focusRef.current); const pending = requests.current;
+		return () => { for (const request of pending.values()) request.abort(); pending.clear(); };
+	}, [read]);
+	const lastRead = React.useRef(Date.now());
+	const stage = progress?.stage, confirmed = progress?.confirmed;
+	React.useEffect(() => {
+		if (!readable || !stage) return;
+		// Byte events update display immediately. Durable totals refresh at most
+		// every thirty seconds, plus the final state, rather than rescanning per byte.
+		const delay = ['complete', 'retained'].includes(stage) ? 0 : Math.max(0, 30_000 - (Date.now() - lastRead.current));
+		const timer = setTimeout(() => {
+			lastRead.current = Date.now();
+			const final = ['complete', 'retained'].includes(stage);
+			for (const parent of Object.keys(latest.current)) if (final || !requests.current.has(parent)) void read(parent, undefined, true);
+		}, delay);
+		return () => clearTimeout(timer);
+	}, [readable, read, confirmed, stage]);
+	const navigate = async (parent: string, history: (string | null)[]) => {
+		for (const [path, request] of requests.current) if (path !== parent && (!parent || path.startsWith(`${parent}/`))) { request.abort(); requests.current.delete(path); }
+		setBranches(previous => Object.fromEntries(Object.entries(previous).filter(([path]) => path === parent || (parent && !path.startsWith(`${parent}/`)))));
+		await read(parent, history);
+	};
+	const focus = async (path: string) => {
+		for (const request of requests.current.values()) request.abort(); requests.current.clear();
+		setFocusedFolder(path);
+		setBranches(previous => ({ ...(previous[''] ? { '': previous[''] } : {}), [path]: { history: [], busy: false } }));
+		await read(path, []);
+	};
+	const visibleFolder = (path: unknown): path is string => typeof path === 'string' &&
+		Object.values(latest.current).some(branch => branch.page?.rows.some(row => row.path === path && row.kind === 'folder'));
+	const actions = {
+		prioritize: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => {
+			if (priorities.enabled && !priorities.disabled && typeof inputs.path === 'string' && Object.values(latest.current).some(branch => branch.page?.rows.some(row => row.path === inputs.path))) await priorities.moveFirst(inputs.path);
+		},
+		refresh: async () => { for (const parent of Object.keys(latest.current)) await read(parent); },
+		root: () => focus(''),
+		up: () => focus(focusRef.current.split('/').slice(0, -1).join('/')),
+		open: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => { if (visibleFolder(inputs.path)) await focus(inputs.path); },
+		toggle: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => {
+			if (!visibleFolder(inputs.path)) return;
+			const path = inputs.path;
+			if (latest.current[path]) {
+				for (const [parent, request] of requests.current) if (parent === path || parent.startsWith(`${path}/`)) { request.abort(); requests.current.delete(parent); }
+				setBranches(previous => Object.fromEntries(Object.entries(previous).filter(([parent]) => parent !== path && !parent.startsWith(`${path}/`))));
+			} else {
+				if (Object.keys(latest.current).filter(path => path !== '' && path !== focusRef.current).length >= MAX_OPEN_BRANCHES) {
+					const current = focusRef.current;
+					setBranches(previous => ({ ...previous, [current]: { ...previous[current], error: 'Use Open folder to explore deeper, or collapse an open folder. Up to eight expanded branches stay in memory.' } })); return;
+				}
+				await read(path, []);
+			}
+		},
+		previous: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => {
+			if (typeof inputs.parent !== 'string') return;
+			const branch = latest.current[inputs.parent]; if (branch?.history.length && !branch.busy) await navigate(inputs.parent, branch.history.slice(0, -1));
+		},
+		next: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => {
+			if (typeof inputs.parent !== 'string') return;
+			const branch = latest.current[inputs.parent]; if (branch?.page?.next && !branch.busy) await navigate(inputs.parent, [...branch.history, branch.page.next]);
+		}
+	};
+	const displayBranches = invalidDescriptor ? { ...branches, '': { ...branches[''], error: 'Saved sync progress metadata is invalid. Resume sync to read its current journal.' } } : branches;
+	return <><SyncUploadPriorities controller={priorities} scopeKey={scopeKey} accountTransport={accountTransport} /><SettingsDocumentHost documentKey="file-sync-progress" defaultDocument={syncProgressBlocks} scopeKey={scopeKey} title="File sync progress" accountTransport={accountTransport}>
+		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, readable, message, focusedFolder, priorities.enabled, priorities.disabled, descriptor?.run.plan.policy.mode)} actions={actions} enabled={!editing}>
+			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+		</TransientBlockHost>}
+	</SettingsDocumentHost>{status === 'error' && descriptor && !readPage && !suppliedSource ? <SyncDetailsSection title="Recovery details">
+		<SyncRecoveryDetails key={`${JSON.stringify(descriptor.scope)}:${descriptor.run.id}`} descriptor={descriptor} currentScope={() => scopeRef.current()} scopeKey={scopeKey} accountTransport={accountTransport} />
+	</SyncDetailsSection> : null}<SyncResourceStatusViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers draftState={speedDraftState} scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+}
+
+function SyncRecoveryDetails({ descriptor, currentScope, scopeKey, accountTransport }: {
+	descriptor: SyncProgressDescriptor; currentScope(): SyncScope; scopeKey: string; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+	const [result, setResult] = React.useState<Awaited<ReturnType<typeof readReservedSyncPublication>> | null>(null);
+	const [error, setError] = React.useState(false);
+	const [loaded, setLoaded] = React.useState(false);
+	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
+	React.useEffect(() => {
+		const controller = new AbortController();
+		setResult(null); setError(false); setLoaded(false);
+		void readReservedSyncPublication(descriptor, () => scopeRef.current(), undefined, controller.signal).then(value => {
+			if (!controller.signal.aborted) { setResult(value); setLoaded(true); }
+		}).catch(() => { if (!controller.signal.aborted) { setError(true); setLoaded(true); } });
+		return () => controller.abort();
+	}, [descriptor]);
+	const sync = { recoveryStatus: error ? 'Saved recovery details are unavailable.' : result ? `${result.direction} ${result.kind} · Saved operation retained for recovery.` : loaded ? 'No operation is currently reserved.' : 'Reading saved recovery details…',
+		hasReservation: !!result, operationId: result?.operationId ?? '', hasFileId: !!result?.fileId, fileId: result?.fileId ?? '',
+		effect: result ? `Canonical dispatch: ${result.canonicalDispatched === true ? 'possible or published' : result.canonicalDispatched === false ? 'not marked' : 'unknown on this saved operation'} · Saved receipt: ${result.receiptPresent ? 'present' : 'not recorded'} · Confirmed: ${result.confirmed ? 'yes' : 'no'}` : '' };
+	return <SettingsDocumentHost documentKey="file-sync-recovery-details" defaultDocument={syncRecoveryBlocks} scopeKey={scopeKey} title="Sync recovery details" accountTransport={accountTransport}>
+		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ sync }} actions={{}} enabled={!editing}>
+			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+		</TransientBlockHost>}
+	</SettingsDocumentHost>;
+}
+
+function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }: {
+ scopeKey: string; progress?: ForegroundSyncProgress; state: SyncProgressState; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+ const display = priorityReadinessDisplay(progress, state);
+ if (!display.hasPriorityReadiness) return null;
+ return <SettingsDocumentHost documentKey="file-sync-priority-readiness" defaultDocument={priorityReadinessBlocks} scopeKey={scopeKey} title="Upload priority readiness" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={{ sync: display }}>
+   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+  </TransientBlockHost>}
+ </SettingsDocumentHost>;
+}
+
+function SyncResourceStatusViewer({ scopeKey, progress, state, accountTransport }: {
+ scopeKey: string; progress?: ForegroundSyncProgress; state: SyncProgressState; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+ const display = syncResourceStatusDisplay(progress, state);
+ if (!progress?.resources) return null;
+ return <SettingsDocumentHost documentKey="file-sync-resource-status" defaultDocument={syncResourceStatusBlocks} scopeKey={scopeKey} title="Effective sync resources" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={display}>
+   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+  </TransientBlockHost>}
+ </SettingsDocumentHost>;
+}

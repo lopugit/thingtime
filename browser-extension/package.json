@@ -1,0 +1,9 @@
+{
+  "name": "thingtime-passwords-browser-extension",
+  "private": true,
+  "version": "0.5.1",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

@@ -99,14 +99,23 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Payload too large' }, { status: 413 });
   }
 
+  const method = request.method.toUpperCase();
+
   // fail-closed: POST/DELETE dial a caller-supplied host (see the
-  // mongodb.endpoint precedent) — nothing here may run unthrottled
-  const limit = await enforceRateLimit(request, 'deployments.link', `user:${user.id}`, { failClosed: true });
+  // mongodb.endpoint precedent) — nothing there may run unthrottled.
+  //
+  // PATCH is charged separately because it dials nothing: it edits a link the
+  // caller already holds, entirely inside their own secure blob. The settings
+  // pane sends one PATCH per sync-mode tap (optimistic, see
+  // useLinkedDeployments) and one per path-rule save, so on the 10-per-5-minute
+  // dial budget an ordinary configuring session runs out — and because the
+  // budget is shared, the 429 lands on linking and unlinking too.
+  const limitKey = method === 'PATCH' ? 'deployments.update' : 'deployments.link';
+  const limit = await enforceRateLimit(request, limitKey, `user:${user.id}`, { failClosed: true });
   if (!limit.allowed) {
     return json({ ok: false, error: 'You’re doing that too fast — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const method = request.method.toUpperCase();
   const body = await request.json().catch(() => ({}));
 
   if (method === 'POST') {

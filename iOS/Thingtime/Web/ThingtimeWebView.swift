@@ -4,6 +4,8 @@ import UIKit
 struct ThingtimeWebView: View {
     private enum StorageKey {
         static let selectedDestinationID = "thingtime.webDestination.selectedID"
+        static let lastConfiguredDestinationID = "thingtime.webDestination.lastConfiguredID"
+        static let hasExplicitDestinationSelection = "thingtime.webDestination.hasExplicitSelection"
     }
 
     enum DeploymentsLoadState: Equatable {
@@ -16,15 +18,39 @@ struct ThingtimeWebView: View {
     private let deploymentsClient = ThingtimeWebDeploymentsClient()
 
     @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
+    @AppStorage(StorageKey.lastConfiguredDestinationID) private var lastConfiguredDestinationID = ""
+    @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
-    @State private var vercelDeployments: [ThingtimeWebDestination.DeploymentSummary] = []
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var authenticatorSetup: AuthenticatorSetupDelivery?
+    @State private var widgetPath: String?
+    @State private var lidarRequest: UUID?
+    @State private var invalidScanLink = false
+    @State private var pendingShare: UUID?
+    @State private var sharedDrafts: [UUID] = []
+    @State private var sharedDraftsOpen = false
+    @State private var sharedDraftsLoadFailed = false
+    @State private var shareReminderError: String?
+    @State private var widgetSettingsOpen = false
+    @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
     @State private var deploymentsLoadState = DeploymentsLoadState.idle
 
-    private var destinations: [ThingtimeWebDestination.Destination] {
-        ThingtimeWebDestination.availableDestinations(
-            vercelDeployments: vercelDeployments
+    private var staticDestinations: [ThingtimeWebDestination.Destination] {
+        ThingtimeWebDestination.availableDestinations()
+    }
+
+    private var deploymentSections: [ThingtimeWebDestination.DeploymentSection] {
+        ThingtimeWebDestination.deploymentSections(
+            from: deploymentGroups,
+            excludingDestinationIDs: Set(staticDestinations.map(\.id))
         )
+    }
+
+    private var destinations: [ThingtimeWebDestination.Destination] {
+        staticDestinations + deploymentSections.flatMap { section in
+            section.deployments.map(\.destination)
+        }
     }
 
     private var selectedDestination: ThingtimeWebDestination.Destination {
@@ -38,8 +64,37 @@ struct ThingtimeWebView: View {
             let drawerWidth = min(proxy.size.width - 48, 360)
 
             ZStack(alignment: .leading) {
-                WebView(url: selectedDestination.url)
-                    .ignoresSafeArea(.container, edges: [.bottom])
+                VStack(spacing: 0) {
+                    if let pendingShare {
+                        HStack(spacing: 8) {
+                            Button {
+                                openSharedDraft(pendingShare)
+                            } label: {
+                                Label("Continue shared draft", systemImage: "square.and.pencil")
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .accessibilityIdentifier("continue-shared-draft")
+                            .accessibilityHint("Opens your unfinished share in the post composer")
+
+                            Button {
+                                dismissSharedDraftReminder(pendingShare)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.body.weight(.semibold))
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel("Dismiss shared draft reminder")
+                            .accessibilityHint("Keeps the draft in Shared drafts in the native drawer")
+                            .accessibilityIdentifier("dismiss-shared-draft-reminder")
+                        }
+                        .padding(.horizontal, 8)
+                        .background(.regularMaterial)
+                    }
+                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, authenticatorSetup: $authenticatorSetup, lidarRequest: $lidarRequest)
+                        .ignoresSafeArea(.container, edges: [.bottom])
+                }
 
                 if isDestinationPickerOpen {
                     Color.black.opacity(0.2)
@@ -50,34 +105,140 @@ struct ThingtimeWebView: View {
                 }
 
                 DestinationPickerDrawer(
-                    destinations: destinations,
+                    deploymentSections: deploymentSections,
+                    staticDestinations: staticDestinations,
                     selectedDestinationID: selectedDestination.id,
                     deploymentsLoadState: deploymentsLoadState,
                     safeAreaInsets: proxy.safeAreaInsets,
                     onSelect: select,
                     onRefreshDeployments: refreshDeployments,
-                    onClose: closeDestinationPicker
+                    onClose: closeDestinationPicker,
+                    onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
+                    onMail: { closeDestinationPicker(); widgetPath = "/mail" },
+                    onScan: { closeDestinationPicker(); lidarRequest = UUID() },
+                    onSharedDrafts: { closeDestinationPicker(); refreshPendingShare(); sharedDraftsOpen = true }
                 )
+                .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
                 .frame(maxHeight: .infinity)
                 .offset(x: isDestinationPickerOpen ? 0 : -max(drawerWidth, 280))
-                .gesture(closeDrawerGesture)
+                .simultaneousGesture(closeDrawerGesture)
                 .ignoresSafeArea(.container, edges: [.top, .bottom, .leading])
             }
             .background(Color.white.ignoresSafeArea())
             .simultaneousGesture(openDrawerGesture(leadingEdgeWidth: 28))
             .animation(.easeOut(duration: 0.22), value: isDestinationPickerOpen)
-            .onAppear(perform: prepareDestinationState)
+            .sheet(isPresented: $widgetSettingsOpen) {
+                NavigationStack {
+                    WidgetPreferences().toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { widgetSettingsOpen = false } }
+                    }
+                }
+            }
+            .sheet(isPresented: $sharedDraftsOpen) {
+                NavigationStack {
+                    List {
+                        if sharedDraftsLoadFailed {
+                            Section {
+                                Text("Could not load shared drafts. Your saved shares have not been removed.")
+                                    .foregroundStyle(.secondary)
+                                Button("Try again", action: refreshPendingShare)
+                            }
+                        }
+                        Section {
+                            ForEach(Array(sharedDrafts.enumerated()), id: \.element) { index, id in
+                                Button {
+                                    sharedDraftsOpen = false
+                                    openSharedDraft(id)
+                                } label: {
+                                    Label("Shared draft \(index + 1)", systemImage: "square.and.pencil")
+                                        .frame(minHeight: 44)
+                                }
+                                .accessibilityIdentifier("shared-draft-\(id.uuidString)")
+                            }
+                        } footer: {
+                            Text(sharedDraftsLoadFailed ? "" : sharedDrafts.isEmpty
+                                 ? "No unfinished shared drafts for this destination."
+                                 : "Your unfinished shares, oldest first. Dismissing a reminder keeps its draft here.")
+                        }
+                    }
+                    .navigationTitle("Shared drafts")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { sharedDraftsOpen = false }
+                        }
+                    }
+                }
+            }
+            .alert("Could not dismiss reminder", isPresented: Binding(
+                get: { shareReminderError != nil },
+                set: { if !$0 { shareReminderError = nil } }
+            )) {
+                Button("OK", role: .cancel) { shareReminderError = nil }
+            } message: {
+                Text(shareReminderError ?? "Please try again. Your draft is still saved.")
+            }
+            .onOpenURL { url in
+                if ["otpauth", "otpauth-migration"].contains(url.scheme?.lowercased() ?? "") {
+                    authenticatorSetup = AuthenticatorSetupDelivery(url: url)
+                } else if url.scheme == "thingtime", url.host == "scan" {
+                    if LiDARLaunchRoute.accepts(url, selectedOrigin: selectedDestination.url) {
+                        closeDestinationPicker(); lidarRequest = UUID()
+                    } else { invalidScanLink = true }
+                } else { widgetPath = WidgetRoute.path(for: url) }
+            }
+            .alert("Scanner destination does not match", isPresented: $invalidScanLink) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Select the same Thingtime destination in the native drawer, then open the scanner again.")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction(); refreshPendingShare() } }
+            .onAppear { prepareDestinationState(); receiveWidgetAction(); refreshPendingShare() }
             .task {
                 await refreshDeploymentsIfNeeded()
             }
             .onChange(of: selectedDestinationID) { _, _ in
                 ensureSelectedDestinationIsAvailable()
+                refreshPendingShare()
             }
-            .onChange(of: vercelDeployments) { _, _ in
+            .onChange(of: deploymentGroups) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
         }
+    }
+
+    private func refreshPendingShare() {
+        do {
+            let inbox = try ShareInbox.shared()
+            let drafts = try inbox.pendingComposers(origin: selectedDestination.url)
+            let reminder = try inbox.pendingComposers(origin: selectedDestination.url, includeDismissed: false).first
+            sharedDrafts = drafts
+            pendingShare = reminder
+            sharedDraftsLoadFailed = false
+        } catch {
+            sharedDrafts = []
+            pendingShare = nil
+            sharedDraftsLoadFailed = true
+        }
+    }
+
+    private func openSharedDraft(_ id: UUID) {
+        widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: id)?.absoluteString
+        pendingShare = nil
+    }
+
+    private func dismissSharedDraftReminder(_ id: UUID) {
+        do {
+            try ShareInbox.shared().dismissComposerReminder(id: id, origin: selectedDestination.url)
+            refreshPendingShare()
+        } catch {
+            shareReminderError = "Your draft is still saved. Please try again."
+        }
+    }
+
+    private func receiveWidgetAction() {
+        if let url = WidgetActionInbox.take() { widgetPath = WidgetRoute.path(for: url) }
     }
 
     private func openDrawerGesture(leadingEdgeWidth: CGFloat) -> some Gesture {
@@ -93,12 +254,21 @@ struct ThingtimeWebView: View {
     private var closeDrawerGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
                 guard value.translation.width < -56 else { return }
                 closeDestinationPicker()
             }
     }
 
     private func prepareDestinationState() {
+        let startupSelection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: selectedDestinationID,
+            lastConfiguredDestinationID: lastConfiguredDestinationID,
+            hasExplicitSelection: hasExplicitDestinationSelection,
+            destinations: staticDestinations
+        )
+        selectedDestinationID = startupSelection.selectedDestinationID
+        lastConfiguredDestinationID = startupSelection.lastConfiguredDestinationID
         ensureSelectedDestinationIsAvailable()
     }
 
@@ -130,6 +300,7 @@ struct ThingtimeWebView: View {
 
     private func select(_ destination: ThingtimeWebDestination.Destination) {
         selectedDestinationID = destination.id
+        hasExplicitDestinationSelection = true
         closeDestinationPicker()
     }
 
@@ -147,172 +318,11 @@ struct ThingtimeWebView: View {
         deploymentsLoadState = .loading
 
         do {
-            vercelDeployments = try await deploymentsClient.fetchDeployments()
+            let overview = try await deploymentsClient.fetchDeployments()
+            deploymentGroups = overview.resolvedDeploymentGroups
             deploymentsLoadState = .loaded
         } catch {
             deploymentsLoadState = .failed("Could not load Vercel deployments.")
-        }
-    }
-}
-
-private struct DestinationPickerDrawer: View {
-    @Environment(\.openURL) private var openURL
-
-    let destinations: [ThingtimeWebDestination.Destination]
-    let selectedDestinationID: String
-    let deploymentsLoadState: ThingtimeWebView.DeploymentsLoadState
-
-    let safeAreaInsets: EdgeInsets
-    let onSelect: (ThingtimeWebDestination.Destination) -> Void
-    let onRefreshDeployments: () async -> Void
-    let onClose: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Text("Web destination")
-                    .font(.headline)
-
-                Spacer()
-
-                Button {
-                    Task {
-                        await onRefreshDeployments()
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(deploymentsLoadState == .loading)
-                .accessibilityLabel("Refresh Vercel deployments")
-
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close destination picker")
-            }
-
-            VStack(spacing: 8) {
-                ForEach(destinations) { destination in
-                    destinationRow(destination)
-                }
-            }
-
-            Divider()
-
-            deploymentStatusView
-
-            Spacer(minLength: 0)
-        }
-        .padding(.top, safeAreaInsets.top + 18)
-        .padding(.horizontal, 16)
-        .padding(.bottom, safeAreaInsets.bottom + 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(.primary.opacity(0.08))
-                .frame(width: 1)
-        }
-    }
-
-    private func destinationRow(_ destination: ThingtimeWebDestination.Destination) -> some View {
-        Button {
-            onSelect(destination)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: iconName(for: destination))
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 28, height: 28)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(destination.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-
-                    Text(destination.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                if destination.id == selectedDestinationID {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .accessibilityLabel("Selected")
-                }
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground(for: destination))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(destination.title), \(destination.subtitle)")
-        .accessibilityHint("Touch and hold for URL actions")
-        .contextMenu {
-            Button {
-                UIPasteboard.general.string = destination.url.absoluteString
-            } label: {
-                Label("Copy URL", systemImage: "doc.on.doc")
-            }
-
-            Button {
-                openURL(destination.url)
-            } label: {
-                Label("Open in Browser", systemImage: "safari")
-            }
-
-            ShareLink(item: destination.url) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var deploymentStatusView: some View {
-        switch deploymentsLoadState {
-        case .idle:
-            EmptyView()
-        case .loading:
-            Label("Loading deployments", systemImage: "arrow.triangle.2.circlepath")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .loaded:
-            if !destinations.contains(where: { $0.source == .vercelDeployment }) {
-                Label("No Vercel deployments", systemImage: "tray")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.red)
-        }
-    }
-
-    private func rowBackground(for destination: ThingtimeWebDestination.Destination) -> Color {
-        destination.id == selectedDestinationID ? Color.primary.opacity(0.1) : Color.primary.opacity(0.04)
-    }
-
-    private func iconName(for destination: ThingtimeWebDestination.Destination) -> String {
-        switch destination.source {
-        case .production:
-            return "globe"
-        case .configured:
-            return "shippingbox"
-        case .vercelDeployment:
-            return "paperplane"
         }
     }
 }

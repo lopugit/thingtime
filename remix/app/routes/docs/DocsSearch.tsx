@@ -53,12 +53,11 @@ const highlightTerms = (text: string, terms: string[]) => {
 };
 
 type DocsSearchProps = {
-  onNavigate?: () => void;
   query: string;
   setQuery: (next: string) => void;
 };
 
-export function DocsSearch({ onNavigate, query, setQuery }: DocsSearchProps) {
+export function DocsSearch({ query, setQuery }: DocsSearchProps) {
   const navigate = useNavigate();
   const [activeIndex, setActiveIndex] = React.useState(0);
 
@@ -83,7 +82,6 @@ export function DocsSearch({ onNavigate, query, setQuery }: DocsSearchProps) {
       if (result) {
         event.preventDefault();
         navigate(withSearchQueryParam(result.doc.to, query));
-        onNavigate?.();
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
@@ -169,7 +167,6 @@ export function DocsSearch({ onNavigate, query, setQuery }: DocsSearchProps) {
                   borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
                   data-testid={`docs-search-result-${result.doc.id}`}
                   display="block"
-                  onClick={() => onNavigate?.()}
                   onMouseEnter={() => setActiveIndex(index)}
                   px={3}
                   py={2}
