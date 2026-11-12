@@ -14,7 +14,7 @@ export type NativeHomeComposition = {
  supportedOperations: readonly NativeHomeOperation[];
  close?(): void;
 };
-export type NativeHomeComposer = (input: { provider: CollectionProvider; homePlaneId: string; keyId: string;
+export type NativeHomeComposer = (input: { provider: CollectionProvider; homePlaneId: string; publicDataPlane: string; keyId: string;
  vaultKey: Uint8Array; outboxKey: Uint8Array }) => Promise<NativeHomeComposition>;
 type Profile = { format: 1; provider: 'sqlite'; profileId: string; homePlaneId: string; origin: string; sqliteFile: string; keyId: string;
  protectedKeys(): { jwt: Uint8Array; vault: Uint8Array; outbox: Uint8Array } };
@@ -102,7 +102,8 @@ export async function createNativeHomeRuntime(value: unknown, compose: NativeHom
     collection.insert(BSON.serialize({ _id: 'identity', id: 'identity', format: 1, profileId: p.profileId, keyId: p.keyId, binding: identity }));
    }
   });
-  composition = await compose({ provider, homePlaneId: p.homePlaneId, keyId: p.keyId, vaultKey: protectedKeys.vault, outboxKey: protectedKeys.outbox });
+  const publicDataPlane = 'custom-' + createHash('sha256').update('native-home-v1\0' + p.profileId).digest('hex');
+  composition = await compose({ provider, publicDataPlane, homePlaneId: p.homePlaneId, keyId: p.keyId, vaultKey: protectedKeys.vault, outboxKey: protectedKeys.outbox });
   if (!composition || typeof composition.run !== 'function' || !Array.isArray(composition.supportedOperations)) return unavailable();
   const operations = composition.supportedOperations.map(operation => {
    if (!operation || !['GET','POST','PATCH','PUT','DELETE','HEAD'].includes(operation.method) ||
@@ -111,7 +112,6 @@ export async function createNativeHomeRuntime(value: unknown, compose: NativeHom
   });
   if (new Set(operations.map(op => op.method + ' ' + op.path)).size !== operations.length) return unavailable();
   let closed = false, active = 0;
-  const publicDataPlane = 'custom-' + createHash('sha256').update('native-home-v1\0' + p.profileId).digest('hex');
   return Object.freeze({
    publicDataPlane, origin: p.origin,
    snapshot: () => {

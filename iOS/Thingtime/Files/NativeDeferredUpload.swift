@@ -244,7 +244,7 @@ final class NativeDeferredUpload {
     private var continuedRequest: UUID?
     private var activeContinuedRequest: UUID?
     private var continuedCompleted: Int64 = 0
-    private var continuedPartial: Int64 = 0
+    private var continuedKnownOriginals: Int64 = 0
     private var originalsRemaining: Int64?
 
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
@@ -297,6 +297,10 @@ final class NativeDeferredUpload {
             [weak self] _ in MainActor.assumeIsolated {
                 self?.executionLease?.becameActive()
                 self?.startNativeForegroundIfNeeded()
+                // Progress hints emitted while suspended cannot reach WebKit.
+                // A native foreground event must refresh even if WebKit emits
+                // no visibilitychange/pageshow event for the existing page.
+                NotificationCenter.default.post(name: Self.photoProgressChanged, object: nil, userInfo: ["immediate": true, "lifecycle": true])
             }
         }
         transitionObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) {
@@ -409,6 +413,10 @@ final class NativeDeferredUpload {
             next.pendingOriginals = current.pendingOriginals; next.unavailableOriginals = current.unavailableOriginals; next.unavailableReasons = current.unavailableReasons
             next.foregroundOwner = current.nativeOwnsRun || proposed.nativeOwnsRun
             next.activity = current.activity
+            next.sourceIndexId = current.sourceIndexId
+            next.sourceIndexMetadataEpoch = current.sourceIndexMetadataEpoch
+            next.sourceIndexAcknowledgedSequence = current.sourceIndexAcknowledgedSequence
+            next.sourceIndexAcknowledgedAt = current.sourceIndexAcknowledgedAt
         }
         if let current, !current.armed, current.sameScope(proposed), current.authorization == proposed.authorization,
            current.stage == "needs-review", current.activity?.reason.map({
@@ -477,7 +485,7 @@ final class NativeDeferredUpload {
         if let unavailable = run.unavailableOriginals { result["unavailableOriginals"] = unavailable }
         if let reasons = run.unavailableReasons { result["unavailableReasons"] = reasons }
         if continuedRun?.sameRun(run) == true && executionLease?.continuedActive == true { result["continuation"] = "active" }
-        if var activity = activity(for: run)?.snapshot() ?? run.activity {
+        if var activity = activity(for: run)?.snapshot() ?? run.activity.map(NativePhotoRunActivity.restoringLastDiscovery) {
             if activePhotoRun?.sameRun(run) != true { activity.cloudPreparationFraction = nil }
             if ["waiting", "paused", "needs-review"].contains(stage) {
                 activity.phase = .waiting
@@ -555,7 +563,7 @@ final class NativeDeferredUpload {
             recordBackgroundRequest(run, .declined); return "declined"
         }
         continuedRun = requestedRun; activeContinuedRequest = id
-        continuedCompleted = 0; continuedPartial = 0
+        continuedCompleted = 0; continuedKnownOriginals = 0
         recordBackgroundRequest(requestedRun, .active)
         reportContinuedWork(requestedRun, subtitle: "Checking Photos originals…")
         return "active"
@@ -584,6 +592,8 @@ final class NativeDeferredUpload {
         observed.phase(.waiting, reason: .interrupted)
         _ = observed.cloudPreparation(nil)
         observed.background(.waiting)
+        let measured = executionLease?.continuedMeasurement ?? (0, nil)
+        observed.backgroundEnded(.systemEnded, measuredUnits: measured.0, lastProgressAt: measured.1)
         live.activity = observed.snapshot()
         // Apple delivers expiration and its own cancellation through this
         // callback. End this lease, retaining the saved automatic policy.
@@ -600,28 +610,39 @@ final class NativeDeferredUpload {
         // One original is one unit of work. Give the system real partial
         // progress within large originals while reserving the final fraction
         // for verification and the canonical publication receipt.
-        let unitsPerOriginal: Int64 = 10_000
-        // Discovery advances measured units even before we know the backup
-        // backlog. Leave the overall total indeterminate during discovery.
+        // Use finite known work: negative Progress totals pin fractionCompleted
+        // at zero, even while completedUnitCount honestly advances.
         let indexing = activity(for: run)?.measuredIndexingWork() ?? 0
-        let total = originalsRemaining.map { (indexing + continuedCompleted + $0) * unitsPerOriginal }.flatMap { $0 > 0 ? $0 : nil }
-        executionLease?.continuedProgress(completed: (indexing + continuedCompleted) * unitsPerOriginal + continuedPartial,
-                                           total: total, subtitle: subtitle)
+        let preparation = activity(for: run)?.measuredPreparationWork() ?? 0
+        let known = activity(for: run)?.knownWork() ?? (0, 0)
+        let completed = NativePhotoContinuedProgress.units(indexed: indexing, preparation: preparation,
+            completed: continuedCompleted, files: fileWork.values.map { ($0.sent, $0.total) })
+        let total = NativePhotoContinuedProgress.total(indexed: indexing, knownIndexing: known.0,
+            preparation: preparation, knownPreparation: known.1, completed: continuedCompleted,
+            knownOriginals: continuedKnownOriginals, activeFiles: fileWork.count)
+        executionLease?.continuedProgress(completed: completed,
+                                           total: total, subtitle: "Library discovery + known originals · " + subtitle)
     }
 
     private func reportContinuedBytes(_ run: NativePhotoRunRecord, sent: Int64, size: Int64) {
         guard continuedRun?.sameRun(run) == true, size > 0 else { return }
-        let fraction = min(1, max(0, Double(sent) / Double(size)))
-        continuedPartial = fileWork.isEmpty ? min(9_999, Int64(fraction * 10_000)) : fileWork.values.reduce(0) { sum, value in
-            sum + min(9_999, Int64(min(1, Double(value.sent) / Double(max(1, value.total))) * 10_000))
-        }
         let display = ByteCountFormatter.string(fromByteCount: sent, countStyle: .decimal)
         reportContinuedWork(run, subtitle: "\(continuedCompleted) originals checked · \(display) sent")
     }
 
-    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool, settledSubtitle: String? = nil) {
+    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool, settledSubtitle: String? = nil,
+                                    cause: NativePhotoRunActivity.BackgroundEndCause? = nil) {
         guard continuedRun?.sameRun(run) == true else { return }
-        executionLease?.finishContinued(success, settledSubtitle: settledSubtitle); continuedRun = nil; activeContinuedRequest = nil
+        var completed = success
+        if var saved = try? photoRuns.lookup(run), saved.sameRun(run) {
+            let observed = activity(for: run) ?? NativePhotoRunActivity(saved.activity)
+            let measured = executionLease?.continuedMeasurement ?? (0, nil)
+            observed.backgroundEnded(cause ?? (success ? .completed : .workerFailed), measuredUnits: measured.0, lastProgressAt: measured.1)
+            observed.background(saved.userPaused == true ? nil : success && saved.stage == "complete" ? .complete : .waiting)
+            saved.activity = observed.snapshot()
+            do { try photoRuns.write(saved) } catch { completed = false; failClosed() }
+        }
+        executionLease?.finishContinued(completed, settledSubtitle: settledSubtitle); continuedRun = nil; activeContinuedRequest = nil
         reportPhotoProgress(run)
     }
 
@@ -937,13 +958,14 @@ final class NativeDeferredUpload {
                                 }, read: { try self.photoRuns.lookup(run) }, write: { try self.photoRuns.update($0) })
                             self.reportPhotoProgress(saved)
                             self.finishContinuedRun(run, success: true,
-                                settledSubtitle: "Progress saved · waiting for upload limits")
+                                settledSubtitle: "Progress saved · waiting for upload limits", cause: .checkpointedWait)
                             continue
                         } catch { failure = error }
                     }
                     // Earlier failures keep the aggregate result unsuccessful.
                     success = false
-                    self.finishContinuedRun(run, success: false)
+                    self.finishContinuedRun(run, success: false,
+                        cause: lease.executionExpired ? .executionExpired : failure is CancellationError ? .workerCancelled : .workerFailed)
                     if var saved = try? self.photoRuns.lookup(run), saved.sameRun(run), saved.armed {
                         if Task.isCancelled, saved.activity?.reason == .interrupted { continue }
                         if (failure as? PhotoLibraryReader.Failure) == .changed {
@@ -1166,6 +1188,9 @@ final class NativeDeferredUpload {
                 guard let self, self.activePhotoRun?.sameRun(proposed) == true, self.activity(for: proposed) === activity else { return }
                 self.reportPhotoProgress(proposed, immediately: immediately)
                 let snapshot = activity.snapshot()
+                if let fraction = snapshot.cloudPreparationFraction {
+                    self.reportContinuedWork(proposed, subtitle: "Downloading an iCloud original · \(Int(fraction * 100))%")
+                }
                 switch snapshot.phase {
                 case .indexing:
                     let subtitle: String
@@ -1211,6 +1236,29 @@ final class NativeDeferredUpload {
             _ = try await client.photoRunRequest(["action": "check-photo-run", "runId": proposed.runId])
             _ = try check()
         }
+        func flushSourceIndex() async throws {
+            guard startWithSingleAsset else { return }
+            while let page = try photos.pendingQueueSourceIndex(scope: photoScope, request: queue) {
+                _ = try check()
+                let indexId: String
+                do { indexId = try await client.publishSourceIndex(page, runId: proposed.runId) }
+                catch {
+                    if NativeDeferredUploadClient.failure(error) == .sourceIndexDiscarded {
+                        try photos.rotateQueueSourceIndex(scope: photoScope, request: queue)
+                        run.sourceIndexId = nil; run.sourceIndexMetadataEpoch = nil; run.sourceIndexAcknowledgedSequence = nil; run.sourceIndexAcknowledgedAt = nil
+                        try checkpoint()
+                        throw NativeDeferredUploadClient.Failure.unavailable
+                    }
+                    throw error
+                }
+                _ = try check()
+                try run.recordSourceIndexReceipt(indexId: indexId, metadataEpoch: page.epoch, sequence: page.sequence)
+                // Persist acknowledgement progress before retiring its outbox
+                // page. A crash between them replays the same safe request.
+                try checkpoint()
+                try photos.acknowledgeQueueSourceIndex(scope: photoScope, request: queue, page: page)
+            }
+        }
         let grant = try check()
         let control = conditions.control(for: authorization)
         let download = control?.reporting { fraction in
@@ -1234,8 +1282,10 @@ final class NativeDeferredUpload {
             guard let original = try await withTaskCancellationHandler(operation: { try await next.value }, onCancel: { next.cancel() }) else { return }
             _ = try check()
             cloudFailure = nil
+            let resource = UUID()
+            activity.beginCloudPreparation(resource)
             let reporting = control?.reporting { fraction in
-                if activity.cloudPreparation(fraction) { announce(false) }
+                if activity.cloudPreparation(fraction, resource: resource) { announce(false) }
             }
             let read = Task.detached {
                 try photos.prepareDeferredCloudOriginal(scope: photoScope, resource: original, control: reporting,
@@ -1254,7 +1304,7 @@ final class NativeDeferredUpload {
                 }
                 defer {
                     watchdog.cancel(); cloudWork = nil
-                    if activity.cloudPreparation(nil) { announce(false) }
+                    if activity.cloudPreparation(nil, resource: resource) { announce(false) }
                 }
                 do {
                     let ready = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
@@ -1277,6 +1327,14 @@ final class NativeDeferredUpload {
             run.retryCloudGaps = false; try checkpoint()
         }
 
+        if startWithSingleAsset, run.batch != nil {
+            try await flushSourceIndex()
+            let discovery = Task.detached { try photos.discoverQueueIndex(scope: photoScope, request: queue, activity: { progress in
+                if activity.capture(progress) { announce(false) }
+            }) }
+            try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+            try await flushSourceIndex()
+        }
         while true {
             try await authorize()
             if run.batch == nil { try await startCloudWork() }
@@ -1289,6 +1347,17 @@ final class NativeDeferredUpload {
                     try checkpoint()
                 }
                 let id = run.captureId!, selectedDeferred = preparedCloud
+                if startWithSingleAsset {
+                    try await flushSourceIndex()
+                    let discovery = Task.detached { try photos.discoverQueueIndex(scope: photoScope, request: queue, preparedDeferred: selectedDeferred, activity: { progress in
+                        if activity.capture(progress) {
+                            if case .enumerating(let discovery) = progress { announce(discovery.inspected == 1 && discovery.latest != nil) }
+                            else { announce(false) }
+                        }
+                    }) }
+                    try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+                    try await flushSourceIndex()
+                }
                 let preparation = Task.detached {
                     if let sealed = try photos.status(scope: photoScope, id: id, allowCloudGaps: true, queueRequest: queue) {
                         return sealed
@@ -1335,21 +1404,33 @@ final class NativeDeferredUpload {
                 run.unavailableReasons = batch.unavailableReasons
                 try checkpoint()
             }
+            try await flushSourceIndex()
             guard let batch = run.batch, let id = run.captureId else { throw MobileFolderStore.Failure.invalid }
             let staging = NativeUploadPartStaging(scope: run.scope, grant: grant, photos: photos, store: parts,
                 download: cloudWork == nil ? download : nil)
             let read = Task.detached { try photos.queueBatchEntries(scope: photoScope, request: queue, batchId: batch.id) }
             let originals = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
             originalsRemaining = batch.remainingKnown == false ? nil : Int64(batch.pending) + Int64(originals.count)
+            continuedKnownOriginals = max(continuedKnownOriginals, continuedCompleted + Int64(originals.count) + Int64(batch.pending))
             activity.backlog(originalsRemaining)
             reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
             var lookahead: Task<Void, Error>?
             defer { lookahead?.cancel() }
             func startLookahead() {
                 guard lookahead == nil else { return }
-                lookahead = Task.detached(priority: .utility) {
-                    try photos.prepareQueueLookahead(scope: photoScope, request: queue, batchId: batch.id,
-                        authorize: { try conditions.verify(authorization) })
+                lookahead = Task { @MainActor in
+                    let discovery = Task.detached(priority: .utility) {
+                        try photos.discoverQueueIndexLookahead(scope: photoScope, request: queue, batchId: batch.id)
+                    }
+                    try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+                    // Only metadata waits here. Already accepted background
+                    // transfers retain their own canonical transport lifecycle.
+                    try await flushSourceIndex()
+                    let warm = Task.detached(priority: .utility) {
+                        try photos.prepareQueueLookahead(scope: photoScope, request: queue, batchId: batch.id,
+                            authorize: { try conditions.verify(authorization) })
+                    }
+                    try await withTaskCancellationHandler(operation: { try await warm.value }, onCancel: { warm.cancel() })
                 }
             }
             let process: @MainActor (MobileFolderReader.Entry) async throws -> Void = { [self] source in
@@ -1389,7 +1470,9 @@ final class NativeDeferredUpload {
                     originalsRemaining = max(0, remaining - 1)
                     activity.backlog(max(0, remaining - 1))
                 }
-                if continuedRun?.sameRun(proposed) == true { continuedCompleted += 1; continuedPartial = 0 }
+                // Convert just this original's partial units into one receipt.
+                // Every admitted sibling retains its own measured byte work.
+                if continuedRun?.sameRun(proposed) == true { continuedCompleted += 1 }
                 reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
             }
             // At most five originals occupy staging/transport concurrently.
@@ -1402,6 +1485,7 @@ final class NativeDeferredUpload {
                 lookahead.cancel()
                 _ = await withTaskCancellationHandler(operation: { await lookahead.result }, onCancel: { lookahead.cancel() })
             }
+            try await flushSourceIndex()
             try await authorize()
             let finish = Task.detached { try photos.finishQueueBatch(scope: photoScope, request: queue, batchId: batch.id) }
             try await withTaskCancellationHandler(operation: { try await finish.value }, onCancel: { finish.cancel() })

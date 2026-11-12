@@ -1,4 +1,6 @@
 import { getThingsCollection } from '../mongodb/collections';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
+import { browseNativeCatalog } from '../things/nativeCatalogReads';
 import { COUNT_MAX_TIME_MS, fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
   asViewer,
@@ -12,6 +14,7 @@ import {
   toPublicThings,
   visibilityQueryFor,
   withMatch,
+  withFriendIds,
   type Fail,
   type PublicThing,
   type ThingDoc,
@@ -307,6 +310,19 @@ export const browseSchemas = async (
   const limit = clampLimit(query.limit);
   const sortRaw = typeof query.sort === 'string' ? query.sort.trim() : '';
   const q = typeof query.q === 'string' ? query.q.trim() : '';
+
+  const native = getBoundThingsPersistence(null);
+  if (native) {
+    const library = truthyFlag(query.library), mine = truthyFlag(query.mine);
+    if (q && !library && !mine && sortRaw !== 'popular') return fail(503, 'Native catalog text search requires the canonical full-text search adapter');
+    const result = await browseNativeCatalog(native, await withFriendIds(viewer), 'schema', {
+      mode: library ? 'library' : mine ? 'mine' : 'visible',
+      sort: library ? 'newest' : mine ? sortRaw === 'oldest' ? 'oldest' : 'newest' : sortRaw === 'popular' ? 'popular' : sortRaw === 'oldest' ? 'oldest' : 'newest',
+      cursor: query.cursor, limit: Math.floor(limit)
+    });
+    if (isFail(result)) return result;
+    return { ok: true, schemas: result.things, nextCursor: result.nextCursor, total: result.total, totalCapped: result.totalCapped };
+  }
 
   if (truthyFlag(query.library)) {
     const result = await browseLibrary(viewer, query.cursor, limit);

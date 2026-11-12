@@ -31,6 +31,14 @@ test('owner-scoped search advertises and negotiates the same additive contract o
   assert.equal(capabilitySatisfies('1.4.1', '1.4.0'), true);
 });
 
+test('source-index pages publish the additive scoped contract on both manifests', () => {
+    const feature = 'api.file-sync-transfer-admissions';
+    assert.equal(createApiCapabilitiesManifest().features[feature], '1.8.0');
+    assert.equal(thingtimeCapabilityManifest('https://index.example').features[feature].version, '1.8.0');
+    for (const value of ['1.8.0', '1.8.1', '1.9.0']) assert.equal(capabilitySatisfies(value, '1.8.0'), true);
+    for (const value of [undefined, '1.7.0', '2.0.0']) assert.equal(capabilitySatisfies(value, '1.8.0'), false);
+});
+
 test('parent argument bindings publish and negotiate matching additive contracts on both manifests', () => {
 	assert.equal(COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things'], '1.63.0');
 	const source = createApiCapabilitiesManifest();
@@ -904,8 +912,8 @@ test('Photos automation settings and exact publication are additive origin-scope
 test('native background file transport is an explicit compatible transfer admission capability', () => {
  const minimum = '1.5.0';
  const docs = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest('https://photos.test');
- assert.equal(docs.features['api.file-sync-transfer-admissions'], '1.7.0');
- assert.equal(runtime.features['api.file-sync-transfer-admissions']?.version, '1.7.0');
+ assert.equal(docs.features['api.file-sync-transfer-admissions'], '1.8.0');
+ assert.equal(runtime.features['api.file-sync-transfer-admissions']?.version, '1.8.0');
  assert(capabilitySatisfies('1.5.1', minimum));
  for (const version of [undefined, '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
  assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/files/sync-transfer-admissions')?.methods, ['POST']);

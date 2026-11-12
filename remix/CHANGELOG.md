@@ -160,6 +160,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Extend SQLite Builder services with transaction-checked collaborator
+  writes, canonical dependency resolution and native catalog reads. Bind draft
+  preview to the protected runtime's public database identity. Full native Things,
+  resolve and catalog HTTP contracts remain gated; text search and broader audience
+  adapters are unfinished. See
+  [PR #1000's note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+- 2026-11-12: Keep measured Photos background progress monotonic across concurrent
+  originals and real iCloud preparation, refresh stale active status on native
+  foreground reentry, retain historical indexing/discovery feedback, and show a
+  closed session-ending cause/time without changing automatic backup or Pause.
+  Physical-device scheduling remains an independent acceptance gate. **Codex (AI)**
+
+- 2026-11-12: Persist pending Photos discovery incrementally through the approved
+  sync-run authority, with durable native metadata retries, private owner reads,
+  explicit partial counts and verified publication reconciliation. See
+  [source-index contract](../docs/sync-source-index.md) and
+  [PR1489 validation](../PRs/1489-codex-ios-photos-cloud-index-persist-incremental-photos-source-index.md). — **Codex (AI)**
+
 - 2026-11-12: Extend native content services to saved Component/Schema/Webpage
   definitions and canonical schema provenance. Capture page Component history
   in the actual SQLite content transaction, preserving permission reads and

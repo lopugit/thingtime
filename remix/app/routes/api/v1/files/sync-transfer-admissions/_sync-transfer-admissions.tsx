@@ -10,11 +10,11 @@ export const action = async ({ request }: { request: Request }) =>
 		if (!isSameOriginAttachmentRequest(request)) return json({ ok: false, error: 'Cross-origin transfer admission is not allowed' }, { status: 403 });
 		if (request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
 			return json({ ok: false, error: 'Use application/json' }, { status: 415 });
-		const raw = await readJsonBody(request, 16 * 1024);
-		if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !['admit', 'parts', 'complete', 'publish', 'revoke', 'open-photo-run', 'reserve-photo-original', 'revoke-photo-run', 'check-photo-run'].includes(raw.action))
+		const raw = await readJsonBody(request, 64 * 1024);
+		if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !['admit', 'parts', 'complete', 'publish', 'revoke', 'open-photo-run', 'reserve-photo-original', 'revoke-photo-run', 'check-photo-run', 'observe-photo-index', 'read-source-index', 'discard-source-index', 'list-source-indexes'].includes(raw.action))
 			return json({ ok: false, error: 'Invalid transfer admission request' }, { status: 400 });
 		const opens = raw.action === 'admit' || raw.action === 'open-photo-run';
-		const owner = opens || raw.action === 'revoke' || raw.action === 'revoke-photo-run' ? await resolveTransferOwner(request) : null;
+		const owner = opens || raw.action === 'list-source-indexes' || raw.action === 'read-source-index' || raw.action === 'discard-source-index' || raw.action === 'revoke' || raw.action === 'revoke-photo-run' ? await resolveTransferOwner(request) : null;
 		const device = !opens && !owner ? await resolveDeviceActor(request) : null;
 		if (!owner && !device) return json({ ok: false, error: 'An owning browser session or paired device credential is required' }, { status: 401 });
 		// Keep the same quota for ordinary and delegated multipart operations.

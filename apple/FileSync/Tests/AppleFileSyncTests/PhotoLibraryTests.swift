@@ -266,6 +266,203 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertEqual(provider.downloads, 6)
     }
 
+    func testSourceIndexBackpressuresLargeAcknowledgedPrefixAndResumesIncrementally() throws {
+        let provider = OrderedPhotoFixtures(); provider.membershipRevision = 0
+        for n in 0..<5000 { provider.add("backed-\(n)", bytes: Data([UInt8(n % 255)]), captured: Double(n), kind: "photo") }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("large-source-index-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let seed = PhotoBackupQueue(directory: directory, request: request)
+        // Synthetic local acknowledgement fixtures exercise discovery only;
+        // this is not evidence of a real cloud byte publication.
+        while true {
+            let work = try seed.select(revision: "seed", resources: provider.records)
+            let entries = work.assets.flatMap(\.resources).map { MobileFolderReader.Entry(path: $0.path, id: $0.identity,
+                version: $0.revision, kind: "file", size: 1, sha256: String(repeating: "a", count: 64), fingerprint: nil) }
+            _ = try seed.prepare(work, unavailable: [], entries: entries)
+            try seed.finish(work.selection.id)
+            if work.assets.isEmpty { break }
+        }
+        let first = PhotoBackupQueue(directory: directory, request: request)
+        try first.enableSourceIndex()
+        let work = try first.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        XCTAssertTrue(work.assets.isEmpty); XCTAssertEqual(work.descriptor.remainingKnown, false)
+        XCTAssertEqual(try first.sourceIndexPendingCount(), 4)
+        XCTAssertEqual(work.selection.orderedCursor?.dated, 128)
+        let retained = try XCTUnwrap(first.pendingSourceIndex())
+        let restarted = PhotoBackupQueue(directory: directory, request: request)
+        try restarted.enableSourceIndex()
+        XCTAssertEqual(try restarted.pendingSourceIndex(), retained)
+        var uploaded = 0
+        while let page = try restarted.pendingSourceIndex() { uploaded += page.entries.count; try restarted.acknowledgeSourceIndex(page) }
+        XCTAssertEqual(uploaded, 128)
+        let resumed = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        _ = try restarted.prepare(resumed, unavailable: [], entries: [])
+        try restarted.finish(resumed.selection.id, orderedAssets: [])
+        let next = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        XCTAssertEqual(try restarted.sourceIndexPendingCount(), 4)
+        XCTAssertEqual(next.selection.orderedCursor?.dated, 256)
+        XCTAssertEqual(provider.exports, 0); XCTAssertEqual(provider.inventoryCalls, 0)
+    }
+
+    func testSourceIndexRetainsPreparedVersionsAcrossRotationAndLabelsLegacyReceipts() throws {
+        let provider = OrderedPhotoFixtures(); provider.membershipRevision = 0
+        let fresh = provider.add("prepared", bytes: Data([1]), captured: 100, kind: "photo")
+        let legacy = provider.add("legacy", bytes: Data([2]), captured: 90, kind: "photo")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("source-index-prepared-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let queue = PhotoBackupQueue(directory: directory, request: request)
+        let seed = try queue.select(revision: "seed", resources: provider.records)
+        let entries = seed.assets.flatMap(\.resources).map { MobileFolderReader.Entry(path: $0.path, id: $0.identity,
+            version: "prepared-" + $0.asset, kind: "file", size: 1, sha256: String(repeating: "a", count: 64), fingerprint: nil) }
+        _ = try queue.prepare(seed, unavailable: [], entries: entries)
+        try queue.finish(seed.selection.id)
+        // Compatibility fixture: remove the field absent in older local
+        // receipt formats, without changing its exact asset/resource stamp.
+        let legacyURL = directory.appendingPathComponent("attempts/" + PhotoLibraryReader.hash(Data(legacy.asset.utf8)) + ".json")
+        var old = try JSONSerialization.jsonObject(with: Data(contentsOf: legacyURL)) as! [String: Any]
+        old.removeValue(forKey: "sourceVersions")
+        try JSONSerialization.data(withJSONObject: old).write(to: legacyURL, options: .atomic)
+        let freshURL = directory.appendingPathComponent("attempts/" + PhotoLibraryReader.hash(Data(fresh.asset.utf8)) + ".json")
+        let freshBytes = try Data(contentsOf: freshURL), legacyBytes = try Data(contentsOf: legacyURL)
+        try queue.enableSourceIndex()
+        let selected = try queue.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        func drain(_ value: PhotoBackupQueue) throws -> [PhotoSourceIndexPage.Entry] {
+            var entries: [PhotoSourceIndexPage.Entry] = []
+            while let page = try value.pendingSourceIndex() { entries.append(contentsOf: page.entries); try value.acknowledgeSourceIndex(page) }
+            return entries
+        }
+        let initial = try drain(queue)
+        XCTAssertEqual(initial.first { $0.path == fresh.path }?.sourceVersion, "prepared-prepared")
+        XCTAssertEqual(initial.first { $0.path == legacy.path }?.availability, "legacy-unverified")
+        XCTAssertNil(initial.first { $0.path == legacy.path }?.sourceVersion)
+        try queue.rotateSourceIndex()
+        _ = try queue.prepare(selected, unavailable: [], entries: [])
+        try queue.finish(selected.selection.id, orderedAssets: [])
+        _ = try queue.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        let rotated = try drain(queue)
+        XCTAssertEqual(rotated.first { $0.path == fresh.path }?.sourceVersion, "prepared-prepared")
+        XCTAssertEqual(rotated.first { $0.path == legacy.path }?.availability, "legacy-unverified")
+        XCTAssertEqual(try Data(contentsOf: freshURL), freshBytes)
+        XCTAssertEqual(try Data(contentsOf: legacyURL), legacyBytes)
+        XCTAssertEqual(provider.exports, 0)
+    }
+
+    func testSourceIndexRotationFailureRetainsBackfillIntentBeforeActivatingEpoch() throws {
+        let provider = OrderedPhotoFixtures(); provider.membershipRevision = 0
+        let original = provider.add("already-acknowledged", bytes: Data([1]), captured: 100, kind: "photo")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("source-index-rotate-fault-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let queue = PhotoBackupQueue(directory: directory, request: request)
+        let seed = try queue.select(revision: "seed", resources: [original])
+        _ = try queue.prepare(seed, unavailable: [original.path], entries: [], reasons: [original.path: "photo-read"])
+        try queue.finish(seed.selection.id)
+        try queue.enableSourceIndex()
+        let selection = try queue.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        while let page = try queue.pendingSourceIndex() { try queue.acknowledgeSourceIndex(page) }
+        let selected = try Data(contentsOf: directory.appendingPathComponent("current.json"))
+        XCTAssertThrowsError(try queue.rotateSourceIndex(afterBackfillIntent: { throw CancellationError() }))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("source-index-v1/backfill-after-selection.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("source-index-v1/epoch.json").path))
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("current.json")), selected)
+        let restarted = PhotoBackupQueue(directory: directory, request: request)
+        try restarted.enableSourceIndex()
+        let retained = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        XCTAssertEqual(retained.selection.id, selection.selection.id)
+        _ = try restarted.prepare(retained, unavailable: [], entries: [])
+        try restarted.finish(retained.selection.id, orderedAssets: [])
+        _ = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        var resources: [PhotoSourceIndexPage.Entry] = []
+        while let page = try restarted.pendingSourceIndex() { resources.append(contentsOf: page.entries); try restarted.acknowledgeSourceIndex(page) }
+        XCTAssertEqual(resources.first?.path, original.path)
+        XCTAssertEqual(resources.first?.reason, "photo-read")
+        XCTAssertEqual(provider.exports, 0)
+    }
+
+    func testSourceIndexPreservesKnownUnavailableReasonAcrossRestartAndRotatesOnlyMetadata() throws {
+        let provider = OrderedPhotoFixtures(); provider.membershipRevision = 0
+        let original = provider.add("unavailable", bytes: Data([1]), captured: 100, kind: "photo")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("source-index-unavailable-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let seed = PhotoBackupQueue(directory: directory, request: request)
+        let seeded = try seed.select(revision: "seed", resources: [original])
+        _ = try seed.prepare(seeded, unavailable: [original.path], entries: [], reasons: [original.path: "photo-read"])
+        try seed.finish(seeded.selection.id)
+        let queue = PhotoBackupQueue(directory: directory, request: request)
+        try queue.enableSourceIndex()
+        let selection = try queue.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        let before = try XCTUnwrap(queue.pendingSourceIndex())
+        XCTAssertEqual(before.entries.first?.availability, "unavailable"); XCTAssertEqual(before.entries.first?.reason, "photo-read")
+        let restarted = PhotoBackupQueue(directory: directory, request: request)
+        try restarted.enableSourceIndex()
+        XCTAssertEqual(try restarted.pendingSourceIndex(), before)
+        let selectedBytes = try Data(contentsOf: directory.appendingPathComponent("current.json"))
+        try restarted.rotateSourceIndex()
+        XCTAssertNil(try restarted.pendingSourceIndex())
+        let retained = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        XCTAssertEqual(retained.selection.id, selection.selection.id)
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("current.json")), selectedBytes)
+        // Empty retained selection is preserved; backfill after its ordinary
+        // acknowledgement rediscovers metadata without erasing byte receipts.
+        _ = try restarted.prepare(retained, unavailable: [], entries: [])
+        try restarted.finish(retained.selection.id, orderedAssets: [])
+        _ = try restarted.selectOrdered(provider: provider, replaceStale: true, progress: { _ in })
+        var rotatedEntries: [PhotoSourceIndexPage.Entry] = []
+        while let after = try restarted.pendingSourceIndex() {
+            XCTAssertNotEqual(after.epoch, before.epoch)
+            rotatedEntries.append(contentsOf: after.entries)
+            try restarted.acknowledgeSourceIndex(after)
+        }
+        XCTAssertEqual(rotatedEntries.first?.path, original.path)
+        XCTAssertEqual(rotatedEntries.first?.availability, "unavailable")
+        XCTAssertEqual(provider.exports, 0)
+    }
+
+    func testSourceIndexPrecedesOriginalPreparationAndRetainsOutboxAcrossRestart() throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        let newest = provider.add("newest", bytes: Data([1]), captured: 100, kind: "photo")
+        for n in 0..<20 { provider.add("older-\(n)", bytes: Data([UInt8(n)]), captured: Double(n), kind: "photo") }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("queue-index-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let owner = try FileSyncOwnerScope(ownerId: "index-fixture", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let queue = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let first = try makeReader(provider, queueDirectory: directory)
+        var discoveryActivity: [PhotoLibraryReader.InventoryProgress] = []
+        try first.discoverQueueIndex(scope: scope, request: queue, activity: {
+            if case .enumerating(let progress) = $0 { discoveryActivity.append(progress) }
+        })
+        XCTAssertEqual(discoveryActivity.last?.inspected, 1)
+        XCTAssertEqual(discoveryActivity.last?.total, 21)
+        let page = try XCTUnwrap(first.pendingQueueSourceIndex(scope: scope, request: queue))
+        XCTAssertEqual(page.entries.map(\.path), [newest.path])
+        XCTAssertEqual(provider.exports, 0, "Index discovery never opens original bytes")
+        XCTAssertEqual(page.progress.totalAssets, 21); XCTAssertFalse(page.progress.complete)
+        let restarted = try makeReader(provider, queueDirectory: directory)
+        try restarted.discoverQueueIndex(scope: scope, request: queue)
+        XCTAssertEqual(try restarted.pendingQueueSourceIndex(scope: scope, request: queue), page)
+        try restarted.acknowledgeQueueSourceIndex(scope: scope, request: queue, page: page)
+        let id = UUID().uuidString.lowercased()
+        let capture = try restarted.sealCapture(scope: scope, capture: restarted.prepareCapture(scope: scope, id: id,
+            generation: id, allowCloudGaps: true, queueRequest: queue, startWithSingleAsset: true))
+        XCTAssertEqual(provider.attempts, [newest.path])
+        let batch = try XCTUnwrap(capture.photoQueue)
+        let preparedEntries = try restarted.queueBatchEntries(scope: scope, request: queue, batchId: batch.id)
+        let preparedIndex = try XCTUnwrap(restarted.pendingQueueSourceIndex(scope: scope, request: queue))
+        XCTAssertEqual(preparedIndex.entries.first?.sourceVersion, preparedEntries.first?.version)
+        XCTAssertEqual(preparedIndex.entries.first?.resourceVersion, newest.revision)
+        XCTAssertNotEqual(preparedIndex.entries.first?.sourceVersion, newest.revision)
+        let beforeLookahead = provider.exports
+        try restarted.discoverQueueIndexLookahead(scope: scope, request: queue, batchId: batch.id)
+        XCTAssertNotNil(try restarted.pendingQueueSourceIndex(scope: scope, request: queue))
+        XCTAssertEqual(provider.exports, beforeLookahead, "Lookahead metadata is durable before warming any original")
+        XCTAssertEqual(provider.inventoryCalls, 0, "Ordered metadata needs no whole-library expansion")
+    }
+
     func testNewestMixedOriginalsAndCompanionsAdvanceWithCachedMembershipAndNewArrival() throws {
         let provider = PhotoFixtures()
         provider.membershipRevision = 0

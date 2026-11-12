@@ -247,3 +247,83 @@ test('native page captures reject arbitrary readers and live foreign-provider tr
  assert.ok(await foreignResult);
  assert.deepEqual(await fixtureRows(f), before);
 });
+
+const writer = { id: 'abcdef0123456789abcdef03', username: 'writer' };
+const sharedWriteAcl = ['tt:custom', ACL_OWNER, 'tt:user/writer/write'];
+async function seedWriter(f: Awaited<ReturnType<typeof fixture>>) {
+ await f.provider.transaction(collections => {
+  const things = collections.collection(physicalCollectionName('things'));
+  things.insert(BSON.serialize({ _id: 'writer-user', shareId: writer.id, ownerId: writer.id, thingtime: ['user'], crystal: { username: writer.username }, createdAt: at, updatedAt: at, secure: buildUserSecure({ email: '', passwordHash: 'synthetic-unused', emailVerified: false, accountKind: 'user', meta: {} }).secure }));
+  const ledger = BSON.deserialize(things.find({ filter: { op: 'eq', path: ['shareId'], value: subscriptionShareId('user', ownerId) }, limit: 1 }).documents[0]);
+  things.insert(BSON.serialize({ ...ledger, _id: 'writer-ledger', shareId: subscriptionShareId('user', writer.id), ownerId: writer.id, crystal: { ...ledger.crystal, subjectId: writer.id, storageUsedBytes: 0 } }));
+ });
+}
+
+test('canonical native collaborator edits debit the content owner and record the real actor with stale CAS and owner-field fences', async t => {
+ const f = await fixture(t); await seedWriter(f);
+ const made = await f.run(() => createThing(ownerId, { shareId: 'shared-data', thingtime: ['data'], crystal: { text: 'Before' }, acl: sharedWriteAcl }, { id: ownerId })); assert.equal(made.ok, true); if (!made.ok) return;
+ const before = await fixtureRows(f), used = before.find(row => row.shareId === subscriptionShareId('user', ownerId)).crystal.storageUsedBytes;
+ const edited = await f.run(() => updateThing(writer, 'shared-data', { crystal: { text: 'Longer edited content '.repeat(20) } }, { expectedUpdatedAt: made.doc.updatedAt.toISOString() })); assert.equal(edited.ok, true); if (!edited.ok) return;
+ assert.equal(edited.thing.timelineHeadId, undefined, 'owner-facing History head is not disclosed to a collaborator');
+ const after = await fixtureRows(f), current = after.find(row => row.shareId === 'shared-data');
+ assert.equal(current.ownerId, ownerId); assert.ok(after.find(row => row.shareId === subscriptionShareId('user', ownerId)).crystal.storageUsedBytes > used);
+ await f.run(async () => assert.equal((await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', writer.id)))!.crystal.storageUsedBytes, 0));
+ const entries = await f.run(() => withBoundTimelineRead(ownerId, port => readTimelineEntries(port, ownerId, [current.timelineHeadId]))); assert.equal(entries![0].event.actorId, writer.id); assert.equal(entries![0].event.ownerId, ownerId);
+ const stale = await f.run(() => updateThing(writer, 'shared-data', { crystal: { text: 'Stale' } }, { expectedUpdatedAt: made.doc.updatedAt.toISOString() })); assert.equal(stale.ok, false); if (!stale.ok) assert.equal(stale.status, 409);
+ for (const patch of [{ acl: ['tt:all'] }, { folderId: null }, { tokenAcl: [] }, { visibility: 'public' }]) { const refused = await f.run(() => updateThing(writer, 'shared-data', patch)); assert.equal(refused.ok, false); if (!refused.ok) assert.equal(refused.status, 403); }
+ assert.deepEqual(await fixtureRows(f), after);
+});
+
+test('canonical native collaborator authorization preserves public/read-only/exclusion refusals and live group revocation', async t => {
+ const f = await fixture(t); await seedWriter(f);
+ for (const [shareId, acl] of [['public-data', ['tt:all']], ['read-only-data', ['tt:custom', ACL_OWNER, 'tt:user/writer']], ['excluded-data', [...sharedWriteAcl, '-tt:user/writer']], ['group-data', ['tt:custom', ACL_OWNER, 'tt:group/editors/write']]] as const) assert.equal((await f.run(() => createThing(ownerId, { shareId, thingtime: ['data'], crystal: { text: 'Preserve' }, acl }, { id: ownerId }))).ok, true);
+ for (const [id, status] of [['public-data', 404], ['read-only-data', 403], ['excluded-data', 404]] as const) { const refused = await f.run(() => updateThing(writer, id, { crystal: { text: 'Unauthorized' } })); assert.equal(refused.ok, false); if (!refused.ok) assert.equal(refused.status, status); }
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).insert(BSON.serialize({ _id: 'editors-membership', shareId: 'editors-membership', ownerId, thingtime: ['group-member'], targetId: writer.id, crystal: { groupId: 'editors' }, createdAt: at, updatedAt: at })));
+ assert.equal((await f.run(() => updateThing(writer, 'group-data', { crystal: { text: 'While a member' } }))).ok, true);
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).deleteOne({ op: 'eq', path: ['shareId'], value: 'editors-membership' }));
+ // A prepared actor can carry stale memberships. The initial canonical gate
+ // accepts that snapshot; native commit must reread membership inside its tx.
+ const staleActor = { ...writer, friendIds: new Set<string>(), groupIds: new Set(['editors']), subspaceRoles: new Map() };
+ const before = await fixtureRows(f);
+ const revoked = await f.run(() => updateThing(staleActor, 'group-data', { crystal: { text: 'After revocation' } })); assert.equal(revoked.ok, false); if (!revoked.ok) assert.equal(revoked.status, 404);
+ assert.deepEqual(await fixtureRows(f), before);
+});
+
+test('canonical native collaborator Builder writes reject argument-only and inactive private dependency injection with atomic refusal', async t => {
+ const f = await fixture(t); await seedWriter(f);
+ // Isolated stored-definition fixtures exercise authorization only. No Action
+ // execution service, transport or capability is activated by these records.
+ await f.provider.transaction(collections => {
+  const things = collections.collection(physicalCollectionName('things'));
+  for (const [shareId, acl] of [['readable-action', ['tt:all']], ['owner-private-action', [ACL_OWNER]]] as const) things.insert(BSON.serialize({ _id: shareId, shareId, ownerId, thingtime: ['action'], crystal: { name: shareId, actionKey: shareId, capabilities: [], steps: [] }, acl, tags: [], createdAt: at, updatedAt: at }));
+ });
+ const component = await f.run(() => createThing(ownerId, { shareId: 'shared-button', thingtime: ['component'], acl: sharedWriteAcl, crystal: { name: 'Shared button', args: [{ name: 'action', type: 'string', default: 'readable-action' }], render: { tag: 'button', ttAction: '{action}' } } }, { id: ownerId })); assert.equal(component.ok, true);
+ const page = await f.run(() => createThing(ownerId, { shareId: 'shared-builder-page', thingtime: ['webpage'], acl: sharedWriteAcl, crystal: { name: 'Shared page', blocks: [{ id: 'button', type: 'component', component: 'shared-button', args: { action: 'readable-action' } }] } }, { id: ownerId })); assert.equal(page.ok, true);
+ const permitted = await f.run(() => updateThing(writer, 'shared-builder-page', { crystal: { name: 'Permitted collaboration' } })); assert.equal(permitted.ok, true);
+ const schema = await f.run(() => createThing(ownerId, { shareId: 'shared-schema', thingtime: ['schema'], acl: sharedWriteAcl, crystal: { name: 'Shared schema', fields: [{ name: 'title', type: 'string' }], render: { tag: 'button', ttAction: 'readable-action' } } }, { id: ownerId })); assert.equal(schema.ok, true);
+ assert.equal((await f.run(() => updateThing(writer, 'shared-schema', { crystal: { description: 'Permitted schema collaboration' } }))).ok, true);
+ const before = await fixtureRows(f);
+ const injected = await f.run(() => updateThing(writer, 'shared-builder-page', { crystal: { blocks: [{ id: 'button', type: 'component', component: 'shared-button', args: { action: 'owner-private-action' } }] } })); assert.equal(injected.ok, false, JSON.stringify(injected)); if (!injected.ok) assert.equal(injected.status, 403);
+ assert.deepEqual(await fixtureRows(f), before);
+ const inactive = await f.run(() => updateThing(writer, 'shared-button', { crystal: { render: { tag: 'div', children: [{ ttIf: { arg: 'query.show', then: { ttAction: 'readable-action' }, else: { ttAction: 'owner-private-action' } } }] } } })); assert.equal(inactive.ok, false, JSON.stringify(inactive)); if (!inactive.ok) assert.equal(inactive.status, 403);
+ assert.deepEqual(await fixtureRows(f), before);
+ const schemaInjection = await f.run(() => updateThing(writer, 'shared-schema', { crystal: { render: { tag: 'button', ttAction: 'owner-private-action' } } })); assert.equal(schemaInjection.ok, false); if (!schemaInjection.ok) assert.equal(schemaInjection.status, 403);
+ assert.deepEqual(await fixtureRows(f), before);
+ const activation = await f.run(() => updateThing(writer, 'shared-builder-page', { crystal: { activationAction: { actionId: 'owner-private-action' } } })); assert.equal(activation.ok, false);
+ assert.deepEqual(await fixtureRows(f), before);
+});
+
+test('canonical native collaborator writes retain foreign composition boundaries and never borrow foreign root authority', async t => {
+ const f = await fixture(t); await seedWriter(f); const foreignId = 'abcdef0123456789abcdef04';
+ await f.provider.transaction(collections => {
+  const things = collections.collection(physicalCollectionName('things'));
+  for (const shareId of ['foreign-default-action', 'foreign-private-action']) things.insert(BSON.serialize({ _id: shareId, shareId, ownerId: foreignId, thingtime: ['action'], crystal: { name: shareId, actionKey: shareId, capabilities: [], steps: [] }, acl: [ACL_OWNER], tags: [], createdAt: at, updatedAt: at }));
+  for (const [shareId, acl] of [['foreign-public-button', ['tt:all']], ['foreign-private-button', [ACL_OWNER]]] as const) things.insert(BSON.serialize({ _id: shareId, shareId, ownerId: foreignId, thingtime: ['component'], crystal: { name: shareId, args: [{ name: 'action', type: 'string', default: 'foreign-default-action' }], render: { tag: 'button', ttAction: '{action}' } }, acl, tags: [], createdAt: at, updatedAt: at }));
+ });
+ const page = await f.run(() => createThing(ownerId, { shareId: 'foreign-boundary-page', thingtime: ['webpage'], acl: sharedWriteAcl, crystal: { name: 'Foreign boundary', blocks: [{ id: 'foreign', type: 'component', component: 'foreign-public-button' }] } }, { id: ownerId })); assert.equal(page.ok, true);
+ const edited = await f.run(() => updateThing(writer, 'foreign-boundary-page', { crystal: { name: 'Preserved independent boundary' } })); assert.equal(edited.ok, true, JSON.stringify(edited));
+ const before = await fixtureRows(f);
+ const injected = await f.run(() => updateThing(writer, 'foreign-boundary-page', { crystal: { blocks: [{ id: 'foreign', type: 'component', component: 'foreign-public-button', args: { action: 'foreign-private-action' } }] } })); assert.equal(injected.ok, false); if (!injected.ok) assert.equal(injected.status, 403);
+ const privateRoot = await f.run(() => updateThing(writer, 'foreign-boundary-page', { crystal: { blocks: [{ id: 'foreign', type: 'component', component: 'foreign-private-button' }] } })); assert.equal(privateRoot.ok, false); if (!privateRoot.ok) assert.equal(privateRoot.status, 403);
+ assert.deepEqual(await fixtureRows(f), before);
+});

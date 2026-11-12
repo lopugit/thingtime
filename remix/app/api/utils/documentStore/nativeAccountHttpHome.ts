@@ -27,7 +27,7 @@ const supportedOperations = Object.freeze([
  * Availability is explicit per operation: generic Things/OTP and
  * external message delivery remain unsupported until their real adapters exist. */
 export async function createNativeAccountHttpHome(input: {
- provider: CollectionProvider; homePlaneId: string; keyId: string;
+ provider: CollectionProvider; homePlaneId: string; publicDataPlane?: string; keyId: string;
  vaultKey: Uint8Array; outboxKey: Uint8Array;
 }) {
  if (!input.homePlaneId || !input.keyId || !(input.vaultKey instanceof Uint8Array) || input.vaultKey.length !== 32 ||
@@ -45,7 +45,7 @@ export async function createNativeAccountHttpHome(input: {
   check();
   const { provider, homePlaneId, keyId } = input;
   const auth = await createNativeAccountCreationRepositories(provider, homePlaneId);
-  const things = createNativeThingsPersistenceContext(provider, homePlaneId);
+  const things = createNativeThingsPersistenceContext(provider, homePlaneId, input.publicDataPlane);
   const roster = await createNativeRosterRepository(provider, homePlaneId);
   const verification = await createNativeEmailVerificationRepository(provider, homePlaneId);
   const subscriptions = await createNativeSubscriptionRepository(provider, homePlaneId);

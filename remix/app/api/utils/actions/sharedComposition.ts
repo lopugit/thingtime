@@ -1,4 +1,4 @@
-import { getThingsCollection } from '../mongodb/collections';
+import { compositionCandidates, type CompositionCandidates } from './compositionCandidates';
 import { batchedThingLookup, withThingLink, canViewInherited, fail, isFail, toPublicThings, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { compositionReferences } from './sharedCompositionCore';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
@@ -7,11 +7,10 @@ import { canViewHomeAttachmentTarget, type AttachmentAccessDocument } from '../a
 
 export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: ThingDoc, crystal: Record<string, unknown>): Promise<Fail | null> => {
 	const before = new Set(compositionReferences(doc.thingtime || [], doc.crystal || {}).map(({ kind, ref }) => `${kind}:${ref}`));
-	const collection = await getThingsCollection();
+	const collection = await compositionCandidates();
 	for (const { kind, ref, optional } of compositionReferences(doc.thingtime || [], crystal)) {
 		if (kind === 'component' || before.has(`${kind}:${ref}`)) continue;
-		const child = await collection.findOne({ thingtime: kind, $or: [{ shareId: ref }, ...(kind === 'action' ? [{ ownerId: doc.ownerId, 'crystal.actionKey': ref }] : kind === 'schema' ? [{ ownerId: { $in: [doc.ownerId, 'system'] }, 'crystal.name': ref }] : [])] } as any,
-			{ sort: { 'crystal.version': -1, updatedAt: -1 } }) as unknown as ThingDoc | null;
+		const child = await collection.addition(kind, doc.ownerId, ref) as ThingDoc | null;
 		if (!child && optional) continue;
 		if (!child || !(await canViewInherited(child, viewer))) return fail(403, 'Only the owner can include a private dependency you cannot already read');
 	}
@@ -46,7 +45,7 @@ export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: Thin
 	const mediaBoundaries = compositionMediaBoundaries(next);
 	for (const id of nextMedia) {
 		if (previousMedia.has(id)) continue;
-		const attachment = await collection.findOne({ shareId: id, thingtime: 'attachment' } as any) as unknown as ThingDoc | null;
+		const attachment = await collection.exact(id, 'attachment') as ThingDoc | null;
 		if (attachment && await canViewInherited(attachment, viewer)) continue;
 		let readableBoundary = false;
 		for (const boundary of mediaBoundaries.get(id) || []) {
@@ -74,8 +73,8 @@ export type SharedComposition = {
 // earlier resolver response as a capability. The root's owner is a lookup
 // namespace, NEVER an execution identity.
 export const resolveSharedComposition = async (viewer: Viewer, id: string, options: { contentRoot?: boolean } = {}): Promise<SharedComposition | Fail> => {
-	const collection = await getThingsCollection();
-	const root = await collection.findOne({ shareId: id } as any) as unknown as ThingDoc | null;
+	const collection = await compositionCandidates();
+	const root = await collection.exact(id) as ThingDoc | null;
 	viewer = withThingLink(viewer, id);
 	if (!root || !(await canViewInherited(root, viewer)) || !(options.contentRoot ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
 		return fail(404, 'Shared app not found');
@@ -87,7 +86,7 @@ export const resolveSharedComposition = async (viewer: Viewer, id: string, optio
 // write validator passes its already-authorized before/after draft solely to
 // compare dependencies; no request can supply a replacement root to reads.
 const resolveCompositionFromRoot = async (
-	viewer: Viewer, root: ThingDoc, collection: Awaited<ReturnType<typeof getThingsCollection>>,
+	viewer: Viewer, root: ThingDoc, collection: CompositionCandidates,
 	cache = new Map<string, Promise<ThingDoc | null>>()
 ): Promise<SharedComposition | Fail> => {
 	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map(), requiredReferences: new Set(), contexts: new Map(), boundaries: new Map([[root.shareId, new Set([root])]]) };
@@ -112,15 +111,15 @@ const resolveCompositionFromRoot = async (
 			if (++edges > 512) return fail(422, 'Shared app has too many references');
 			const { kind, ref } = reference;
 			if (!reference.optional) result.requiredReferences.add(`${parent.shareId}:${kind}:${ref}`);
-			const queries: Record<string, unknown>[] = [{ shareId: ref, thingtime: kind }];
-			if (kind === 'component') queries.push({ shareId: `component-${ref}`, ownerId: 'system', thingtime: kind });
-			if (kind !== 'data') queries.push({ ownerId: parent.ownerId, thingtime: kind, [`crystal.${kind === 'schema' ? 'name' : `${kind}Key`}`]: ref });
-			if (kind === 'schema') queries.push({ ownerId: 'system', thingtime: 'schema', 'crystal.name': ref });
+			const queries: { key: unknown[]; read: () => Promise<unknown> }[] = [{ key: ['exact', kind, ref], read: () => collection.exact(ref, kind) }];
+			if (kind === 'component') queries.push({ key: ['exact', kind, `component-${ref}`, 'system'], read: () => collection.exact(`component-${ref}`, kind, 'system') });
+			if (kind !== 'data') queries.push({ key: ['named', kind, parent.ownerId, ref], read: () => collection.named(kind, parent.ownerId, ref) });
+			if (kind === 'schema') queries.push({ key: ['named', kind, 'system', ref], read: () => collection.named(kind, 'system', ref) });
 			let child: ThingDoc | null = null;
 			let childBoundary: ThingDoc | undefined;
 			for (const query of queries) {
-				const cacheKey = JSON.stringify(query);
-				if (!cache.has(cacheKey)) cache.set(cacheKey, collection.findOne(query as any, { sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } }) as unknown as Promise<ThingDoc | null>);
+				const cacheKey = JSON.stringify(query.key);
+				if (!cache.has(cacheKey)) cache.set(cacheKey, query.read() as Promise<ThingDoc | null>);
 				const found = await cache.get(cacheKey);
 				if (!found) continue;
 				// Same-author descendants inherit the current audience. A foreign

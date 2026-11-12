@@ -560,10 +560,21 @@ final class PhotoBackupInstalledTests: XCTestCase {
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)
             phase = "start and confirm first original"
             let firstStarted = Date()
+            let indexProof = env["THINGTIME_PHOTO_INDEX_TEST"] == "1"
+            var pendingIndexBeforePublication = false
             let firstReceipt = Task { @MainActor in
                 for _ in 0..<120 {
                     try Task.checkCancellation()
                     let savedNodes = try await cloudNodes()
+                    if indexProof, !pendingIndexBeforePublication, savedNodes.isEmpty,
+                       let configurationId = connection,
+                       let read = try? await api("/api/v1/files/sync-transfer-admissions", body: ["action": "read-source-index", "configurationId": configurationId]),
+                       let index = read["index"] as? [String: Any], let entries = index["entries"] as? [[String: Any]], !entries.isEmpty {
+                        XCTAssertTrue(entries.allSatisfy { $0["publication"] is NSNull })
+                        XCTAssertTrue(entries.allSatisfy { $0["resourceVersion"] is String })
+                        pendingIndexBeforePublication = true
+                        print("IOS_PHOTO_PENDING_CLOUD_INDEX_PASS: metadata persisted before first File publication")
+                    }
                     if mixedProof && !savedNodes.isEmpty {
                         XCTAssertEqual(savedNodes.compactMap { $0["path"] as? String }, [first.path],
                                        "The newest video should be the first published original")
@@ -599,11 +610,36 @@ final class PhotoBackupInstalledTests: XCTestCase {
             defer { firstReceipt.cancel() }
             try await reloadFresh(); try await startAndAwaitUpload(background: env["THINGTIME_PHOTO_BACKGROUND_TEST"] == "1")
             let firstFile = try await firstReceipt.value
+            if indexProof { XCTAssertTrue(pendingIndexBeforePublication) }
             let firstNodes = try await cloudNodes()
             let nodes: [[String: Any]]
             if uiVerified {
                 nodes = firstNodes
                 XCTAssertEqual(nodes.count, resources.count)
+                if indexProof {
+                    var indexEntries: [[String: Any]] = [], after: String?
+                    repeat {
+                        var body: [String: Any] = ["action": "read-source-index", "configurationId": connection!]
+                        if let after { body["after"] = after }
+                        let result = try await api("/api/v1/files/sync-transfer-admissions", body: body)
+                        let index = try XCTUnwrap(result["index"] as? [String: Any])
+                        XCTAssertEqual(index["scanComplete"] as? Bool, true)
+                        XCTAssertEqual(index["discoveredResources"] as? Int, resources.count)
+                        indexEntries.append(contentsOf: try XCTUnwrap(index["entries"] as? [[String: Any]]))
+                        after = index["after"] as? String
+                    } while after != nil
+                    XCTAssertEqual(indexEntries.count, resources.count)
+                    for entry in indexEntries {
+                        let path = try XCTUnwrap(entry["path"] as? String)
+                        let node = try XCTUnwrap(nodes.first { $0["path"] as? String == path })
+                        let file = try XCTUnwrap(node["file"] as? [String: Any])
+                        let proof = try XCTUnwrap(entry["publication"] as? [String: Any])
+                        XCTAssertEqual(proof["fileId"] as? String, file["id"] as? String)
+                        XCTAssertEqual(proof["revision"] as? String, file["revision"] as? String)
+                        XCTAssertEqual(proof["sourceVersion"] as? String, entry["sourceVersion"] as? String)
+                    }
+                    print("IOS_PHOTO_CLOUD_INDEX_PUBLICATION_PASS: exact prepared source versions and verified Files matched for \(indexEntries.count) originals")
+                }
                 if let videoFixture {
                     for original in resources {
                         let file = try XCTUnwrap(nodes.first { $0["path"] as? String == original.path }?["file"] as? [String: Any])

@@ -19,8 +19,11 @@ import { loader as accounts } from '~/routes/api/v1/auth/accounts/_accounts';
 import { loader as verify } from '~/routes/api/v1/auth/verify-email/_verify-email';
 import { loader as notifications } from '~/routes/api/v1/notifications/_notifications';
 import { action as markRead } from '~/routes/api/v1/notifications/read/_read';
+import { action as previewComponents } from '~/routes/api/v1/webpages/resolve/_resolve';
+import { createThing } from '../things/things';
 
 const origin = 'http://127.0.0.1:18637';
+const publicDataPlane = 'custom-' + 'a'.repeat(64);
 const credentials = (username: string) => ({ username, email: `${username}@example.invalid`, password: 'Disposable test password only' });
 const fixture = async (t: TestContext) => {
  const directory = await mkdtemp(join(tmpdir(), 'thingtime-native-account-http-'));
@@ -40,7 +43,7 @@ const fixture = async (t: TestContext) => {
  });
  return async (file = 'home.sqlite') => {
   const provider = createCollectionProvider(await openSqliteDocumentStore(join(directory, file)));
-  const home = await createNativeAccountHttpHome({ provider, homePlaneId: 'test-home', keyId: 'test-key', vaultKey, outboxKey });
+  const home = await createNativeAccountHttpHome({ provider, homePlaneId: 'test-home', publicDataPlane, keyId: 'test-key', vaultKey, outboxKey });
   const f = { ...home, close: async () => { home.close(); await provider.close(); } }; opened.push(f); return f;
  };
 };
@@ -49,6 +52,28 @@ const request = (path: string, cookie = '', body?: unknown) => new Request(origi
  ...(body === undefined ? {} : { body: JSON.stringify(body) })
 });
 const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+
+test('native draft preview matches the protected public database identity with real auth and local Components', async t => {
+ const open = await fixture(t), home = await open();
+ const call = (handler: (input: { request: Request }) => Promise<Response>, req: Request) => home.run(() => handler({ request: req }));
+ const signup = await call(register, request('v1/auth/register', '', credentials('native-preview')));
+ assert.equal(signup.status, 200); const user = (await signup.json()).user, cookie = cookies(signup);
+ const created = await home.run(() => createThing(user.id, { shareId: 'local-preview-component', thingtime: ['component'], visibility: 'private',
+  crystal: { name: 'Native preview', componentKey: 'native-preview', library: 'custom', category: 'general', render: { tag: 'p', children: ['Local definition'] } }
+ }, { id: user.id, username: user.username }));
+ assert.equal(created.ok, true);
+ const path = `v1/webpages/resolve?ownerId=${encodeURIComponent(user.id)}&dataPlane=${publicDataPlane}`;
+ const body = { blocks: [{ id: 'preview-card', type: 'component', component: 'native-preview' }] };
+ const resolved = await call(previewComponents, request(path, cookie, body));
+ assert.equal(resolved.status, 200); const preview = await resolved.json();
+ assert.equal(preview.refs['native-preview'], 'local-preview-component');
+ assert.equal(preview.components[0].crystal.render.children[0], 'Local definition');
+ assert.equal(resolved.headers.get('Cache-Control'), 'private, no-store');
+ assert.equal((await call(previewComponents, request(path.replace(publicDataPlane, 'home'), cookie, body))).status, 409);
+ assert.equal((await call(previewComponents, request(path.replace(user.id, 'other-owner'), cookie, body))).status, 409);
+ assert.equal((await call(previewComponents, request(path, '', body))).status, 401);
+ assert.equal(home.supportedOperations.some(op => op.path === 'v1/webpages/resolve'), false, 'handler acceptance alone cannot enable the full HTTP contract');
+});
 
 test('canonical account routes create, verify, reopen, log in and revoke with actual SQLite and no Mongo authority', async t => {
  const open = await fixture(t); let home = await open();

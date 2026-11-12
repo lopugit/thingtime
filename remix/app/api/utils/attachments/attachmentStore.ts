@@ -81,7 +81,7 @@ export type AttachmentDoc = {
 	attachmentRequestFingerprint?: string;
 	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	// Canonical scoped publication records the verified native source separately from reservation input.
-	fileSyncSourceGrant?: { localRootId: string; grantRevision: string };
+	fileSyncSourceGrant?: { localRootId: string; grantRevision: string; sourceVersion?: string };
 	attachmentPurpose?: AttachmentPurpose;
 	// Protected password adapter relation, retained without secrets on cleanup.
 	passwordFileParent?: string;

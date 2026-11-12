@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +18,7 @@ const fixture = async (t: TestContext) => {
  const env = { JWT_SECRET: jwt.toString('base64url'), THINGTIME_USER_VAULT_KEY: vault.toString('base64url') };
  const compose: NativeHomeComposer = async input => {
   assert.equal(input.homePlaneId, value.homePlaneId); assert.equal(input.keyId, value.keyId);
+  assert.equal(input.publicDataPlane, 'custom-' + createHash('sha256').update('native-home-v1\0' + profileId).digest('hex'));
   assert.deepEqual(input.vaultKey, vault); assert.deepEqual(input.outboxKey, outbox);
   return { run: async work => work(), supportedOperations: [{ method: 'GET', path: 'v1/auth/me' }] };
  };

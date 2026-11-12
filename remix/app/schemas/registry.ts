@@ -4297,6 +4297,7 @@ export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant
 
 export const PROTECTED_THINGTIME = [
   'lopu-instruction-transfer', 'lopu-instruction-part',
+  'sync-source-index', 'sync-source-observation',
   THING_METADATA_KIND,
   THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
   'backup-job', 'backup-job-event', ATTACHMENT_BLOB_THINGTIME,
@@ -4383,7 +4384,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['sync-source-index', 'sync-source-observation', 'post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4545,6 +4546,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
         { name: 'structured', type: 'boolean', required: false, description: 'Preserve the original JSON type of structured values.' }
       ], description: 'Ordered fields in the encrypted document: id, label, type and value. Defaults are username, password and website.' }
     ], example: { title: 'Example login', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: '' }, { id: 'password', label: 'Password', type: 'password', value: '' }] } },
+  ...['sync-source-index', 'sync-source-observation'].map(id => ({ id, version: 1, kind: 'crystal' as const, collection: null,
+    title: id === 'sync-source-index' ? 'Sync source index' : 'Sync source observation',
+    summary: 'Protected private source-discovery metadata; never proof of saved bytes.',
+    detail: 'Quota-accounted atomic Things with relational target links and canonical cascade deletion. The approved sync-run endpoint owns writes; full-owner scoped reads remain available after Pause or authorization expiry.',
+    createdVia: '/api/v1/files/sync-transfer-admissions', fields: [], example: {} })),
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',

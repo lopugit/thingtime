@@ -7,11 +7,18 @@ no root-data authority. Tests: root-data, runtimeAvailability/native dispatcher,
 and the opt-in compiled SQLite HTTP fixture.
 
 
-The merged Things contract is `api.things` 1.64.0: it combines retained attachment
-receipts/atomic generic PATCH with parent Component argument bindings. Both
-historical 1.62 variants are insufficient; sync and authoring clients negotiate
-the combined minimum before dependent writes. Dedicated Things update is 1.27.0
+The merged Things contract is `api.things` 1.65.0: it combines retained attachment
+receipts/atomic generic PATCH, parent Component argument bindings and v5 upload
+policy. Both historical 1.64 variants are insufficient; sync and authoring clients
+negotiate the combined minimum before dependent writes. Dedicated Things update is 1.28.0
 and webpage resolve is 1.19.0.
+
+Native draft preview compares the protected host's public database identity with
+root-data through `things/contentDataPlane.ts`; HTTP inputs cannot choose that
+identity. The full native webpage-resolve operation remains unavailable pending
+workspace/external-source audience parity. Verify real authenticated handler
+preview, stale owner/plane refusals and native scope lifetime; do not advertise
+the whole GET/POST feature from the handler fixture alone.
 
 ## Embedded runtime activity
 
@@ -66,7 +73,7 @@ acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
 Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.
 
 The combined contract distinguishes main’s existing features from the local-first
-receipt additions: `api.things` 1.64.0, `api.things-search` 1.7.0,
+receipt additions: `api.things` 1.65.0, `api.things-search` 1.8.0,
 `api.attachment-content` 1.20.0,
 `api.attachment-link` 1.3.0, `api.attachment-upload-abort` 1.4.0,
 `api.attachment-delete` 1.9.0 and
@@ -1271,3 +1278,8 @@ The canonical client checker also exposes the fixed same-origin `active-api`
 source. Connections requires modern and active API capability maps; an older
 shared API behind a newer frontend cannot enable service actions. Neither
 manifest-supplied foreign URLs nor frontend-only versions establish support.
+
+Photos source discovery extends the existing sync-transfer-admissions route at
+1.8.0; both manifest generators consume its canonical docs entry. Scoped native
+writes, owner reads/discard and watermark pagination share that route; no generic
+Things permission is delegated. See [source index](../sync-source-index.md).

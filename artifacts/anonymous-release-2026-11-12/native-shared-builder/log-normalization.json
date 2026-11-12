@@ -1,0 +1,41 @@
+{
+  "transformation": "Strip ANSI display controls and trailing whitespace only; original bytes retained in deterministic gzip archives",
+  "logs": [
+    {
+      "log": "preview-plane-before.log",
+      "rawArchive": "preview-plane-before.log.raw.gz",
+      "rawSha256": "2c79423bc3b4f2e56e470e09aef6695b2c7f940748704ced9ec5f367a31266c7",
+      "readableSha256": "5fbf594da2d786b703469acb2acb7d363b0715cf7bfeaa231377a0088a897924"
+    },
+    {
+      "log": "native/filesync-swift-test.log",
+      "rawArchive": "native/filesync-swift-test.log.raw.gz",
+      "rawSha256": "32a05becf7f84155fe4db1e3a78a437cfb46256d39ebcf5f0bec1d93cdf33da7",
+      "readableSha256": "b96f354192c417155c3b8cd3e5dcb612498c0e6669bb177e34eef4647883d4ce"
+    },
+    {
+      "log": "native/ios-build.log",
+      "rawArchive": "native/ios-build.log.raw.gz",
+      "rawSha256": "58de82c861f2145360296c879daab62bf44875a154c025a0d589cdfde5d834de",
+      "readableSha256": "abc0c2094c859412627d4f5e4812a0a40c1f5cd452add3cc171dd04474f9e6bf"
+    },
+    {
+      "log": "integration/lint.log",
+      "rawArchive": "integration/lint.log.raw.gz",
+      "rawSha256": "816f4400750752de26ae7afaeae41a9a2d1cf614d4e51399cf2a05252606d1b4",
+      "readableSha256": "f1254a6e4b4af0062bf63ea77353a16591a9b2fbd4450d5994fe34977988bd7f"
+    },
+    {
+      "log": "integration/typecheck.log",
+      "rawArchive": "integration/typecheck.log.raw.gz",
+      "rawSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "readableSha256": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818"
+    },
+    {
+      "log": "integration/build.log",
+      "rawArchive": "integration/build.log.raw.gz",
+      "rawSha256": "3a747ec8a1daecef2d9b09c033de1a0f62e66c9ab26c0ccb9ab0c9a7e13a560f",
+      "readableSha256": "a16c3758cd9f734fda5975a13292a3f1d1dbeddbc1de72b2cd3e5ed70ce8ff95"
+    }
+  ]
+}

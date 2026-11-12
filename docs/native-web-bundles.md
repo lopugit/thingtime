@@ -26,13 +26,29 @@ history require normal quota admission before the root refund; existing history
 and final deletion retain the cleanup lane. A retry cannot delete a replacement
 root that happens to reuse the same portable ID.
 
+Shared writers now retain the document owner's storage and History ownership,
+with the verified writer recorded as actor. Membership, ACL and included
+Component/Schema/Action/Data dependencies are rechecked inside the actual write
+transaction. Dependency candidates preserve exact, system and author-local
+selection without borrowing hosted data or executing Actions.
+
+Component/Schema catalogs have native reads for chronology, saved libraries,
+popularity, family designs and real reaction/save/usage decorations. Text and
+relevance search still refuse with 503: a substring match does not implement
+Mongo's text-search contract. Scanning is not indexed-query parity.
+
+Native draft preview uses the protected host's public database identity, matching
+root-data, while preserving owner and origin checks. This handler correction
+does not enable the full webpage-resolve contract: service-workspace and external
+source audiences still require native authorization adapters.
+
 Generic native Things HTTP remains unavailable. This service slice does not yet
 support the full `api.things` contract: app/PAT namespaces, composed hooks,
-shared writes, managed kinds and target cascades require their canonical adapters.
+managed kinds and target cascades require their canonical adapters.
 Unsupported private items retain the ordinary not-found response for unauthorized
 viewers. Do not advertise the whole feature merely because its HTTP verbs could
 be dispatched. Real SQLite service tests and local Mongo HTTP regression are
-separate acceptance layers. See [service evidence](../artifacts/anonymous-release-2026-11-12/native-things-services/README.md).
+separate acceptance layers. See [service evidence](../artifacts/anonymous-release-2026-11-12/native-shared-builder/README.md).
 
 ## Content and Timeline persistence — 12 November 2026
 

@@ -23,6 +23,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'password-verification-device': [], // Private device proofs never enter the public crystal projection.
   'backup-job': [], // Coordinator authority is never public schema data.
   'backup-job-event': [],
+  'sync-source-index': [], // Private discovery metadata is written only by the approved sync-run endpoint.
+  'sync-source-observation': [],
   draft: [], // Private snapshots never enter the public schema projection.
   'lopu-instruction-transfer': [], // Private manifests and receipts live in secure records.
   'lopu-instruction-part': [], // Instruction text never enters the schema projection.
@@ -398,4 +400,24 @@ test('password verification device is a protected zero-field marker with no publ
   const projected = projectBuiltinSchemaCrystal(schema);
   assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
   assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
+});
+
+test('source index schemas expose no private metadata or generic write authority', () => {
+  for (const kind of ['sync-source-index', 'sync-source-observation']) {
+    const schema = crystalSchemas.find(schema => schema.id === kind)!;
+    assert.equal(isProtectedThingtime([kind]), true);
+    assert.equal(isProtectedThingtime(['builder-thing', kind]), true);
+    assert.equal(schema.collection, null);
+    assert.equal(schema.createdVia, '/api/v1/files/sync-transfer-admissions');
+    const projected = projectBuiltinSchemaCrystal(schema);
+    assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+    assert.equal(Object.prototype.hasOwnProperty.call(projected, 'uniqueKeys'), false);
+    assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
+    for (const thingtime of [[kind], ['builder-thing', kind], ['data', kind]]) {
+      assert.equal(validateThingtimeCrystal(thingtime, {}).ok, false, `${thingtime}: no generic creation sanitizer`);
+      assert.equal(validateThingtimeCrystal(thingtime, {
+        uniqueKeys: ['forged'], sourceVersion: 'forged', publication: { fileId: 'forged' }
+      }).ok, false, `${thingtime}: private metadata cannot enter generic writes`);
+    }
+  }
 });

@@ -5736,12 +5736,15 @@ export const updateThing = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   if (shareId.trim().startsWith('timeline-')) return fail(403, 'Timeline records are managed through History');
-  const nativeRepository = getBoundThingsPersistence(viewer.id);
+  // Read candidates without selecting a mutation owner. A collaborator is
+  // authorized as the actor below; the stored owner is selected only after
+  // those gates, and owns quota/History throughout the actual transaction.
+  const nativeRepository = getBoundThingsPersistence(null);
   if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt'].includes(key)))) return nativeOrdinaryUnavailable();
   const things: any = nativeRepository ? null : await getThingsCollection();
   const doc = (nativeRepository ? await nativeRepository.readExact(shareId.trim()) : await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as ThingDoc | null;
   if (nativeRepository && doc?.ownerId === viewer.id && isProtectedThingtime(thingtimeOf(doc))) return fail(403, 'This Thing is managed through its own endpoint');
-  if (nativeRepository && doc && (!nativeOrdinaryThingSupported(doc) || doc.ownerId !== viewer.id)) return doc.ownerId !== viewer.id ? fail(404, 'Thing not found') : nativeOrdinaryUnavailable();
+
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
   const storageCloudWrite = options.storageCloudWrite;
   const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
@@ -5779,6 +5782,7 @@ export const updateThing = async (
       return fail(409, 'Thing changed after the preview — build a new preview before updating');
     }
   }
+  if (nativeRepository && !nativeOrdinaryThingSupported(doc)) return nativeOrdinaryUnavailable();
   // app writes stay inside the namespace: a thing the acting user owns but
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
@@ -6077,7 +6081,29 @@ export const updateThing = async (
     for (const key of Object.keys(unset)) delete (next as any)[key];
     if (!nativeOrdinaryThingSupported(next)) return nativeOrdinaryUnavailable();
     try {
-      const updated = await updateNativeOrdinaryThing(nativeRepository, doc, next, timelineCapture!);
+      const revalidate = doc.ownerId !== viewer.id ? async (current: Record<string, any>) => {
+        // Membership snapshots used during preparation must not authorize a
+        // later commit after revocation. These reads resolve through the exact
+        // active native content transaction and never impersonate its owner.
+        const { friendIds: _friends, groupIds: _groups, subspaceRoles: _roles, ...actor } = viewer;
+        const fresh = await withFriendIds(actor);
+        if (current.ownerId !== doc.ownerId || !aclOf(current as ThingDoc).includes(ACL_CUSTOM) || !(await canViewInherited(current as ThingDoc, fresh)))
+          throw new StorageMutationError(404, 'storage_conflict', 'Thing not found');
+        if (aclCapabilityFor(aclOf(current as ThingDoc), fresh, String(current.ownerId)) !== 'write')
+          throw new StorageMutationError(403, 'storage_conflict', 'This thing has a custom audience — you don’t have edit access 🎭');
+        if (!nativeOrdinaryThingSupported(current)) throw new StorageMutationError(503, 'storage_conflict', nativeOrdinaryUnavailable().error);
+        if (validated.thingtime.includes('webpage')) {
+          const { validateSharedComponentAdditions } = await import('../webpages/webpages');
+          const denied = await validateSharedComponentAdditions(fresh, current as ThingDoc, validated.crystal);
+          if (denied) throw new StorageMutationError(denied.status, 'storage_conflict', denied.error);
+        }
+        if (validated.thingtime.some(kind => ['webpage', 'component', 'schema'].includes(kind))) {
+          const { validateSharedReferenceAdditions } = await import('../actions/sharedComposition');
+          const denied = await validateSharedReferenceAdditions(fresh, current as ThingDoc, validated.crystal);
+          if (denied) throw new StorageMutationError(denied.status, 'storage_conflict', denied.error);
+        }
+      } : undefined;
+      const updated = await updateNativeOrdinaryThing(getBoundThingsPersistence(doc.ownerId)!, doc, next, timelineCapture!, revalidate);
       return { ok: true, thing: (await toPublicThings([updated as ThingDoc], viewer))[0], post: null };
     } catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
   }

@@ -1,5 +1,12 @@
 # Attachments and media
 
+Photos pending source discovery uses transfer-admissions 1.8.0. The live exact
+run writes sequenced metadata pages; full-owner `read-source-index` reads private
+atomic source Things without a run handle after Pause/expiry. See
+[the source-index contract](../sync-source-index.md), `sourceIndex.ts`, native
+`PhotoSourceIndexOutbox`, and the source-index cases in the built transfer
+admission fixture. Metadata never substitutes for verified Files publication.
+
 `api.attachment-link` 1.1.0 accepts optional owner-scoped request IDs for
 metadata-only post/comment links. Exact canonical URL/purpose/media-kind retries
 return the same attachment and current version after binding, without renewing

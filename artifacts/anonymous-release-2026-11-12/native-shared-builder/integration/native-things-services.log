@@ -1,0 +1,59 @@
+
+> @1.0.0 test:native-things /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node scripts/test-native-things.mjs
+
+✔ actual SQLite shared composition keeps stored contexts, foreign boundaries and live revocation across reopen (472.076542ms)
+✔ native component catalog reads real reactions/saves/visible versions and family designs after reopen (88.083209ms)
+✔ native schema usage binds stamped IDs and counts only authorized legacy-name instances (16.152667ms)
+✔ native chronological catalog pagination traverses every internal batch without a catalog-size ceiling (149.656667ms)
+✔ native family rosters and real reaction counts cross internal batches without truncation (384.684375ms)
+✔ native popularity offset windows do not impose the hosted 500-result ceiling (1053.72375ms)
+✔ native family grouping batches real read calls and preserves keyed/share-identity collisions (388.564333ms)
+ℹ 270 unkeyed families: 14 actual readWindow calls
+ℹ 271 components with a cross-batch family collision: 21 actual readWindow calls
+✔ native equal-timestamp catalog cursors preserve binary chronology across every page (10.250583ms)
+✔ public content identity comes from the protected native binding and never from its private plane (23.685125ms)
+✔ missing and malformed native public identities fail closed instead of returning the Mongo plane (10.312625ms)
+✔ escaped or closed native identity scopes cannot reuse the public identity (8.695458ms)
+✔ hosted content retains the existing Mongo public plane without a native selection (0.386709ms)
+✔ execution receipts use the selected native history without hosted fallback (1080.768125ms)
+✔ canonical content mutations fence old held ownership during transfer, deduping unchanged provenance (1.579583ms)
+✔ unheld ordinary writes do not acquire an operation fence; forged hold fields refuse (0.275041ms)
+✔ Mongo adapter preserves selected collection, actual session, chronological cursor and CAS fields (4.136792ms)
+✔ SQLite audience reads preserve both friend directions, membership filters and every page after reopen (2075.561083ms)
+✔ canonical native Things CRUD, projections, folder move, CAS and History use real SQLite (190.604584ms)
+✔ native canonical ACL never exposes foreign private content; unsupported operations have no side effects (21.288125ms)
+✔ private unsupported Things remain indistinguishable from absent records (8.897708ms)
+✔ folder deletion admits a legacy child baseline before deleting the root and retains accounting (87.428417ms)
+✔ native candidate pagination is stable and rejects cross-selection cursors; unsupported ordinary rows never disappear silently (49.440083ms)
+✔ protected history and archived rows are excluded before paging and every selection predicate binds the cursor (273.484292ms)
+✔ native Builder schema provenance uses canonical validation, live visibility and stale CAS (75.901583ms)
+✔ native Builder Component and Webpage services capture actual definitions, inaccessible nulls, edits and reopen (137.615542ms)
+✔ native Builder capture quota failure rolls back page content, head, captures and charges (55.047541ms)
+✔ native page captures reject arbitrary readers and live foreign-provider transactions before effects (9.694917ms)
+✔ canonical native collaborator edits debit the content owner and record the real actor with stale CAS and owner-field fences (37.016583ms)
+✔ canonical native collaborator authorization preserves public/read-only/exclusion refusals and live group revocation (66.167083ms)
+✔ canonical native collaborator Builder writes reject argument-only and inactive private dependency injection with atomic refusal (208.045959ms)
+✔ canonical native collaborator writes retain foreign composition boundaries and never borrow foreign root authority (67.689375ms)
+✔ real SQLite request selection preserves exact transaction binding and expires cached handles (43.736334ms)
+✔ foreign owner selection poisons caught errors and rolls back content (11.108667ms)
+✔ provider, plane, missing native scope and bootstrap lifetime fail closed without Mongo (7.403041ms)
+✔ readonly Timeline ports retain author identity and expire within a live request (12.47525ms)
+✔ closing bootstrap during content callback prevents a caught-error commit (8.656791ms)
+✔ expired async descendants cannot acquire a replacement repository or borrow Mongo (5.929625ms)
+✔ a leaked readonly Timeline port is expired even while its parent request remains active (9.32725ms)
+✔ bound candidate reads and canonical audiences see uncommitted rows on the exact transaction (69.957125ms)
+✔ same-transaction receipt ports remain read-only and expire before their containing write ends (26.347209ms)
+✔ candidate windows preserve their cursor namespace before, during and after a transaction (11.358583ms)
+✔ a caught receipt callback rejection with no Error value still aborts its containing transaction (9.525416ms)
+✔ caught malformed and foreign-scope cursors poison writes and suppress effects (14.058792ms)
+✔ afterCommit reads use the outer repository and escaped transaction descendants refuse (7.077167ms)
+✔ parallel request/provider scopes cannot borrow active candidates or uncommitted writes (12.27475ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3311.469667

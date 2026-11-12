@@ -36,9 +36,10 @@ export async function insertNativeOrdinaryThing(repository: ThingsPersistence, d
   return inserted;
  });
 }
-export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture) {
+export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture, authorize?: (current: StoredThing) => Promise<void>) {
  return repository.transaction('write', async tx => {
   const current = await tx.readExact(before.shareId);
+  if (current && authorize) await authorize(current);
   if (!current || !matchesThingVersion(current, version(before))) return conflict();
   await tx.lockFolder(after.folderId ?? null, after.thingtime.includes('folder') ? after.shareId : undefined);
   const { port, session } = history(tx, before.ownerId);

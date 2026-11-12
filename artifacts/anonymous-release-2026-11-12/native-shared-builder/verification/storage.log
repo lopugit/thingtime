@@ -1,0 +1,56 @@
+
+> @1.0.0 test:storage /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --import tsx --experimental-test-module-mocks --test app/api/utils/storage/*.test.ts app/api/utils/subscriptions/subscriptionIdentity.test.ts
+
+✔ protected device mirrors use the exact same canonical content stamp as posts and Messenger (0.837667ms)
+✔ attachment references do not duplicate attachment object bytes into device metadata (0.09175ms)
+✔ thingStorageSizeBytes is exact UTF-8 JSON bytes for the canonical payload (0.760167ms)
+✔ missing payload fields normalize identically everywhere (0.078833ms)
+✔ protected attachment envelopes add exact object bytes without changing ordinary Thing sizes (0.648125ms)
+✔ incremental ledger arithmetic accepts only an exact current canonical source stamp (0.15475ms)
+✔ all attachment lifecycle states stay billable while malformed envelopes fail current-stamp validation (0.238958ms)
+✔ billable policy defaults user content on and excludes control-plane and sandbox Things (0.256417ms)
+✔ usage projection distinguishes unlimited, overage, reconciling, and unavailable (0.531875ms)
+✔ private instruction content bills exact retained UTF-8 secure bytes and refuses malformed mixed envelopes (0.255292ms)
+✔ pending accounting admits exactly100MiB gross positive budget with complete protected state (4.652625ms)
+✔ storage readiness requires one exact current ready ledger per user (0.960625ms)
+✔ storage source readiness refuses even one legacy or malformed billable counterexample (1.497291ms)
+✔ recovery health requires a trusted durable live job and never labels queued accounting ready (0.630667ms)
+(node:26982) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26982) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ quota rejection preserves507 and never performs an inline source census (1.470625ms)
+✔ finite unknown, initializing, foreign and missing ledgers cannot queue growth (0.537667ms)
+✔ unlimited recovery accepts exactly100MiB across distinct durable operation receipts (0.642291ms)
+✔ deferred deletes journal without refunding usage or reopening positive pending budget (0.387708ms)
+✔ healthy unlimited writes larger than100MiB retain normal exact admission (0.179083ms)
+✔ separate recovery remeasures stale stamps and never double-charges an already-applied source UPDATE (1.672208ms)
+✔ legacy source schemas and expired leases cannot be silently blessed or drain queued receipts (0.355292ms)
+✔ retained deletion history remains available at a full pending budget without granting growth credit (0.227875ms)
+✔ inactive sessions cannot persist deferred accounting outside the content transaction (0.191416ms)
+✔ enqueue is durable and idempotent per account; lease writes share recovery transaction (1.799916ms)
+✔ a concurrent second claimant skips while the first owns its lease (0.288ms)
+✔ expired/crashed lease can be reclaimed and its old worker cannot touch or finish (0.344708ms)
+✔ work queued after the source census cannot be overwritten by completion (0.270667ms)
+✔ bounded passes persist source cursor; successful final pass clears it (0.346ms)
+✔ transient failures back off and stop after five attempts without retaining raw errors (3.648791ms)
+✔ invalid job envelopes are neither claimed nor silently overwritten (0.570584ms)
+✔ schema/invalid-source recovery refuses remain explicit blocked jobs (0.242834ms)
+✔ blocked retries rearm only after a newer trusted exact reconciliation baseline (0.823334ms)
+✔ scheduler deadline bounds a pass and stops admissions after its run budget (0.288375ms)
+✔ only the exact protected user subscription envelope is trusted (0.8155ms)
+✔ all canonical tier snapshots and optional speed-test overrides preserve current and legacy envelopes (2.411166ms)
+✔ stored quotas reject malformed values without coercion or clamping in either envelope (1.874708ms)
+✔ migration upgrades only the exact old server envelope (0.090708ms)
+✔ hot Mongo match pins the same deterministic identity and proof marker (0.137167ms)
+✔ operator diagnostics identify invalid fields without disclosing values or arbitrary key names (0.132958ms)
+✔ diagnostics cover every canonical envelope predicate and stay bounded on malformed input (0.285708ms)
+✔ pending storage aggregates stay protected and malformed or partial pending state invalidates the ledger (0.122917ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 371.681708

@@ -154,7 +154,7 @@ export function createCloudFileService(overrides: Partial<{
 				});
 			} catch (error) { return errorResult(error); }
 		},
-		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true; expectedFingerprint?: ContentFingerprint; syncSourceGrant?: { localRootId: string; grantRevision: string } }) {
+		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true; expectedFingerprint?: ContentFingerprint; syncSourceGrant?: { localRootId: string; grantRevision: string; sourceVersion?: string } }) {
 			if (context && !context.session?.inTransaction?.()) throw Error('File composition requires an active transaction');
 			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
 			if (!ownerId) return failure(401, 'Unauthorized');

@@ -38,3 +38,17 @@ test('closed failure operation telemetry identifies the refusal without retainin
   activity: { phase: 'waiting', reason: 'private server error', failureOperation: 'raw private path' } }).photoRunProgress?.activity;
  assert.equal(unknown?.reason, undefined); assert.equal(unknown?.failureOperation, undefined);
 });
+
+
+test('background termination is closed optional history with measured progress, never raw error text', () => {
+ const backgroundEnd = { cause: 'system-ended', at: revision, measuredUnits: 12345, lastProgressAt: revision };
+ const parsed = parseNativePhotoRunStatus(revision, { ...progress,
+  activity: { phase: 'waiting', backgroundEnd: { ...backgroundEnd, error: 'private path' } } }).photoRunProgress!;
+ assert.deepEqual(parsed.activity?.backgroundEnd, backgroundEnd);
+ for (const invalid of [{ ...backgroundEnd, cause: 'private raw failure' }, { ...backgroundEnd, at: 'invalid' },
+  { ...backgroundEnd, measuredUnits: -1 }]) {
+  const value = parseNativePhotoRunStatus(revision, { ...progress, activity: { phase: 'waiting', backgroundEnd: invalid } }).photoRunProgress!;
+  assert.equal(value.activity?.backgroundEnd, undefined);
+  assert.deepEqual(value.confirmed, progress.confirmed);
+ }
+});

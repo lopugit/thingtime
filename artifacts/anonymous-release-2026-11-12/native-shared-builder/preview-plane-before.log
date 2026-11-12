@@ -1,0 +1,28 @@
+✖ native draft preview matches the protected public database identity with real auth and local Components (266.973125ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1101.200083
+
+✖ failing tests:
+
+test at app/api/utils/documentStore/nativeAccountHttpHome.test.ts:2:4453
+✖ native draft preview matches the protected public database identity with real auth and local Components (266.973125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  409 !== 200
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/documentStore/nativeAccountHttpHome.test.ts:68:9)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 409,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

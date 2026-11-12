@@ -17,8 +17,16 @@ the normal page resolver; `timeline/componentBindings.ts` captures approved
 direct block Component definitions using the exact content transaction. Bound
 permission reads share that transaction, with scope-bound cursor translation.
 Missing or inaccessible Components retain explicit null captures; this is not a
-snapshot of the full Action/Schema/Data dependency closure. Catalog decorations,
-shared-writer additions, app/token namespaces and HTTP activation remain separate.
+snapshot of the full Action/Schema/Data dependency closure.
+
+`actions/compositionCandidates.ts` gives canonical shared composition semantic
+native lookups. Shared writes reauthorize memberships, ACLs and dependencies
+inside the actual content transaction, preserving document-owner accounting and
+writer actor attribution. `things/nativeCatalogReads.ts` supplies Component and
+Schema catalog chronology, saved libraries, popularity, families and actual
+decorations; text/relevance search remains explicitly unavailable. Native tests
+for both paths are in `test:native-things`. App/token namespaces, managed kinds,
+workspace/external-source audiences and full HTTP activation remain separate.
 
 Native persistence foundation (12 November 2026):
 `things/persistence.ts` defines internal semantic content reads/transactions,
@@ -851,6 +859,18 @@ only those acknowledged jobs on visibility changes; page exit still cancels.
 Timeline publication stays in the shared runner. Scheduler refusal falls back to
 foreground; actual background completion and relaunch acceptance remain open.
 
+
+Photos automation 1.7.0 records closed background-session endings and actual
+last-progress measurements. `NativePhotoContinuedProgress` preserves all five
+siblings' measured work as exact publication receipts arrive; cloud preparation
+uses resource-fenced real download fractions. The existing activity row renders
+ending cause/time and retains last discovery/index values outside indexing.
+`nativePhotoProgressLifecycle` invalidates lease-active certainty on resume/focus;
+the hook scopes cached counts by owner, origin, device, plane and generation.
+Regressions: `NativeUploadBackgroundTests`, `NativeFileUploadJobTests`,
+`nativePhotoRunProgress.test.ts`, and the `native-lifecycle`, `native-scope`,
+`native-history` scenarios in `test-explicit-sync-start-ui.mjs`. Simulator and
+browser fixtures do not establish a physical iOS background guarantee.
 
 ### Android current-file upload continuation
 

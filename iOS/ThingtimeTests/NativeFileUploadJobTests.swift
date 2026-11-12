@@ -46,6 +46,22 @@ final class NativeFileUploadJobTests: XCTestCase {
         return (NativeUploadFileRequest(source: source, uploadId: "upload", requestId: "operation", authorization: try authorization()), digest)
     }
 
+    func testSourceIndexRotationReconcilesStaleJournalWithoutChangingByteEpoch() throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        var run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),
+            grantRevision: String(repeating: "a", count: 64), runId: "run", expiresAt: Date().addingTimeInterval(3600))
+        let byteEpoch = run.epoch
+        try run.recordSourceIndexReceipt(indexId: "old-index", metadataEpoch: "old-metadata", sequence: 40)
+        // Durable outbox rotation happened, but its journal checkpoint did not.
+        let data = try JSONEncoder().encode(run)
+        var restarted = try JSONDecoder().decode(NativePhotoRunRecord.self, from: data)
+        try restarted.recordSourceIndexReceipt(indexId: "new-index", metadataEpoch: "new-metadata", sequence: 1)
+        XCTAssertEqual(restarted.epoch, byteEpoch)
+        XCTAssertEqual(restarted.sourceIndexId, "new-index")
+        XCTAssertEqual(restarted.sourceIndexAcknowledgedSequence, 1)
+        XCTAssertThrowsError(try restarted.recordSourceIndexReceipt(indexId: "wrong-index", metadataEpoch: "new-metadata", sequence: 2))
+    }
+
     func testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey() throws {
         let files = FileManager.default
         let directory = files.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -547,6 +563,43 @@ final class NativeFileUploadJobTests: XCTestCase {
         failedWrite = false
         XCTAssertTrue(try coordinator.enqueue(record))
         XCTAssertTrue(coordinator.schedule(), "A fresh exact admission recovers after durable disarm")
+    }
+
+    func testForegroundNativeLifecyclePublishesImmediateProgressHintWithoutAWebVisibilityEvent() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler())
+        worker.activate(foreground: true)
+        var hints = 0
+        let observer = NotificationCenter.default.addObserver(forName: NativeDeferredUpload.photoProgressChanged,
+            object: nil, queue: .main) { notification in
+                if notification.userInfo?["immediate"] as? Bool == true && notification.userInfo?["lifecycle"] as? Bool == true { hints += 1 }
+            }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        XCTAssertGreaterThan(hints, 0)
+        XCTAssertTrue(try NativePhotoRunStore(directory: directory).load().isEmpty,
+            "A status hint alone neither admits work nor restores authority")
+    }
+
+    func testClosedBackgroundTerminationSurvivesExactJournalReopenWithoutChangingQueueOrPause() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory)
+        var run = try budgetWaitingRun(now: Date())
+        let before = run
+        let activity = NativePhotoRunActivity(run.activity)
+        activity.backgroundEnded(.workerCancelled, measuredUnits: 12_345, lastProgressAt: Date(timeIntervalSince1970: 100),
+            now: Date(timeIntervalSince1970: 101))
+        run.activity = activity.snapshot(); try store.write(run)
+        let reopened = try XCTUnwrap(NativePhotoRunStore(directory: directory).lookup(run))
+        XCTAssertEqual(reopened.activity?.backgroundEnd?.cause, .workerCancelled)
+        XCTAssertEqual(reopened.activity?.backgroundEnd?.measuredUnits, 12_345)
+        XCTAssertEqual(reopened.batch, before.batch); XCTAssertEqual(reopened.authorization, before.authorization)
+        XCTAssertEqual(reopened.armed, before.armed); XCTAssertEqual(reopened.retryAt, before.retryAt)
+        var paused = reopened; paused.pauseByUser(); try store.write(paused)
+        XCTAssertEqual(try store.lookup(paused)?.userPaused, true)
+        XCTAssertEqual(try store.lookup(paused)?.activity?.backgroundEnd, reopened.activity?.backgroundEnd)
     }
 
 }

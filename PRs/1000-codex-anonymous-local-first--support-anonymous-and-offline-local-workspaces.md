@@ -2,6 +2,51 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Shared native Builder and current main integration — 12 November 2026
+
+Integrated freshly fetched main `f2538e19257bcfdf35ba050e7b187c94ea2252c0`
+(Photos lifecycle and incremental source index), retaining native database and
+protected-kind contracts. Both sides of the protected-kind and capability tests
+remain; generated graph variants are regenerated rather than hand-merged.
+
+New SQLite services support collaborator edits with fresh transactional
+membership/dependency authorization, content-owner accounting and writer History
+attribution. Canonical composition resolves stored dependencies and foreign
+boundaries without executing Actions. Component/Schema catalogs use real
+reactions, saves, usage and family designs. Native text/relevance still returns
+unavailable. Catalog grouping now aggregates bounded key windows rather than
+rescanning for every anchor; 270 ordinary families use 14 semantic window reads,
+271 components with a cross-batch keyed collision use 21. Keyed scans still need
+an index for performance parity.
+
+The actual authenticated draft-preview handler originally returned 409 against
+its own native root-data identity. It now receives that exact public identity
+from protected host composition; malformed, missing or expired bindings fail
+closed. Caller owner/plane checks remain. The initial fixture also omitted the
+required block ID; the fixture was corrected without weakening validation.
+
+The first combined batch passed 12 gates before typecheck caught two missing
+string guards. Its failed receipt remains; the final batch runs against the
+merged tree with those guards. Full native Things/resolve/catalog HTTP stays
+disabled. Actual Builder UI, iOS protected-key launch and connected-host artifact
+delivery remain separate from service or compile results.
+
+Final validation: all 21 commands pass, with 3,449 test passes, nine explicit
+opt-in skips, zero failures; TypeScript/ratchet, full lint (0 errors / 376 warnings),
+canonical Electron build/inventory and actual packaged Mongo/SQLite HTTP/restart.
+All 5,621 inventoried source files stayed unchanged. Nitro SHA-256:
+`7942080863847d31b3f70f97a5204cfe0e1548f4b3a249524a58f224827c147b`.
+SQLite generic Things remains unavailable and queued mail undelivered.
+The actual AppleFileSync suite additionally passes 168 tests with 14 skips after
+supplying its documented Rust indexer test fixture; the initial missing-fixture
+failure and unchanged-source evidence are retained.
+
+The isolated unsigned iOS development target also compiles with this same Nitro
+payload. Complete prepared/built inventories match with only the two pinned addon
+substitutions. Runtime launch, Keychain and physical-device acceptance remain open.
+
+[Current combined evidence](../artifacts/anonymous-release-2026-11-12/native-shared-builder/README.md).
+
 ## Native Builder definitions and captures — 12 November 2026
 
 Canonical native services now admit saved Components, Schemas and Webpages and

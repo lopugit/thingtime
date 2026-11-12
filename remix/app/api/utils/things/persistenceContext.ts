@@ -10,7 +10,7 @@ import { decodeThingsCursor, encodeThingsCursor, getThingsTransactionBinding, no
 
 type Scope = {
  active: boolean; identities: UserIdentityRepository; token: object; binding: object; homePlaneId: string;
- ownerId: string | undefined; failure?: Error; repositories: Map<string | null, ThingsPersistence>;
+ ownerId: string | undefined; publicDataPlane: string | undefined; failure?: Error; repositories: Map<string | null, ThingsPersistence>;
 };
 const scopes = new AsyncLocalStorage<Scope>();
 type ActiveTransaction = { scope: Scope; transaction: ThingsTransaction; selectionScope: ThingsScope; active: boolean; failed: boolean; failure: unknown };
@@ -54,6 +54,23 @@ export function getBoundThingsPersistence(ownerId: string | null): ThingsPersist
  if (ownerId !== null && scope.ownerId !== undefined && scope.ownerId !== ownerId) return refuse(scope);
  if (ownerId !== null) scope.ownerId = ownerId;
  return scope.repositories.get(ownerId) ?? createBoundRepository(scope, ownerId);
+}
+
+/** Public identity supplied only by the protected host composition. It is a
+ * comparison precondition, never storage routing or the private home-plane id.
+ * A native selection without its exact live binding cannot fall back to Mongo. */
+export function getBoundNativeContentDataPlane(): string | null {
+ const scope = scopes.getStore();
+ if (!scope) {
+  if (currentUserIdentityRepository() || hasNativeHomeSelection()) return refuse();
+  return null;
+ }
+ check(scope); activeTransaction(scope);
+ if (typeof scope.publicDataPlane !== 'string' || !/^custom-[0-9a-f]{64}$/.test(scope.publicDataPlane)) {
+  const error = new Error('Things persistence: native public database identity is unavailable');
+  scope.failure ??= error; throw error;
+ }
+ return scope.publicDataPlane;
 }
 
 /** Read-only receipt candidates may have different authors. This does not
@@ -141,8 +158,9 @@ function createBoundRepository(scope: Scope, ownerId: string | null): ThingsPers
 /** Protected native host bootstrap only. No stores are opened, no Mongo
  * fallback is chosen, and no HTTP/environment value can select a provider.
  * Must run inside this same provider's live native authentication scope. */
-export function createNativeThingsPersistenceContext(provider: CollectionProvider, homePlaneId: string) {
+export function createNativeThingsPersistenceContext(provider: CollectionProvider, homePlaneId: string, publicDataPlane?: string) {
  if (typeof homePlaneId !== 'string' || !homePlaneId || homePlaneId.includes('\0') || !provider || typeof provider.transaction !== 'function') return thingsPersistenceError('invalid native request binding');
+ if (publicDataPlane !== undefined && (typeof publicDataPlane !== 'string' || !/^custom-[0-9a-f]{64}$/.test(publicDataPlane))) return thingsPersistenceError('invalid native public database identity');
  const binding = Object.freeze({}); registerHomeRepositoryProvider(binding, provider); providers.set(binding, provider);
  let closed = false;
  const active = new Set<Scope>();
@@ -152,7 +170,7 @@ export function createNativeThingsPersistenceContext(provider: CollectionProvide
    const identities = currentUserIdentityRepository();
    if (!identities || identities.homePlaneId !== homePlaneId) return refuse();
    assertSameHomeRepositoryProvider(identities, binding);
-   const scope: Scope = { active: true, identities, token: userIdentityScopeToken(identities), binding, homePlaneId, ownerId: undefined, repositories: new Map() };
+   const scope: Scope = { active: true, identities, token: userIdentityScopeToken(identities), binding, homePlaneId, publicDataPlane, ownerId: undefined, repositories: new Map() };
    active.add(scope);
    return scopes.run(scope, async () => {
     try { check(scope); const result = await work(); check(scope); return result; }

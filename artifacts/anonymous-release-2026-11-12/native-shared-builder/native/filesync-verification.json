@@ -1,0 +1,33 @@
+{
+  "scope": "actual AppleFileSync SwiftPM tests on macOS, current merged workingtree; no simulator/device acceptance",
+  "sourceHeadBefore": "1266b73879fe9e6cebbb15038418da3c971e925c",
+  "sourceMergeHead": "f2538e19257bcfdf35ba050e7b187c94ea2252c0",
+  "sourceFingerprint": "e36f5aae0c4ab0b834906d4839a3b855df5e241532e8fb2b6e4f1dc3c067fa60",
+  "sourceUnchanged": true,
+  "scratchPath": "/tmp/thingtime-native-shared-builder-filesync.7XAQh0",
+  "rustIndexerSha256": "8bf492b15027499bfc16b6a4b882ff4d3c795dd786493e1d8a21a07941dbc81e",
+  "command": [
+    "swift",
+    "test",
+    "--package-path",
+    "apple/FileSync",
+    "--scratch-path",
+    "/tmp/thingtime-native-shared-builder-filesync.7XAQh0",
+    "--jobs",
+    "4"
+  ],
+  "fixtureEnvironment": {
+    "THINGTIME_TEST_COMMANDER_INDEXER": "/tmp/thingtime-native-shared-builder-filesync.7XAQh0/rust-indexer/debug/commander-indexer"
+  },
+  "tests": 182,
+  "skipped": 14,
+  "failures": 0,
+  "passedNonSkipped": 168,
+  "initialAttempt": {
+    "exitCode": 1,
+    "cause": "Missing documented commander-indexer fixture",
+    "log": "filesync-swift-test.log"
+  },
+  "log": "filesync-swift-test-with-indexer.log",
+  "logSha256": "01b237ce108f7552ecc73153b7c63ddf456941570bf6e1eb57b072e0f098fd1f"
+}
