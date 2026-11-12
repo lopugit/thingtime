@@ -222,7 +222,7 @@ final class NativeDeferredUpload {
     private let photos: PhotoLibraryReader
     private let parts: FileUploadPartStore
     private let network = NWPathMonitor()
-    private let conditions = NativePhotoDownloadConditions()
+    private let conditions: NativePhotoDownloadConditions
     private var registered = false, activated = false, scheduled = false
     private var operations: [String: UUID] = [:]
     private var verifiedScope: FileSyncOwnerScope?
@@ -248,12 +248,14 @@ final class NativeDeferredUpload {
     private var originalsRemaining: Int64?
 
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
-         grants: MobileFolderStore? = nil, photos: PhotoLibraryReader? = nil, parts: FileUploadPartStore? = nil) {
+         grants: MobileFolderStore? = nil, photos: PhotoLibraryReader? = nil, parts: FileUploadPartStore? = nil,
+         conditions: NativePhotoDownloadConditions? = nil) {
         self.store = store; self.scheduler = scheduler
         photoRuns = NativePhotoRunStore(directory: store.url.deletingLastPathComponent())
         self.grants = grants ?? MobileFolderStore()
         self.photos = photos ?? PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default)
         self.parts = parts ?? FileUploadPartStore()
+        self.conditions = conditions ?? NativePhotoDownloadConditions()
     }
 
     deinit {
@@ -409,6 +411,7 @@ final class NativeDeferredUpload {
             // reviewed asset selection remain at the same checkpoint.
             next.epoch = current.epoch; next.captureId = current.captureId; next.batch = current.batch
             next.retryAt = current.retryAt; next.retryCloudGaps = current.retryCloudGaps
+            next.retrySource = current.retrySource
             next.stage = current.stage; next.syncWait = current.syncWait; next.minimumPartBytes = current.minimumPartBytes
             next.pendingOriginals = current.pendingOriginals; next.unavailableOriginals = current.unavailableOriginals; next.unavailableReasons = current.unavailableReasons
             next.foregroundOwner = current.nativeOwnsRun || proposed.nativeOwnsRun
@@ -449,6 +452,43 @@ final class NativeDeferredUpload {
             $0.authorization.scope.deviceId == deviceId && $0.nativeOwnsRun &&
             ($0.legacySystemInterruption || $0.armed && $0.expiresAt > Date())
         }
+    }
+
+    /// A verified foreground page may reconsider local cadence, never authority,
+    /// user Pause, budget pacing or an ambiguous/server transfer retry.
+    func wakePhotoRun(scope: FileSyncOwnerScope, configurationId: String, rootId: String, deviceId: String,
+                      configurationRevision: String, grantRevision: String, now: Date = Date()) throws -> [String: String] {
+        func result(_ status: String, _ reason: String? = nil) -> [String: String] {
+            var value = ["status": status]; if let reason { value["reason"] = reason }; return value
+        }
+        guard activated, !persistenceUncertain, UIApplication.shared.applicationState == .active else { return result("refused", "inactive") }
+        guard verifiedScope == scope else { return result("refused", "identity") }
+        guard var run = try photoRuns.load().first(where: { $0.scope == scope && $0.authorization.id == configurationId &&
+            $0.rootId == rootId && $0.authorization.scope.deviceId == deviceId }) else { return result("refused", "missing") }
+        guard run.authorization.updatedAt == configurationRevision, run.nativeOwnsRun, run.expiresAt > now else {
+            return result("refused", "authorization-required")
+        }
+        if run.userPaused == true || run.authorization.configuration.paused || run.stage == "paused" { return result("refused", "paused") }
+        if run.stage == "needs-review" { return result("refused", "needs-review") }
+        guard run.armed else { return result("refused", run.stage == "needs-review" ? "needs-review" : "authorization-required") }
+        guard run.grantRevision == grantRevision else { return result("refused", "source-changed") }
+        guard photos.access() != "unavailable" else { return result("refused", "source-unavailable") }
+        do { try conditions.verify(run.authorization) }
+        catch is NativeUploadAuthorization.Wait { return result("waiting", "conditions") }
+        if activePhotoRun?.sameRun(run) == true, nativeExecution, background != nil { return result("running") }
+        if run.retryAt > now {
+            if run.syncWait == "data-budget" || run.retrySource == .budget { return result("waiting", "budget") }
+            let local = run.stage == "complete" || run.retrySource.map {
+                [NativePhotoRunRecord.RetrySource.automaticCheck, .systemInterruption, .conditions].contains($0)
+            } == true
+            guard local else { return result("waiting", "backoff") }
+            run.retryAt = .distantPast; run.retrySource = nil
+            run.stage = "ready"; run.syncWait = nil; run.minimumPartBytes = nil
+            try photoRuns.update(run)
+        }
+        startNativeForegroundIfNeeded(prioritizing: run)
+        reportPhotoProgress(run, immediately: true)
+        return result(activePhotoRun?.sameRun(run) == true ? "running" : "queued")
     }
 
     func pausePhotoRuns(scope: FileSyncOwnerScope) throws {
@@ -977,7 +1017,9 @@ final class NativeDeferredUpload {
                         } else {
                             let budget = failure as? NativePhotoUploadBudget.Wait
                             let conditions = failure as? NativeUploadAuthorization.Wait
-                            saved.retryAt = budget == nil ? max(saved.retryAt, Self.budgetRetryDeadline(nil)) : Self.budgetRetryDeadline(budget)
+                            let proposedRetry = Self.budgetRetryDeadline(budget)
+                            saved.deferRetry(until: proposedRetry,
+                                source: budget != nil ? .budget : conditions != nil ? .conditions : .transferBackoff)
                             saved.stage = NativeDeferredUploadClient.failure(failure) == .photoPathConflict ? "needs-review" : "waiting"
                             saved.syncWait = budget == nil ? conditions?.rawValue : "data-budget"
                             saved.minimumPartBytes = budget?.minimumPartBytes
@@ -1119,6 +1161,7 @@ final class NativeDeferredUpload {
         try await verifyAuthority()
         var saved = try current()
         saved.retryAt = budgetRetryDeadline(wait, now: now())
+        saved.retrySource = .budget
         guard saved.retryAt < saved.expiresAt else { throw NativeDeferredUploadClient.Failure.expired }
         saved.stage = "waiting"; saved.syncWait = "data-budget"; saved.minimumPartBytes = wait.minimumPartBytes
         let observed = NativePhotoRunActivity(activity ?? saved.activity)
@@ -1500,6 +1543,7 @@ final class NativeDeferredUpload {
                 let retainedDeferred = startWithSingleAsset ? try await deferredOriginalsRemain() : false
                 let complete = batch.unavailable == 0 && !retainedDeferred
                 run.retryAt = Date(timeIntervalSinceNow: 300)
+                run.retrySource = .automaticCheck
                 run.retryCloudGaps = !complete
                 run.stage = complete ? "complete" : "waiting"
                 activity.phase(complete ? .complete : .waiting, reason: cloudFailure.flatMap(NativePhotoRunActivity.reason(for:)) ??

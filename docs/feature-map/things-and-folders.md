@@ -743,6 +743,20 @@ Regressions: `NativeUploadBackgroundTests`, `NativeFileUploadJobTests`,
 `native-history` scenarios in `test-explicit-sync-start-ui.mjs`. Simulator and
 browser fixtures do not establish a physical iOS background guarantee.
 
+Photos automation 1.8.0 adds the exact-scope `wake-photo-run` foreground-entry
+operation. `NativeSyncBootstrap` uses the existing discovery/worker path across
+app pages, and `syncStartup` keeps only scoped presentation receipts for the
+editable status and canonical Lopu notification. Local cadence may wake early;
+explicit Pause, server/unknown retry barriers and transfer budgets remain
+binding. Repeated navigation must preserve active runs and receipts. The native
+reply distinguishes running, queued, waiting and refused work, independently
+of a continued-processing lease. See `iOS/README.md` and the app-entry checklist
+under **iOS Photos launch and retry** in `TESTING.md`.
+`MobileFolderControlRequests` isolates only negotiated startup list/status/wake
+requests from the serialized scan/upload lane. Its token cancellation and
+fresh paired-device checks are covered by `MobileFolderControlTests` and the
+client `mobileFolders.client.test.ts` regressions.
+
 ### Android current-file upload continuation
 
 `NativeUploadContinuation.java` owns one nonpersistent, token-scoped OS lease.

@@ -529,7 +529,7 @@ when this check finishes. iOS uses the same callback for its resource limit
 and Cancel on the system UI. Either ends that session and retains the
 automatic backup and its checkpoint. The ordinary scheduler or next permitted
 foreground run can retry after the backoff. A new continued session requires
-an explicit action. **Pause sync** durably stops automatic backup until the
+an explicit foreground action. **Pause sync** durably stops automatic backup until the
 owner resumes. Existing system-only holds recover with fresh authorization
 for the same connection. Charging, network and budget waits still obey the
 saved transfer settings.
@@ -542,6 +542,26 @@ that the whole library is complete. Foreground reentry refreshes native status
 without requesting a new continued session. Known discovery/index counts remain
 visible as historical values outside indexing, and owner/origin/device/plane/
 generation changes immediately hide the prior protected view.
+
+Photos automation 1.8.0 adds `wake-photo-run` for opening the app or a page and
+returning it to the foreground. The request binds the current owner, origin,
+device, source grant and saved configuration revision. It reuses the existing
+run and receipts, and can retire only proven local check/interruption delays.
+Explicit Pause, server or unknown retry barriers, hourly budgets and saved
+network/charging conditions remain binding. Ordinary status reads and periodic
+or connectivity callbacks do not request a new continued-processing session.
+An admitted foreground-entry action can ask the existing finite-work
+continued-processing slot to accompany the run. Queued work and OS refusal
+remain explicitly distinct from an active system lease; background URLSession
+transfers and opportunistic processing retain their existing recovery paths.
+The web app's shared startup receipt drives the editable sync-page status and
+one Lopu notification after all eligible local configurations acknowledge
+startup. It is presentation state, not new native execution authority.
+The negotiated `photos-startup-v1` control lane accepts only folder listing,
+Photos status and foreground wake. It uses independent request identities and
+fresh paired-device checks so a long folder scan cannot block startup; it never
+owns or cancels the serialized data-operation lane. Old clients retain the
+existing request serialization.
 
 System Progress uses a finite denominator for known library discovery, known
 originals and their preparation, with one final verification/checkpoint unit.

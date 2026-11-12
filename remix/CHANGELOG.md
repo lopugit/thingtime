@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Start eligible device file-sync configs from the shared app
+  lifecycle, show immediate sync-page feedback, and report acknowledged startup
+  through Lopu without a Retry tap. Preserve explicit Pause, transfer settings,
+  scoped authority and in-flight work across repeated navigation. **Codex (AI)**
+
 - 2026-11-12: Keep measured Photos background progress monotonic across concurrent
   originals and real iCloud preparation, refresh stale active status on native
   foreground reentry, retain historical indexing/discovery feedback, and show a
