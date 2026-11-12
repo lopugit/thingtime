@@ -1,8 +1,9 @@
 import { BSON } from 'mongodb';
-import { registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
+import { assertSameHomeRepositoryProvider, registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { mergeRateLimitConfig, normalizeRateLimitConfig, type RateLimitConfig } from '../rateLimit/config';
-import { assertRateLimitRepositoryScope, RateLimitRepositoryError, type RateLimitRepository, type WindowConsumption } from '../rateLimit/repository';
+import { assertRateLimitRepositoryScope, currentRateLimitRepository, RateLimitRepositoryError, type RateLimitRepository, type WindowConsumption } from '../rateLimit/repository';
+import type { ByteBudgetPersistence, ByteWindowConsumption } from '../rateLimit/byteBudget';
 import type { CollectionProvider, CollectionTransaction, NativeCollection } from './collectionContract';
 import { encodeCollectionDocument } from './collectionProvider';
 
@@ -31,6 +32,46 @@ const save = (collection: NativeCollection, row: Record<string, any>, exists: bo
  } else collection.insert(encodeCollectionDocument(row));
 };
 
+/** A transaction-owned semantic adapter for sandbox writes. The caller owns the
+ * provider transaction and must propagate failed admission to roll back content.
+ * Collection handles additionally enforce their provider/transaction lifetime. */
+export function nativeByteBudgetPersistenceInTransaction(collections: CollectionTransaction): ByteBudgetPersistence {
+ const repository = currentRateLimitRepository();
+ if (!repository) return unavailable();
+ const assertActive = () => {
+  assertRateLimitRepositoryScope(repository);
+  assertSameHomeRepositoryProvider(repository, collections);
+ };
+ assertActive();
+ const checkKey = (key: string) => { if (typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) return unavailable(); };
+ const priorWindow = (key: string) => {
+  const prior = one(collections.collection(counters), key);
+  if (prior && (prior.key !== key || !date(prior.createdAt) || !date(prior.updatedAt) || !date(prior.expiresAt) || !date(prior.bytesWindowStartedAt) || !Number.isSafeInteger(prior.bytes) || prior.bytes < 0)) return unavailable();
+  return prior;
+ };
+ return {
+  async readConfig() { assertActive(); return configFrom(one(collections.collection(settings), 'rateLimits')); },
+  async consumeByteWindow(raw: ByteWindowConsumption) {
+   assertActive();
+   const { key, limitBytes, windowMs, charge, now } = BSON.deserialize(encodeCollectionDocument(raw, 'key'));
+   checkKey(key);
+   if (!Number.isSafeInteger(limitBytes) || limitBytes < 0 || !Number.isSafeInteger(charge) || charge < 0 || !Number.isSafeInteger(windowMs) || windowMs < 1000 || windowMs > 86_400_000 || !date(now) || !date(new Date(now.getTime() + windowMs))) return unavailable();
+   const prior = priorWindow(key), reset = !prior || prior.bytesWindowStartedAt.getTime() <= now.getTime() - windowMs;
+   const started = reset ? now : prior!.bytesWindowStartedAt, bytes = reset ? 0 : prior!.bytes;
+   const allowed = bytes <= limitBytes - charge, usedBytes = allowed ? bytes + charge : bytes;
+   save(collections.collection(counters), { _id: prior?._id ?? key, key, createdAt: prior?.createdAt ?? now, bytesWindowStartedAt: started, bytes: usedBytes, updatedAt: now, expiresAt: new Date(now.getTime() + windowMs) }, !!prior);
+   return { allowed, limitBytes, usedBytes, resetAt: new Date(started.getTime() + windowMs).toISOString() };
+  },
+  async refundByteWindow(raw: { key: string; charge: number }) {
+   assertActive();
+   const { key, charge } = BSON.deserialize(encodeCollectionDocument(raw, 'key')); checkKey(key);
+   if (!Number.isSafeInteger(charge) || charge < 0) return unavailable();
+   const prior = priorWindow(key);
+   if (prior) save(collections.collection(counters), { ...prior, bytes: Math.max(0, prior.bytes - charge) }, true);
+  }
+ };
+}
+
 /** Real SQLite atomic sliding windows, including the canonical inclusive cutoff
  * and rejected-hit metadata (no rejected-hit charge). Current collection reads
  * scan O(n); key uniqueness is integrity, not query acceleration. Inactive rows
@@ -42,15 +83,25 @@ export async function createNativeRateLimitRepository(provider: CollectionProvid
   for (const namespace of [settings, counters]) transaction.defineCollection(namespace, { unique: [{ name: 'key', path: ['key'], sparse: false, multikey: false }] });
  });
  let repository: RateLimitRepository;
- const transaction = async <T>(work: (collections: CollectionTransaction) => T): Promise<T> => {
+ const transaction = async <T>(work: (collections: CollectionTransaction) => T | Promise<T>): Promise<T> => {
   assertRateLimitRepositoryScope(repository);
   return provider.transaction(async collections => {
-   assertRateLimitRepositoryScope(repository); const result = work(collections);
+   assertRateLimitRepositoryScope(repository); const result = await work(collections);
    await Promise.resolve(); assertRateLimitRepositoryScope(repository); return result;
   });
  };
  repository = Object.freeze({
   homePlaneId,
+  consumeByteWindow: async (input: ByteWindowConsumption) => {
+   assertRateLimitRepositoryScope(repository);
+   const accepted = BSON.deserialize(encodeCollectionDocument(input, 'key')) as ByteWindowConsumption;
+   return transaction(collections => nativeByteBudgetPersistenceInTransaction(collections).consumeByteWindow(accepted));
+  },
+  refundByteWindow: async (input: { key: string; charge: number }) => {
+   assertRateLimitRepositoryScope(repository);
+   const accepted = BSON.deserialize(encodeCollectionDocument(input, 'key')) as { key: string; charge: number };
+   return transaction(collections => nativeByteBudgetPersistenceInTransaction(collections).refundByteWindow(accepted));
+  },
   readConfig: () => transaction(collections => configFrom(one(collections.collection(settings), 'rateLimits'))),
   async patchConfig(patch: RateLimitConfig, updatedBy: string) {
    assertRateLimitRepositoryScope(repository);

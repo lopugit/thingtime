@@ -1,0 +1,30 @@
+{
+  "scope": "Internal delegate focused correction evidence; parent combined verification is authoritative for final tree",
+  "logs": [
+    {
+      "log": "native-namespace-refund-regression.log",
+      "originalSha256": "b15357b40442cacdca4802a447d81309a8e51a936db5c2f0aa52fa83523e919e",
+      "parentReported": true
+    },
+    {
+      "log": "native-namespace-refund-lint.log",
+      "originalSha256": "94ab4f28bf6b54a3d42f9b6fe3692875834cb8ff84dbf60fbb0173db40f16e83",
+      "parentReported": true
+    },
+    {
+      "log": "native-byte-budget-provider-before.log",
+      "originalSha256": "46791db00a6ad6518267ac518d05131c81fea3242d3fae0b1a12e11d0a631fd0",
+      "parentReported": true
+    },
+    {
+      "log": "native-byte-budget-provider-after.log",
+      "originalSha256": "c31213e2f0bd9fd18a5ce76de8595127e3eddd86b2e36fcfb553c2f04e4f934b",
+      "parentReported": true
+    },
+    {
+      "log": "native-byte-budget-provider-lint.log",
+      "originalSha256": "5bdd3b0ac1b6c7119877f0e25243ca9b04ff2003396514340a1fd37b06c0b92d",
+      "parentReported": true
+    }
+  ]
+}

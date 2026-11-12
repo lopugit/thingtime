@@ -1,5 +1,16 @@
 # API endpoints and capabilities
 
+Native Webpage resolution now admits both existing GET/POST handlers on the
+protected SQLite home (`api.webpages-resolve` 1.20.0). Run `test:native-things`,
+`test:api-capabilities` and the bundled SQLite HTTP fixture. The handler suite
+covers exact text/dependencies, site defaults, private/workspace/external
+read audiences and revocation; protected metadata fixtures are labeled. No
+Actions execute and PAT/app credentials do not gain account authority. Native
+composed create/update share exact transaction/effect identity and rollback.
+Namespace quota and byte-budget adapters remain guarded foundations pending
+normal service billing, token pruning and retention integration. See
+[native runtime](../native-web-bundles.md).
+
 Native SQLite now admits the complete token management operations through the
 existing `/api/v1/tokens` GET/POST, `/tokens/revoke` POST and `/tokens/self` GET
 handlers. Canonical PAT services use `SessionRepository.pat`, with the native
@@ -22,14 +33,13 @@ The merged Things contract is `api.things` 1.65.0: it combines retained attachme
 receipts/atomic generic PATCH, parent Component argument bindings and v5 upload
 policy. Both historical 1.64 variants are insufficient; sync and authoring clients
 negotiate the combined minimum before dependent writes. Dedicated Things update is 1.28.0
-and webpage resolve is 1.19.0.
+and webpage resolve is 1.20.0.
 
 Native draft preview compares the protected host's public database identity with
 root-data through `things/contentDataPlane.ts`; HTTP inputs cannot choose that
-identity. The full native webpage-resolve operation remains unavailable pending
-workspace/external-source audience parity. Verify real authenticated handler
-preview, stale owner/plane refusals and native scope lifetime; do not advertise
-the whole GET/POST feature from the handler fixture alone.
+identity. Real runtime GET/POST admission now has complete handler coverage,
+including workspace/external-source audiences. Verify compiled HTTP admission
+and manifests separately from saved-content service and rendered Builder checks.
 
 ## Embedded runtime activity
 

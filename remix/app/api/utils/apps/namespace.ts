@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { withBoundNativeCollectionsRead } from '../things/persistenceContext';
+import { nativeAppSharingAuthors, nativeSandboxSharingAuthors } from './nativeNamespacePersistence';
 
 import { getSessionsCollection, getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { consumeByteBudget, refundByteBudget } from '../rateLimit/byteBudget';
@@ -60,6 +62,8 @@ const fail = (status: number, error: string): Fail => ({ ok: false, status, erro
 export const appAclEntry = (appId: string) => `${ACL_APP_PREFIX}${appId}`;
 
 export type AppNamespaceScope = {
+  tokenId?: string; // server-resolved session identity, required for native sandbox writes
+  tokenOrigin?: string;
   appId: string; // the app's clientId
   ownerId: string; // the acting user's id ('sandbox:<uuid>' for sandbox tokens)
   sharedRead: boolean; // token covers app-data.shared → may read the app-audience slice
@@ -69,6 +73,8 @@ export type AppNamespaceScope = {
 };
 
 export const appScopeOf = (ctx: AppTokenContext): AppNamespaceScope => ({
+  tokenId: ctx.jti,
+  tokenOrigin: ctx.origin,
   appId: ctx.clientId,
   ownerId: ctx.user.id,
   sharedRead: scopeCovers(ctx.scopes, 'app-data.shared'),
@@ -178,6 +184,8 @@ export const resolveAppScopedAcl = (appId: string, visibility: unknown, acl: unk
 // immediately; the docs themselves stay the author's.
 
 export const liveSharingAuthors = async (clientId: string, userIds: string[]): Promise<Map<string, string[]>> => {
+  const native = withBoundNativeCollectionsRead(async collections => nativeAppSharingAuthors(collections, clientId, userIds));
+  if (native) return native;
   if (!userIds.length) return new Map();
   const sessions = await (
     await getSessionsCollection()
@@ -191,6 +199,11 @@ export const liveSharingAuthors = async (clientId: string, userIds: string[]): P
     })
     .toArray();
 
+  return sharingAuthorsFromSessions(sessions);
+};
+
+/** One scope-union policy for both persistence providers. */
+export const sharingAuthorsFromSessions = (sessions: readonly any[]): Map<string, string[]> => {
   const scopesByUser = new Map<string, string[]>();
   for (const session of sessions) {
     const userId = String(session.userId);
@@ -215,6 +228,8 @@ export const liveSandboxAuthors = async (
   space: string,
   userIds: string[]
 ): Promise<Map<string, { scopes: string[]; username: string }>> => {
+  const native = withBoundNativeCollectionsRead(async collections => nativeSandboxSharingAuthors(collections, clientId, space, userIds));
+  if (native) return native;
   if (!userIds.length) return new Map();
   const sessions = await (
     await getSessionsCollection()
@@ -229,6 +244,10 @@ export const liveSandboxAuthors = async (
     })
     .toArray();
 
+  return sandboxAuthorsFromSessions(sessions);
+};
+
+export const sandboxAuthorsFromSessions = (sessions: readonly any[]): Map<string, { scopes: string[]; username: string }> => {
   const byUser = new Map<string, { scopes: string[]; username: string }>();
   for (const session of sessions) {
     const scopes = sessionScopes(session.meta);
@@ -482,6 +501,16 @@ export const appStorageCounterEnvelopeIsTrusted = (doc: any, scope: AppNamespace
 		doc.updatedAt instanceof Date &&
 		Number.isFinite(doc.updatedAt.getTime())
 	);
+};
+
+/** The delete fence preserves malformed values instead of making them ready.
+ * It recognizes only the same server-owned identity/key envelope as admission. */
+export const appStorageCounterFenceEnvelopeIsTrusted = (doc: any, scope: AppNamespaceScope): boolean => {
+ if (!isPlainObject(doc) || !isPlainObject(doc.crystal)) return false;
+ return appStorageCounterEnvelopeIsTrusted({ ...doc, createdAt: new Date(0), updatedAt: new Date(0), crystal: {
+  ...doc.crystal, usedBytes: 0, storageAllowanceBytes: null, storageLedgerStatus: USER_STORAGE_STATUS.needsReconcile,
+  storageReconciledAt: new Date(0), storageUpdatedAt: new Date(0)
+ } }, scope);
 };
 
 const LEGACY_APP_STORAGE_COUNTER_ROOT_KEYS = [

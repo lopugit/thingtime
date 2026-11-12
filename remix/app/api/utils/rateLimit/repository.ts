@@ -1,13 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { assertSameHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 import { currentUserIdentityRepository, userIdentityScopeToken, type UserIdentityRepository } from '../auth/userIdentityRepository';
+import type { ByteBudgetPersistence } from './byteBudget';
 import type { RateLimitConfig } from './config';
 import type { RateLimitOutcome } from './enforce';
 
 export type WindowConsumption = { key: string; limit: number; windowMs: number; cost: number; now: Date };
 /** Semantic native operations, not a Mongo query facade. No provider is selected
  * implicitly; config cache and failure policy must never cross profiles. */
-export interface RateLimitRepository {
+export interface RateLimitRepository extends ByteBudgetPersistence {
  readonly homePlaneId: string;
  readConfig(): Promise<RateLimitConfig>;
  patchConfig(patch: RateLimitConfig, updatedBy: string): Promise<RateLimitConfig>;

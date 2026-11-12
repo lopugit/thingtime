@@ -22,6 +22,7 @@ const supportedOperations = Object.freeze([
  ['POST', 'v1/auth/register'], ['POST', 'v1/login'], ['POST', 'v1/auth/logout'],
  ['GET', 'v1/auth/me'], ['GET', 'v1/auth/accounts'], ['GET', 'v1/auth/verify-email'],
  ['GET', 'v1/tokens'], ['POST', 'v1/tokens'], ['POST', 'v1/tokens/revoke'], ['GET', 'v1/tokens/self'],
+ ['GET', 'v1/webpages/resolve'], ['POST', 'v1/webpages/resolve'],
  ['GET', 'v1/notifications'], ['POST', 'v1/notifications/read']
 ].map(([method, path]) => Object.freeze({ method, path })));
 

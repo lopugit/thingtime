@@ -1,3 +1,4 @@
+import { registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 import { types } from 'node:util';
 import { BSON, Binary, Decimal128, Double, Int32, Long, ObjectId } from 'mongodb';
 import { DocumentStoreError, type DocumentStore, type DocumentTransaction } from './contract';
@@ -246,7 +247,7 @@ const dataCollection = (logical: string) => `collection-provider:data:${Buffer.f
  * durable; no arbitrary options, MongoClient, query code or index promises.
  * The primitive store must be exclusively used through this provider. */
 export function createCollectionProvider(store: DocumentStore): CollectionProvider {
- return {
+ const provider: CollectionProvider = {
   transaction: work => store.transaction(async primitive => {
    let failed = false, failure: unknown;
    const operation = <T>(body: () => T): T => {
@@ -307,12 +308,14 @@ export function createCollectionProvider(store: DocumentStore): CollectionProvid
      });
     }),
    });
+   registerHomeRepositoryProvider(session, provider);
    const result = await work(session);
    if (failed) throw failure;
    return result;
   }),
   close: () => store.close(),
  };
+ return provider;
 }
 
 /** Canonical adapters constructing BSON from data must validate before the

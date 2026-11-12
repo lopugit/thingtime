@@ -1,0 +1,21 @@
+✔ shared workspace authorization retains more than5000 synthetic fetched candidates without a product ceiling (10.885042ms)
+✔ Places preserves suggestions and sends credentials only in the fixed provider header (12.309875ms)
+✔ Places returns actionable configuration guidance without reflecting provider secrets (1.606417ms)
+✔ Places handles quota, gateway HTML, oversized bodies and transport failures safely (1.022708ms)
+✔ opening related records builds a back trail without duplicates or self-links (0.885792ms)
+✔ back skips records that no longer exist and ends on the list (0.154833ms)
+✔ new child records return to the parent they were added from (0.119959ms)
+✔ gateway HTML produces a useful retry error without exposing its body (12.671375ms)
+✔ workspace JSON retains actionable server errors and successful payloads (0.920917ms)
+✔ all supported sizes cover every result once across pages (1.025ms)
+✔ filtering or deleting the final page cannot leave an empty out-of-range page (0.134ms)
+✔ infinite mode reveals cumulative batches without skipping earlier results (0.069208ms)
+✔ Show all renders every result and resets stale pagination (0.068958ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 397.951958

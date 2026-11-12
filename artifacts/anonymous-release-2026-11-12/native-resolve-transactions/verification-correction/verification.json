@@ -1,0 +1,141 @@
+{
+  "startedAt": "2026-11-12T03:02:12.029125+00:00",
+  "attribution": {
+    "base": "2421303c6e588e21af0289bd72de78bb73960e75",
+    "integratedMain": "f2538e192",
+    "head": "2421303c6e588e21af0289bd72de78bb73960e75"
+  },
+  "sourceRoots": [
+    "remix",
+    "electron",
+    "native-bundles",
+    "MCP",
+    "iOS",
+    "apple"
+  ],
+  "inventoryPolicy": "Unique git ls-files --cached --others --exclude-standard; ignored outputs excluded; regular-file contents SHA256",
+  "before": {
+    "files": 5638,
+    "sha256": "efc8a9687dc1083acf4fc8fc07bd2a708eba3ac48df25387609b565b356447af"
+  },
+  "fixtureEnvironment": "Both Mongo URI aliases point to unreachable loopback port 1; no real database selected.",
+  "checks": [
+    {
+      "name": "test:native-things",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:native-things",
+      "startedAt": "2026-11-12T03:02:12.043224+00:00",
+      "timeoutSeconds": 900,
+      "log": "01-test-native-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:32.275886+00:00",
+      "elapsedSeconds": 140.23,
+      "testTotals": {
+        "tests": 95,
+        "suites": 0,
+        "pass": 95,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "17f42dd385f63fb0617efba20535cb8576f955e2fa8b45da63c206a343bdc687"
+    },
+    {
+      "name": "test:things",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:things",
+      "startedAt": "2026-11-12T03:04:32.276451+00:00",
+      "timeoutSeconds": 900,
+      "log": "02-test-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:40.381481+00:00",
+      "elapsedSeconds": 8.105,
+      "testTotals": {
+        "tests": 458,
+        "suites": 0,
+        "pass": 455,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      },
+      "logSha256": "a251a752dc2e4bb47d544599147dffff02c57aa969279fbb47c5c5d05ebf15a1"
+    },
+    {
+      "name": "test:document-store",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "startedAt": "2026-11-12T03:04:40.382012+00:00",
+      "timeoutSeconds": 900,
+      "log": "03-test-document-store.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:47.951230+00:00",
+      "elapsedSeconds": 7.569,
+      "testTotals": {
+        "tests": 175,
+        "suites": 0,
+        "pass": 175,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "7795043aa3d5c0c2a1dc2f7df58ed1a45ff3fdb67e5dfd6e4cc10f9016d99dc6"
+    },
+    {
+      "name": "typecheck",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "startedAt": "2026-11-12T03:04:47.951846+00:00",
+      "timeoutSeconds": 900,
+      "log": "04-typecheck.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:05:28.935297+00:00",
+      "elapsedSeconds": 40.983,
+      "testTotals": {},
+      "logSha256": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+      "originalLog": {
+        "gzip": "04-typecheck.log.raw.gz",
+        "sha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa"
+      }
+    },
+    {
+      "name": "typecheck-ratchet",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "startedAt": "2026-11-12T03:05:28.935846+00:00",
+      "timeoutSeconds": 900,
+      "log": "05-typecheck-ratchet.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:06:53.547399+00:00",
+      "elapsedSeconds": 84.61,
+      "testTotals": {},
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9"
+    },
+    {
+      "name": "lint",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run lint",
+      "startedAt": "2026-11-12T03:06:53.548405+00:00",
+      "timeoutSeconds": 900,
+      "log": "06-lint.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:08:01.277288+00:00",
+      "elapsedSeconds": 67.728,
+      "testTotals": {},
+      "logSha256": "1aadbd23a7ae4765052b47d342a4834be54d0ae0f48646bd17862beb12c49ae5",
+      "originalLog": {
+        "gzip": "06-lint.log.raw.gz",
+        "sha256": "8c98a31f0df8846b18e126ee62a180f3d18dee6c1d83d17f04c4937d1d09ba20"
+      }
+    }
+  ],
+  "endedAt": "2026-11-12T03:08:07.996920+00:00",
+  "after": {
+    "files": 5638,
+    "sha256": "efc8a9687dc1083acf4fc8fc07bd2a708eba3ac48df25387609b565b356447af"
+  },
+  "sourceUnchanged": true,
+  "changedPaths": []
+}

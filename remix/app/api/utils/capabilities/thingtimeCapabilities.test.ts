@@ -174,7 +174,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const feature of ['api.oauth-desktop-authorize', 'api.oauth-token']) {
     assert.equal(manifest.features[feature]?.version, '1.2.0');
   }
-	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.19.0');
+	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.20.0');
 
 	assert.equal(manifest.features['api.actions-run']?.version, '1.46.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
@@ -701,7 +701,7 @@ test('retry-safe linked galleries require additive link and delete contracts on 
 test('editable media containers require compatible element storage contracts on both manifests', () => {
  const generated=createApiCapabilitiesManifest();
  const runtime=thingtimeCapabilityManifest('https://media.test');
- for(const [feature,minimum] of [['api.things','1.65.0'],['api.things-update','1.28.0'],['api.webpages-resolve','1.19.0'],['api.webpages-suites-install','1.7.0']]) {
+ for(const [feature,minimum] of [['api.things','1.65.0'],['api.things-update','1.28.0'],['api.webpages-resolve','1.20.0'],['api.webpages-suites-install','1.7.0']]) {
 
 
   assert.equal(generated.features[feature],minimum);

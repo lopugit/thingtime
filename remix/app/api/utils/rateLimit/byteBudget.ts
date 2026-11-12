@@ -1,4 +1,5 @@
-import { nativeRateLimitContext, RateLimitRepositoryError } from './repository';
+import { currentRateLimitRepository } from './repository';
+import type { RateLimitConfig } from './config';
 import { createHash } from 'node:crypto';
 
 import { ensureIndexes, getRateLimitsCollection } from '../mongodb/collections';
@@ -22,26 +23,36 @@ export type ByteBudgetOutcome = {
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
-export const consumeByteBudget = async (name: string, bytes: number): Promise<ByteBudgetOutcome> => {
-  if (nativeRateLimitContext()) throw new RateLimitRepositoryError('RATE_LIMIT_UNSUPPORTED', 'Native byte-budget persistence is not implemented');
-  const config = await getRateLimitConfig();
-  const rule = config[name];
-  const nowIso = new Date().toISOString();
-  if (!rule || !rule.enabled) {
-    // Disabled = unlimited, mirroring enforce.ts (the kill switch must be its
-    // own deliberate act, never a side effect of a limiter hiccup).
-    return { allowed: true, limitBytes: 0, usedBytes: 0, resetAt: nowIso };
-  }
-  const limitBytes = rule.limit * 1024 * 1024;
-  const charge = Math.max(0, Math.floor(bytes));
+/** Semantic persistence boundary: no Mongo query translation in native callers. */
+export type ByteWindowConsumption = { key: string; limitBytes: number; windowMs: number; charge: number; now: Date };
+export interface ByteBudgetPersistence {
+  readConfig(): Promise<RateLimitConfig>;
+  consumeByteWindow(input: ByteWindowConsumption): Promise<ByteBudgetOutcome>;
+  refundByteWindow(input: { key: string; charge: number }): Promise<void>;
+}
 
+export const consumeByteBudgetUsing = async (persistence: ByteBudgetPersistence, name: string, bytes: number): Promise<ByteBudgetOutcome> => {
+  const nowIso = new Date().toISOString();
+  let limitBytes = 0;
   try {
+    const rule = (await persistence.readConfig())[name];
+    if (!rule || !rule.enabled) return { allowed: true, limitBytes: 0, usedBytes: 0, resetAt: nowIso };
+    limitBytes = rule.limit * 1024 * 1024;
+    const charge = Math.max(0, Math.floor(bytes));
+    if (!Number.isSafeInteger(charge) || !Number.isSafeInteger(limitBytes) || limitBytes < 0) throw Error('Invalid byte budget');
+    return await persistence.consumeByteWindow({ key: hash(`bytes:${name}`), limitBytes, windowMs: rule.windowMs, charge, now: new Date() });
+  } catch {
+    return { allowed: false, limitBytes, usedBytes: 0, resetAt: nowIso, unavailable: true };
+  }
+};
+
+const hostedByteBudgetPersistence: ByteBudgetPersistence = {
+  readConfig: getRateLimitConfig,
+  async consumeByteWindow({ key, limitBytes, windowMs, charge, now }) {
     await ensureIndexes();
     const coll = await getRateLimitsCollection();
-    const key = hash(`bytes:${name}`);
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - rule.windowMs);
-    const expiresAt = new Date(now.getTime() + rule.windowMs);
+    const windowStart = new Date(now.getTime() - windowMs);
+    const expiresAt = new Date(now.getTime() + windowMs);
 
     await coll.updateOne(
       { key },
@@ -64,7 +75,7 @@ export const consumeByteBudget = async (name: string, bytes: number): Promise<By
         allowed: true,
         limitBytes,
         usedBytes: admitted.bytes ?? charge,
-        resetAt: new Date(new Date(admitted.bytesWindowStartedAt ?? now).getTime() + rule.windowMs).toISOString()
+        resetAt: new Date(new Date(admitted.bytesWindowStartedAt ?? now).getTime() + windowMs).toISOString()
       };
     }
     const current = await coll.findOne({ key });
@@ -72,24 +83,29 @@ export const consumeByteBudget = async (name: string, bytes: number): Promise<By
       allowed: false,
       limitBytes,
       usedBytes: current?.bytes ?? limitBytes,
-      resetAt: new Date(new Date(current?.bytesWindowStartedAt ?? now).getTime() + rule.windowMs).toISOString()
+      resetAt: new Date(new Date(current?.bytesWindowStartedAt ?? now).getTime() + windowMs).toISOString()
     };
-  } catch {
-    return { allowed: false, limitBytes, usedBytes: 0, resetAt: nowIso, unavailable: true };
+  },
+  async refundByteWindow({ key, charge }) {
+    const coll = await getRateLimitsCollection();
+    await coll.updateOne({ key }, [
+      { $set: { bytes: { $max: [0, { $subtract: [{ $ifNull: ['$bytes', 0] }, charge] }] } } }
+    ]);
   }
+};
+
+export const consumeByteBudget = async (name: string, bytes: number): Promise<ByteBudgetOutcome> => {
+  try { return await consumeByteBudgetUsing(currentRateLimitRepository() ?? hostedByteBudgetPersistence, name, bytes); }
+  catch { return { allowed: false, limitBytes: 0, usedBytes: 0, resetAt: new Date().toISOString(), unavailable: true }; }
 };
 
 // Refund bytes into the window (a charged write that ultimately failed) —
 // floored at zero, best-effort.
 export const refundByteBudget = async (name: string, bytes: number): Promise<void> => {
-  if (nativeRateLimitContext()) throw new RateLimitRepositoryError('RATE_LIMIT_UNSUPPORTED', 'Native byte-budget refunds are not implemented');
   const charge = Math.max(0, Math.floor(bytes));
-  if (!charge) return;
+  if (!Number.isSafeInteger(charge) || !charge) return;
   try {
-    const coll = await getRateLimitsCollection();
-    await coll.updateOne({ key: hash(`bytes:${name}`) }, [
-      { $set: { bytes: { $max: [0, { $subtract: [{ $ifNull: ['$bytes', 0] }, charge] }] } } }
-    ]);
+    await (currentRateLimitRepository() ?? hostedByteBudgetPersistence).refundByteWindow({ key: hash(`bytes:${name}`), charge });
   } catch {
     // best-effort: an unrefunded failure only makes the brake tighter
   }

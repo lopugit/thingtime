@@ -1,0 +1,44 @@
+{
+  "startedAt": "2026-11-12T03:08:07.831400+00:00",
+  "checks": [
+    {
+      "name": "build-web",
+      "command": "corepack pnpm --dir electron run build:web",
+      "exitCode": 0,
+      "elapsedSeconds": 32.113,
+      "log": "build-web.log",
+      "logSha256": "188b9e1166fd83842b21bedfb4bd76186cd499d0d51ceaa0aa1c47cdae36da7b",
+      "originalLog": {
+        "gzip": "build-web.log.raw.gz",
+        "sha256": "512b26aa32c903d511114bcb8b00ad02ea036923c24bc1d25bd57d2c699849a0"
+      }
+    },
+    {
+      "name": "verify-web",
+      "command": "corepack pnpm --dir electron run verify:web",
+      "exitCode": 0,
+      "elapsedSeconds": 0.895,
+      "log": "verify-web.log",
+      "logSha256": "5f2aa8f5faa0716f6c3bb9ad9773dd115b420f2356cbc84a00718c7d90e16127"
+    },
+    {
+      "name": "mongo-http",
+      "command": "node electron/scripts/test-bundled-local-runtime.cjs",
+      "exitCode": 0,
+      "elapsedSeconds": 10.249,
+      "log": "mongo-http.log",
+      "logSha256": "68367b6573879d59d05ee1948d2dd76974bee9f7cca7b0f47cdc3f25d1398910"
+    },
+    {
+      "name": "sqlite-http",
+      "command": "node electron/scripts/test-bundled-sqlite-account.cjs",
+      "exitCode": 0,
+      "elapsedSeconds": 5.448,
+      "log": "sqlite-http.log",
+      "logSha256": "b538076fc47009f3af815de519ba415bb811f156eeb550299e556f69a75f5972"
+    }
+  ],
+  "claim": "Isolated compiled Nitro/provider fixtures; not installed full Builder or iOS acceptance",
+  "nitroSha256": "d768692d5e26379a027fb3102cc724265870c5071b745f5a3a2ec9457983179c",
+  "endedAt": "2026-11-12T03:08:56.546544+00:00"
+}

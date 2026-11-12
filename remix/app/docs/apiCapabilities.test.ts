@@ -129,7 +129,7 @@ test('editable map uploads and numeric summaries require their deployed contract
   for (const [feature, minimum, previous] of [
     ['api.things', '1.65.0', '1.46.3'],
     ['api.things-update', '1.28.0', '1.15.1'],
-    ['api.webpages-resolve', '1.19.0', '1.8.1'],
+    ['api.webpages-resolve', '1.20.0', '1.8.1'],
 
     ['api.actions-run', '1.46.0', '1.38.0'],
     ['api.things-fork', '1.8.1', '1.7.0']
@@ -223,8 +223,8 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 		['api.things', '1.65.0', '1.32.0'], ['api.things-update', '1.27.0', '1.9.0'],
 		['api.actions-run', '1.46.0', '1.35.0'], ['api.webpages-suites-install', '1.7.0', '1.4.0']
 	]) {
-		assert.equal(route[feature], feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : feature === 'api.webpages-resolve' ? '1.19.0' : minimum);
-		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : feature === 'api.webpages-resolve' ? '1.19.0' : minimum);
+		assert.equal(route[feature], feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : feature === 'api.webpages-resolve' ? '1.20.0' : minimum);
+		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : feature === 'api.webpages-resolve' ? '1.20.0' : minimum);
 
 
 		assert.equal(capabilitySatisfies(route[feature], minimum), true);
@@ -881,7 +881,7 @@ test('native aggregate chat activities have origin-scoped capability coverage', 
 test('service workspace clients negotiate the native builder contract', () => {
  const manifest = createApiCapabilitiesManifest();
  assert.equal(manifest.features['api.builder-workspaces'], '1.2.0');
- assert.equal(manifest.features['api.webpages-resolve'], '1.19.0');
+ assert.equal(manifest.features['api.webpages-resolve'], '1.20.0');
 
  for (const actual of [undefined, '1.0.1', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(actual, '1.2.0'), false);
  for (const actual of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(actual, '1.2.0'), true);
@@ -1103,7 +1103,7 @@ test('local ChatGPT plan capabilities cover both manifests and reject unsupporte
 test('live overview and saved source contracts exist on both origin manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const origin = thingtimeCapabilityManifest('https://thingtime.test').features;
-  for (const [feature, minimum] of [['api.agent-overview', '2.1.0'], ['api.things', '1.65.0'], ['api.things-update', '1.28.0'], ['api.webpages-resolve', '1.19.0']]) {
+  for (const [feature, minimum] of [['api.agent-overview', '2.1.0'], ['api.things', '1.65.0'], ['api.things-update', '1.28.0'], ['api.webpages-resolve', '1.20.0']]) {
     assert.equal(route[feature], feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : minimum);
     assert.equal(origin[feature].version, feature === 'api.things' ? '1.65.0' : feature === 'api.things-update' ? '1.28.0' : minimum);
 

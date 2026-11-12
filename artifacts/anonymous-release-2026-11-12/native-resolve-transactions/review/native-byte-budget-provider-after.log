@@ -1,0 +1,44 @@
+✔ SQLite namespace accounting reconciles current content, charges both quotas and rolls back refusal (31.338917ms)
+✔ registered app counters cannot adopt forged ids, invalid bytes, revoked app or another namespace (17.930458ms)
+✔ deletion underflow fences the real counters without fabricating balances (9.180167ms)
+✔ registered refunds keep invalid allowance counters fenced without decrementing (19.105375ms)
+✔ registered refunds keep invalid timestamp counters fenced without decrementing (11.934791ms)
+✔ current registered app actor cannot reuse revoked, expired, foreign-client or reduced-scope grants (7.22925ms)
+✔ malformed sandbox stamp is an invalid reconciliation source, not unbilled content (18.955542ms)
+✔ live author reads union current grants, respect expiry/revocation/client/space and scan all batches (146.490625ms)
+✔ sandbox content, standing quota and burn commit together; expiry and revocation cannot borrow account storage (53.598791ms)
+✔ exact typed identities and lossless BSON survive updates and reopen without aliasing bytes (40.187875ms)
+✔ ordered paging matches an independent bytewise identity ordering with exact missing/null and scalar-array membership (18.22775ms)
+✔ durable sparse multikey uniqueness deduplicates one document but rejects other documents and rolls back a caught error (18.22725ms)
+✔ cross-collection content/ledger mutation rolls back on failure, and conditional revision claims have one winner (27.862375ms)
+✔ invalid grammar and options fail eagerly on empty and no-match collections before any write (11.266833ms)
+✔ prototype/accessor/code inputs never execute; escaped collections and numeric overflow cannot partially commit (12.876916ms)
+✔ conditional owner/revision guards, set/unset, no-op and delete use the same exact matcher (10.49225ms)
+✔ unique-key changes are atomic, null and missing policy is explicit, and invalid definitions never register (21.484583ms)
+✔ forged BSON wrapper internals cannot execute nested hooks or proxies during query/update admission (26.755708ms)
+✔ internal scan batches and caller page sizes never truncate larger collections (146.679125ms)
+✔ byte fixed window matches exact cutoff, rejection metadata, floor refund and distinct budget identities (82.1725ms)
+✔ concurrent SQLite handles share budget; reopening persists; separate profiles isolate (129.217167ms)
+✔ bound transaction charges roll back with interrupted content; expired scope and closed provider fail closed (10.623917ms)
+✔ native invalid amounts and corrupted byte rows refuse without rewriting or Mongo fallback (6.981917ms)
+✔ byte inputs snapshot before queued admission; disabled rule stays deliberate and oversized charge never burns (10.913666ms)
+✔ hosted byte admission retains Mongo atomic guard, cutoff, refund and outage behavior without native imports (417.257458ms)
+✔ byte adapter rejects actual foreign provider transactions despite matching home labels (10.211292ms)
+✔ real SQLite canonical config/enforcement survives reopen without hosted config cache or Mongo (113.036708ms)
+✔ inclusive sliding cutoff, multi-unit charge, rejected metadata and exact expiry match independent timestamp model (46.794583ms)
+✔ concurrent real handles never exceed quota and canonical fixed/quota/multiplier/disabled policies are retained (53.530041ms)
+✔ atomic concurrent partial config patches preserve both changes and canonical legacy migration (14.222542ms)
+✔ native missing/failed composition denies ordinary requests without hosted fail-open; byte budget uses native persistence (8.154625ms)
+✔ same-label other file, saved repository and queued expired lifetime cannot read or write (8.611708ms)
+✔ hostile input is inert and accepted input/config is snapshotted before queue admission (6.000417ms)
+✔ malformed persisted counters/settings refuse rather than grant and do not mutate state (10.702959ms)
+✔ hosted pipeline operations/fail-open and no native import remain compatible (399.240834ms)
+✔ two independent Node processes atomically share the real-file canonical bucket (451.943917ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1878.762875

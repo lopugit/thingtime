@@ -59,6 +59,18 @@ export function nativeThingsReadMemoKey(): object | null {
  return key;
 }
 
+/** Profile projection may join an existing content snapshot. Identity-only
+ * compositions legitimately have no Things scope; their identity repository
+ * remains authoritative. An expired/foreign Things scope must still refuse. */
+export function readBoundNativeTransactionProfiles(ids: readonly string[]) {
+ const scope = scopes.getStore();
+ if (!scope) return null;
+ check(scope);
+ const active = activeTransaction(scope);
+ if (!active) return null;
+ return active.transaction.readBatch([...ids]);
+}
+
 /** An internal selection, never authentication. Canonical services establish
  * actor authority and authorize all read candidates before exposing content.
  * Normal hosted callers retain their existing Mongo implementation. */
@@ -90,6 +102,67 @@ export function getBoundNativeContentDataPlane(): string | null {
   scope.failure ??= error; throw error;
  }
  return scope.publicDataPlane;
+}
+
+/** Trusted composed writers may reuse only the currently bound transaction,
+ * including its exact deferred-effect sink. Matching owner labels are not a
+ * replacement for session, provider and asynchronous lifetime identity. */
+export function getBoundNativeWriteTransaction(ownerId: string, session: unknown, afterCommit: unknown): ThingsTransaction {
+ const scope = scopes.getStore();
+ if (!scope) return refuse();
+ check(scope);
+ const active = activeTransaction(scope);
+ if (!active) return refuse(scope);
+ try {
+  const binding = getThingsTransactionBinding(active.transaction, ownerId);
+  if (binding.kind !== 'native' || binding.session !== session || active.transaction.afterCommit !== afterCommit) return refuse(scope);
+  return active.transaction;
+ } catch (error) { poison(active, error); throw error; }
+}
+
+/** Trusted semantic adapters only. Read candidates from the exact request's
+ * provider, sharing an active content transaction without granting writes.
+ * Every returned collection handle expires with this callback. */
+export function withBoundNativeCollectionsRead<T>(work: (collections: CollectionTransaction) => Promise<T>): Promise<T> | null {
+ const scope = scopes.getStore();
+ if (!scope) {
+  if (currentUserIdentityRepository() || hasNativeHomeSelection()) return refuse();
+  return null;
+ }
+ check(scope);
+ if (typeof work !== 'function') return refuse(scope);
+ const active = activeTransaction(scope);
+ const read = async (source: CollectionTransaction) => {
+  let live = true, failed = false, failure: unknown;
+  const assertLive = () => {
+   check(scope);
+   if (!live || transactions.getStore() !== active) refuse(scope);
+   if (active) activeTransaction(scope);
+   if (failed) throw failure;
+  };
+  const guard = <R>(operation: () => R): R => {
+   try { assertLive(); const result = operation(); assertLive(); return result; }
+   catch (error) { failed = true; failure = error; poison(active, error); throw error; }
+  };
+  const readonly = (): never => guard(() => thingsPersistenceError('read-only native collection scope'));
+  const collections: CollectionTransaction = Object.freeze({
+   defineCollection: readonly,
+   collection: (name: string) => guard(() => {
+    const collection = source.collection(name);
+    return Object.freeze({ find: (options: Parameters<typeof collection.find>[0]) => guard(() => collection.find(options)),
+     insert: readonly, updateOne: readonly, deleteOne: readonly });
+   })
+  });
+  try { const result = await work(collections); assertLive(); return result; }
+  catch (error) { poison(active, error); throw error; }
+  finally { live = false; }
+ };
+ if (active) {
+  const binding = getThingsTransactionBinding(active.transaction, active.selectionScope.ownerId!);
+  if (binding.kind !== 'native') return refuse(scope);
+  return read(binding.collections);
+ }
+ return providers.get(scope.binding)!.transaction(read);
 }
 
 /** Read-only receipt candidates may have different authors. This does not

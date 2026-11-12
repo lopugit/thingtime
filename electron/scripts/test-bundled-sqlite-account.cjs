@@ -16,7 +16,7 @@ const sourceRoot = path.resolve(__dirname, '..');
 const entry = path.join(sourceRoot, 'dist/web/.output/server/index.mjs');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const port = 19885, origin = 'http://127.0.0.1:' + port;
-const STAGES = Object.freeze(['guard','build','profile','os-storage','configure','bootstrap','manifest','register','session','roster','root-data','tokens','unsupported','reopen','logout','login','close','cleanup']);
+const STAGES = Object.freeze(['guard','build','profile','os-storage','configure','bootstrap','manifest','register','session','roster','root-data','tokens','webpages','unsupported','reopen','logout','login','close','cleanup']);
 let stage = 'guard', lastHttpStatus = null, manifestInvariant = null;
 const setStage = value => {
  if (!STAGES.includes(value)) throw Error('Unknown fixture stage'); stage = value;
@@ -200,6 +200,19 @@ async function runFixture() {
   assert.equal(privateResponse(await api('POST', 'v1/tokens/revoke', { id: tokenId })).status, 404);
   assert.equal(privateResponse(await api('GET', 'v1/tokens')).body.tokens?.some(token => token.id === tokenId), false);
   cookies.clear(); cookies = originalCookies;
+  setStage('webpages');
+  const draftPath = 'v1/webpages/resolve?ownerId=' + encodeURIComponent(userId) + '&dataPlane=' + encodeURIComponent(publicPlane);
+  const draft = privateResponse(await api('POST', draftPath, { blocks: [] }));
+  assert.equal(draft.status, 200); assert.equal(draft.body.ok, true);
+  assert.deepEqual(draft.body.components, []); assert.deepEqual(draft.body.refs, {});
+  assert.equal(privateResponse(await api('POST', draftPath, { blocks: [] }, false)).status, 401);
+  assert.equal(privateResponse(await api('POST', draftPath, { blocks: [] }, false, bearer)).status, 401);
+  assert.equal(privateResponse(await api('POST', draftPath.replace(publicPlane, 'home'), { blocks: [] })).status, 409);
+  assert.equal(privateResponse(await api('POST', draftPath.replace(userId, 'other-owner'), { blocks: [] })).status, 409);
+  assert.equal((await api('GET', 'v1/webpages/resolve?id=fixture-missing', undefined, false)).status, 404);
+  assert.equal((await api('GET', 'v1/webpages/resolve?path=invalid', undefined, false)).status, 400);
+  const globalPage = await api('GET', 'v1/webpages/resolve?global=1');
+  assert.equal(globalPage.status, 200); assert.equal(globalPage.body.page, null);
   setStage('unsupported');
   for (const route of ['v1/things', 'v1/passwords']) assert.equal((await api('GET', route)).status, 503, 'Unsupported storage operations cannot fall through to Mongo.');
   await rootData(userId, publicPlane);
@@ -226,6 +239,7 @@ async function runFixture() {
   receipt = { ok: true, claim: 'compiled-Nitro SQLite account HTTP with real Electron safeStorage and fresh-process reopen',
    nitroSha, sourceHashes, osProtected: true, provider: 'sqlite', registered: true, sessionReopened: true, rosterReopened: true,
    logoutAndLogin: true, rootDataReopened: true, manifestsVerified: true, tokensMintedAndListed: true, tokenIntrospectionReopened: true,
+   webpageResolveHttp: true, emptyDraftPreviewHttp: true, draftScopeRefusals: true, savedPageHttp: false,
    tokenManagementOwnerBound: true, tokenManagementRefusesPat: true, tokenRevocationVerified: true, tokenResponsesPrivateNoStore: true,
    unsupportedRefused: true, externalMailDelivered: false, thingsSupported: false, socketClosed: true, runtimeClosed: true, cleanupVerified: true };
  } finally { try { await stop(); } finally { cookies.clear(); await fs.rm(directory, { recursive: true, force: true }); } }
@@ -248,6 +262,7 @@ function assertNativeManifest(manifest, { kind = 'well-known', expectedOrigin = 
   assert.equal(version(manifest.features?.['api.root-data']), '1.2.0');
   assert.match(version(manifest.features?.['api.login']) || '', /^1\./);
   assert.equal(version(manifest.features?.['api.tokens']), '1.1.1');
+  assert.equal(version(manifest.features?.['api.webpages-resolve']), '1.20.0');
   assert.equal(version(manifest.features?.['api.tokens-revoke']), '1.0.1');
   assert.equal(version(manifest.features?.['api.tokens-self']), '1.0.1');
   assert.equal(Object.hasOwn(manifest.features || {}, 'api.things'), false);
@@ -255,7 +270,7 @@ function assertNativeManifest(manifest, { kind = 'well-known', expectedOrigin = 
   assert.equal(version(manifest.registeredFeatures?.['api.builder-workspaces']), '1.2.0');
   assert.equal(Object.hasOwn(manifest.features || {}, 'api.builder-workspaces'), false, 'Partial native workspace services must not advertise the full HTTP contract.');
  });
- check('manifest-operations', () => { for (const [route, method, available] of [['/api/root-data', 'GET', true], ['/api/v1/auth/register', 'POST', true], ['/api/v1/login', 'POST', true], ['/api/v1/tokens', 'GET', true], ['/api/v1/tokens', 'POST', true], ['/api/v1/tokens/revoke', 'POST', true], ['/api/v1/tokens/self', 'GET', true], ['/api/v1/things', 'GET', false]]) {
+ check('manifest-operations', () => { for (const [route, method, available] of [['/api/root-data', 'GET', true], ['/api/v1/auth/register', 'POST', true], ['/api/v1/login', 'POST', true], ['/api/v1/tokens', 'GET', true], ['/api/v1/tokens', 'POST', true], ['/api/v1/tokens/revoke', 'POST', true], ['/api/v1/tokens/self', 'GET', true], ['/api/v1/webpages/resolve', 'GET', true], ['/api/v1/webpages/resolve', 'POST', true], ['/api/v1/things', 'GET', false]]) {
   const operation = manifest.operations?.find(item => item.path === route && item.methods.includes(method));
   assert.ok(operation); assert.equal(operation.availableMethods.includes(method), available);
  } });

@@ -1,4 +1,4 @@
-import { getBoundThingsPersistence } from './persistenceContext';
+import { getBoundNativeWriteTransaction, getBoundThingsPersistence, readBoundNativeTransactionProfiles } from './persistenceContext';
 import { NATIVE_ORDINARY_CONTENT_KINDS, nativeOrdinaryThingSupported, nativeOrdinaryUnavailable, insertNativeOrdinaryThing, updateNativeOrdinaryThing, deleteNativeOrdinaryThing } from './nativeOrdinaryPersistence';
 import { ensureNativeExtAccountIds, ensureNativeExtSourced } from './nativeExternalAudienceReads';
 import { withGatewayWork } from '../deployment/environmentGateway';
@@ -1462,7 +1462,9 @@ export const createThing = async (
 	app: AppLens = null,
 	hooks: CreateThingHooks = {}
 ): Promise<CreateThingResult> => {
-  if (hooks.transaction && (!hooks.transaction.session?.inTransaction() || app?.sandbox)) throw new Error('A composed Thing write requires the active content transaction');
+  const nativeTransaction = hooks.transaction && getBoundThingsPersistence(ownerId)
+    ? getBoundNativeWriteTransaction(ownerId, hooks.transaction.session, hooks.transaction.afterCommit) : undefined;
+  if (hooks.transaction && ((!nativeTransaction && !hooks.transaction.session?.inTransaction()) || app?.sandbox)) throw new Error('A composed Thing write requires the active content transaction');
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
 	const validated = validateThingtimeCrystal(input.thingtime, input.crystal, {
 		postAttachments: hooks.postAttachments
@@ -1480,7 +1482,7 @@ export const createThing = async (
   if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
-  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => !['timelineCapture', 'executionHold', 'afterInsert'].includes(key)) || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
+  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => !['timelineCapture', 'executionHold', 'afterInsert', 'transaction'].includes(key)) || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
 
   // saves (the user's personal library) and shares (public social reposting)
   // are first-party surfaces — an app acting as the user must not write into
@@ -1738,7 +1740,7 @@ export const createThing = async (
 	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? hooks.timelineCapture ?? newThingMutationCapture(viewer?.id ?? ownerId) : null;
   if (nativeRepository) {
     if (!nativeOrdinaryThingSupported(doc)) return nativeOrdinaryUnavailable();
-    try { return { ok: true, doc: await insertNativeOrdinaryThing(nativeRepository, doc, timelineCapture!, hooks.afterInsert ? (inserted, session) => hooks.afterInsert!(inserted as ThingDoc, session) : undefined) as ThingDoc }; }
+    try { return { ok: true, doc: await insertNativeOrdinaryThing(nativeRepository, doc, timelineCapture!, hooks.afterInsert ? (inserted, session) => hooks.afterInsert!(inserted as ThingDoc, session) : undefined, nativeTransaction) as ThingDoc }; }
     catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
   }
   try {
@@ -2115,7 +2117,8 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   // HOME collection: identity lives on the home deployment, so author cards
   // keep resolving while a custom data-plane endpoint override is active.
   const identities = currentUserIdentityRepository();
-  const userThings = identities ? await identities.findUserThingsByIds(wanted) : await (await getHomeThingsCollection())
+  const nativeProfiles = identities ? readBoundNativeTransactionProfiles(wanted) : null;
+  const userThings = nativeProfiles ? (await nativeProfiles).filter(doc => doc.thingtime?.includes('user')) : identities ? await identities.findUserThingsByIds(wanted) : await (await getHomeThingsCollection())
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
 		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, 'crystal.avatarPresentation': 1, avatarAttachmentId: 1, secure: 1 })
     .toArray();
@@ -5780,7 +5783,6 @@ export const updateThing = async (
   options: { transaction?: ThingWriteTransaction; replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; storageCloudWrite?: { expectedRevision: string | null; attachmentIds?: readonly unknown[] }; mutation?: ThingUpdateMutationHooks; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
-  if (options.transaction && (!options.transaction.session?.inTransaction() || app?.sandbox)) throw new Error('A composed Thing update requires the active content transaction');
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
@@ -5789,12 +5791,15 @@ export const updateThing = async (
   // authorized as the actor below; the stored owner is selected only after
   // those gates, and owns quota/History throughout the actual transaction.
   const nativeRepository = getBoundThingsPersistence(null);
-  if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt', 'mutation'].includes(key)))) return nativeOrdinaryUnavailable();
+  if (options.transaction && ((!nativeRepository && !options.transaction.session?.inTransaction()) || app?.sandbox)) throw new Error('A composed Thing update requires the active content transaction');
+  if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt', 'mutation', 'transaction'].includes(key)))) return nativeOrdinaryUnavailable();
   const things: any = nativeRepository ? null : await getThingsCollection();
   const doc = (nativeRepository ? await nativeRepository.readExact(shareId.trim()) : await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as ThingDoc | null;
   if (nativeRepository && doc?.ownerId === viewer.id && isProtectedThingtime(thingtimeOf(doc))) return fail(403, 'This Thing is managed through its own endpoint');
 
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  const nativeTransaction = nativeRepository && options.transaction
+    ? getBoundNativeWriteTransaction(doc.ownerId, options.transaction.session, options.transaction.afterCommit) : undefined;
   const storageCloudWrite = options.storageCloudWrite;
   const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
   if (storageCloudWrite && (app || viewer.pat || isCustomMongoEndpointActive() ||
@@ -6155,7 +6160,7 @@ export const updateThing = async (
       const updated = await updateNativeOrdinaryThing(getBoundThingsPersistence(doc.ownerId)!, doc, next, timelineCapture!, revalidate, {
         beforeWrite: options.mutation?.beforeWrite ? (current, session) => options.mutation!.beforeWrite!(current as ThingDoc, session) : undefined,
         afterWrite: options.mutation?.afterWrite
-      });
+      }, nativeTransaction);
       return { ok: true, thing: (await toPublicThings([updated as ThingDoc], viewer))[0], post: null };
     } catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
   }

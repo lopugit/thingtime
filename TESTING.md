@@ -15,6 +15,13 @@ The bundled Mongo HTTP fixture must also move into a valid existing folder,
 refuse a cycle, preserve/reparent children on deletion and retain them on restart.
 Generic native Things HTTP and broad capability publication remain separate gates.
 
+- Trusted composed create/update must bind the exact current session, owner and
+  deferred-effect sink. Ignored failure results must still abort all content,
+  quota, History and effects; stale/foreign sessions and replaced sinks refuse.
+- Native namespace adapter fixtures cover aggregate/user quotas, malformed
+  counter refunds, reconciliation, exact live grants, sandbox expiry/revocation,
+  atomic standing/burn rollback and protected purge. Keep canonical namespace
+  service admission closed until normal create/update/delete and maintenance pass.
 - Native mutation hooks must observe the actual uncommitted content/session and
   preserve owner accounting plus real actor attribution. Async afterInsert,
   beforeWrite or afterWrite failure must roll back content, quota and History;
@@ -62,8 +69,13 @@ from these service fixtures.
 - Native draft preview must accept the authoritative public plane returned by
   root-data with a real local session and saved Component. Wrong owner/plane,
   anonymous requests, missing identity and expired scopes must refuse. Test the
-  composed handler and keep full resolve HTTP unavailable until its workspace
-  and external-source audience contract is supported.
+  real runtime GET/POST handlers, saved/nested Components, default/override text,
+  site/global precedence, activation cutoff, workspace and external-source
+  audiences/revocation. Label protected external/system unit fixtures. PAT/app
+  credentials retain anonymous GET and refused POST. Both manifests negotiate
+  api.webpages-resolve 1.20.0; compiled HTTP checks cover admitted empty drafts,
+  owner/plane/auth refusals and missing/invalid saved-page reads. Full rendered
+  Builder and saved-content compiled HTTP remain separate acceptance.
 - Native workspace authorization must use canonical account/workspace creation
   for its positive fixtures, preserve Admin/staff/customer/B2B visibility, read
   beyond internal page windows, and reject foreign roots, PATs and moderated

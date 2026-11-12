@@ -1,0 +1,24 @@
+✖ byte adapter rejects actual foreign provider transactions despite matching home labels (27.030458ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 468.861875
+
+✖ failing tests:
+
+test at app/api/utils/documentStore/nativeByteBudgets.test.ts:2:10852
+✖ byte adapter rejects actual foreign provider transactions despite matching home labels (27.030458ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/documentStore/nativeByteBudgets.test.ts:118:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }

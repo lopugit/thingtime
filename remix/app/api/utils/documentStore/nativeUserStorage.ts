@@ -1,3 +1,5 @@
+import { currentNativeSandboxNamespace, assertNativeSandboxSession } from '../apps/nativeSandboxNamespace';
+import type { AppNamespaceScope } from '../apps/namespace';
 import { BSON, Double, Int32, Long } from 'mongodb';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { DocumentStoreError } from './contract';
@@ -14,7 +16,7 @@ import type { CollectionFilter, CollectionProvider, CollectionTransaction } from
  * recognizable after expiry so an escaped handle cannot fall through to Mongo.
  * No runtime/user selection is provided by this adapter. */
 export type NativeUserStorageSession = Readonly<{ kind: 'native-user-storage' }>;
-type Context = { active: boolean; ownerId: string; planeId: string; collections: CollectionTransaction; failed: boolean; failure: unknown; deletionOnly: boolean; refundBytes: number; uncertainRefund: boolean };
+type Context = { sandbox?: AppNamespaceScope; active: boolean; ownerId: string; planeId: string; collections: CollectionTransaction; failed: boolean; failure: unknown; deletionOnly: boolean; refundBytes: number; uncertainRefund: boolean };
 const contexts = new WeakMap<object, Context>();
 const transactionOwnership = new AsyncLocalStorage<Context>();
 const invariant = (message: string): never => { throw new StorageMutationError(500, 'storage_invariant', message); };
@@ -54,10 +56,42 @@ function withStorageTransaction<T>(provider: CollectionProvider,
  });
 }
 
+/** Synthetic app-sandbox lane. No real account ledger, History budget or
+ * owner inheritance is borrowed. Canonical namespace admission owns its bytes. */
+export function withNativeSandboxStorageTransaction<T>(provider: CollectionProvider,
+ binding: { ownerId: string; homePlaneId: string; contentPlaneId: string }, deletionOnly: boolean,
+ work: (session: NativeUserStorageSession, collections: CollectionTransaction) => T | Promise<T>): Promise<T> {
+ const sandbox = currentNativeSandboxNamespace(binding.ownerId);
+ if (!sandbox || !binding.ownerId.startsWith('sandbox:') || !binding.homePlaneId || binding.homePlaneId !== binding.contentPlaneId) return Promise.reject(new StorageMutationError(403, 'storage_invariant', 'Native sandbox transaction requires its exact namespace binding'));
+ return provider.transaction(async collections => {
+  const session: NativeUserStorageSession = Object.freeze({ kind: 'native-user-storage' });
+  const context: Context = { sandbox, active: true, ownerId: binding.ownerId, planeId: binding.homePlaneId, collections, failed: false, failure: undefined, deletionOnly, refundBytes: 0, uncertainRefund: false };
+  contexts.set(session, context);
+  try {
+   assertNativeSandboxSession(collections, sandbox);
+   const result = await transactionOwnership.run(context, () => work(session, collections));
+   if (context.failed) throw context.failure;
+   assertNativeSandboxSession(collections, sandbox);
+   return result;
+  } finally { context.active = false; }
+ });
+}
+/** Also proves asynchronous ownership and exact transaction identity. */
+export function nativeSandboxStorageScope(session: NativeUserStorageSession, collections: CollectionTransaction, delta = 0): AppNamespaceScope {
+ const context = contexts.get(session);
+ if (!context) return invariant('Unrecognized native sandbox session');
+ checkedContext(context.ownerId, session);
+ if (!context.sandbox || context.collections !== collections) return invariant('Native sandbox namespace/transaction mismatch');
+ if (context.deletionOnly && delta > 0) return invariant('Deletion-only sandbox transactions cannot admit content growth');
+ assertNativeSandboxSession(collections, context.sandbox);
+ return context.sandbox;
+}
+
 // Validate unsupported identities/states before exposing a writable callback,
 // and again for each debit in case that callback changed a protected row.
 const readNativeOwner = (context: Context) => {
  const ownerId = context.ownerId;
+ if (context.sandbox) { assertNativeSandboxSession(context.collections, context.sandbox); return context.collections.collection(physicalCollectionName('things')); }
  const things = context.collections.collection(physicalCollectionName('things'));
  const users = things.find({ filter: { op: 'and', filters: [exact(['shareId'], ownerId), { op: 'contains', path: ['thingtime'], value: 'user' }] }, limit: 2 }).documents;
  if (users.length !== 1) return unsupported();
@@ -69,6 +103,7 @@ const readNativeOwner = (context: Context) => {
  return things;
 };
 const readNativeReadyLedger = (context: Context) => {
+ if (context.sandbox) return unsupported();
  const things = readNativeOwner(context), ownerId = context.ownerId;
  const records = things.find({ filter: exact(['shareId'], subscriptionShareId('user', ownerId)), limit: 2 }).documents;
  if (records.length !== 1) return unsupported();
@@ -87,6 +122,7 @@ const readNativeReadyLedger = (context: Context) => {
  * this accounting adapter alone does not activate canonical Things APIs. */
 export function applyNativeUserStorageDelta(ownerId: string, deltaBytes: number, session: NativeUserStorageSession): void {
  guarded(ownerId, session, context => {
+  if (context.sandbox) return invariant('Sandbox content cannot debit a real account ledger');
   if (!Number.isSafeInteger(deltaBytes)) return invariant('Storage accounting received an invalid byte delta');
   if (context.deletionOnly && deltaBytes > 0) return invariant('Deletion-only transactions cannot admit new content');
   let ledger: ReturnType<typeof readNativeReadyLedger>;
@@ -150,8 +186,10 @@ export async function withNativeStorageOperation<T>(ownerId: string, session: Na
  const context = checkedContext(ownerId, session);
  try {
   if (context.collections !== collections) return invariant('Native operation used another collection transaction');
+  if (context.sandbox) assertNativeSandboxSession(collections, context.sandbox);
   const result = await work();
   checkedContext(ownerId, session);
+  if (context.sandbox) assertNativeSandboxSession(collections, context.sandbox);
   return result;
  } catch (error) { context.failed = true; context.failure = error; throw error; }
 }

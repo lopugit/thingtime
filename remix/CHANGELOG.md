@@ -160,6 +160,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Admit canonical Webpage GET/POST resolution on protected SQLite
+  homes with runtime-scoped capability 1.20.0. Preserve audience, owner/plane
+  and inert-action boundaries. Add atomic composed Thing writes and guarded
+  namespace/byte-budget foundations; generic Things and namespace HTTP remain
+  unavailable pending full service acceptance. **Codex (AI)**
+
 - 2026-11-12: Add canonical SQLite mutation hooks and delegated workspace writes,
   protected discovery and owner-library counts, plus typed PAT persistence and
   native token-management HTTP. Token responses are private/no-store; broader

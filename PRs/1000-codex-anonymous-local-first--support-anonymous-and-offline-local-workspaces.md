@@ -1,5 +1,34 @@
 # PR #1000 — Anonymous and offline local workspaces
 
+## SQLite page resolution and composed transactions — 12 November 2026
+
+The protected native runtime now admits canonical Webpage GET/POST resolution
+with `api.webpages-resolve` 1.20.0. Actual handlers preserve nested Components,
+text/args, site defaults, activation settings, private/workspace/external-source
+audiences and revocation; PAT/app credentials remain anonymous for GET and cannot
+authorize POST. Protected external/system metadata fixtures are labeled.
+
+Trusted native create/update can share an exact transaction/effect sink. Caught
+failures roll back rows, accounting, History and effects. Identity-only profile
+reads remain supported while composed reads use the uncommitted snapshot.
+Typed byte budgets and namespace quota/sandbox foundations now validate exact
+provider/session identity and malformed refund state. Namespace service billing,
+token pruning and retention scheduling still need integration; admission stays
+closed. Hosted permission behavior is preserved.
+
+All 13 retained/final check commands pass: 1,289 reported test passes, three
+explicit opt-in skips. TypeScript/ratchet and full lint pass (0 errors/377 warnings).
+Affected reruns used 5,638 unchanged inventoried files. Build/integrity plus actual
+isolated Mongo/SQLite HTTP restart fixtures pass with Electron protected storage.
+SQLite's compiled HTTP proof covers empty drafts and refusal paths; full saved
+Builder editing/rendering is a separate gate. Nitro SHA-256:
+`d768692d5e26379a027fb3102cc724265870c5071b745f5a3a2ec9457983179c`.
+Initial projection/provider/refund findings and evidence are retained. No full new
+semantic indexing, iOS device acceptance or connected MCP artifact delivery is
+claimed. Keep PR open and all release holds; parent goal remains active.
+
+[Verification and limitations](../artifacts/anonymous-release-2026-11-12/native-resolve-transactions/README.md).
+
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
 ## Native transactional writes and token HTTP — 12 November 2026

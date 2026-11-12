@@ -1,0 +1,12 @@
+✔ compiled SQLite fixture refuses unguarded direct invocation before opening any app/profile/server (36.163125ms)
+✔ requiring the fixture does not execute it; opt-in still requires an exact independently recorded payload hash (5.121625ms)
+✔ compiled fixture negotiates actual available account operations and refuses registered-only or false-ready advertisements (2.859667ms)
+✔ Electron main entry runs the owned guarded child despite require.main differing; ordinary imports/renderers remain inert (0.130625ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 86.803458

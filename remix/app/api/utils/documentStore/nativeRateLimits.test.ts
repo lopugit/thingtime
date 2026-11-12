@@ -78,10 +78,10 @@ test('atomic concurrent partial config patches preserve both changes and canonic
  await Promise.all([a.run(() => setRateLimitConfig({ 'auth.login': { limit: 9 } } as any, 'a')), b.run(() => setRateLimitConfig({ 'auth.login': { windowMs: 2000 } } as any, 'b'))]);
  await a.run(async () => { assert.deepEqual((await getRateLimitConfig())['auth.login'], { limit: 9, windowMs: 2000, enabled: true }); });
 });
-test('native missing/failed composition denies ordinary requests without hosted fail-open; byte budget refuses Mongo', async t => {
+test('native missing/failed composition denies ordinary requests without hosted fail-open; byte budget uses native persistence', async t => {
  const { open } = await fixture(t), f = await open();
  await f.auth.run(async () => { const denied = await enforceRateLimit(request, 'auth.login', null); assert.equal(denied.allowed, false); assert.equal(denied.unavailable, true); });
- await f.run(async () => { await assert.rejects(consumeByteBudget('auth.login', 12), code('RATE_LIMIT_UNSUPPORTED')); await assert.rejects(refundByteBudget('auth.login', 12), code('RATE_LIMIT_UNSUPPORTED')); });
+ await f.run(async () => { assert.equal((await consumeByteBudget('sandbox.storage.global', 12)).usedBytes, 12); await refundByteBudget('sandbox.storage.global', 12); });
  await f.provider.close(); await f.run(async () => { const denied = await enforceRateLimit(request, 'auth.login', null); assert.equal(denied.allowed, false); assert.equal(denied.unavailable, true); });
 });
 test('same-label other file, saved repository and queued expired lifetime cannot read or write', async t => {

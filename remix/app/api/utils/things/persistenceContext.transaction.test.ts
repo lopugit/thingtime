@@ -4,7 +4,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BSON } from 'mongodb';
-import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead } from './persistenceContext';
+import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead, withBoundNativeCollectionsRead } from './persistenceContext';
+import type { NativeCollection } from '../documentStore/collectionContract';
 import { getThingsTransactionBinding, type ThingsPersistence } from './persistence';
 import { createNativeHomeAuthRepositories } from '../documentStore/nativeUserIdentities';
 import { createCollectionProvider } from '../documentStore/collectionProvider';
@@ -90,6 +91,46 @@ test('same-transaction receipt ports remain read-only and expire before their co
    assert.equal(await candidates.readExact(timelineEventThingId(ownerId, mode)), null);
   });
  }
+});
+
+test('semantic collection reads share uncommitted content without acquiring mutation authority', async t => {
+ const f = await fixture(t);
+ await f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => {
+  await tx.insert(row('semantic-candidate'));
+  await withBoundNativeCollectionsRead(async collections => {
+   const rows = collections.collection(physicalCollectionName('things')).find({
+    filter: { op: 'eq', path: ['shareId'], value: 'semantic-candidate' }, limit: 2
+   }).documents;
+   assert.equal(rows.length, 1);
+   assert.equal(BSON.deserialize(rows[0]).ownerId, ownerId);
+  });
+ }));
+ for (const operation of ['define', 'insert', 'update', 'delete']) {
+  await assert.rejects(f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => {
+   await tx.insert(row('readonly-rollback-' + operation));
+   await assert.rejects(withBoundNativeCollectionsRead(async collections => {
+    const records = collections.collection(physicalCollectionName('things'));
+    assert.throws(() => {
+     if (operation === 'define') collections.defineCollection('forbidden', { unique: [] });
+     if (operation === 'insert') records.insert(BSON.serialize(row('forbidden')));
+     if (operation === 'update') records.updateOne({ op: 'eq', path: ['shareId'], value: 'semantic-candidate' }, []);
+     if (operation === 'delete') records.deleteOne({ op: 'eq', path: ['shareId'], value: 'semantic-candidate' });
+    }, /read-only/);
+   })!, /read-only/);
+  })), /read-only/);
+  await f.run(async () => assert.equal(await getBoundThingsPersistence(null)!.readExact('readonly-rollback-' + operation), null));
+ }
+});
+
+test('escaped semantic collection handles expire before the containing transaction commits', async t => {
+ const f = await fixture(t);
+ await assert.rejects(f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => {
+  await tx.insert(row('escaped-collection-rollback'));
+  let escaped!: NativeCollection;
+  await withBoundNativeCollectionsRead(async collections => { escaped = collections.collection(physicalCollectionName('things')); });
+  assert.throws(() => escaped.find({ limit: 1 }), /request scope/);
+ })), /request scope/);
+ await f.run(async () => assert.equal(await getBoundThingsPersistence(null)!.readExact('escaped-collection-rollback'), null));
 });
 
 test('candidate windows preserve their cursor namespace before, during and after a transaction', async t => {

@@ -1,5 +1,16 @@
 # Local development and worktrees
 
+Native Webpage resolution now admits both existing GET/POST handlers on the
+protected SQLite home (`api.webpages-resolve` 1.20.0). Run `test:native-things`,
+`test:api-capabilities` and the bundled SQLite HTTP fixture. The handler suite
+covers exact text/dependencies, site defaults, private/workspace/external
+read audiences and revocation; protected metadata fixtures are labeled. No
+Actions execute and PAT/app credentials do not gain account authority. Native
+composed create/update share exact transaction/effect identity and rollback.
+Namespace quota and byte-budget adapters remain guarded foundations pending
+normal service billing, token pruning and retention integration. See
+[native runtime](../native-web-bundles.md).
+
 ## Current managed-local update acceptance
 
 The `managed-local-dialog` receipt on the36e46bb6 payload proves actual

@@ -62,8 +62,14 @@ relevance search still refuse with 503: a substring match does not implement
 Mongo's text-search contract. Scanning is not indexed-query parity.
 
 Native draft preview uses the protected host's public database identity, matching
-root-data, while preserving owner and origin checks. This handler correction
-does not enable the full webpage-resolve HTTP contract.
+root-data, while preserving owner and origin checks. The protected runtime now
+admits both GET and POST through the existing webpage-resolve handlers and
+advertises `api.webpages-resolve` 1.20.0 when ready. Actual handler acceptance
+covers saved pages, nested Components and arguments, site/global precedence,
+activation cutoff settings, private/workspace/external-source audiences and
+revocation. PAT/app credentials keep their existing anonymous GET and refused
+POST behavior. External relationship/system catalogue unit fixtures are labeled;
+these reads do not establish native OAuth, system seeding or Action execution.
 
 Workspace audience reads now use shared membership, moderation and linked-customer
 rules. Native owner setup and delegated writes reuse canonical account and content
@@ -81,8 +87,10 @@ Trusted native creation and hold attachment share canonical validation, accounti
 and Timeline completion checks. Attaching a hold requires the exact transaction
 and current hold identity; stale replacement and quota failures roll back. Ordinary
 client input cannot mint these protected fields. The broader creation checkpoint
-coordinator remains unavailable, and positive compiled-server resolution plus
-actual rendered Builder acceptance are still required before HTTP activation.
+coordinator remains unavailable. Trusted composed create/update now reuse the
+exact live native transaction and deferred-effect sink. A caught internal failure
+still rolls back content, storage and History; profiles read that same snapshot.
+Actual rendered Builder acceptance remains separate from handler acceptance.
 
 Native owner-library counts retain canonical filters and audience checks; unsupported
 managed selections explicitly refuse. Discovery uses a separate protected HOME
@@ -99,12 +107,21 @@ Token issuance alone does not enable native content operations for that token.
 
 Generic native Things HTTP remains unavailable. This service slice does not yet
 support the full `api.things` contract: app namespaces, content PAT enforcement,
-external composed transactions and creation coordinators,
-managed kinds and target cascades require their canonical adapters.
+creation coordinators, managed kinds and target cascades require their canonical adapters.
 Unsupported private items retain the ordinary not-found response for unauthorized
 viewers. Do not advertise the whole feature merely because its HTTP verbs could
 be dispatched. Real SQLite service tests and local Mongo HTTP regression are
 separate acceptance layers. See [service evidence](../artifacts/anonymous-release-2026-11-12/native-shared-builder/README.md).
+
+Native namespace foundations now provide scoped app/grant reads, shared quota
+policy, reconciliation and atomic sandbox standing-storage/write-burn accounting.
+The separate sandbox session lane cannot acquire an ordinary account ledger.
+Malformed refund counters remain unavailable; expiry and revocation are checked
+inside the actual transaction. Generic namespace writes remain guarded: service
+billing hooks, canonical app-token session pruning and native retention scheduling
+still need integration. The protected purge helper alone is not a running cleanup
+service. Byte budgets share hosted policy while persisting through typed native
+operations; charges retain their existing non-idempotent contract.
 
 ## Content and Timeline persistence — 12 November 2026
 
@@ -175,7 +192,7 @@ database migration or dual write.
 
 The current SQLite operation set includes canonical app-shell root data, registration, ordinary password login,
 current user, account roster reads, logout, email verification, notification
-history and mark-read. Rate limits are durable and deny on unavailable storage.
+history and mark-read, token management and Webpage GET/POST resolution. Rate limits are durable and deny on unavailable storage.
 Invitation registration, email OTP login, generic Things, attachment
 cleanup and other unimplemented operations cannot borrow Mongo or a remote API.
 The capability manifest retains the complete registry and advertises only the

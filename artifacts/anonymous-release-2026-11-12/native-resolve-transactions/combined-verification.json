@@ -1,0 +1,263 @@
+{
+  "checks": 13,
+  "allPassed": true,
+  "reportedTestPasses": 1289,
+  "reportedSkipped": 3,
+  "notes": "Command totals, not a distinct-case count; initial profile failure retained. Affected checks rerun on corrected frozen source.",
+  "correctedSourceUnchanged": true,
+  "sourceInventory": {
+    "files": 5638,
+    "sha256": "efc8a9687dc1083acf4fc8fc07bd2a708eba3ac48df25387609b565b356447af"
+  },
+  "finalChecks": {
+    "test:native-things": {
+      "receipt": "verification-correction/verification.json",
+      "name": "test:native-things",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:native-things",
+      "startedAt": "2026-11-12T03:02:12.043224+00:00",
+      "timeoutSeconds": 900,
+      "log": "01-test-native-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:32.275886+00:00",
+      "elapsedSeconds": 140.23,
+      "testTotals": {
+        "tests": 95,
+        "suites": 0,
+        "pass": 95,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "test:things": {
+      "receipt": "verification-correction/verification.json",
+      "name": "test:things",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:things",
+      "startedAt": "2026-11-12T03:04:32.276451+00:00",
+      "timeoutSeconds": 900,
+      "log": "02-test-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:40.381481+00:00",
+      "elapsedSeconds": 8.105,
+      "testTotals": {
+        "tests": 458,
+        "suites": 0,
+        "pass": 455,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      }
+    },
+    "test:document-store": {
+      "receipt": "verification-correction/verification.json",
+      "name": "test:document-store",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "startedAt": "2026-11-12T03:04:40.382012+00:00",
+      "timeoutSeconds": 900,
+      "log": "03-test-document-store.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:04:47.951230+00:00",
+      "elapsedSeconds": 7.569,
+      "testTotals": {
+        "tests": 175,
+        "suites": 0,
+        "pass": 175,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "test:storage": {
+      "receipt": "verification/verification.json",
+      "name": "test:storage",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:storage",
+      "startedAt": "2026-11-12T02:52:30.015591+00:00",
+      "timeoutSeconds": 900,
+      "log": "04-test-storage.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:30.761734+00:00",
+      "elapsedSeconds": 0.746,
+      "testTotals": {
+        "tests": 41,
+        "suites": 0,
+        "pass": 41,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "test:timeline": {
+      "receipt": "verification/verification.json",
+      "name": "test:timeline",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:timeline",
+      "startedAt": "2026-11-12T02:52:30.762458+00:00",
+      "timeoutSeconds": 900,
+      "log": "05-test-timeline.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:41.943300+00:00",
+      "elapsedSeconds": 11.181,
+      "testTotals": {
+        "tests": 278,
+        "suites": 0,
+        "pass": 278,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "test:api-capabilities": {
+      "receipt": "verification/verification.json",
+      "name": "test:api-capabilities",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "startedAt": "2026-11-12T02:52:41.943959+00:00",
+      "timeoutSeconds": 900,
+      "log": "06-test-api-capabilities.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:43.170207+00:00",
+      "elapsedSeconds": 1.226,
+      "testTotals": {
+        "tests": 212,
+        "suites": 0,
+        "pass": 212,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "pat-revalidation": {
+      "receipt": "verification/verification.json",
+      "name": "pat-revalidation",
+      "cwd": "remix",
+      "command": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/patRevalidation.test.mts",
+      "startedAt": "2026-11-12T02:52:43.170874+00:00",
+      "timeoutSeconds": 300,
+      "log": "07-pat-revalidation.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:43.410132+00:00",
+      "elapsedSeconds": 0.239,
+      "testTotals": {
+        "tests": 5,
+        "suites": 0,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "workspace-components": {
+      "receipt": "verification/verification.json",
+      "name": "workspace-components",
+      "cwd": "remix",
+      "command": "node --import tsx --test app/api/utils/serviceWorkspaces/access.test.ts app/api/utils/serviceWorkspaces/googlePlaces.test.ts app/components/Builder/ServiceWorkspace/serviceNavigation.test.ts app/components/Builder/ServiceWorkspace/workspaceResponse.test.ts app/components/Collections/collectionWindow.test.ts",
+      "startedAt": "2026-11-12T02:52:43.410669+00:00",
+      "timeoutSeconds": 300,
+      "log": "08-workspace-components.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:43.872540+00:00",
+      "elapsedSeconds": 0.462,
+      "testTotals": {
+        "tests": 13,
+        "suites": 0,
+        "pass": 13,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "native-home": {
+      "receipt": "verification/verification.json",
+      "name": "native-home",
+      "cwd": "remix",
+      "command": "node --import tsx --test server/utils/nativeHomeDispatch.test.ts server/utils/nativeHomeFence.test.ts server/utils/nativeHomePlugin.test.ts server/utils/nativeHomeRuntime.test.ts",
+      "startedAt": "2026-11-12T02:52:43.873313+00:00",
+      "timeoutSeconds": 300,
+      "log": "09-native-home.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:45.841213+00:00",
+      "elapsedSeconds": 1.968,
+      "testTotals": {
+        "tests": 11,
+        "suites": 0,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "electron-fixture-contract": {
+      "receipt": "verification/verification.json",
+      "name": "electron-fixture-contract",
+      "cwd": ".",
+      "command": "node --test electron/test/bundled-sqlite-account-fixture.test.cjs",
+      "startedAt": "2026-11-12T02:52:45.841812+00:00",
+      "timeoutSeconds": 120,
+      "log": "10-electron-fixture-contract.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:52:45.983720+00:00",
+      "elapsedSeconds": 0.142,
+      "testTotals": {
+        "tests": 4,
+        "suites": 0,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "typecheck": {
+      "receipt": "verification-correction/verification.json",
+      "name": "typecheck",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "startedAt": "2026-11-12T03:04:47.951846+00:00",
+      "timeoutSeconds": 900,
+      "log": "04-typecheck.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:05:28.935297+00:00",
+      "elapsedSeconds": 40.983,
+      "testTotals": {}
+    },
+    "typecheck-ratchet": {
+      "receipt": "verification-correction/verification.json",
+      "name": "typecheck-ratchet",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "startedAt": "2026-11-12T03:05:28.935846+00:00",
+      "timeoutSeconds": 900,
+      "log": "05-typecheck-ratchet.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:06:53.547399+00:00",
+      "elapsedSeconds": 84.61,
+      "testTotals": {}
+    },
+    "lint": {
+      "receipt": "verification-correction/verification.json",
+      "name": "lint",
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run lint",
+      "startedAt": "2026-11-12T03:06:53.548405+00:00",
+      "timeoutSeconds": 900,
+      "log": "06-lint.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T03:08:01.277288+00:00",
+      "elapsedSeconds": 67.728,
+      "testTotals": {}
+    }
+  }
+}

@@ -10,6 +10,9 @@ const tests = [
 ].map(name => `app/api/utils/things/${name}.test.ts`);
 tests.push(
   'app/api/utils/auth/patTokens.native.test.ts',
+  'app/api/utils/apps/nativeNamespacePersistence.test.ts',
+  'app/api/utils/documentStore/nativeByteBudgets.test.ts',
+  'app/api/utils/webpages/nativeResolveRoute.test.ts',
   'app/api/utils/actions/sharedComposition.native.test.ts',
   'app/api/utils/components/nativeCatalogReads.test.ts',
   'app/api/utils/serviceWorkspaces/nativeAccess.test.ts',

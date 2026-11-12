@@ -13875,14 +13875,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.19.0',
-    featureVersion: '1.19.0',
+    contractVersion: '1.20.0',
+    featureVersion: '1.20.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.20 admits GET and authenticated POST through a ready protected native SQLite home, using the same page, component, audience and draft-scope checks. Runtime capability discovery advertises availability only after composition succeeds. PAT and app credentials remain anonymous for GET and cannot authorize POST. This read-only capability does not enable generic Things writes or execute Actions. ' +
       'Version 1.19 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
       'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +

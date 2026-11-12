@@ -1,0 +1,17 @@
+✔ SQLite namespace accounting reconciles current content, charges both quotas and rolls back refusal (22.12275ms)
+✔ registered app counters cannot adopt forged ids, invalid bytes, revoked app or another namespace (12.957875ms)
+✔ deletion underflow fences the real counters without fabricating balances (6.830917ms)
+✔ registered refunds keep invalid allowance counters fenced without decrementing (7.201167ms)
+✔ registered refunds keep invalid timestamp counters fenced without decrementing (6.716041ms)
+✔ current registered app actor cannot reuse revoked, expired, foreign-client or reduced-scope grants (5.548042ms)
+✔ malformed sandbox stamp is an invalid reconciliation source, not unbilled content (4.730958ms)
+✔ live author reads union current grants, respect expiry/revocation/client/space and scan all batches (86.840459ms)
+✔ sandbox content, standing quota and burn commit together; expiry and revocation cannot borrow account storage (53.048708ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 917.663708

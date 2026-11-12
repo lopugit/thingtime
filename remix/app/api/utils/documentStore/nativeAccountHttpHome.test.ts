@@ -72,7 +72,7 @@ test('native draft preview matches the protected public database identity with r
  assert.equal((await call(previewComponents, request(path.replace(publicDataPlane, 'home'), cookie, body))).status, 409);
  assert.equal((await call(previewComponents, request(path.replace(user.id, 'other-owner'), cookie, body))).status, 409);
  assert.equal((await call(previewComponents, request(path, '', body))).status, 401);
- assert.equal(home.supportedOperations.some(op => op.path === 'v1/webpages/resolve'), false, 'handler acceptance alone cannot enable the full HTTP contract');
+ assert.deepEqual(home.supportedOperations.filter(op => op.path === 'v1/webpages/resolve').map(op => op.method), ['GET', 'POST']);
 });
 
 test('canonical account routes create, verify, reopen, log in and revoke with actual SQLite and no Mongo authority', async t => {

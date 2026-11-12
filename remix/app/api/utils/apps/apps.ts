@@ -1,3 +1,5 @@
+import { withBoundNativeCollectionsRead } from '../things/persistenceContext';
+import { nativeAppsByClientIds } from './nativeNamespacePersistence';
 import { randomUUID } from 'node:crypto';
 import { WIDGET_CLIENT_ID, widgetClientSeed } from './widgetClient';
 
@@ -179,6 +181,8 @@ const toPublicApp = (doc: any): PublicApp => {
 export const appIsRevoked = (appDoc: any): boolean => !!appDoc?.crystal?.revokedAt;
 
 export const findAppByClientId = async (clientId: string) => {
+  const native = withBoundNativeCollectionsRead(async collections => typeof clientId === 'string' && clientId.trim() ? nativeAppsByClientIds(collections, [clientId.trim()])[0] ?? null : null);
+  if (native) return native;
   if (typeof clientId !== 'string' || !clientId.trim()) return null;
   const things = await getThingsCollection();
   if (clientId.trim() === WIDGET_CLIENT_ID) {
@@ -196,6 +200,8 @@ export const findAppByClientId = async (clientId: string) => {
 // Batch counterpart for grant listings: one indexed query instead of one
 // findAppByClientId round-trip per connected app.
 export const findAppsByClientIds = async (clientIds: string[]) => {
+  const native = withBoundNativeCollectionsRead(async collections => nativeAppsByClientIds(collections, clientIds.filter(id => typeof id === 'string' && id.trim()).map(id => id.trim())));
+  if (native) return native;
   const ids = clientIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim());
   if (!ids.length) return [];
   const things = await getThingsCollection();

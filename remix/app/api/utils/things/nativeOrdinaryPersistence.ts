@@ -5,7 +5,7 @@ import { currentContentStorageSizeBytes, StorageMutationError } from '../storage
 import { newThingMutationCapture, recordThingMutation, type ThingMutationCapture } from '../timeline/recordMutation';
 import { getThingsTransactionBinding, matchesThingVersion, type StoredThing, type ThingsPersistence, type ThingsTransaction } from './persistence';
 import { contentExecutionHold } from './contentExecutionGate';
-import type { NativeUserStorageSession } from '../documentStore/nativeUserStorage';
+import { withNativeStorageOperation, type NativeUserStorageSession } from '../documentStore/nativeUserStorage';
 
 type NativeMutationHooks = {
  beforeWrite?: (before: StoredThing, session: NativeUserStorageSession) => Promise<void>;
@@ -39,8 +39,8 @@ function history(tx: ThingsTransaction, ownerId: string) {
  if (binding.kind !== 'native') throw new Error('Native Thing mutation requires its actual storage session');
  return { port: createNativeTimelinePersistence(binding.collections, { ownerId, session: binding.session }), session: binding.session };
 }
-export async function insertNativeOrdinaryThing(repository: ThingsPersistence, document: StoredThing, capture: ThingMutationCapture, afterInsert?: (document: StoredThing, session: NativeUserStorageSession) => Promise<void>) {
- return repository.transaction('write', async tx => {
+export async function insertNativeOrdinaryThing(repository: ThingsPersistence, document: StoredThing, capture: ThingMutationCapture, afterInsert?: (document: StoredThing, session: NativeUserStorageSession) => Promise<void>, transaction?: ThingsTransaction) {
+ const write = async (tx: ThingsTransaction) => {
   if (await tx.readExact(document.shareId)) return conflict('A Thing with this id already exists');
   await tx.lockFolder(document.folderId ?? null, document.thingtime.includes('folder') ? document.shareId : undefined);
   const { port, session } = history(tx, document.ownerId);
@@ -49,10 +49,16 @@ export async function insertNativeOrdinaryThing(repository: ThingsPersistence, d
   await afterInsert?.(inserted, session);
   await recordThingMutation(port, null, inserted, capture, session, tx);
   return inserted;
- });
+ };
+ const guardedWrite = (tx: ThingsTransaction) => {
+  const binding = getThingsTransactionBinding(tx, document.ownerId);
+  if (binding.kind !== 'native') throw new Error('Native Thing mutation requires its actual storage session');
+  return withNativeStorageOperation(document.ownerId, binding.session, binding.collections, () => write(tx));
+ };
+ return transaction ? guardedWrite(transaction) : repository.transaction('write', guardedWrite);
 }
-export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture, authorize?: (current: StoredThing) => Promise<void>, hooks: NativeMutationHooks = {}) {
- return repository.transaction('write', async tx => {
+export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture, authorize?: (current: StoredThing) => Promise<void>, hooks: NativeMutationHooks = {}, transaction?: ThingsTransaction) {
+ const write = async (tx: ThingsTransaction) => {
   const current = await tx.readExact(before.shareId);
   if (current && authorize) await authorize(current);
   if (!current || !matchesThingVersion(current, version(before))) return conflict();
@@ -66,7 +72,13 @@ export async function updateNativeOrdinaryThing(repository: ThingsPersistence, b
   await recordThingMutation(port, before, after, capture, session, tx);
   await hooks.afterWrite?.(session);
   return after;
- });
+ };
+ const guardedWrite = (tx: ThingsTransaction) => {
+  const binding = getThingsTransactionBinding(tx, before.ownerId);
+  if (binding.kind !== 'native') throw new Error('Native Thing mutation requires its actual storage session');
+  return withNativeStorageOperation(before.ownerId, binding.session, binding.collections, () => write(tx));
+ };
+ return transaction ? guardedWrite(transaction) : repository.transaction('write', guardedWrite);
 }
 /** Match canonical folder draining: each placement and its History commit
  * together while the exact physical root remains a retry anchor. Legacy child

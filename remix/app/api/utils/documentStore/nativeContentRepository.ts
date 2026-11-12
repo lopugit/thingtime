@@ -1,8 +1,9 @@
+import { currentNativeSandboxNamespace } from '../apps/nativeSandboxNamespace';
 import { BSON, ObjectId } from 'mongodb';
 import { randomUUID } from 'node:crypto';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { createThingsPersistence, matchesThingVersion, normalizeThingsSelection, thingsPersistenceError, type StoredThing, type ThingsDriverReads, type ThingsPersistence, type ThingsScope, type ThingsSelection } from '../things/persistence';
-import { withNativeHomeStorageTransaction, withNativeHomeDeletionStorageTransaction, withNativeStorageOperation } from './nativeUserStorage';
+import { withNativeHomeStorageTransaction, withNativeHomeDeletionStorageTransaction, withNativeStorageOperation, withNativeSandboxStorageTransaction } from './nativeUserStorage';
 import { encodeCollectionDocument } from './collectionProvider';
 import type { CollectionProvider, CollectionTransaction, CollectionFilter, CollectionUpdate } from './collectionContract';
 const providerIdentities = new WeakMap<CollectionProvider, string>();
@@ -66,7 +67,9 @@ export function createNativeContentRepository(provider: CollectionProvider, inpu
    if (!scope.ownerId) return thingsPersistenceError('writes require an authenticated owner');
    const ownerId = scope.ownerId;
    const run = mode === 'delete' ? withNativeHomeDeletionStorageTransaction : withNativeHomeStorageTransaction;
-   return run(provider, { ...scope, ownerId }, (session, collections) => {
+   const sandbox = currentNativeSandboxNamespace(ownerId);
+   const selectedRun: typeof run = sandbox ? (provider, binding, work) => withNativeSandboxStorageTransaction(provider, binding, mode === 'delete', work) : run;
+   return selectedRun(provider, { ...scope, ownerId }, (session, collections) => {
     const source = reads(collections), collection = collections.collection(namespace);
     const versionRow = async (expected: Parameters<typeof matchesThingVersion>[1]) => {
      const row = await source.exact(expected.id);

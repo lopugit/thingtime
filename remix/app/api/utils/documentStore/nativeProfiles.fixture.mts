@@ -32,6 +32,7 @@ const { createCollectionProvider } = await import('./collectionProvider.ts');
 const { openSqliteDocumentStore } = await import('./sqliteStore.ts');
 const { insertUser, toBin } = await import('../auth/users.ts');
 const { resolveProfiles } = await import('../things/things.ts');
+const { readBoundNativeTransactionProfiles } = await import('../things/persistenceContext.ts');
 const directory = await mkdtemp(join(tmpdir(), 'thingtime-native-profiles-'));
 const providers: ReturnType<typeof createCollectionProvider>[] = [];
 let transactions = 0;
@@ -52,6 +53,7 @@ try {
   id = String((await insertUser(user('native-author')))._id);
   temporaryId = String((await insertUser(user('temporary-author', true)))._id);
   transactions = 0;
+  assert.equal(readBoundNativeTransactionProfiles([id]), null, 'identity-only projection retains its supported repository path');
   const profiles = await resolveProfiles([id, temporaryId, id, 'missing', '000000000000000000000000']);
   assert.equal(transactions, 1); assert.equal(profiles.size, 2);
   assert.deepEqual(profiles.get(id), { id, username: 'native-author', displayName: 'Editable author', temporary: false, avatarUrl: null });

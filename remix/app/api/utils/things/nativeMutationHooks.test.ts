@@ -9,7 +9,9 @@ import { createNativeAccountCreationRepositories } from '../documentStore/native
 import { isNativeUserStorageSession } from '../documentStore/nativeUserStorage';
 import { createUserAccount } from '../auth/registerUser';
 import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead } from './persistenceContext';
-import { createThing, updateThing } from './things';
+import { getThingsTransactionBinding, type ThingsTransaction } from './persistence';
+import { StorageMutationError } from '../storage/storageCore';
+import { createThing, updateThing, resolveProfiles } from './things';
 import { newThingMutationCapture } from '../timeline/recordMutation';
 import { readTimelineEntries } from '../timeline/repository';
 import { subscriptionShareId } from '../subscriptions/subscriptionIdentity';
@@ -109,6 +111,65 @@ test('native canonical mutation hooks share content, quota and History transacti
  }));
  assert.equal(stale.ok, false); if (!stale.ok) assert.equal(stale.status, 409);
  assert.equal(forbiddenHookCalls, 0);
+
+ const compose = <T>(work: (tx: ThingsTransaction, transaction: { session: unknown; afterCommit: ThingsTransaction['afterCommit'] }) => Promise<T>) => run(() =>
+  getBoundThingsPersistence(owner.id)!.transaction('write', tx => {
+   const binding = getThingsTransactionBinding(tx, owner.id); assert.equal(binding.kind, 'native');
+   if (binding.kind !== 'native') throw Error('Expected native transaction');
+   return work(tx, { session: binding.session, afterCommit: tx.afterCommit });
+  }));
+ let effects = 0, staleTransaction!: { session: unknown; afterCommit: ThingsTransaction['afterCommit'] };
+ await compose(async (tx, transaction) => {
+  staleTransaction = transaction;
+  const added = await createThing(owner.id, input('composed'), { id: owner.id }, null, { transaction }); assert.equal(added.ok, true);
+  const edited = await updateThing(owner.id, 'composed', { crystal: { text: 'composed edited' } }, { transaction }); assert.equal(edited.ok, true);
+  assert.equal((await tx.readExact('composed'))?.crystal.text, 'composed edited');
+  transaction.afterCommit(async () => { effects++; }); assert.equal(effects, 0);
+ });
+ assert.equal(effects, 1); assert.equal((await read('composed'))?.crystal.text, 'composed edited'); assert.ok((await read('composed'))?.timelineHeadId);
+ for (const phase of ['create', 'update'] as const) {
+  const saved = await state();
+  await assert.rejects(compose(async (_tx, transaction) => {
+   transaction.afterCommit(async () => { effects++; });
+   const earlier = await createThing(owner.id, input('before-composed-failure-' + phase), { id: owner.id }, null, { transaction }); assert.equal(earlier.ok, true);
+   const fail = async () => { throw new StorageMutationError(409, 'storage_conflict', 'Controlled composed hook failure'); };
+   // Ignore the Fail result deliberately: the complete storage operation must
+   // poison the outer transaction and roll rows/quota/History/effects back.
+   const result = phase === 'create'
+    ? await createThing(owner.id, input('composed-failed'), { id: owner.id }, null, { transaction, afterInsert: fail })
+    : await updateThing(owner.id, 'composed', { crystal: { text: 'must rollback' } }, { transaction, mutation: { afterWrite: fail } });
+   assert.equal(result.ok, false);
+  }), /Controlled composed hook failure|failed|transaction/i);
+  assert.deepEqual(await state(), saved); assert.equal(effects, 1);
+ }
+ // Profile projection must use the active native snapshot instead of opening
+ // an identity-repository transaction. This protected identity CAS is a
+ // rollback-only snapshot fixture, not a supported profile-edit operation.
+ const savedProfile = await read(owner.id);
+ await assert.rejects(compose(async (tx) => {
+  const identity = await tx.readExact(owner.id); assert.ok(identity);
+  assert.equal(await tx.compareAndSwap({ id: owner.id, identity: identity._id, updatedAt: identity.updatedAt },
+   { ...identity, crystal: { ...identity.crystal, displayName: 'Uncommitted profile snapshot' } }), true);
+  const profiles = await resolveProfiles([owner.id, 'missing']);
+  assert.equal(profiles.get(owner.id)?.displayName, 'Uncommitted profile snapshot'); assert.equal(profiles.size, 1);
+  throw Error('Rollback profile snapshot fixture');
+ }), /Rollback profile snapshot fixture/);
+ assert.deepEqual(await read(owner.id), savedProfile);
+ assert.notEqual((await run(() => resolveProfiles([owner.id]))).get(owner.id)?.displayName, 'Uncommitted profile snapshot');
+
+ const beforeBadSessions = await state();
+ await assert.rejects(run(() => createThing(owner.id, input('stale-composed'), { id: owner.id }, null, { transaction: staleTransaction })), /scope|transaction|session/i);
+ await assert.rejects(compose(async (_tx, transaction) => {
+  await createThing(owner.id, input('bad-effect'), { id: owner.id }, null, { transaction: { ...transaction, afterCommit: () => {} } });
+ }), /scope|transaction|session/i);
+ await assert.rejects(compose(async (_tx, transaction) => {
+  await updateThing(owner.id, 'composed', { crystal: { text: 'bad-session' } }, { transaction: { ...transaction, session: {} } });
+ }), /scope|transaction|session/i);
+ await assert.rejects(run(() => getBoundThingsPersistence(actor.id)!.transaction('write', async tx => {
+  const binding = getThingsTransactionBinding(tx, actor.id); assert.equal(binding.kind, 'native'); if (binding.kind !== 'native') throw Error('Expected native');
+  await updateThing(owner.id, 'composed', { crystal: { text: 'foreign-session' } }, { transaction: { session: binding.session, afterCommit: tx.afterCommit } });
+ })), /scope|transaction|session|owner/i);
+ assert.deepEqual(await state(), beforeBadSessions); assert.equal(effects, 1);
 
  const stable = await state();
  context.close(); await provider.close();
