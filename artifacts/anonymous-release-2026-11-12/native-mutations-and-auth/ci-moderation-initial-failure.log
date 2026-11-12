@@ -1,0 +1,52 @@
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:32:06.8627453Z > npm run test:ios-release && npm run test:error-logs && npm run test:acl && npm run test:account-hints && npm run test:action-packs && npm run test:actions && npm run test:admin-integrations && npm run test:credentials-import && npm run test:ai-model-routing && npm run test:ai-models && npm run test:api-capabilities && npm run test:agent-overview && npm run test:agent-reporting && npm run test:attachments && npm run test:birthday-scope && npm run test:auth-origin && npm run test:auth-introspection && npm run test:characters && npm run test:characters-preflight && npm run test:autosave && npm run test:drafts && npm run test:branding && npm run test:chatgpt && npm run test:chatgpt-plan && npm run test:commander && npm run test:ci-control && npm run test:client-errors && npm run test:collections && npm run test:document-store && npm run test:native-things && npm run test:components && npm run test:connections && npm run test:dependencies && npm run test:desktop-oauth && npm run test:environment-gateway && npm run test:deployments && npm run test:devices && npm run test:file-sync && npm run test:folder-batches && npm run test:editorjs && npm run test:embed && npm run test:embed-bundle && npm run test:feed && npm run test:hooks && npm run test:feed-contract && npm run test:editable-target && npm run test:graphify-cas && npm run test:invites && npm run test:lopu && npm run test:lopu-streaming && npm run test:lopu-chat-streaming && npm run test:lopu-ui && npm run test:partial-json && npm run test:mcp-demo && npm run test:messenger && npm run test:inline-tokens && npm run test:migrations && npm run test:moderation && npm run test:nav && npm run test:notifications && npm run test:pat-scopes && npm run test:peers && npm run test:preview-build && npm run test:quota && npm run test:rate-limit && npm run test:root-data && npm run test:schemas && npm run test:service-workspaces && npm run test:sensitive-reveal && npm run test:social-previews && npm run test:seo && npm run test:settings && npm run test:storage && npm run test:storage-recovery && npm run test:subspaces && npm run test:support && npm run test:temporary-user && npm run test:theme && npm run test:things && npm run test:thing-metadata && npm run test:thing-storage && npm run test:timeline && npm run test:webpages && npm run test:marketing && npm run test:library && npm run test:smarts && npm run test:typecheck-ratchet && npm run test:vercel-status && npm run test:vercel-config && npm run test:vercel-root && npm run test:passwords && npm run test:passkeys && npm run test:web-platform && npm run test:draft && npm run test:mail && npm run test:catalogue && npm run test:local-workspace
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:01.0349057Z > test:moderation
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4607082Z ℹ tests 85
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4607719Z ℹ suites 0
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4608128Z ℹ pass 83
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4608521Z ℹ fail 2
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4608918Z ℹ cancelled 0
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4609339Z ℹ skipped 0
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4612101Z ℹ todo 0
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4613053Z ℹ duration_ms 3381.3788
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4626266Z
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4626909Z ✖ failing tests:
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4627172Z
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4627775Z test at app/api/utils/moderation/detachedQueuesShutdown.test.ts:2:3657
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4629255Z ✖ ../../../routes/api/v1/auth/verify-email/_verify-email.tsx tracks detached completion (5.210812ms)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4631102Z   AssertionError [ERR_ASSERTION]: Missing tracked scheduling boundary: ../../../routes/api/v1/auth/verify-email/_verify-email.tsx / sendNewUserAdminNotification(
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4633144Z       at schedulingStatement (/home/runner/work/thingtime/thingtime/remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts:21:3)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4635572Z       at TestContext.<anonymous> (/home/runner/work/thingtime/thingtime/remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts:54:59)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4637073Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4637815Z       at Test.run (node:internal/test_runner/test:1402:25)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4638689Z       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4639589Z       at Test.postRun (node:internal/test_runner/test:1542:19)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4640332Z       at Test.run (node:internal/test_runner/test:1467:12)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4641239Z       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4642271Z     generatedMessage: false,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4642742Z     code: 'ERR_ASSERTION',
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4643170Z     actual: undefined,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4643577Z     expected: true,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4643966Z     operator: '==',
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4644352Z     diff: 'simple'
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4644713Z   }
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4644919Z
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4645449Z test at app/api/utils/moderation/detachedQueuesShutdown.test.ts:2:3657
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4647127Z ✖ ../../../routes/api/v1/auth/verify-email/_verify-email.tsx tracks detached failure (2.098023ms)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4648870Z   AssertionError [ERR_ASSERTION]: Missing tracked scheduling boundary: ../../../routes/api/v1/auth/verify-email/_verify-email.tsx / sendNewUserAdminNotification(
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4650893Z       at schedulingStatement (/home/runner/work/thingtime/thingtime/remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts:21:3)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4652847Z       at TestContext.<anonymous> (/home/runner/work/thingtime/thingtime/remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts:54:59)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4654160Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4654875Z       at Test.run (node:internal/test_runner/test:1402:25)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4655737Z       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4656789Z       at Test.postRun (node:internal/test_runner/test:1542:19)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4657536Z       at Test.run (node:internal/test_runner/test:1467:12)
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4658478Z       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4659362Z     generatedMessage: false,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4659863Z     code: 'ERR_ASSERTION',
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4660324Z     actual: undefined,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4660731Z     expected: true,
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4661185Z     operator: '==',
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4661593Z     diff: 'simple'
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.4661977Z   }
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.5062890Z  ELIFECYCLE  Command failed with exit code 1.
+control-plane / Build + typecheck ratchet + unit tests	UNKNOWN STEP	2026-11-12T01:43:04.5374893Z ##[error]Process completed with exit code 1.

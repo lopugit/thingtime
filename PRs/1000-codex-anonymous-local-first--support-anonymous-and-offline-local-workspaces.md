@@ -2,6 +2,30 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native transactional writes and token HTTP — 12 November 2026
+
+SQLite now supports trusted canonical mutation callbacks, delegated workspace
+writes with transactional permission checks, protected discovery receipts and
+owner-library counts. Actor History and owner quota remain distinct. Native PAT
+storage serializes admission/use limits and preserves expiry, revocation and
+profile scope. Token management is enabled through the real local API; full
+Things/workspace HTTP remains gated.
+
+The packaged build, integrity check and actual Mongo/SQLite HTTP restart fixtures
+pass. SQLite token mint/list/introspection/revoke, cross-account refusal, PAT
+management refusal, bearer redaction and private/no-store responses are verified
+through compiled Nitro with real Electron safeStorage. Current Nitro SHA-256:
+`17fac19e0155d5465242c12ec6acd05957af3904edb6d6a2665b9efef49f28e9`.
+All 13 combined gates pass (1,253 reported tests, three explicit skips), plus
+85 moderation tests. TypeScript/ratchet and full lint pass (0 errors/376 warnings).
+Only the test extractor changed during verification; runtime source stayed fixed.
+Exact source attribution is in the linked receipts. A prior CI test extractor missed a hoisted notification callback; its
+failure and focused correction are retained separately from runtime evidence.
+No full native Builder UI, iOS runtime or connected-host artifact delivery is
+claimed. SQLite is first-class; MongoDB is optional on supported desktops.
+
+[Verification, initial failures and remaining acceptance](../artifacts/anonymous-release-2026-11-12/native-mutations-and-auth/README.md).
+
 ## Native resolution permissions and holds — 12 November 2026
 
 Shared workspace access now supports the selected SQLite provider, including

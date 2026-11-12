@@ -12102,7 +12102,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'tokens', contractVersion: '1.1.0', featureVersion: '1.1.0',
+    id: 'tokens', contractVersion: '1.1.1', featureVersion: '1.1.1',
     group: 'tokens',
     title: 'Personal access tokens',
     endpoint: '/api/v1/tokens',
@@ -12118,6 +12118,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET to list your tokens (newest first) and the scope catalog for pickers.',
       'POST { name, scopes, expiresInMs, maxUses } to mint — omit/null expiresInMs for never, omit/null maxUses for unlimited.',
       'Copy the returned token immediately; it is shown exactly once.',
+      'Responses, including refusals, use Cache-Control: private, no-store.',
       'Send it as Authorization: Bearer <token> against the things routes.',
       'Revoke anytime via POST /api/v1/tokens/revoke.'
     ],
@@ -12282,7 +12283,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'tokens-revoke',
+    id: 'tokens-revoke', contractVersion: '1.0.1', featureVersion: '1.0.1',
     group: 'tokens',
     title: 'Revoke a token',
     endpoint: '/api/v1/tokens/revoke',
@@ -12303,7 +12304,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'tokens-self',
+    id: 'tokens-self', contractVersion: '1.0.1', featureVersion: '1.0.1',
     group: 'tokens',
     title: 'Token introspection',
     endpoint: '/api/v1/tokens/self',

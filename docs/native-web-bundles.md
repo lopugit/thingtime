@@ -66,8 +66,12 @@ root-data, while preserving owner and origin checks. This handler correction
 does not enable the full webpage-resolve HTTP contract.
 
 Workspace audience reads now use shared membership, moderation and linked-customer
-rules. Native owner setup reuses canonical account and content writers; delegated
-workspace writes and Maps credentials still require their protected adapters.
+rules. Native owner setup and delegated writes reuse canonical account and content
+writers. Trusted insert/update hooks recheck current role, references and scope
+inside the actual content transaction; failures roll back quota and History.
+Owner accounting and real actor attribution remain separate. Multi-write folder
+workflows retain their existing per-write commits. Maps credentials/dashboard
+still require their protected adapter.
 External-source reads use local link/source metadata only, with no OAuth refresh,
 credential reads or outbound fetch. Permission snapshots are scoped to the actual
 request/transaction and invalidated by mutation, commit and rollback. A reused
@@ -80,8 +84,22 @@ client input cannot mint these protected fields. The broader creation checkpoint
 coordinator remains unavailable, and positive compiled-server resolution plus
 actual rendered Builder acceptance are still required before HTTP activation.
 
+Native owner-library counts retain canonical filters and audience checks; unsupported
+managed selections explicitly refuse. Discovery uses a separate protected HOME
+control repository, preserving anonymous browser identities and current hidden-link
+receipt checks without manufacturing a content allowance. Ordinary Builder reads
+with discovery enabled remain the canonical no-op for non-post content.
+
+Native PAT management uses the shared mint/list/resolve/consume/revoke services.
+Typed session operations serialize token-cap admission and finite-use consumption,
+recheck revocation/expiry and reap expired or retired receipts on scoped operations.
+GET/POST tokens, POST revoke and GET self are admitted independently of Things;
+both manifests advertise only complete methods. Responses are private/no-store.
+Token issuance alone does not enable native content operations for that token.
+
 Generic native Things HTTP remains unavailable. This service slice does not yet
-support the full `api.things` contract: app/PAT namespaces, composed hooks,
+support the full `api.things` contract: app namespaces, content PAT enforcement,
+external composed transactions and creation coordinators,
 managed kinds and target cascades require their canonical adapters.
 Unsupported private items retain the ordinary not-found response for unauthorized
 viewers. Do not advertise the whole feature merely because its HTTP verbs could

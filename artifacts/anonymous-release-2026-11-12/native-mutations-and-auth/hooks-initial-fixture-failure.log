@@ -1,0 +1,28 @@
+✖ native canonical mutation hooks share content, quota and History transactions with trusted actor attribution (172.330875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1605.261583
+
+✖ failing tests:
+
+test at app/api/utils/things/nativeMutationHooks.test.ts:2:1789
+✖ native canonical mutation hooks share content, quota and History transactions with trusted actor attribution (172.330875ms)
+  Error [SubscriptionRepositoryError]: Subscription repository does not match the active home profile or request
+      at refused (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/subscriptions/subscriptionRepository.ts:20:32)
+      at currentSubscriptionRepository (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/subscriptions/subscriptionRepository.ts:29:23)
+      at getSubscription (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/subscriptions/subscriptions.ts:280:18)
+      at <anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/nativeMutationHooks.test.ts:32:23)
+      at async <anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/persistenceContext.ts:201:40)
+      at async <anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/auth/accountCreationRepository.ts:35:95)
+      at async <anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/auth/sessionRepository.ts:100:54)
+      at async <anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/auth/userIdentityRepository.ts:55:16)
+      at async TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/nativeMutationHooks.test.ts:58:29)
+      at async Test.run (node:internal/test_runner/test:1332:7) {
+    code: 'SUBSCRIPTION_REPOSITORY_SCOPE',
+    status: 503
+  }

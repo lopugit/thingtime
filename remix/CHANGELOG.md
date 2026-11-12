@@ -160,6 +160,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add canonical SQLite mutation hooks and delegated workspace writes,
+  protected discovery and owner-library counts, plus typed PAT persistence and
+  native token-management HTTP. Token responses are private/no-store; broader
+  Things/Builder HTTP remains gated. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-12: Reuse workspace authorization and trusted creation holds on SQLite,
   with local external-source audience reads and mutation-scoped permission
   snapshots. Preserve canonical accounting, receipt and private-data boundaries.

@@ -1,5 +1,5 @@
 import type { Binary } from 'mongodb';
-import { currentSessionRepository } from './sessionRepository';
+import { currentSessionRepository, currentPatSessionPersistence, PatSessionLimitError } from './sessionRepository';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 export { REVOKED_SESSION_REAP_MS, revokedSessionPipeline } from './sessionCore';
 
@@ -27,6 +27,8 @@ export type SessionDoc = {
 };
 
 export type CreateSessionOptions = {
+  /** Internal PAT mint admission; never copied from a request/session payload. */
+  patLimit?: number | null;
   // A signed one-time authorization request can supply its preallocated ID so
   // repeated consent submissions collide on the existing unique jti index.
   jti?: string;
@@ -51,7 +53,10 @@ export const createSession = async (userId: string, options: CreateSessionOption
     purpose: options.purpose ?? 'browser',
     meta: options.meta ?? {}
   };
-	await currentSessionRepository().insert(session, options.session);
+	if (options.patLimit !== undefined) {
+    if (session.purpose !== 'pat' || options.session || (options.patLimit !== null && (!Number.isSafeInteger(options.patLimit) || options.patLimit < 0))) throw new Error('Invalid personal token mint admission');
+    if (!await currentPatSessionPersistence().insert(session, options.patLimit)) throw new PatSessionLimitError();
+  } else await currentSessionRepository().insert(session, options.session);
   return session;
 };
 

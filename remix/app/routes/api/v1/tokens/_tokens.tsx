@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { privateJson as json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { listPatTokens, mintPatToken, PAT_SCOPE_CATALOG, PAT_VISIBILITY_CATALOG } from '~/api/utils/auth/patTokens';

@@ -1,0 +1,78 @@
+{
+  "status": "passed",
+  "baseCommit": "860ebaf315b40c0b79cb069a2f239d986fc61149",
+  "attribution": "Frozen uncommitted runtime tree inventoried by companion non-build verification; no stable app replacement or deployment.",
+  "startedAt": "2026-11-12T02:02:53.491552+00:00",
+  "checks": [
+    {
+      "name": "01-build-web",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "startedAt": "2026-11-12T02:02:53.491970+00:00",
+      "log": "01-build-web.log",
+      "environment": {},
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:03:48.655774+00:00",
+      "logSha256": "498755d96420bbc4ac7d220a0362ab7afa05f4bcf29668bec807b2186ddc643c",
+      "rawLog": "01-build-web.log.raw.gz",
+      "rawLogSha256": "f5e4d81a3657f95763c2e6160d3c429fefcd6243877daf2db1e7151a2f7aa80c",
+      "normalizedLogSha256": "498755d96420bbc4ac7d220a0362ab7afa05f4bcf29668bec807b2186ddc643c"
+    },
+    {
+      "name": "02-verify-web",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "startedAt": "2026-11-12T02:03:48.656860+00:00",
+      "log": "02-verify-web.log",
+      "environment": {},
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:03:49.462062+00:00",
+      "logSha256": "5f2aa8f5faa0716f6c3bb9ad9773dd115b420f2356cbc84a00718c7d90e16127"
+    },
+    {
+      "name": "03-bundled-mongo-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "startedAt": "2026-11-12T02:03:49.465496+00:00",
+      "log": "03-bundled-mongo-http.log",
+      "environment": {},
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:04:14.314648+00:00",
+      "logSha256": "68367b6573879d59d05ee1948d2dd76974bee9f7cca7b0f47cdc3f25d1398910"
+    },
+    {
+      "name": "04-bundled-sqlite-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-sqlite-account.cjs"
+      ],
+      "startedAt": "2026-11-12T02:04:14.318363+00:00",
+      "log": "04-bundled-sqlite-http.log",
+      "environment": {
+        "THINGTIME_RUN_BUNDLED_SQLITE_ACCOUNT_TEST": "1",
+        "THINGTIME_SQLITE_EXPECTED_NITRO_SHA": "17fac19e0155d5465242c12ec6acd05957af3904edb6d6a2665b9efef49f28e9"
+      },
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:04:20.753502+00:00",
+      "logSha256": "c5f94c19fdaa312afaa28ab85c882a540987c28d0cd11f2cc1a1a60981edaab1"
+    }
+  ],
+  "nitroSha256": "17fac19e0155d5465242c12ec6acd05957af3904edb6d6a2665b9efef49f28e9",
+  "webIntegritySha256": "250f166eebaef68530cad57eba1d1a55b0877270fbc59b40ea56860cd05c20c5",
+  "endedAt": "2026-11-12T02:04:20.754351+00:00",
+  "logNormalization": "ANSI escapes and trailing line whitespace removed for review. Every modified original is preserved as .raw.gz; rawLogSha256 hashes its uncompressed bytes. Test totals and exits unchanged."
+}

@@ -1,0 +1,334 @@
+{
+  "startedAt": "2026-11-12T02:03:21.595040+00:00",
+  "attribution": {
+    "base": "860ebaf31",
+    "integratedMain": "f2538e192",
+    "head": "860ebaf315b40c0b79cb069a2f239d986fc61149"
+  },
+  "sourceRoots": [
+    "remix",
+    "electron",
+    "native-bundles",
+    "MCP",
+    "iOS",
+    "apple"
+  ],
+  "inventoryPolicy": "Unique git ls-files --cached --others --exclude-standard; ignored outputs excluded; regular-file contents SHA256",
+  "before": {
+    "files": 5632,
+    "sha256": "bc6b5a968fccff4661460c21ae86ef2f5a3245eb1bd4f98000d08615a88f892b"
+  },
+  "fixtureEnvironment": "Both Mongo URI aliases point to unreachable loopback port 1; no real database selected.",
+  "checks": [
+    {
+      "name": "test:native-things",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:native-things",
+      "startedAt": "2026-11-12T02:03:21.611336+00:00",
+      "timeoutSeconds": 900,
+      "log": "01-test-native-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:06:39.168457+00:00",
+      "elapsedSeconds": 197.554,
+      "testTotals": {
+        "tests": 66,
+        "suites": 0,
+        "pass": 66,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "c399fe32157c72191c72fadfbfd4a5b81598b2184e708072e0b15c2d88e954e6",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "test:things",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:things",
+      "startedAt": "2026-11-12T02:06:39.169720+00:00",
+      "timeoutSeconds": 900,
+      "log": "02-test-things.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:06:55.787599+00:00",
+      "elapsedSeconds": 16.618,
+      "testTotals": {
+        "tests": 458,
+        "suites": 0,
+        "pass": 455,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      },
+      "logSha256": "5dd7e346b3d1cd4f16d380d1866499b5fe1c25f428767ecff1e669b02ac5d7ea",
+      "experimentalWarningLines": 1
+    },
+    {
+      "name": "test:document-store",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "startedAt": "2026-11-12T02:06:55.788932+00:00",
+      "timeoutSeconds": 900,
+      "log": "03-test-document-store.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:22.521974+00:00",
+      "elapsedSeconds": 26.735,
+      "testTotals": {
+        "tests": 168,
+        "suites": 0,
+        "pass": 168,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "7109ea9250945f828571e3b7029ab80534da05b2bd2c40e1baf749a31be409e5",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "test:storage",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:storage",
+      "startedAt": "2026-11-12T02:07:22.542386+00:00",
+      "timeoutSeconds": 900,
+      "log": "04-test-storage.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:28.632587+00:00",
+      "elapsedSeconds": 6.09,
+      "testTotals": {
+        "tests": 41,
+        "suites": 0,
+        "pass": 41,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "fd06f9c2976dcb667a3084bb6e273342a6500d357614f48693b867b9266ff630",
+      "experimentalWarningLines": 1
+    },
+    {
+      "name": "test:timeline",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:timeline",
+      "startedAt": "2026-11-12T02:07:28.633300+00:00",
+      "timeoutSeconds": 900,
+      "log": "05-test-timeline.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:49.294573+00:00",
+      "elapsedSeconds": 20.661,
+      "testTotals": {
+        "tests": 278,
+        "suites": 0,
+        "pass": 278,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "562cf46ebcd69f308506ae67c4c95e1324de2d1c431fd05e02438b889dcfd95a",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "test:api-capabilities",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "startedAt": "2026-11-12T02:07:49.295434+00:00",
+      "timeoutSeconds": 900,
+      "log": "06-test-api-capabilities.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:50.591817+00:00",
+      "elapsedSeconds": 1.296,
+      "testTotals": {
+        "tests": 212,
+        "suites": 0,
+        "pass": 212,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "c93115b60611038b8cb013c75a5c3b8afe421c49c6c20b97d578b5a2487aad37",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "pat-revalidation",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix",
+      "command": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/patRevalidation.test.mts",
+      "startedAt": "2026-11-12T02:07:50.592464+00:00",
+      "timeoutSeconds": 300,
+      "log": "07-pat-revalidation.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:50.879557+00:00",
+      "elapsedSeconds": 0.287,
+      "testTotals": {
+        "tests": 5,
+        "suites": 0,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "f4225da81092cd87a19b856fd7db22af5bc3658fd5a2da33ffa1e501ce83618d",
+      "experimentalWarningLines": 1
+    },
+    {
+      "name": "workspace-components",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix",
+      "command": "node --import tsx --test app/api/utils/serviceWorkspaces/access.test.ts app/api/utils/serviceWorkspaces/googlePlaces.test.ts app/components/Builder/ServiceWorkspace/serviceNavigation.test.ts app/components/Builder/ServiceWorkspace/workspaceResponse.test.ts app/components/Collections/collectionWindow.test.ts",
+      "startedAt": "2026-11-12T02:07:50.880144+00:00",
+      "timeoutSeconds": 300,
+      "log": "08-workspace-components.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:51.441517+00:00",
+      "elapsedSeconds": 0.561,
+      "testTotals": {
+        "tests": 13,
+        "suites": 0,
+        "pass": 13,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "e9e4971530feab78d346b7cda6161c2c492c668d68e09c9d93e9bd86c4a1a161",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "native-home",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix",
+      "command": "node --import tsx --test server/utils/nativeHomeDispatch.test.ts server/utils/nativeHomeFence.test.ts server/utils/nativeHomePlugin.test.ts server/utils/nativeHomeRuntime.test.ts",
+      "startedAt": "2026-11-12T02:07:51.442328+00:00",
+      "timeoutSeconds": 300,
+      "log": "09-native-home.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:53.800450+00:00",
+      "elapsedSeconds": 2.358,
+      "testTotals": {
+        "tests": 11,
+        "suites": 0,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "f3afe59c292e3bb1677c615f943a92bd176e7da975c74903a7e3f4c69e6e58a7",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "electron-fixture-contract",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "node --test electron/test/bundled-sqlite-account-fixture.test.cjs",
+      "startedAt": "2026-11-12T02:07:53.801022+00:00",
+      "timeoutSeconds": 120,
+      "log": "10-electron-fixture-contract.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:07:53.985535+00:00",
+      "elapsedSeconds": 0.185,
+      "testTotals": {
+        "tests": 4,
+        "suites": 0,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "69c49944daf857c2f486efad4453181c339fb9ac92f808e64bda33f6239c37ef",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "typecheck",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "startedAt": "2026-11-12T02:07:53.986074+00:00",
+      "timeoutSeconds": 900,
+      "log": "11-typecheck.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:09:09.810220+00:00",
+      "elapsedSeconds": 75.823,
+      "testTotals": {},
+      "logSha256": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+      "experimentalWarningLines": 0,
+      "rawLog": "11-typecheck.log.raw.gz",
+      "rawLogSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "normalizedLogSha256": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818"
+    },
+    {
+      "name": "typecheck-ratchet",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "startedAt": "2026-11-12T02:09:09.810848+00:00",
+      "timeoutSeconds": 900,
+      "log": "12-typecheck-ratchet.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:10:00.235554+00:00",
+      "elapsedSeconds": 50.424,
+      "testTotals": {},
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "experimentalWarningLines": 0
+    },
+    {
+      "name": "lint",
+      "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+      "command": "corepack pnpm --dir remix run lint",
+      "startedAt": "2026-11-12T02:10:00.236212+00:00",
+      "timeoutSeconds": 900,
+      "log": "13-lint.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-12T02:10:46.790742+00:00",
+      "elapsedSeconds": 46.554,
+      "testTotals": {},
+      "logSha256": "e8975e440b52a068e96a5ca0ee6d8b249b1c3a79babafe62cd4414c9514d261c",
+      "experimentalWarningLines": 0,
+      "lintTotals": {
+        "problems": 376,
+        "errors": 0,
+        "warnings": 376
+      },
+      "rawLog": "13-lint.log.raw.gz",
+      "rawLogSha256": "8ef290705fc444044fad72739427390d003c2168de9d4987d423005313d9f1d5",
+      "normalizedLogSha256": "e8975e440b52a068e96a5ca0ee6d8b249b1c3a79babafe62cd4414c9514d261c"
+    }
+  ],
+  "endedAt": "2026-11-12T02:10:47.395375+00:00",
+  "after": {
+    "files": 5632,
+    "sha256": "47c683e73f98e23783620f58138221cd769d26acf198265a3d2fc7bc200ba3f0"
+  },
+  "sourceUnchanged": false,
+  "changedPaths": [
+    "remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts"
+  ],
+  "aggregateTestTotals": {
+    "tests": 1256,
+    "suites": 0,
+    "pass": 1253,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 3,
+    "todo": 0
+  },
+  "normalization": "Totals sum top-level TAP or Node spec reporter summaries, including multiple Node invocations per command. Original logs are retained directly or in the indicated .raw.gz.",
+  "sourceDeltaAttribution": {
+    "path": "remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts",
+    "owner": "canonical_native_things via parent authorization",
+    "classification": "test-only AST extractor correction, unrelated to runtime implementation",
+    "observedMtimeUtc": "2026-11-12T02:05:50.408721+00:00",
+    "typecheckRatchetAndLintFollowedEdit": true
+  },
+  "runtimeSourceUnchanged": true,
+  "intentionalSkippedTests": [
+    "native post and Thing permalinks preserve audience context and reachable composer controls",
+    "513 MiB of real Blob files collect, export and import with independent exact digests",
+    "real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte"
+  ],
+  "finalFreeSpaceObservation": "5.2 GiB available on workspace volume",
+  "allCommandsSucceeded": true,
+  "experimentalWarningLines": 3,
+  "scope": "Non-build isolated test/static-analysis batch only. No packaged runtime/device/UI/deployment acceptance claimed. Parent owns packaged verification.",
+  "logNormalization": "ANSI escapes and trailing line whitespace removed for review. Every modified original is preserved as .raw.gz; rawLogSha256 hashes its uncompressed bytes. Test totals and exits unchanged."
+}

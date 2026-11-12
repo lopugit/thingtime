@@ -15,6 +15,13 @@ export const json = (data: unknown, init: JsonInit = {}) => {
   });
 };
 
+/** Sensitive response bodies and account metadata must not enter HTTP caches. */
+export const privateJson = (data: unknown, init: JsonInit = {}) => {
+  const headers = new Headers(init.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  return json(data, { ...init, headers });
+};
+
 /** Convert an HTTP Request facade while adding cancellation. Nitro/H3 facades
  * cannot be passed to Undici's private-state clone constructor. This preserves
  * the one original body stream; it neither buffers nor transfers server-only

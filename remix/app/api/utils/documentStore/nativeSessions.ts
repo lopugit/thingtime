@@ -6,6 +6,7 @@ import { REVOKED_SESSION_REAP_MS } from '../auth/sessionCore';
 import type { SessionDoc } from '../auth/sessions';
 import type { CollectionProvider, CollectionTransaction } from './collectionContract';
 import { encodeCollectionDocument } from './collectionProvider';
+import { createNativePatSessionPersistence } from './nativePatSessions';
 
 /** Constructs persistence for canonical session helpers only. The supplied
  * provider is already opened by the explicit native caller. This module does
@@ -27,6 +28,7 @@ export async function createNativeSessionRepository(provider: CollectionProvider
  };
  repository = Object.freeze({
   kind: 'native-home' as const, homePlaneId,
+  pat: createNativePatSessionPersistence(provider, namespace, () => repository),
   async insert(document: SessionDoc, callerTransaction?: unknown) {
    assertSessionRepositoryScope(repository);
    // Registration/session callers needing a wider native transaction must get

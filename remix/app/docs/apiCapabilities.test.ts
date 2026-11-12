@@ -151,8 +151,13 @@ test('private agent reporting is registered in both manifests with an independen
   assert.equal(manifest.origin, 'https://reporting.example');
   assert.equal(manifest.features['api.agent-reporting'].version, '1.1.0');
   assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.3.0');
-  assert.equal(legacy.features['api.tokens'], '1.1.0');
-  assert.equal(manifest.features['api.tokens'].version, '1.1.0');
+  for (const [feature, version] of [['api.tokens', '1.1.1'], ['api.tokens-revoke', '1.0.1'], ['api.tokens-self', '1.0.1']]) {
+    assert.equal(legacy.features[feature], version);
+    assert.equal(manifest.features[feature].version, version);
+    assert.equal(capabilitySatisfies(version, version), true);
+    assert.equal(capabilitySatisfies('2.0.0', version), false);
+    assert.equal(capabilitySatisfies(undefined, version), false);
+  }
   assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.3.0');
   assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.3.0');
   for (const [id, version, old] of [['agent-reporting', '1.1.0', '1.0.0'], ['chatgpt-mcp', '2.3.0', '2.1.0'], ['chatgpt-oauth-authorize', '1.3.0', '1.2.0'], ['chatgpt-oauth-token', '1.1.0', '1.0.0'], ['chatgpt-oauth-register', '1.1.0', '1.0.0']]) {

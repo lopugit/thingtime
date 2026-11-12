@@ -9,10 +9,41 @@ function schedulingStatement(file: string, call: string) {
   const url = new URL(file, import.meta.url);
   const source = ts.createSourceFile(url.pathname, readFileSync(url, 'utf8'), ts.ScriptTarget.Latest, true);
   const candidates: string[] = [];
+  const callbackDeclaration = (node: ts.Node, name: string): string | null => {
+    // Resolve the real lexical callback, not an unrelated same-name function
+    // elsewhere in the file. Execute its source with the scheduling statement
+    // so the existing pending/rejected-effect assertions still test behavior.
+    for (let scope: ts.Node | undefined = node.parent; scope; scope = scope.parent) {
+      if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
+      for (const statement of scope.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        for (const declaration of statement.declarationList.declarations) {
+          if (!ts.isIdentifier(declaration.name) || declaration.name.text !== name) continue;
+          const initializer = declaration.initializer;
+          return initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) && initializer.getText(source).includes(call)
+            ? statement.getText(source) : null;
+        }
+      }
+    }
+    return null;
+  };
   const visit = (node: ts.Node) => {
     if (ts.isExpressionStatement(node)) {
       const text = node.getText(source);
       if (text.includes(call) && text.includes('withGatewayWork')) candidates.push(text);
+      else {
+        const findHoisted = (child: ts.Node) => {
+          if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === 'withGatewayWork') {
+            const callback = child.arguments[0];
+            if (callback && ts.isIdentifier(callback)) {
+              const declaration = callbackDeclaration(child, callback.text);
+              if (declaration) candidates.push(`${declaration}\n${text}`);
+            }
+          }
+          ts.forEachChild(child, findHoisted);
+        };
+        findHoisted(node);
+      }
     }
     ts.forEachChild(node, visit);
   };

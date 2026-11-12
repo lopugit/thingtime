@@ -14,11 +14,14 @@ import { withHomeEmailRepository } from '../email/repository';
 import { withHomeNotificationRepository } from '../notifications/repository';
 import { withHomeRateLimitRepository } from '../rateLimit/repository';
 import { createNativeThingsPersistenceContext } from '../things/persistenceContext';
+import { createNativeFoundPostRepository } from './nativeFoundPosts';
+import { withHomeFoundPostRepository } from '../things/foundPostRepository';
 
 const supportedOperations = Object.freeze([
  ['GET', 'root-data'],
  ['POST', 'v1/auth/register'], ['POST', 'v1/login'], ['POST', 'v1/auth/logout'],
  ['GET', 'v1/auth/me'], ['GET', 'v1/auth/accounts'], ['GET', 'v1/auth/verify-email'],
+ ['GET', 'v1/tokens'], ['POST', 'v1/tokens'], ['POST', 'v1/tokens/revoke'], ['GET', 'v1/tokens/self'],
  ['GET', 'v1/notifications'], ['POST', 'v1/notifications/read']
 ].map(([method, path]) => Object.freeze({ method, path })));
 
@@ -50,6 +53,7 @@ export async function createNativeAccountHttpHome(input: {
   const verification = await createNativeEmailVerificationRepository(provider, homePlaneId);
   const subscriptions = await createNativeSubscriptionRepository(provider, homePlaneId);
   const notifications = await createNativeNotificationRepository(provider, homePlaneId);
+  const discoveries = await createNativeFoundPostRepository(provider, homePlaneId);
   const limiter = await createNativeRateLimitRepository(provider, homePlaneId);
   const email = await createNativeEmailRepository(provider, homePlaneId, {
    homePlaneId, keyId, withKey<T>(work: (key: Uint8Array) => T): T { check(); return work(outbox); }
@@ -61,7 +65,7 @@ export async function createNativeAccountHttpHome(input: {
     return auth.run(() => things.run(() => withHomeSubscriptionRepository(subscriptions, () =>
      withHomeRosterRepository(roster, homePlaneId, () => withHomeEmailVerificationRepository(verification, homePlaneId, () =>
       withHomeEmailRepository(email, homePlaneId, () => withHomeNotificationRepository(notifications, () =>
-       withHomeRateLimitRepository(limiter, work))))))));
+       withHomeRateLimitRepository(limiter, () => withHomeFoundPostRepository(discoveries, work)))))))));
    },
    close() { closed = true; things.close(); vault.fill(0); outbox.fill(0); }
   });

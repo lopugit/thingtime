@@ -1,0 +1,33 @@
+{
+  "scope": "Test-only correction for prior-head CI failure; no runtime change",
+  "source": "remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts",
+  "sourceSha256": "a945f8a47091f26f288f26d714744b63d771c81821f3d51d14d716a5d8153e81",
+  "sourceModifiedAt": "2026-11-12T02:05:50.408721+00:00",
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:moderation",
+      "exitCode": 0,
+      "attribution": "Parent-reported actual worker result, not a second run",
+      "log": "moderation-after.log",
+      "sha256": "6c9ede84f2e62e94b1335fed9ec20d7292d7289643fa8ffa0a43a9f119a87e3f",
+      "testTotals": {
+        "tests": 85,
+        "pass": 85,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/moderation/detachedQueuesShutdown.test.ts",
+      "exitCode": 0,
+      "attribution": "Parent-reported actual worker result, not a second run",
+      "log": "moderation-lint.log",
+      "sha256": "6ffff0cba5f24f21d65d3f158d47023fccd93fe41cdb501f65df9a6c459653be",
+      "testTotals": {},
+      "rawLog": "moderation-lint.log.raw.gz",
+      "rawLogSha256": "5be7e46de3a42a444e124aee6aa38932ba0b627a29840a374bf6fdeba92e66c1",
+      "normalizedLogSha256": "6ffff0cba5f24f21d65d3f158d47023fccd93fe41cdb501f65df9a6c459653be"
+    }
+  ],
+  "logNormalization": "ANSI escapes and trailing line whitespace removed for review. Every modified original is preserved as .raw.gz; rawLogSha256 hashes its uncompressed bytes. Test totals and exits unchanged."
+}

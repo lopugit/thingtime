@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { privateJson as json } from '~/api/http';
 
 import { resolvePatIntrospection } from '~/api/utils/auth/patTokens';
 

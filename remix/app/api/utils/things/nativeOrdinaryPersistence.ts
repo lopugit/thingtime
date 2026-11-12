@@ -5,6 +5,12 @@ import { currentContentStorageSizeBytes, StorageMutationError } from '../storage
 import { newThingMutationCapture, recordThingMutation, type ThingMutationCapture } from '../timeline/recordMutation';
 import { getThingsTransactionBinding, matchesThingVersion, type StoredThing, type ThingsPersistence, type ThingsTransaction } from './persistence';
 import { contentExecutionHold } from './contentExecutionGate';
+import type { NativeUserStorageSession } from '../documentStore/nativeUserStorage';
+
+type NativeMutationHooks = {
+ beforeWrite?: (before: StoredThing, session: NativeUserStorageSession) => Promise<void>;
+ afterWrite?: (session: NativeUserStorageSession) => Promise<void>;
+};
 
 /** Temporary admission boundary for the first canonical service vertical slice.
  * Unsupported composition/namespace families remain unavailable until their
@@ -33,29 +39,32 @@ function history(tx: ThingsTransaction, ownerId: string) {
  if (binding.kind !== 'native') throw new Error('Native Thing mutation requires its actual storage session');
  return { port: createNativeTimelinePersistence(binding.collections, { ownerId, session: binding.session }), session: binding.session };
 }
-export async function insertNativeOrdinaryThing(repository: ThingsPersistence, document: StoredThing, capture: ThingMutationCapture) {
+export async function insertNativeOrdinaryThing(repository: ThingsPersistence, document: StoredThing, capture: ThingMutationCapture, afterInsert?: (document: StoredThing, session: NativeUserStorageSession) => Promise<void>) {
  return repository.transaction('write', async tx => {
   if (await tx.readExact(document.shareId)) return conflict('A Thing with this id already exists');
   await tx.lockFolder(document.folderId ?? null, document.thingtime.includes('folder') ? document.shareId : undefined);
   const { port, session } = history(tx, document.ownerId);
   await applyUserStorageDelta(document.ownerId, document.sizeBytes, session);
   const inserted = await tx.insert(document);
+  await afterInsert?.(inserted, session);
   await recordThingMutation(port, null, inserted, capture, session, tx);
   return inserted;
  });
 }
-export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture, authorize?: (current: StoredThing) => Promise<void>) {
+export async function updateNativeOrdinaryThing(repository: ThingsPersistence, before: StoredThing, after: StoredThing, capture: ThingMutationCapture, authorize?: (current: StoredThing) => Promise<void>, hooks: NativeMutationHooks = {}) {
  return repository.transaction('write', async tx => {
   const current = await tx.readExact(before.shareId);
   if (current && authorize) await authorize(current);
   if (!current || !matchesThingVersion(current, version(before))) return conflict();
-  await tx.lockFolder(after.folderId ?? null, after.thingtime.includes('folder') ? after.shareId : undefined);
   const { port, session } = history(tx, before.ownerId);
+  await hooks.beforeWrite?.(current, session);
+  await tx.lockFolder(after.folderId ?? null, after.thingtime.includes('folder') ? after.shareId : undefined);
   const previousBytes = currentContentStorageSizeBytes(before);
   if (previousBytes === null) throw new StorageMutationError(503, 'accounting_unavailable', 'Thing requires the current storage migration before it can be updated');
   await applyUserStorageDelta(before.ownerId, after.sizeBytes - previousBytes, session);
   if (!await tx.compareAndSwap(version(before), after)) return conflict();
   await recordThingMutation(port, before, after, capture, session, tx);
+  await hooks.afterWrite?.(session);
   return after;
  });
 }

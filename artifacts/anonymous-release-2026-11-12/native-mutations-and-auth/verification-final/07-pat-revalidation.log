@@ -1,0 +1,16 @@
+(node:11056) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11056) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ a last-use PAT admits exactly one request and revalidates it without consuming again (22.214167ms)
+✔ copied actors, another request and another scope cannot skip admission (3.456875ms)
+✔ every revalidation checks live revocation, expiry, scopes and account state (12.822583ms)
+✔ canonical tagged Actor revalidator keeps PAT fences and does not admit a copied Request (4.488917ms)
+✔ body pre-admission checks alternatives without spending a use or granting revalidation (3.31ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 205.835583

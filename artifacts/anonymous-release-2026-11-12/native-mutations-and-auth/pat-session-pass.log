@@ -1,0 +1,19 @@
+✔ registered SQLite PAT issue, exact-use consumption, scopes, revoke, isolation and runtime origin survive reopen (1583.388875ms)
+✔ canonical session creation, live reads and revocation persist in a real SQLite file across reopen (15.330834ms)
+✔ canonical expiry and non-expiring revocation retention preserve existing expiry and remove vault authority (5.398541ms)
+✔ preallocated canonical session identities have one winner across two SQLite handles (3.354917ms)
+✔ concurrent home repositories remain isolated and nested/wrong-plane scopes fail closed (4.553458ms)
+✔ expired async descendants and unawaited queued work cannot fall back or mutate after repository scope closes (3.091667ms)
+✔ unimplemented caller-owned native transaction is refused before session insertion (6.308ms)
+✔ existing exported Mongo revocation pipeline retains its exact update and key-removal contract (0.180125ms)
+✔ normal hosted session helper import loads neither native provider nor SQLite (137.197333ms)
+✔ canonical session metadata cannot execute accessors or serialization hooks before native BSON admission (3.800875ms)
+✔ saved native repository calls refuse after scope expiry instead of borrowing default Mongo authority (5.143916ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2409.630291

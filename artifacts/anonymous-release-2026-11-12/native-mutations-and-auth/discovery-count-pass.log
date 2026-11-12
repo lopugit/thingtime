@@ -1,0 +1,23 @@
+✔ only valid-key visits create one protected relationship; repeated reads do not grow or rewrite it (3.564292ms)
+✔ profile candidates batch revalidate rotation, ACL removal, author changes and deletion (0.714917ms)
+✔ receipts cannot be replayed across viewers, targets, kinds or key generations (0.23075ms)
+✔ collected media inherits current post access but cannot bypass moderation or token fences (1.264041ms)
+✔ anonymous browser identity is secret-backed and cannot replace an account or a scoped token (15.860959ms)
+✔ browser collection proof survives reloads and uses a secure host-only cookie (0.365917ms)
+✔ plain permalink discoveries persist for the same browser identity without storing a secret URL (0.272584ms)
+✔ registered native Builder reads with discovery enabled are true no-ops for ordinary Things (355.491959ms)
+✔ registered SQLite count spans batches, filters, root containment, edits and reopen (13234.968166ms)
+✔ native count enforces read-token ACLs and refuses unavailable families rather than count0 (334.979042ms)
+✔ SQLite discovery unit fixtures preserve canonical anonymous/control receipts and revisit idempotency (528.517708ms)
+✔ native discovery revalidates rotation, private/blocked content, foreign receipts and exact provider/lifetime (605.978041ms)
+✔ discovery read revalidation sees a protected post generation changed inside the exact active transaction (673.865708ms)
+✔ registered schema-stamped Data counts retain exact schema filters and active-library authorization (342.272459ms)
+✔ semantic native owner/root selection agrees with the canonical managed-family query (1.349125ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18229.219417

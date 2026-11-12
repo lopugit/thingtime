@@ -4,11 +4,12 @@ import { fileURLToPath } from 'node:url';
 // These fixtures own disposable SQLite files. An accidental Mongo fallback
 // must fail against an unreachable fixture destination, never use a saved URI.
 const tests = [
-  'nativeOrdinaryService', 'persistenceContext', 'persistenceContext.transaction', 'contentDataPlane',
+  'nativeOrdinaryService', 'nativeMutationHooks', 'nativeReadPrerequisites', 'persistenceContext', 'persistenceContext.transaction', 'contentDataPlane',
   'nativeAudienceReads', 'contentExecutionGate', 'contentExecutionGate.native',
   'mongoPersistence'
 ].map(name => `app/api/utils/things/${name}.test.ts`);
 tests.push(
+  'app/api/utils/auth/patTokens.native.test.ts',
   'app/api/utils/actions/sharedComposition.native.test.ts',
   'app/api/utils/components/nativeCatalogReads.test.ts',
   'app/api/utils/serviceWorkspaces/nativeAccess.test.ts',

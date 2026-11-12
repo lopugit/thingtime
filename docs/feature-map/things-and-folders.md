@@ -33,7 +33,11 @@ record visibility on both providers. `things/nativeExternalAudienceReads.ts`
 resolves local account-link/source metadata without credentials or remote
 fetches. Its authorization snapshots use opaque request/transaction read epochs,
 invalidated on mutation and transaction exit. Native workspace setup is owned;
-delegated workspace writes and Maps vault support remain unavailable.
+delegated writes now use canonical transactional insert/update hooks, retaining
+fresh roles/references, owner quota and actor History. Maps vault support remains
+unavailable. `nativeMutationHooks.test.ts` covers rollback and expired sessions;
+`nativeReadPrerequisites.test.ts` covers native library counts and protected
+discovery receipts through `foundPostRepository.ts`/`nativeFoundPosts.ts`.
 `contentExecutionGate.ts` supports native hold attachment in the exact content
 transaction, accounting and completion receipts; `creationCheckpoint` workflows
 remain separate. The native runner includes workspace/external/hold regressions.

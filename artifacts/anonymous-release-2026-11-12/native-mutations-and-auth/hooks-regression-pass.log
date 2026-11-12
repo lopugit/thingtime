@@ -1,0 +1,24 @@
+✔ actual SQLite shared composition keeps stored contexts, foreign boundaries and live revocation across reopen (254.500958ms)
+✔ native canonical mutation hooks share content, quota and History transactions with trusted actor attribution (217.474292ms)
+✔ canonical native Things CRUD, projections, folder move, CAS and History use real SQLite (113.090333ms)
+✔ native canonical ACL never exposes foreign private content; unsupported operations have no side effects (13.105333ms)
+✔ private unsupported Things remain indistinguishable from absent records (6.569417ms)
+✔ folder deletion admits a legacy child baseline before deleting the root and retains accounting (47.527792ms)
+✔ native candidate pagination is stable and rejects cross-selection cursors; unsupported ordinary rows never disappear silently (33.18ms)
+✔ protected history and archived rows are excluded before paging and every selection predicate binds the cursor (138.876833ms)
+✔ native Builder schema provenance uses canonical validation, live visibility and stale CAS (45.082125ms)
+✔ native Builder Component and Webpage services capture actual definitions, inaccessible nulls, edits and reopen (87.21575ms)
+✔ native Builder capture quota failure rolls back page content, head, captures and charges (38.042542ms)
+✔ native page captures reject arbitrary readers and live foreign-provider transactions before effects (7.269291ms)
+✔ canonical native collaborator edits debit the content owner and record the real actor with stale CAS and owner-field fences (21.864667ms)
+✔ canonical native collaborator authorization preserves public/read-only/exclusion refusals and live group revocation (47.268916ms)
+✔ canonical native collaborator Builder writes reject argument-only and inactive private dependency injection with atomic refusal (138.061042ms)
+✔ canonical native collaborator writes retain foreign composition boundaries and never borrow foreign root authority (35.179541ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1969.232084

@@ -1,11 +1,14 @@
 import { workspaceMapKeys } from './maps';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { createThing, getThing, updateThing, viewerOf } from '../things/things';
 import type { PublicUser } from '../auth/users';
 import { findUserByUsername } from '../auth/users';
 import { loadWorkspaceAccess, workspaceCanWrite, type WorkspaceAccess } from './access';
 import { getBoundThingsPersistence } from '../things/persistenceContext';
+import { newThingMutationCapture } from '../timeline/recordMutation';
+import type { CreateThingHooks, ThingDoc, ThingUpdateMutationHooks } from '../things/things';
 import {
 	SERVICE_FIELDS,
 	SERVICE_KINDS,
@@ -35,7 +38,7 @@ const id = (value: unknown) => {
 };
 const recordAcl = ['tt:user', 'tt:custom', SERVICE_WORKSPACE_ACL];
 
-async function createOnce(ownerId: string, input: Parameters<typeof createThing>[1]) {
+async function createOnce(ownerId: string, input: Parameters<typeof createThing>[1], hooks: CreateThingHooks = {}) {
 	const expectedKinds = Array.isArray(input.thingtime) ? input.thingtime : [];
 	const expectedCrystal = input.crystal as Record<string, unknown> | undefined;
 	const verify = (thing: any) => {
@@ -50,7 +53,7 @@ async function createOnce(ownerId: string, input: Parameters<typeof createThing>
 	};
 	const existing = await getThing({ id: ownerId }, String(input.shareId));
 	if (existing.ok) return verify(existing.thing);
-	const result = await createThing(ownerId, input);
+	const result = await createThing(ownerId, input, null, null, hooks);
 	if (result.ok === false) {
 		const retry = await getThing({ id: ownerId }, String(input.shareId));
 		if (retry.ok) return verify(retry.thing);
@@ -170,12 +173,47 @@ function validateReferences(access: WorkspaceAccess, kind: ServiceKind, values: 
 	if (values.employeeId && !isServiceStaff(relatedRecord(access, values.employeeId, 'member').values.role))
 		throw new WorkspaceError(400, 'Choose an active staff member');
 }
+/** Trusted composition only. The plan constrains a write but grants no role:
+ * the native callback reloads current authority inside the canonical content
+ * transaction. Hosted writes retain their existing mechanism and attribution
+ * uses the real service actor on both providers. No input accepts these hooks. */
+export function workspaceWriteHooks(user: PublicUser, planned: WorkspaceAccess, kind: ServiceKind, targetId: string, values?: Record<string, any>, folder = false): { create: CreateThingHooks; update: ThingUpdateMutationHooks } {
+	const capture = newThingMutationCapture(user.id);
+	const native = getBoundThingsPersistence(null);
+	// The stored owner already has canonical owner authority; workspace membership
+	// cannot revoke it. Only delegated actors need the additional role fence.
+	if (!native || user.id === planned.ownerId) return { create: { timelineCapture: capture }, update: { capture } };
+	const authorize = async (current: ThingDoc) => {
+		if (getBoundThingsPersistence(null) !== native) throw new WorkspaceError(409, 'Workspace write belongs to another request or storage scope');
+		const fresh = await workspaceAccess(user, planned.rootId);
+		if (fresh.ownerId !== planned.ownerId || !isDeepStrictEqual(fresh.config, planned.config)) throw new WorkspaceError(409, 'Workspace changed before this write');
+		if (!workspaceCanWrite(fresh, kind)) throw new WorkspaceError(403, 'Your current role cannot change these records');
+		if (current.ownerId !== fresh.ownerId || current.shareId !== targetId) throw new WorkspaceError(404, 'Workspace record not found');
+		if (folder) {
+			if (!current.thingtime?.includes('folder')) throw new WorkspaceError(404, 'Workspace folder not found');
+			const seen = new Set<string>(); let parent = current.folderId;
+			while (parent && parent !== fresh.rootId) {
+				if (seen.has(parent)) throw new WorkspaceError(409, 'Workspace folder ancestry changed');
+				seen.add(parent);
+				const row = await getBoundThingsPersistence(null)!.readExact(parent);
+				if (!row || row.ownerId !== fresh.ownerId || !row.thingtime?.includes('folder')) throw new WorkspaceError(404, 'Workspace folder not found');
+				parent = row.folderId;
+			}
+			if (parent !== fresh.rootId) throw new WorkspaceError(404, 'Workspace folder is outside this workspace');
+		} else {
+			const record = fresh.records.find(row => row.id === current.shareId);
+			if (!record || record.kind !== kind || current.crystal?.workspaceId !== fresh.rootId || current.crystal?.recordType !== kind) throw new WorkspaceError(404, 'Workspace record not found');
+			if (kind === 'member' && current.crystal?.values?.userId === fresh.ownerId) throw new WorkspaceError(400, 'The workspace owner is always an Admin');
+		}
+		if (values) validateReferences(fresh, kind, values);
+	};
+	return { create: { timelineCapture: capture, afterInsert: authorize }, update: { capture, beforeWrite: authorize } };
+}
 export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 	const access = await workspaceAccess(user, input.rootId);
 	if (!isServiceKind(input.kind)) throw new WorkspaceError(400, 'Unknown record type');
 	const kind = input.kind;
 	if (!workspaceCanWrite(access, kind)) throw new WorkspaceError(403, 'Your role cannot change these records');
-	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	let values: Record<string, any>;
 	try {
 		values = validateServiceValues(kind, input.values, access.config.timeZone);
@@ -232,16 +270,17 @@ export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 			folderId: parent.folderId || access.config.folders.job,
 			crystal: { name: String(parent.values.title || 'Job').slice(0, 100) + ' · records', icon: '📋' },
 			acl: ['tt:user']
-		});
+		}, workspaceWriteHooks(user, access, kind, folderId, values, true).create);
 	}
 	const crystal = { workspaceId: access.rootId, recordType: kind, values, ...(parentKey ? { parentId: parentKey } : {}) };
+	const hooks = workspaceWriteHooks(user, access, kind, recordId, values);
 	if (existing) {
-		check(await updateThing(access.ownerId, recordId, { crystal, folderId }, { replaceCrystal: true, expectedUpdatedAt: input.expectedUpdatedAt }));
+		check(await updateThing(access.ownerId, recordId, { crystal, folderId }, { replaceCrystal: true, expectedUpdatedAt: input.expectedUpdatedAt, mutation: hooks.update }));
 		if (existing.folderId !== folderId && kind === 'visit') {
 			const childrenId = stableId(access.rootId, `record-folder:${recordId}`);
 			const children = await getThing({ id: access.ownerId }, childrenId);
 			if (children.ok && children.thing.thingtime.includes('folder'))
-				check(await updateThing(access.ownerId, childrenId, { folderId }, { expectedUpdatedAt: children.thing.updatedAt }));
+				check(await updateThing(access.ownerId, childrenId, { folderId }, { expectedUpdatedAt: children.thing.updatedAt, mutation: workspaceWriteHooks(user, access, kind, childrenId, values, true).update }));
 		}
 	} else
 		check(
@@ -251,7 +290,7 @@ export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 				crystal,
 				folderId,
 				acl: kind === 'member' ? ['tt:user'] : recordAcl
-			})
+			}, null, null, hooks.create)
 		);
 	return { ok: true, id: recordId };
 }
@@ -260,7 +299,6 @@ export async function archiveWorkspaceRecord(user: PublicUser, input: any) {
 	const record = access.records.find((r) => r.id === input.id);
 	if (!record) throw new WorkspaceError(404, 'Record not found');
 	if (!workspaceCanWrite(access, record.kind)) throw new WorkspaceError(403, 'Your role cannot archive this record');
-	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	if (record.kind === 'member' && record.values.userId === access.ownerId) throw new WorkspaceError(400, 'The workspace owner is always an Admin');
 	if (input.expectedUpdatedAt !== record.updatedAt) throw new WorkspaceError(409, 'Record changed. Refresh first.');
 	check(
@@ -268,7 +306,7 @@ export async function archiveWorkspaceRecord(user: PublicUser, input: any) {
 			access.ownerId,
 			record.id,
 			{ crystal: { values: { ...record.values, archived: input.archived !== false, updatedBy: user.id } } },
-			{ expectedUpdatedAt: input.expectedUpdatedAt }
+			{ expectedUpdatedAt: input.expectedUpdatedAt, mutation: workspaceWriteHooks(user, access, record.kind, record.id).update }
 		)
 	);
 	return { ok: true };
@@ -276,7 +314,6 @@ export async function archiveWorkspaceRecord(user: PublicUser, input: any) {
 export async function moveWorkspaceVisit(user: PublicUser, input: any) {
 	const access = await workspaceAccess(user, input.rootId);
 	if (!isServiceStaff(access.role)) throw new WorkspaceError(403, 'Only staff can schedule visits');
-	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	const visit = relatedRecord(access, id(input.id), 'visit');
 	let values;
 	try {
@@ -288,7 +325,7 @@ export async function moveWorkspaceVisit(user: PublicUser, input: any) {
 	values.order = input.order;
 	values.updatedBy = user.id;
 	if (input.expectedUpdatedAt !== visit.updatedAt) throw new WorkspaceError(409, 'Visit changed. Refresh before moving it.');
-	check(await updateThing(access.ownerId, visit.id, { crystal: { values } }, { expectedUpdatedAt: input.expectedUpdatedAt }));
+	check(await updateThing(access.ownerId, visit.id, { crystal: { values } }, { expectedUpdatedAt: input.expectedUpdatedAt, mutation: workspaceWriteHooks(user, access, 'visit', visit.id, values).update }));
 	return { ok: true };
 }
 export async function bindWorkspacePage(user: PublicUser, input: any) {

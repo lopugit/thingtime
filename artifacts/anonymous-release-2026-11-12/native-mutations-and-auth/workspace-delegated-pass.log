@@ -1,0 +1,10 @@
+✔ canonical native workspace setup preserves every read role, scoped page, linked customer and fresh revocation (2935.295459ms)
+✔ canonical native delegated writes fence live roles and scopes with owner accounting and actual actor History (2319.422916ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6884.93675

@@ -6,18 +6,23 @@ import { tmpdir } from 'node:os';
 import { createCollectionProvider } from '../documentStore/collectionProvider';
 import { openSqliteDocumentStore } from '../documentStore/sqliteStore';
 import { createNativeAccountCreationRepositories } from '../documentStore/nativeAccountCreation';
-import { createNativeThingsPersistenceContext, getBoundThingsPersistence } from '../things/persistenceContext';
+import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead } from '../things/persistenceContext';
 import { createUserAccount } from '../auth/registerUser';
 import type { PublicUser } from '../auth/users';
-import { createThing, deleteThing, viewerOf, type Viewer } from '../things/things';
+import { createThing, deleteThing, updateThing, viewerOf, type Viewer } from '../things/things';
 import { loadWorkspaceAccess, serviceWorkspaceCanRead, workspaceRootFor } from './access';
-import { initializeWorkspace, saveWorkspaceRecord, archiveWorkspaceRecord, bindWorkspacePage, readWorkspace } from './workspaces';
+import { initializeWorkspace, saveWorkspaceRecord, archiveWorkspaceRecord, bindWorkspacePage, readWorkspace, moveWorkspaceVisit, workspaceAccess, workspaceWriteHooks } from './workspaces';
 import type { ServiceKind } from '../../../schemas/serviceWorkspace';
 import type { CollectionProvider } from '../documentStore/collectionContract';
 import { resolveWebpage } from '../webpages/webpages';
+import { readTimelineEntries, timelineEventThingId } from '../timeline/repository';
+import { subscriptionShareId } from '../subscriptions/subscriptionIdentity';
 
 const rootId = 'native-service-workspace';
 async function fixture(t: TestContext) {
+	const priorMongo = process.env.MONGODB_CONNECTION_STRING;
+	process.env.MONGODB_CONNECTION_STRING = 'mongodb://127.0.0.1:1/forbidden-native-service-workspace-fallback';
+	t.after(() => { if (priorMongo === undefined) delete process.env.MONGODB_CONNECTION_STRING; else process.env.MONGODB_CONNECTION_STRING = priorMongo; });
  const directory = await mkdtemp(join(tmpdir(), 'tt-native-service-access-')), path = join(directory, 'home.sqlite');
  const providers: CollectionProvider[] = [], contexts: ReturnType<typeof createNativeThingsPersistenceContext>[] = [];
  const open = async () => {
@@ -79,7 +84,7 @@ test('canonical native workspace setup preserves every read role, scoped page, l
   assert.equal(await loadWorkspaceAccess(rootId, { ...customerViewer, pat: {} as NonNullable<NonNullable<Viewer>['pat']> }), null);
   assert.equal(await loadWorkspaceAccess(rootId, null), null);
   await assert.rejects(saveWorkspaceRecord(customer, { rootId, kind: 'customer', id: 'denied', values: { firstName: 'Denied' } }), (error: any) => error.status === 403);
-  await assert.rejects(saveWorkspaceRecord(employee, { rootId, kind: 'customer', id: 'not-enabled', values: { firstName: 'Deferred' } }), (error: any) => error.status === 503);
+  assert.equal((await saveWorkspaceRecord(employee, { rootId, kind: 'customer', id: 'employee-created', values: { firstName: 'Delegated' } })).ok, true);
   await assert.rejects(readWorkspace(f.owner, rootId), (error: any) => error.status === 503);
  });
  await verify(f.run);
@@ -167,5 +172,109 @@ test('canonical native workspace reads traverse membership and linked-property b
   assert.equal([...access.visibleIds].filter(id => id.startsWith('address-')).length, 130);
   assert.equal([...access.visibleIds].filter(id => id.startsWith('link-')).length, 130);
   assert.equal(access.visibleIds.has('address-129'), true);
+ });
+});
+
+test('canonical native delegated writes fence live roles and scopes with owner accounting and actual actor History', async t => {
+ const f = await fixture(t), employee = await f.account('write-employee'), admin = await f.account('write-admin'), customer = await f.account('write-customer'), outsider = await f.account('write-outsider');
+ await f.save('customer', 'write-customer-record', { firstName: 'Account' });
+ await f.save('address', 'write-address', { title: 'Property', address: '1 Local Street' });
+ await f.save('job', 'write-job', { title: 'Job', addressId: 'write-address' });
+ await f.save('visit', 'write-visit', { title: 'Visit', jobId: 'write-job', date: '2026-11-12' });
+ const employeeMember = await f.save('member', 'employee', { username: employee.username, role: 'Employee' });
+ await f.save('member', 'admin', { username: admin.username, role: 'Admin' });
+ await f.save('member', 'customer', { username: customer.username, role: 'Customer', customerId: 'write-customer-record' });
+ const saveAs = (user: PublicUser, kind: ServiceKind, id: string, values: Record<string, unknown>, expectedUpdatedAt?: string) => f.run(() => saveWorkspaceRecord(user, { rootId, kind, id, values, expectedUpdatedAt }));
+ const headActor = async (id: string, actorId: string) => f.run(async () => {
+  const row = (await getBoundThingsPersistence(null)!.readExact(id))!;
+  assert.equal(row.ownerId, f.owner.id);
+  await withBoundTimelineRead(f.owner.id, async port => assert.equal((await readTimelineEntries(port, f.owner.id, [row.timelineHeadId]))[0].event.actorId, actorId));
+ });
+ assert.equal((await saveAs(employee, 'customer', 'delegated-record', { firstName: 'Created' })).ok, true);
+ await headActor('delegated-record', employee.id);
+ let record = (await f.raw('delegated-record'))!;
+ assert.equal(record.crystal.values.createdBy, employee.id);
+ assert.equal((await saveAs(employee, 'customer', 'delegated-record', { firstName: 'Edited' }, record.updatedAt.toISOString())).ok, true);
+ await headActor('delegated-record', employee.id);
+ record = (await f.raw('delegated-record'))!;
+ assert.equal((await f.run(() => archiveWorkspaceRecord(employee, { rootId, id: record.shareId, expectedUpdatedAt: record.updatedAt.toISOString() }))).ok, true);
+ await headActor('delegated-record', employee.id);
+ const visit = (await f.raw('write-visit'))!;
+ assert.equal((await f.run(() => moveWorkspaceVisit(employee, { rootId, id: visit.shareId, expectedUpdatedAt: visit.updatedAt.toISOString(), date: '2026-11-13', time: '10:30', order: 17 }))).ok, true);
+ await headActor('write-visit', employee.id);
+ assert.equal((await saveAs(employee, 'job', 'employee-job', { title: 'Employee job', addressId: 'write-address' })).ok, true);
+ assert.equal((await saveAs(employee, 'visit', 'employee-visit', { title: 'Employee visit', jobId: 'employee-job', date: '2026-11-14' })).ok, true);
+ const employeeVisit = (await f.raw('employee-visit'))!;
+ await headActor(employeeVisit.folderId, employee.id);
+ assert.equal((await saveAs(employee, 'time', 'employee-time', { visitId: 'employee-visit', title: 'Work', minutes: 10 })).ok, true);
+ const employeeTime = (await f.raw('employee-time'))!;
+ await headActor(employeeTime.folderId, employee.id);
+ assert.equal((await saveAs(employee, 'visit', 'employee-visit', { title: 'Moved visit', jobId: 'write-job', date: '2026-11-14' }, (await f.raw('employee-visit'))!.updatedAt.toISOString())).ok, true);
+ assert.equal((await f.raw(employeeTime.folderId))!.folderId, (await f.raw('employee-visit'))!.folderId);
+ assert.equal((await saveAs(admin, 'member', 'employee', { username: employee.username, role: 'Lopu' }, (await f.raw(employeeMember.id))!.updatedAt.toISOString())).ok, true);
+ await headActor(employeeMember.id, admin.id);
+ await assert.rejects(saveAs(employee, 'member', 'not-allowed', { username: customer.username, role: 'Admin' }), (error: any) => error.status === 403);
+ await assert.rejects(saveAs(customer, 'customer', 'customer-denied', { firstName: 'Denied' }), (error: any) => error.status === 403);
+ await assert.rejects(saveAs(outsider, 'customer', 'outsider-denied', { firstName: 'Denied' }), (error: any) => error.status === 404);
+
+ await f.run(async () => {
+  const planned = await workspaceAccess(employee, rootId), values = { title: 'Stale reference', addressId: 'write-address' };
+  const hooks = workspaceWriteHooks(employee, planned, 'job', 'stale-reference-job', values);
+  const address = (await getBoundThingsPersistence(null)!.readExact('write-address'))!;
+  await archiveWorkspaceRecord(f.owner, { rootId, id: address.shareId, expectedUpdatedAt: address.updatedAt.toISOString() });
+  const ledger = (await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)))!;
+  await assert.rejects(createThing(f.owner.id, { shareId: 'stale-reference-job', thingtime: ['data'], crystal: { workspaceId: rootId, recordType: 'job', values }, acl: ['tt:user', 'tt:custom', 'tt:service-workspace'], folderId: planned.config.folders.job }, null, null, hooks.create), (error: any) => error.status === 400);
+  assert.equal(await getBoundThingsPersistence(null)!.readExact('stale-reference-job'), null);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)), ledger);
+  const archived = (await getBoundThingsPersistence(null)!.readExact('write-address'))!;
+  await archiveWorkspaceRecord(f.owner, { rootId, id: archived.shareId, expectedUpdatedAt: archived.updatedAt.toISOString(), archived: false });
+ });
+
+ await f.run(async () => {
+  const planned = await workspaceAccess(employee, rootId);
+  const hooks = workspaceWriteHooks(employee, planned, 'customer', 'revoked-create', { firstName: 'Must roll back' });
+  const member = (await getBoundThingsPersistence(null)!.readExact(employeeMember.id))!;
+  await archiveWorkspaceRecord(f.owner, { rootId, id: member.shareId, expectedUpdatedAt: member.updatedAt.toISOString() });
+  const ledger = (await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)))!;
+  const root = (await getBoundThingsPersistence(null)!.readExact(rootId))!;
+  await assert.rejects(createThing(f.owner.id, { shareId: 'revoked-create', thingtime: ['data'], crystal: { workspaceId: rootId, recordType: 'customer', values: { firstName: 'Must roll back' } }, acl: ['tt:user', 'tt:custom', 'tt:service-workspace'], folderId: planned.config.folders.customer }, null, null, hooks.create), (error: any) => error.status === 404);
+  assert.equal(await getBoundThingsPersistence(null)!.readExact('revoked-create'), null);
+  assert.equal(await getBoundThingsPersistence(null)!.readExact(timelineEventThingId(f.owner.id, hooks.create.timelineCapture!.id)), null);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)), ledger);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(rootId), root);
+ });
+ let member = (await f.raw(employeeMember.id))!;
+ await f.run(() => archiveWorkspaceRecord(f.owner, { rootId, id: member.shareId, expectedUpdatedAt: member.updatedAt.toISOString(), archived: false }));
+ await f.run(async () => {
+  const planned = await workspaceAccess(employee, rootId), before = (await getBoundThingsPersistence(null)!.readExact('delegated-record'))!;
+  const hooks = workspaceWriteHooks(employee, planned, 'customer', before.shareId, { firstName: 'Rollback update' });
+  const ledger = (await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)))!;
+  await assert.rejects(updateThing(f.owner.id, before.shareId, { crystal: { values: { ...before.crystal.values, firstName: 'Rollback update' } } }, { expectedUpdatedAt: before.updatedAt.toISOString(), mutation: { ...hooks.update, afterWrite: async () => { throw Error('rollback delegated update'); } } }), /rollback delegated update/);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(before.shareId), before);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(subscriptionShareId('user', f.owner.id)), ledger);
+  assert.equal(await getBoundThingsPersistence(null)!.readExact(timelineEventThingId(f.owner.id, hooks.update.capture!.id)), null);
+ });
+
+ await f.run(async () => {
+  const made = await createThing(outsider.id, { shareId: 'foreign-write-target', thingtime: ['data'], crystal: { workspaceId: rootId, recordType: 'customer', values: { firstName: 'Foreign' } }, acl: ['tt:user'] }); assert.equal(made.ok, true);
+ });
+ await f.run(async () => {
+  const planned = await workspaceAccess(employee, rootId), before = (await getBoundThingsPersistence(null)!.readExact('foreign-write-target'))!;
+  const hooks = workspaceWriteHooks(employee, planned, 'customer', before.shareId, { firstName: 'Forbidden' });
+  await assert.rejects(updateThing(outsider.id, before.shareId, { crystal: { values: { firstName: 'Forbidden' } } }, { expectedUpdatedAt: before.updatedAt.toISOString(), mutation: hooks.update }), (error: any) => error.status === 404);
+  assert.deepEqual(await getBoundThingsPersistence(null)!.readExact(before.shareId), before);
+ });
+ const expired = await f.run(async () => workspaceWriteHooks(employee, await workspaceAccess(employee, rootId), 'customer', 'escaped-write', { firstName: 'Forbidden' }));
+ const otherHandle = await f.open();
+ await assert.rejects(otherHandle.run(() => createThing(f.owner.id, { shareId: 'escaped-write', thingtime: ['data'], crystal: { workspaceId: rootId, recordType: 'customer', values: { firstName: 'Forbidden' } }, acl: ['tt:user', 'tt:custom', 'tt:service-workspace'] }, null, null, expired.create)), (error: any) => error.status === 409);
+ assert.equal(await f.raw('escaped-write'), null);
+ member = (await f.raw(employeeMember.id))!;
+ await f.run(() => archiveWorkspaceRecord(admin, { rootId, id: member.shareId, expectedUpdatedAt: member.updatedAt.toISOString() }));
+ await assert.rejects(saveAs(employee, 'customer', 'fresh-revoked', { firstName: 'Forbidden' }), (error: any) => error.status === 404);
+ await f.provider.close(); const reopened = await f.open();
+ await reopened.run(async () => {
+  const stored = (await getBoundThingsPersistence(null)!.readExact('delegated-record'))!; assert.equal(stored.crystal.values.firstName, 'Edited');
+  assert.equal(await loadWorkspaceAccess(rootId, viewerOf(employee)), null);
+  assert.equal(await getBoundThingsPersistence(null)!.readExact('revoked-create'), null);
  });
 });

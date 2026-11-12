@@ -10,11 +10,11 @@ import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
-import { createSession, getLiveSession, REVOKED_SESSION_REAP_MS } from './sessions';
+import { createSession, getLiveSession } from './sessions';
+import { currentPatSessionPersistence, PatSessionLimitError } from './sessionRepository';
 import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
-import { getSessionsCollection } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
 
 // Personal access tokens — the Settings "Token minter". A PAT is a scoped,
@@ -180,14 +180,14 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
     visibility = input.visibility;
   }
 
-  const sessions = await getSessionsCollection();
+  const sessions = currentPatSessionPersistence();
   // The cap is the user's subscription tier (null = unlimited, e.g. payg);
   // free mirrors MAX_PAT_TOKENS_PER_USER.
   const maxPats = (await getSubscription('user', userId)).effective.maxPats;
   if (maxPats !== null) {
     // Revoked credentials are no longer usable and already have a bounded
     // reap date, so they must not prevent a user from replacing a token.
-    const existing = await sessions.countDocuments({ userId, purpose: 'pat', revokedAt: null });
+    const existing = await sessions.countUnrevoked(userId);
     if (existing >= maxPats) {
       return {
         ok: false,
@@ -199,7 +199,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
 
   const now = Date.now();
   const expiresAt = expiresInMs === null ? null : new Date(now + expiresInMs);
-  const session = await createSession(userId, {
+  let session: SessionDoc;
+  try { session = await createSession(userId, {
+    patLimit: maxPats,
     purpose: 'pat',
     expiresAt,
     meta: {
@@ -216,7 +218,10 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       ...(input.allowGet === true ? { allowGet: true } : {}),
       createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
-  });
+  }); } catch (error) {
+    if (error instanceof PatSessionLimitError) return { ok: false, status: 409, error: `You already have ${maxPats} tokens — revoke some before minting more` };
+    throw error;
+  }
 
   // The JWT exp is second-granular; the session expiresAt above is the
   // authoritative millisecond check (getLiveSession compares real dates).
@@ -234,8 +239,7 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
 const PAT_LIST_MAX = 2000;
 
 export const listPatTokens = async (userId: string): Promise<PublicPatToken[]> => {
-  const sessions = await getSessionsCollection();
-	const docs = await sessions.find({ userId, purpose: 'pat' }).sort({ createdAt: -1 }).limit(PAT_LIST_MAX).toArray();
+  const docs = await currentPatSessionPersistence().list(userId, PAT_LIST_MAX);
   return docs.map((doc: any) => toPublicPatToken(doc));
 };
 
@@ -248,17 +252,8 @@ export const revokePatToken = async (userId: string, id: unknown): Promise<Revok
   if (typeof id !== 'string' || !id.trim()) {
     return { ok: false, status: 400, error: 'id is required' };
   }
-  const sessions = await getSessionsCollection();
-  const session = await sessions.findOne({ jti: id.trim(), userId, purpose: 'pat' });
+  const session = await currentPatSessionPersistence().revokeOwned(userId, id.trim(), new Date());
   if (!session) return { ok: false, status: 404, error: 'Token not found' };
-
-  if (!session.revokedAt) {
-    const revokedAt = new Date();
-    const patch: Record<string, any> = { revokedAt };
-    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS);
-    await sessions.updateOne({ jti: session.jti }, { $set: patch });
-    Object.assign(session, patch);
-  }
 
   return { ok: true, token: toPublicPatToken(session as SessionDoc) };
 };
@@ -267,17 +262,7 @@ export const revokePatToken = async (userId: string, id: unknown): Promise<Revok
 // tokens decrement guarded by usesRemaining > 0 in the filter, so two racing
 // requests can never spend the same final use.
 const consumePatUse = async (session: SessionDoc): Promise<boolean> => {
-  const sessions = await getSessionsCollection();
-  const now = new Date();
-  if (typeof session.meta?.maxUses !== 'number') {
-    await sessions.updateOne({ jti: session.jti }, { $set: { 'meta.lastUsedAt': now } });
-    return true;
-  }
-  const result = await sessions.updateOne(
-    { jti: session.jti, purpose: 'pat', revokedAt: null, 'meta.usesRemaining': { $gt: 0 } },
-    { $inc: { 'meta.usesRemaining': -1 }, $set: { 'meta.lastUsedAt': now } }
-  );
-  return result.modifiedCount === 1;
+  return currentPatSessionPersistence().consume(String(session.userId), session.jti, typeof session.meta?.maxUses === 'number', new Date());
 };
 
 export type PatContext = {

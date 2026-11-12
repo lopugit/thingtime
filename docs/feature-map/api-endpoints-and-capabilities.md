@@ -1,5 +1,16 @@
 # API endpoints and capabilities
 
+Native SQLite now admits the complete token management operations through the
+existing `/api/v1/tokens` GET/POST, `/tokens/revoke` POST and `/tokens/self` GET
+handlers. Canonical PAT services use `SessionRepository.pat`, with the native
+adapter in `documentStore/nativePatSessions.ts`; identity/provider/lifetime,
+atomic allowance/use consumption, revocation and retention remain enforced.
+Responses use `privateJson`: tokens is 1.1.1, revoke/self are 1.0.1. Both manifest
+generators and the compiled SQLite fixture verify actual method availability.
+Token management does not advertise generic Things or grant missing operations.
+Run `test:native-things`, native session tests, hosted PAT revalidation, both
+capability suites and the real packaged SQLite account fixture.
+
 `api.root-data` 1.2.0 adds the protected native app-shell bootstrap. Runtime
 availability comes from `nativeAccountHttpHome` and is projected by both manifest
 generators. The hosted contract remains compatible; unready native homes expose

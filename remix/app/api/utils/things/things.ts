@@ -23,6 +23,7 @@ import { postThingReferences, type PostThingReference } from '../../../component
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
+import { nativeOwnerLibraryIncludes } from './nativeOwnerLibraryQuery';
 import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -1479,7 +1480,7 @@ export const createThing = async (
   if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
-  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => !['timelineCapture', 'executionHold'].includes(key)) || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
+  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => !['timelineCapture', 'executionHold', 'afterInsert'].includes(key)) || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
 
   // saves (the user's personal library) and shares (public social reposting)
   // are first-party surfaces — an app acting as the user must not write into
@@ -1737,7 +1738,7 @@ export const createThing = async (
 	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? hooks.timelineCapture ?? newThingMutationCapture(viewer?.id ?? ownerId) : null;
   if (nativeRepository) {
     if (!nativeOrdinaryThingSupported(doc)) return nativeOrdinaryUnavailable();
-    try { return { ok: true, doc: await insertNativeOrdinaryThing(nativeRepository, doc, timelineCapture!) as ThingDoc }; }
+    try { return { ok: true, doc: await insertNativeOrdinaryThing(nativeRepository, doc, timelineCapture!, hooks.afterInsert ? (inserted, session) => hooks.afterInsert!(inserted as ThingDoc, session) : undefined) as ThingDoc }; }
     catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
   }
   try {
@@ -3148,7 +3149,6 @@ export const canViewInherited = async (
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
     if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
-    if (getBoundThingsPersistence(null)) return false;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }
@@ -3814,7 +3814,7 @@ export async function getThing(
 ): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>> {
   const nativeRepository = getBoundThingsPersistence(null);
   if (nativeRepository) {
-    if (app || asViewer(viewerInput)?.pat || options.rememberDiscovery) return nativeOrdinaryUnavailable();
+    if (app || asViewer(viewerInput)?.pat) return nativeOrdinaryUnavailable();
     const candidate = typeof shareId === 'string' ? await nativeRepository.readExact(shareId.trim()) : null;
     if (candidate && genericThingReadBlocked(candidate as ThingDoc)) return fail(404, 'Thing not found');
     if (candidate && !nativeOrdinaryThingSupported(candidate)) {
@@ -4125,6 +4125,51 @@ export const countThings = async (
 ): Promise<Fail | { ok: true; count: number }> => {
   if (!asViewer(viewerInput)?.id) return fail(401, 'Sign in to count Things');
   if (query.cursor != null || query.limit != null || query.offset !== undefined || query.commentProjection) return fail(400, 'Counts require an unpaged Thing list');
+  const nativeRepository = getBoundThingsPersistence(null);
+  if (nativeRepository) {
+    try {
+      context.signal?.throwIfAborted();
+      const viewer = await withFriendIds(asViewer(viewerInput));
+      if (!viewer?.id) return fail(401, 'Sign in to count Things');
+      if (app || query.targetId || query.appId) return nativeOrdinaryUnavailable();
+      if (query.builderAppOnly && query.folder !== 'root') return fail(400, 'Builder apps require the first-party root folder list');
+      const schema = listSchemaIdMatch(query.schemaId), parent = listCrystalIdMatch('parentId', query.parentId);
+      if (isFail(schema)) return schema; if (isFail(parent)) return parent;
+      if (query.libraryArchive && (context.archiveOwnerId !== viewer.id || viewer.pat || isCustomMongoEndpointActive()))
+        return fail(403, 'The library archive filter requires the owner in their home Things library');
+      if (query.libraryArchive === 'archived') return nativeOrdinaryUnavailable();
+      const kinds = (query.thingtime || []).filter(id => typeof id === 'string' && id.trim());
+      const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
+      const hiddenKinds = folder ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE] : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
+      const managed = ['theme', 'file', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment'];
+      if (kinds.some(kind => kind !== 'builder-thing' && !NATIVE_ORDINARY_CONTENT_KINDS.some(supported => supported === kind) && (!hiddenKinds.includes(kind) || managed.includes(kind))))
+        return nativeOrdinaryUnavailable();
+      if (folder && folder !== 'root') { const assignment = await resolveFolderAssignment(viewer.id, folder, []); if (isFail(assignment)) return assignment; }
+      const includeArchives = context.archiveOwnerId === viewer.id && !viewer.pat;
+      // Prune only impossible library candidates before chronological paging;
+      // managed exceptions still pass through the exact semantic predicate.
+      const excludedKinds = [...new Set([...hiddenKinds.filter(kind => !managed.includes(kind)), ...DEVICE_CONTROL_THINGTIME])];
+      let count = 0, after: string | null = null;
+      do {
+        context.signal?.throwIfAborted();
+        const page = await nativeRepository.readWindow({ ownerId: viewer.id, excludedKinds, ...(kinds.length ? { kinds } : {}),
+          ...(folder && folder !== 'root' ? { folder: { kind: 'id' as const, id: folder } } : {}),
+          ...(query.excludeArchived ? { excludeArchived: true } : {}),
+          ...(schema.match ? { schemaId: query.schemaId! } : {}), ...(parent.match ? { parentId: query.parentId! } : {}), limit: 128, cursor: after });
+        const candidates = page.documents.filter(doc => nativeOwnerLibraryIncludes(doc, hiddenKinds, includeArchives, folder === 'root') &&
+          !thingtimeOf(doc as ThingDoc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind)) &&
+          (query.libraryArchive !== 'active' || doc.libraryArchived !== true) &&
+          (!query.builderAppOnly || (doc.thingtime?.includes('folder') && doc.crystal?.builderApp === true)));
+        const visible = await visibleThingsPage(candidates as ThingDoc[], viewer, null);
+        if (visible.some(doc => !nativeOrdinaryThingSupported(doc))) return nativeOrdinaryUnavailable();
+        count += visible.length;
+        if (!Number.isSafeInteger(count)) return fail(503, 'Things count is unavailable');
+        after = page.nextCursor;
+      } while (after);
+      context.signal?.throwIfAborted();
+      return { ok: true, count };
+    } catch { return context.signal?.aborted ? fail(499, 'Things count cancelled') : fail(503, 'Things count is unavailable'); }
+  }
   let cursor: ReturnType<Awaited<ReturnType<typeof getThingsCollection>>['find']> | undefined;
   try {
     context.signal?.throwIfAborted();
@@ -5744,7 +5789,7 @@ export const updateThing = async (
   // authorized as the actor below; the stored owner is selected only after
   // those gates, and owns quota/History throughout the actual transaction.
   const nativeRepository = getBoundThingsPersistence(null);
-  if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt'].includes(key)))) return nativeOrdinaryUnavailable();
+  if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt', 'mutation'].includes(key)))) return nativeOrdinaryUnavailable();
   const things: any = nativeRepository ? null : await getThingsCollection();
   const doc = (nativeRepository ? await nativeRepository.readExact(shareId.trim()) : await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as ThingDoc | null;
   if (nativeRepository && doc?.ownerId === viewer.id && isProtectedThingtime(thingtimeOf(doc))) return fail(403, 'This Thing is managed through its own endpoint');
@@ -6107,7 +6152,10 @@ export const updateThing = async (
           if (denied) throw new StorageMutationError(denied.status, 'storage_conflict', denied.error);
         }
       } : undefined;
-      const updated = await updateNativeOrdinaryThing(getBoundThingsPersistence(doc.ownerId)!, doc, next, timelineCapture!, revalidate);
+      const updated = await updateNativeOrdinaryThing(getBoundThingsPersistence(doc.ownerId)!, doc, next, timelineCapture!, revalidate, {
+        beforeWrite: options.mutation?.beforeWrite ? (current, session) => options.mutation!.beforeWrite!(current as ThingDoc, session) : undefined,
+        afterWrite: options.mutation?.afterWrite
+      });
       return { ok: true, thing: (await toPublicThings([updated as ThingDoc], viewer))[0], post: null };
     } catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
   }

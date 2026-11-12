@@ -15,6 +15,27 @@ The bundled Mongo HTTP fixture must also move into a valid existing folder,
 refuse a cycle, preserve/reparent children on deletion and retain them on restart.
 Generic native Things HTTP and broad capability publication remain separate gates.
 
+- Native mutation hooks must observe the actual uncommitted content/session and
+  preserve owner accounting plus real actor attribution. Async afterInsert,
+  beforeWrite or afterWrite failure must roll back content, quota and History;
+  stale/foreign writes never invoke hooks, and escaped sessions cannot mutate.
+- Native delegated workspace save/archive/move must recheck roles, references,
+  configuration and target scope in that transaction. Cover revocation after
+  preparation, wrong owner/provider, rollback and reopen. Do not claim whole
+  folder workflows atomic when the canonical service commits separate writes.
+- Native owner counts must match canonical library filters across internal
+  batches, respect PAT visibility and cancellation, and refuse unsupported
+  managed selections. Discovery receipts must preserve account/anonymous
+  identity, current hidden-link digest, revocation and zero-byte control semantics.
+  Non-post rememberDiscovery is a no-op; raw post fixtures are not post-create E2E.
+- Native PAT checks use registered SQLite accounts: concurrent cap admission and
+  finite-use consumption, free missing-scope/introspection checks, expiry and
+  retention, revoke, wrong provider/expired scope and reopen. The actual packaged
+  HTTP fixture must mint/list/introspect/revoke through normal endpoints, refuse
+  another owner and PAT-based management, retain the same token after a fresh
+  process, and verify private/no-store responses and both capability manifests.
+  Raw bearer bytes remain in process memory and never enter evidence logs.
+
 Native Builder services must create a Schema, stamp its authoritative provenance
 on Data, reject inaccessible schemas, retain attribution after revocation, and
 reject stale updates. Save/edit/reopen a Webpage using saved Components, verify

@@ -1,0 +1,113 @@
+
+> @1.0.0 test:moderation /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --import tsx --test app/api/utils/moderation/*.test.ts
+
+✔ ./analyzeAttachment.ts tracks detached completion (50.395875ms)
+✔ ./analyzeAttachment.ts tracks detached failure (8.071584ms)
+✔ ./analyzeText.ts tracks detached completion (22.281791ms)
+✔ ./analyzeText.ts tracks detached failure (6.241917ms)
+✔ ../things/things.ts tracks detached completion (74.290292ms)
+[moderation] release notification failed: synthetic failure
+✔ ../things/things.ts tracks detached failure (39.70375ms)
+✔ ../auth/registerUser.ts tracks detached completion (4.1ms)
+✔ ../auth/registerUser.ts tracks detached failure (4.155667ms)
+✔ ../auth/serviceAccounts.ts tracks detached completion (2.734916ms)
+✔ ../auth/serviceAccounts.ts tracks detached failure (2.912542ms)
+✔ ../../../routes/api/v1/auth/password-reset/_password-reset.tsx tracks detached completion (2.815208ms)
+✔ ../../../routes/api/v1/auth/password-reset/_password-reset.tsx tracks detached failure (1.938875ms)
+✔ ../../../routes/api/v1/auth/verify-email/_verify-email.tsx tracks detached completion (5.56375ms)
+✔ ../../../routes/api/v1/auth/verify-email/_verify-email.tsx tracks detached failure (9.976875ms)
+✔ ../../../routes/api/v1/auth/resend-verification/_resend-verification.tsx tracks detached completion (2.064208ms)
+✔ ../../../routes/api/v1/auth/resend-verification/_resend-verification.tsx tracks detached failure (1.837625ms)
+✔ ../migrations/migrationDiagnostics.ts tracks detached completion (4.668709ms)
+✔ ../migrations/migrationDiagnostics.ts tracks detached failure (4.375042ms)
+✔ ../backups/backupWorkspace.server.ts tracks detached completion (4.995959ms)
+✔ ../backups/backupWorkspace.server.ts tracks detached failure (3.935167ms)
+✔ moderation settings task remains tracked beyond the response budget (1.788458ms)
+✔ moderation provider task remains tracked beyond the response budget (0.633209ms)
+[moderation] analysis failed for attachment attachment-1: provider down
+✔ moderationFromVerdict maps verdicts with tosViolation outranking nsfw (0.791417ms)
+✔ sanitizeModerationCategories bounds, lowercases, and truncates provider output (0.711166ms)
+✔ moderation doc guards read only well-formed stamps (0.140542ms)
+✔ public metadata carries nsfw and quarantines pending or blocked attachments (0.764167ms)
+✔ test provider keys verdicts off filename markers (0.195375ms)
+✔ provider resolution follows THINGTIME_MODERATION_PROVIDER and fails to off without a key (81.144833ms)
+✔ analyzer stamps nsfw verdicts and logs a moderation flag (3.767333ms)
+✔ analyzer quarantines TOS verdicts as blocked (0.375ms)
+✔ analyzer skips non-analyzable media and the off provider without fetching bytes (0.318541ms)
+✔ analyzer leaves the doc pending on provider failure and no-ops landed verdicts (0.961334ms)
+✔ analyzer retries a lost moderationFlag without re-running the provider (0.19075ms)
+✔ a delayed image verdict cannot mutate a deleting file or its retained cancellation receipt (0.477334ms)
+✔ vault credential overrides legacy only for moderation, and reaches both Omni request paths (15.088583ms)
+✔ missing entry preserves migration fallback; unavailable vault fails closed (0.403375ms)
+✔ each request uses its own environment vault and observes rotation immediately (0.151375ms)
+✔ deterministic test provider never reads a live vault (0.087125ms)
+[moderation] text analysis failed for thing post-1: duplicate key
+[moderation] text analysis failed for thing post-1: openai down
+✔ moderation settings normalize forgivingly and validate strictly (1.459833ms)
+✔ settings store round-trips, rejects invalid writes, and degrades to defaults on read failure (0.723417ms)
+✔ admin media provider choice overrides env resolution; default delegates (74.583417ms)
+✔ text verdict mapping splits block-worthy categories from advisory flags (0.458375ms)
+✔ text moderation resolution honors the admin choice and key default (0.234792ms)
+✔ text analyzer stamps verdicts on the thing and flags blocked/nsfw text with an excerpt (1.257ms)
+✔ text flag creation never repurposes an ordinary Thing that squats the deterministic id (0.866291ms)
+✔ text analyzer labels comment/share purposes and bounds the excerpt at 500 chars (0.424375ms)
+✔ text analyzer: clean text stamps clear with no flag; off/unknown do nothing durable (0.309542ms)
+✔ re-analysis that clears edited text resolves the unreviewed flag; reviewed flags stay as audit log (0.43225ms)
+✔ emptied text clears a stale pipeline stamp but never an admin stamp (0.256833ms)
+✔ admin stamps stay final on the thing, but a flagged post-review edit resurfaces in the queue (0.221375ms)
+✔ screen failures leave no verdict stamp (0.204666ms)
+✔ text-moderated kinds cover the post family only (0.104791ms)
+✔ text sweep: off releases pending only; batches analyze and count (8.77375ms)
+✔ moderation sweep continues full successful batches, but not failures or short batches (0.400917ms)
+✔ moderation sweep cron route requires the exact bearer secret, starts a continuation, and fails closed unconfigured (491.367125ms)
+✔ sync screen budget env parsing: default, override, disable, clamp (0.13175ms)
+[moderation] sync text screen failed; the doc is born pending: openai down
+✔ create-time sync screen: fast verdicts gate the doc, slow/broken omni falls back to owner-private pending (35.788708ms)
+✔ sync screen stamps carry textHash; flagged ones carry flagPending; advisory nsfw passes through (0.581875ms)
+[moderation] sync text screen failed; the doc is born pending: down
+[moderation] sync text screen failed; the doc is born pending: down
+[moderation] sync screen breaker OPEN — posts are born pending until 1970-01-01T00:17:40.000Z
+[moderation] sync text screen failed; the doc is born pending: down
+✔ sync screen: hung settings read cannot hold a post past the budget; late rejections are handled (118.507792ms)
+✔ post-insert moderation plan: notify/inlineFlag/queueAsync branching (0.396875ms)
+✔ a non-admin block on identical text is sticky against provider flip-flops; edits re-verdict freely (0.517ms)
+✔ analyzer stamps are fenced to the text they screened and carry its hash; flag success clears flagPending (0.234291ms)
+✔ sweep filter drains unstamped/flag-lost docs with prose OR external image URLs (0.273625ms)
+✔ moderated content covers prose, listing text, tags, and capped http(s) image URLs (0.265458ms)
+✔ image-URL-only posts are screened and can flag with a URL excerpt (0.145833ms)
+✔ sync-screen circuit breaker opens after consecutive failures and re-probes after cooldown (1.703459ms)
+✔ releasing a born-pending doc emits its deferred creation notification (0.308292ms)
+✔ sweep with the surface off releases stranded born-pending docs (0.49275ms)
+✔ temporary throttling retries once, preserving the actual moderation verdict (24.179833ms)
+✔ exhausted quota and long cooldowns fail closed without retry or raw provider text (0.9625ms)
+✔ repeated throttling is bounded to two attempts (0.535125ms)
+✔ non-JSON outages remain bounded and never expose upstream text (0.536625ms)
+✔ provider type and redacted-only log input preserve the reason of a 429 without a code (0.473042ms)
+[error-log] {"id":"error-log-f409223e-54c3-432f-a375-a24aa0d5eb3f","source":"moderation","message":"Provider returned no JSON error message","provider":"openai","code":"insufficient_quota","status":429,"attempt":1}
+[error-log] persistence unavailable
+[moderation] omni-moderation screen failed; escalating to claude: openai down
+[moderation] claude escalation failed; falling back to omni nsfw verdict: claude down
+[moderation] omni-moderation screen failed; escalating to claude: openai down
+[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "claude+openai" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.
+[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "bogus" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.
+✔ mapOmniVerdict maps flagged results to nsfw-only (never blocked) with kebab categories (1.660292ms)
+✔ escalation checks the flag and image-applicable scores only (0.318666ms)
+✔ escalation score env override parses and clamps to [0,1] (0.1485ms)
+✔ omni screen posts a data-URL image with bearer auth and rejects bad responses (49.637292ms)
+✔ standalone openai provider maps the screen result directly and propagates screen failures (0.277375ms)
+✔ tiered: clean screen clears for $0 without calling claude (0.333167ms)
+✔ tiered: flagged and borderline screens escalate to claude for the final verdict (0.230875ms)
+✔ tiered: TT_MODERATION_ESCALATION_SCORE env wiring changes the escalation decision (0.211625ms)
+✔ tiered lazy claude import contract holds without a network call (161.205833ms)
+✔ tiered: screen outage goes straight to claude (0.352292ms)
+✔ tiered: claude outage falls back to the omni nsfw verdict for flagged images, rethrows without a flag (0.8265ms)
+✔ provider resolution covers the new openai and tiered values plus key-based defaults (2.573833ms)
+ℹ tests 85
+ℹ suites 0
+ℹ pass 85
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1901.732708

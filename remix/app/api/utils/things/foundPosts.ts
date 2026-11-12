@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import type { ThingDoc, Viewer } from './things';
+import { currentNativeFoundPostRepository } from './foundPostRepository';
 
 export const FOUND_POST_KIND = 'post-discovery';
 export const FOUND_POST_PREFIX = 'post-discovery-';
@@ -35,56 +36,39 @@ export const withFoundPostGrant = async (post: ThingDoc, viewer: Viewer, lookup:
 	return { id: '', ...viewer, foundPosts: new Map([...(viewer?.foundPosts || []), [post.shareId, foundPostDigest(post.linkKey!)]]) };
 };
 
+/** Canonical zero-byte control envelope, shared by both persistence adapters.
+ * Only a successfully opened current hidden-post URL can create a receipt. */
+export function foundPostVisitDocument(viewer: Viewer, post: ThingDoc, ipAddress?: string) {
+ const viewerId = foundPostViewerId(viewer);
+ if (!viewerId || !viewer || viewerId === post.ownerId || !post.thingtime?.includes('post') ||
+  !post.acl?.includes('tt:hidden') || !post.linkKey ||
+  (!viewer.linkKeys?.has(post.linkKey) && !viewer.linkThingIds?.has(post.shareId))) return null;
+ const now = new Date();
+ return { shareId: foundPostId(viewerId, post.shareId), schemaVersion: 2, thingtime: [FOUND_POST_KIND], ownerId: viewerId,
+  targetId: post.shareId, acl: ['tt:user'], tags: [], extended: null, storageClass: 'control', storageAccountingVersion: 1,
+  sizeBytes: 0, createdAt: now, updatedAt: now,
+  crystal: { authorId: post.ownerId, linkKeyDigest: foundPostDigest(post.linkKey),
+   ...(viewer.anonymousId ? { anonymousId: viewer.anonymousId } : {}), ...(ipAddress ? { ipAddress } : {}) } };
+}
+
 export const createFoundPostStore = (getCollection = getThingsCollection) => {
 	// One private, protected relationship per account/post. Only a successfully
 	// opened current permalink can stamp it; no bearer secret is stored or returned.
 	const rememberFoundPost = async (viewer: Viewer, post: ThingDoc, ipAddress?: string): Promise<void> => {
-		const viewerId = foundPostViewerId(viewer);
-		if (
-			!viewerId ||
-			!viewer ||
-			viewerId === post.ownerId ||
-			!post.thingtime?.includes('post') ||
-			!post.acl?.includes('tt:hidden') ||
-			!post.linkKey ||
-			(!viewer.linkKeys?.has(post.linkKey) && !viewer.linkThingIds?.has(post.shareId))
-		)
-			return;
+		const document = foundPostVisitDocument(viewer, post, ipAddress);
+		if (!document) return;
+		const viewerId = document.ownerId, shareId = document.shareId;
 		const collection = await getCollection();
-		const shareId = foundPostId(viewerId, post.shareId),
-			now = new Date();
-		const linkKeyDigest = foundPostDigest(post.linkKey);
 		// Read-mostly after first discovery: avoid turning ordinary revisits into writes.
 		const current = await collection.findOne({ shareId } as any);
 		if (foundPostReceiptMatches(current as any, post, viewerId)) return;
-		const doc = {
-			shareId,
-			schemaVersion: 2,
-			thingtime: [FOUND_POST_KIND],
-			ownerId: viewerId,
-			targetId: post.shareId,
-			acl: ['tt:user'],
-			tags: [],
-			extended: null,
-			storageClass: 'control',
-			storageAccountingVersion: 1,
-			sizeBytes: 0,
-			createdAt: now
-		};
+		const { crystal, updatedAt, ...doc } = document;
 		try {
 			await collection.updateOne(
 				{ shareId, ownerId: viewerId, thingtime: FOUND_POST_KIND } as any,
 				{
 					$setOnInsert: doc,
-					$set: {
-						crystal: {
-							authorId: post.ownerId,
-							linkKeyDigest,
-							...(viewer.anonymousId ? { anonymousId: viewer.anonymousId } : {}),
-							...(ipAddress ? { ipAddress } : {})
-						},
-						updatedAt: now
-					}
+					$set: { crystal, updatedAt }
 				} as any,
 				{ upsert: true }
 			);
@@ -120,4 +104,15 @@ export const createFoundPostStore = (getCollection = getThingsCollection) => {
 
 	return { rememberFoundPost, loadFoundPostsForAuthor };
 };
-export const { rememberFoundPost, loadFoundPostsForAuthor } = createFoundPostStore();
+const hosted = createFoundPostStore();
+export const rememberFoundPost = (viewer: Viewer, post: ThingDoc, ipAddress?: string): Promise<void> => {
+ // Check eligibility before opening storage: ordinary Builder reads are a true
+ // no-op, including anonymous reads and read-only/scoped-token requests.
+ if (!foundPostVisitDocument(viewer, post, ipAddress)) return Promise.resolve();
+ const native = currentNativeFoundPostRepository();
+ return native ? native.remember(viewer, post, ipAddress) : hosted.rememberFoundPost(viewer, post, ipAddress);
+};
+export const loadFoundPostsForAuthor = (viewerId: string, authorId: string): Promise<ReadonlyMap<string, string>> => {
+ const native = currentNativeFoundPostRepository();
+ return native ? native.loadForAuthor(viewerId, authorId) : hosted.loadFoundPostsForAuthor(viewerId, authorId);
+};
