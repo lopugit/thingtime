@@ -88,6 +88,8 @@ export type ForegroundSyncInput = {
 	beginLocalImport?(purpose: 'initial' | 'review'): Promise<InventoryIdentity>;
 	releaseLocalImport?(inventory: InventoryIdentity): Promise<void>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
+	/** Mac 1.22 current metadata for upload sources only; never a byte digest. */
+	inspectLocalStamp?(path: string): Promise<Pick<SyncEntry, 'path' | 'id' | 'version' | 'kind' | 'size'> | null>;
 	inventory(): Promise<CloudInventory>;
 	inventoryPages?(options?: { signal?: AbortSignal }): AsyncIterable<CloudInventoryPage>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;
@@ -114,7 +116,7 @@ export async function runForegroundCloudSync(
 	input: ForegroundSyncInput,
 	signal: AbortSignal
 ) {
-	const { configuration, approved, check, authorize, scan, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, approved, check, authorize, scan, readLocal, readLocalUploadSource, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
@@ -282,6 +284,7 @@ export async function runForegroundCloudSync(
 				report(value);
 			},
 			readLocal,
+			readLocalUploadSource,
 			openSource,
 			localTarget,
 			signal,

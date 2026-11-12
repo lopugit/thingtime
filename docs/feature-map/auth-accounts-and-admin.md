@@ -122,6 +122,28 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+The macOS accessory companion installs `Host/PasswordApplicationMenu.swift`
+through `PasswordApp.swift`. Its standard nil-target Edit actions send keyboard
+shortcuts to the focused WebKit responder without credential/clipboard adapters.
+The Swift test target compiles that same host source and verifies selectors,
+modifiers and targets; the menu stays outside production core and iOS. The
+shared setup bridge keeps ordinary review instructions web-only, clears stale
+native copy to a neutral destination after verified readiness, and preserves
+native errors when the web surface cannot initialize. See the native
+keyboard editing section in `password-manager.md` and the signed acceptance
+checklist in `TESTING.md`.
+
+Native authenticator link intake: shared Swift `AuthenticatorSetup.swift` and
+`Host/AuthenticatorSetupBridge.swift`; macOS `PasswordSetupEditor.swift`; iOS
+`WebView.swift`. The narrow native bridge 1.0.0 requires compatible `api.passwords`
+1.2+ and verifies current home-plane owner, origin and document before transient
+one-use delivery. `PasswordAuthenticatorSetup.tsx` composes editable
+`PasswordWorkspaceControls` setup blocks into the existing controlled draft;
+Save remains the canonical encrypted-vault operation. No new API route or scope.
+See `password-manager.md` for packaging, separate sign-in and acceptance, Swift
+`AuthenticatorSetupTests`, web `authenticatorSetup*.test.ts` and the isolated
+`test-authenticator-setup-ui.mjs` browser regression.
+
 The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
 only for non-passkey manager entries. Copy uses an already-authorized draft and
 browser Clipboard API with secret-free inline status; it never reads clipboard
@@ -494,3 +516,54 @@ no-op updates and caller-supplied actor IDs are not authority. The selected
 ordinary-restore primitive currently refuses Character delegation and scoped
 credentials; this is an explicit initial capability scope, not impersonation.
 The real replica check covers wrong-account and revoked accepted-receipt retries.
+
+## Anthropic Console connections
+
+Secure Vault exposes the explicit `anthropic-api-key` kind alongside unchanged
+`anthropic` Claude Code OAuth records. `ai/anthropicApiKey.ts` creates the native
+Messages SDK with only the selected owner credential; `lopu/vaultProviderClient.ts`
+applies the existing host/DNS/redirect fences and `lopu/chat.ts` reuses native tool
+streaming. Console keys use separate provider billing. Save rejects setup tokens
+and mode changes without a new key. No platform/admin credential is migrated.
+Run `anthropicApiKey.test.ts`, `userVaultCore.test.ts`, `vaultProviders.test.ts`,
+`voice.test.ts`, `chat.streaming.test.mts`, `completion.test.ts` and capability
+coverage. Live Console inference and installed-native acceptance remain separate.
+
+
+## Named Google service reads
+
+`connections/googleServiceActions.ts` extends the shared named-operation catalog;
+`api/utils/connections/googleServiceRequests.ts` validates fixed service/resource
+requests and redacts exact credentials from complete results. The existing
+`useNamedConnection` path retains owner/origin/environment, exact-grant refresh,
+scope and post-read revocation fences. `NamedConnectionPanel` and its editable
+block template expose resource IDs and opaque next-page actions. Existing grants
+do not acquire operations automatically. See [service actions](../google-service-actions.md),
+`namedServiceActions.test.mts`, `googleServiceRequests.test.ts`, and the existing
+isolated OAuth-tab UI fixture. Provider consent/data acceptance is separate.
+Connections access inspection: `GET /api/v1/connections/diagnostics` negotiates
+`api.connections-diagnostics` 1.0.0, requires an exact connection and expected
+owner, and uses registered provider `diagnose` adapters only. The service checks
+owner, saved OAuth binding, selected origin/environment and unchanged encrypted
+grant before and after probes. It never refreshes or persists. Facebook returns
+actual grant names or unknown and separates minimal posts from engagement fields.
+Connections 2.2 exposes requested/confirmed grant evidence; callbacks 2.1.1 verify
+both default and named Facebook grants. Run `test:connections`, capability tests
+and compiled Connections smoke; live provider acceptance is separate.
+Personal-provider Lopu chat normalizes effort against the resolved saved model's
+`providerModelFor` catalog in `userVaultCore.ts`, before metadata and SDK request
+construction in `chat.ts`. Reply contract 1.23.1 preserves the selected credential
+and BYO billing; Haiku 4.5's empty effort list omits `output_config.effort` rather
+than mapping it to an invented thinking mode. Console SDK streaming regression:
+`api/utils/lopu/chat.streaming.test.mts`; both manifest generators and personal
+provider client requirements advertise the compatible reply PATCH. Voice retains
+its existing strict tuning guard.
+
+Browser passkey AppID compatibility: `passwords/browserPasskey.ts` validates the
+empty/default or HTTPS same-site boundary documented by WebAuthn (PSL including private suffixes) and emits
+`appid:false` for ordinary RP-bound assertions. `browserProviderCeremony.ts`
+requires both frontend and active `api.passwords` 1.9.1 before AppID vault reads;
+full request hashing retains AppID in the verification/session binding.
+`browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
+and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
+browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.

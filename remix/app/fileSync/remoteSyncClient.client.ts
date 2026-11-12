@@ -2,7 +2,7 @@ import { parseSyncActivityPage, type SyncActivityQuery } from './syncActivity';
 import { deviceSyncHistoryScopeKey, type DeviceSyncHistoryScope } from './deviceSyncHistory';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
-import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_ACTIVITY_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
+import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_ACTIVITY_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
 
 /** Optional display contract: older origins keep ordinary controls and explicit
  * destination selection. Callers recheck their identity after awaiting this. */
@@ -91,6 +91,7 @@ export function createRemoteSyncClient(input: {
 			try {
 				check(signal);
 				const minimum = command.action === 'connection-activity' ? REMOTE_SYNC_ACTIVITY_REQUIREMENTS['api.devices-sync-control'] :
+					command.action === 'start' && command.recoverSavedIntent ? REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS['api.devices-sync-control'] :
 					command.action === 'start' && command.intervalMs !== undefined ? REMOTE_SYNC_ENROLLMENT_REQUIREMENTS['api.devices-sync-control'] :
 					command.action === 'resources' ? REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control'] :
 					command.action === 'history' ? REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control'] : '1.0.0';

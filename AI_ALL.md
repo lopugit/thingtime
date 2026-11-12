@@ -155,6 +155,34 @@ authoritative.
   exact remaining human-only dependency after supported recovery. Record source,
   synthetic, deployed, installed and live-provider evidence separately.
 
+## Compact, collapsible multi-section interfaces
+
+User guidance (12 November 2026):
+
+> “multi-section pages with config/settings and many UI parts should always have headings and minimal info and be collapsable/expandable please defaulted to collapsed please”
+
+- Treat compact progressive disclosure as a foundational layout rule. Give each
+  section a clear heading, a concise useful summary where needed, and an
+  accessible expand/collapse control. Start configuration, settings and other
+  multi-section device surfaces collapsed; preserve deliberate user choices
+  when the surface explicitly remembers them. Do not expand every section on
+  first render or mount expensive hidden content merely to populate summaries.
+- Keep the main browsing surface focused on its Things. Give substantial tools
+  such as LiDAR capture their own page, with clear navigation back. Use ordinary
+  Thing browser cards, selection and context menus for saved and pending items;
+  distinguish device-only storage from an explicit cloud save.
+- Put secondary actions in the relevant Thing or page context menu instead of
+  crowding breadcrumbs and headers. Keep setup beside or directly below its
+  device item, and hide setup once that device is already configured. Preserve
+  a keyboard- and touch-accessible menu trigger; right-click cannot be the only
+  way to reach an action.
+- Show the ten most recent location-log entries initially, newest first. Put an
+  inline **Show more** control immediately below the list to fetch the next page.
+  This is a presentation batch size, never a retention or total-history limit.
+- Compose headings, summaries, controls and repeated fields as individually
+  editable Builder blocks. Check collapsed, expanded, menu, loading, empty and
+  error states at desktop and mobile widths, including the bottom of the page.
+
 ## Power users: no arbitrary product limits
 
 Thingtime is for power users and should stay simple to use at any scale. Do not
@@ -542,18 +570,26 @@ or authorization for new work.
   unavailable. Use the supported origin-scoped discovery path, distinguish edge
   refusal from capability/authentication/membership failures, and continue
   independent work. Never spoof clients, copy browser credentials, change origins
-  or weaken network isolation to recover coordination.
+  or bypass authentication or credential controls to recover coordination.
 - Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
   testing in the Thingtime Mac app, installation, CLI claims and live viewing.
   Keep tasks, todos and progress as editable Things; the native adapter owns
-  device browser installations, claims and enforced network boundaries.
+  device browser installations, claims and separate task-owned browser processes
+  and profiles.
 - Scope a native task to its origin, database identity, owner and Thing ID.
   Claim separately for each concurrent agent; never reuse another claim's
-  handle or mutable browser profile. Read and preserve the effective policy.
+  handle or mutable browser profile. Use separate Chrome profiles/browser
+  processes and VMs where needed to isolate task execution; preserve independent
+  accounts, credentials, databases and mutable test data.
 - Full-app acceptance must cover independent data and authentication, rendered
-  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
-  backend network restrictions. A fixture, healthy API or build alone is not
-  evidence that the installed feature works.
+  desktop/mobile task controls, live viewing and cleanup. A fixture, healthy API
+  or build alone is not evidence that the installed feature works.
+- Do not require network sandboxing, network isolation, outbound deny rules,
+  IP allowlists or browser/backend network restrictions for AI-agent work.
+  Normal network access is allowed within the task's authorization. This rule
+  supersedes older network-sandbox requirements in local instructions, runbooks
+  and historical acceptance checklists. Keep Chromium/Electron's normal process
+  sandbox and all account, credential, permission and data safeguards enabled.
 - The live global credential policy remains authoritative: use the Thingtime
   password manager on the executing device through its supported interfaces.
 
@@ -609,6 +645,35 @@ fork once the owner decides. Write a note before a plan and a plan before a new
 (`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
 `TODO/claude-todo/README.md`) in the same change — those indexes are the entry
 points, not the individual files.
+
+### Everything is a Thing: shared actions and context menus
+
+- **Fundamental architecture rule:** build common actions on the unified Thing
+  model, shared context-menu system and canonical permission checks. A Thing's
+  kind, page, card renderer or browsing mode must not arbitrarily determine
+  whether a common Thing action exists. Extend the shared action contract and
+  its consumers instead of implementing separate copies for individual views.
+- **Archive example (owner guidance, 11 November 2026):** Archive belongs on
+  every Thing-backed context menu when the current user has the appropriate
+  permission, including posts, comments, apps, folders, Builder items and
+  ordinary Things. Adding Archive only to `/things`, or excluding `builderMode`,
+  does not deliver this feature. Everything is a Thing; the shared action must
+  follow the Thing wherever its context menu is presented.
+- Derive availability from the canonical action and permission contract for
+  the exact Thing, account and origin. Reauthorize on the server when executing;
+  a visible menu item never grants access. Preserve protected-system boundaries,
+  scoped-token restrictions, ownership and collaborator rules. A missing
+  adapter or unsupported surface is an implementation gap to resolve or report,
+  not permission to silently exclude that class of Things.
+- Keep the action's meaning, mutation path, feedback and state updates
+  consistent across consumers. For Archive, preserve content and relationships,
+  define its visibility semantics explicitly, and provide a discoverable
+  Archived/Restore path. Do not confuse archiving with deletion or file export.
+- Verify the shared contract and representative real consumers: post/feed and
+  detail menus, Builder app cards, folders and ordinary Things, on desktop and
+  mobile. Cover authorized and refused actions, refresh/reload and restoration.
+  A successful test of one page is not evidence that a shared feature works
+  everywhere; inspect the menu consumers and record any uncovered surface.
 
 ## Local development and worktrees
 

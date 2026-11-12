@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
+import { SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -69,14 +69,37 @@ test('identity changes and cancellation fence admission and discovery', async ()
  assert.throws(() => jobs.read(), { name: 'AbortError' }); journal.close();
 });
 
-test('concurrent admissions enforce the account cap without blocking existing connections', async () => {
- const journal = await open();
- const results = await Promise.allSettled(Array.from({ length: MAX_SYNC_JOBS_PER_ACCOUNT + 1 }, (_, i) => {
+test('more than 256 independent configs admit, pause, and remain discoverable across reopen', async () => {
+ const factory = new IDBFactory(); const journal = await open(factory);
+ const results = await Promise.allSettled(Array.from({ length: 257 }, (_, i) => {
   const binding = { ...scope, rootId: 'connection-' + i }; return jobsFor(journal, binding).admit(saved(binding), 'job-' + i);
  }));
- assert.equal(results.filter(result => result.status === 'fulfilled').length, MAX_SYNC_JOBS_PER_ACCOUNT);
- assert.equal(results.filter(result => result.status === 'rejected').length, 1);
- const binding = { ...scope, rootId: 'connection-0' }; assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0'); journal.close();
+ assert.equal(results.filter(result => result.status === 'fulfilled').length, 257);
+ const folder = { ...scope, rootId: 'paused-folder' };
+ assert.equal((await jobsFor(journal, folder).pauseFolderSetup(saved(folder), 'folder-denial'))?.state, 'paused');
+ const photo = { ...scope, rootId: 'paused-photo' };
+ const photoSaved = { ...saved(photo), configuration: { ...saved(photo).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, photo).pausePhoto(photoSaved, 'photo-denial')).state, 'paused');
+ const automatic = { ...scope, rootId: 'automatic-photo' };
+ const automaticSaved = { ...saved(automatic), configuration: { ...saved(automatic).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, automatic).admit(automaticSaved, 'auto', 300_000, undefined, { previous: null })).id, 'auto');
+ const binding = { ...scope, rootId: 'connection-0' };
+ assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0');
+ journal.close();
+ const reopened = await open(factory);
+ try {
+  const jobs = jobsFor(reopened); let after: string | undefined; const keys = new Set<string>();
+  do {
+   const page = await jobs.list(after);
+   assert.ok(page.jobs.length <= SYNC_JOB_PAGE_SIZE);
+   for (const job of page.jobs) keys.add(job.key);
+   after = page.next;
+  } while (after);
+  assert.equal(keys.size, 260);
+  assert.equal((await jobsFor(reopened, folder).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, photo).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, automatic).read())?.id, 'auto');
+ } finally { reopened.close(); }
 });
 
 test('version-10 upgrade preserves existing records and admits no jobs', async () => {
@@ -256,6 +279,25 @@ test('transient retry deadlines survive restart, reject noisy early wakes, and p
  journal.close();
 });
 
+test('app opening wakes the saved local cadence without bypassing retry backoff, Pause or attention', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'cycle', 300_000);
+ const scheduled = (await jobs.finish(first, 100))!;
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const restored = (await jobs.read())!;
+ assert.equal(syncJobDue(restored, 200, true), false);
+ assert.equal(syncJobDue(restored, 200, true, true), true);
+ const begun = (await jobs.begin(restored, 200, 'next-cycle', undefined, true, true))!;
+ assert.equal(begun.state, 'runnable');
+ const backoff = (await jobs.defer(begun, 200, 120_000))!;
+ assert.equal(syncJobDue(backoff, 201, true, true), false, 'ambiguous/server retry deadlines remain binding');
+ assert.equal(await jobs.begin(backoff, 201, 'not-admitted', undefined, true, true), null);
+ const paused = (await jobs.pause(backoff))!;
+ assert.equal(syncJobDue(paused, 999_999, true, true), false);
+ assert.equal(syncJobDue({ ...scheduled, state: 'attention' }, 999_999, true, true), false);
+ journal.close();
+});
+
 test('strict native capture survives a lost reply and a failed cleanup across a reopen', async () => {
  const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
  const initial = saved(), captureId = crypto.randomUUID(), replacement = crypto.randomUUID();
@@ -426,5 +468,42 @@ test('strict scan interruption gets one durable verified retry before attention'
  const attention = (await jobs.attention(resumed, Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.')))!;
  assert.equal(attention.failureReason, 'indexing-incomplete');
  assert.equal(syncJobDue(attention, 999_999, true), false);
+ journal.close();
+});
+
+test('verified folder/device policy edits wake only matching hourly jobs, preserving Pause, receipts and relaunch state', async () => {
+ const { wakeUploadPolicyJobs } = await import('./syncJobJournal');
+ const factory = new IDBFactory(); let journal = await open(factory);
+ const now = Date.now(), deadline = now + 3_600_000;
+ const rows = [];
+ for (const [id, grant, device, owner, origin, reason, state] of [
+  ['one', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['two', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['scheduled', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'scheduled'],
+  ['other-folder', 'other-grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-device', 'grant', 'other-device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-owner', 'grant', 'device', 'other-owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-origin', 'grant', 'device', 'owner', 'https://other.example', 'data-budget', 'runnable'],
+  ['charging', 'grant', 'device', 'owner', scope.origin, 'charging', 'runnable'],
+  ['paused', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'paused'],
+  ['review', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'attention']
+ ] as const) {
+  const binding = { ...scope, rootId: id, deviceId: device, ownerId: owner, origin };
+  const jobs = jobsFor(journal, binding), configuration = { ...saved(binding), configuration: { ...saved(binding).configuration, localRootId: grant } };
+  let job = await jobs.admit(configuration, 'job-' + id, state === 'scheduled' ? 60_000 : undefined);
+  if (state === 'scheduled') job = (await jobs.finish(job, now))!;
+  job = (await jobs.defer(job, now, 30_000, { reason, retryAt: deadline }))!;
+  if (state !== 'runnable' && state !== 'scheduled') job = (await jobs.transition(job, state))!;
+  rows.push({ binding, job });
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { ...scope, rootId: 'grant' }, () => {}), 3);
+ journal.close(); journal = await open(factory);
+ for (const { binding, job } of rows) {
+  const current = (await jobsFor(journal, binding).read())!;
+  assert.equal(current.id, job.id); assert.deepEqual(current.reviewed, job.reviewed);
+  if (['one', 'two', 'scheduled'].includes(binding.rootId)) { assert.equal(current.retryAt, undefined); assert.equal(syncJobDue(current, Date.now()), true); assert.equal(current.intervalMs, job.intervalMs); }
+  else assert.deepEqual(current, job, 'unrelated/pause/authority state stays exact: ' + binding.rootId);
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { origin: scope.origin, ownerId: scope.ownerId, deviceId: scope.deviceId }, () => {}), 1);
  journal.close();
 });

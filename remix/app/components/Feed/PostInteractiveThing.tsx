@@ -15,7 +15,7 @@ function LinkedComponent({ thing }: { thing: ThingsThing }) {
   // An attached reference never smuggles a source action that runs on mount.
   const { scope } = useThingSource({ source: null, cacheId: thing.id, argValues, interactive: true });
   const { confirm, dialog } = useActionRunConfirm({ enabled: true });
-  return <>{thing.crystal.render ? <LiveTemplate render={thing.crystal.render} scope={{ ...argValues, ...scope }} interactive confirm={confirm} /> : <ThingView thing={thing.crystal} />}{dialog}</>;
+  return <>{thing.crystal.render ? <LiveTemplate render={thing.crystal.render} scope={{ ...argValues, ...scope }} interactive confirm={confirm} /> : <ThingView subjectId={thing.id} thing={thing.crystal} />}{dialog}</>;
 }
 function LinkedPage({ thing }: { thing: ThingsThing }) {
   const target = React.useMemo(() => ({ kind: 'id' as const, id: thing.id }), [thing.id]);
@@ -28,7 +28,7 @@ export function PostInteractiveThing({ thing, compact }: { thing: ThingsThing; c
   const owner = !!user?.id && thing.author?.id === user.id;
   const component = thing.thingtime.includes('component');
   const webpage = thing.thingtime.includes('webpage');
-  if (!component && !webpage) return <ThingView thing={thingPresentationData(thing.crystal)} compact={compact} />;
+  if (!component && !webpage) return <ThingView subjectId={thing.id} thing={thingPresentationData(thing.crystal)} compact={compact} />;
   // Reuse the canonical runtime: visitors execute only the shared read-only
   // composition, and owner mutations still go through the action confirmation.
   return <WebpageRuntimeProvider key={`${user?.id || 'anonymous'}:${thing.id}`} pageId={thing.id} pageKey={typeof thing.crystal.pageKey === 'string' ? thing.crystal.pageKey : null} suiteKey={null} source={owner ? 'user' : 'system'} shared={!owner}>

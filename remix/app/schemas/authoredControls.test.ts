@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from './authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings } from './authoredControls';
 import { sanitizeActionCrystal, sanitizeWebpageBlocks } from './registry';
 import { validateRunInputs } from '../api/utils/actions/actionInputs';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+
+test('explicit argument bindings are detected independently and negotiate additive contracts', () => {
+	assert.equal(usesComponentArgumentBindings({ args: { id: '{item.id}' } }), false);
+	assert.equal(usesComponentArgumentBindings({ blocks: [{ type: 'component', argBindings: { id: '{item.id}' } }] }), true);
+	assert.equal(usesComponentArgumentBindings({ blocks: [{ type: 'component', argBindings: {} }] }), false);
+	const cycle: any = {}; cycle.children = [cycle];
+	assert.equal(usesComponentArgumentBindings(cycle), false);
+	for (const minimum of Object.values(COMPONENT_ARGUMENT_BINDING_REQUIREMENTS)) {
+		assert.equal(capabilitySatisfies(minimum, minimum), true);
+		assert.equal(capabilitySatisfies('1.0.0', minimum), false);
+		assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+	}
+});
 
 test('typed Actions accept more than sixteen distinct inputs through save and execution validation', () => {
 	const inputs = Array.from({ length: 40 }, (_, index) => ({ name: `field${index}`, type: 'json' }));

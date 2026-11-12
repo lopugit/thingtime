@@ -54,6 +54,7 @@ try {
 	for (const [profile, viewport] of Object.entries({ desktop: { width: 1280, height: 840 }, mobile: { width: 390, height: 844 } })) {
 		const context = await browser.newContext({ viewport, isMobile: profile === 'mobile', hasTouch: profile === 'mobile', reducedMotion: 'reduce' });
 		try { await exercise(context, profile); }
+		catch (error) { for (const page of context.pages()) { await page.screenshot({ path: join(evidence, profile + '-failure.png'), fullPage: true }); console.error((await page.locator('body').innerText()).slice(-1800)); } throw error; }
 		finally { await context.close(); }
 	}
 	await exerciseBrowserFallback();
@@ -69,8 +70,8 @@ async function exercise(context, profile) {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.route('**/.well-known/thingtime-capabilities.json', route => route.fulfill({ json: manifest(origin) }));
-	let layout;
-	await page.route('**/api/v1/webpages/resolve?*', route => route.fulfill(layout ? { json: { ok: true, source: 'user', page: layout } } : { status: 404, json: { ok: false } }));
+	const layouts = new Map();
+	await page.route('**/api/v1/webpages/resolve?*', route => { const layout = layouts.get(new URL(route.request().url()).searchParams.get('id')); return route.fulfill(layout ? { json: { ok: true, source: 'user', page: layout } } : { status: 404, json: { ok: false } }); });
 	await page.route('**/api/v1/things', route => {
 		const request = route.request();
 		assert.equal(request.method(), 'POST');
@@ -78,110 +79,90 @@ async function exercise(context, profile) {
 		assert.equal(request.headers()['x-thingtime-expected-data-plane'], 'home');
 		const body = request.postDataJSON();
 		assert.deepEqual(body.acl, ['tt:user']);
-		assert.equal(body.crystal.pageKey, 'settings-lidar-scan-controls');
-		layout = { id: 'fixture-layout', updatedAt: new Date().toISOString(), author: { id: 'fixture-lidar-owner' }, ...body };
+		assert.ok(['settings-lidar-scan-controls', 'settings-lidar-library-save-button', 'settings-lidar-library-toolbar'].includes(body.crystal.pageKey));
+		const layout = { id: 'fixture-layout', updatedAt: new Date().toISOString(), author: { id: 'fixture-lidar-owner' }, ...body };
+		layouts.set(body.crystal.pageKey, layout);
 		return route.fulfill({ json: { ok: true, thing: layout } });
 	});
 	const panel = page.getByRole('region', { name: 'LiDAR scan' });
-	const start = panel.getByRole('button', { name: 'Scan with LiDAR' });
-	const capture = page.getByRole('button', { name: 'Builder scan action', exact: true });
 	await page.goto(origin + '/lidar-fixture');
-	await start.waitFor();
-	assert.deepEqual(await readActions(page), ['status']);
-	await capture.evaluate(button => button.click());
-	await page.getByRole('button', { name: 'Builder scan with unknown arguments' }).click();
-	assert.deepEqual(await readActions(page), ['status']);
-	await capture.press('Enter');
-	assert.deepEqual(await readActions(page), ['status', 'start']);
-	await page.evaluate(() => {
-		const request = window.lidarFixture.requests.at(-1);
-		window.lidarFixture.reply(request, { state: 'capturing', scanId: request.requestId });
-	});
-	await panel.getByText('The scanner is open in Thingtime.').waitFor();
-	await page.evaluate(() => {
-		const request = window.lidarFixture.requests.at(-1);
-		window.lidarFixture.reply(request, { state: 'saving', scanId: request.requestId });
-	});
-	const busy = panel.getByRole('status', { name: 'Saving LiDAR scan' });
-	await busy.waitFor();
-	assert.equal(await panel.locator('.ttLidarIndicator').count(), 1);
-	assert.equal(await busy.evaluate(element => getComputedStyle(element).animationName), 'none');
-	await page.evaluate(() => {
-		const request = window.lidarFixture.requests.at(-1);
-		window.lidarFixture.setStatus({ state: 'pending', scanId: request.requestId });
-		document.dispatchEvent(new Event('visibilitychange'));
-		window.lidarFixture.reply(request, { state: 'saved', scanId: request.requestId, fileThingId: request.requestId });
-	});
-	await panel.getByText('Saved on this device. Retry to finish saving to Things.').waitFor();
-	await panel.getByRole('button', { name: 'Retry save' }).click();
-	const fileId = randomUUID();
-	await page.evaluate(fileThingId => {
-		const request = window.lidarFixture.requests.at(-1);
-		const state = { state: 'saved', scanId: request.scanId, fileThingId, isPartial: true, detail: 'The capture was interrupted.' };
-		window.lidarFixture.reply(request, { ...state, ownerId: 'other-owner' });
-		window.lidarFixture.reply(request, state);
-		window.lidarFixture.reply(request, state);
-	}, fileId);
-	const saved = panel.getByRole('link', { name: 'Open saved scan' });
-	await saved.waitFor();
-	await panel.getByText('Partial scan saved to your private Things. The capture was interrupted.').waitFor();
-	assert.equal(await saved.getAttribute('href'), '/thing/' + fileId + '?from=things');
-	assert.deepEqual(await readActions(page), ['status', 'start', 'status', 'retry']);
-	assert.equal(await page.evaluate(() => window.lidarFixture.savedNotifications()), 1);
-	assert.equal(await panel.locator('.ttLidarIndicator').count(), 0);
-	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-	await page.screenshot({ path: join(evidence, profile + '-saved.png'), fullPage: true });
-	await page.getByText('End of Things').scrollIntoViewIfNeeded();
-	assert.ok(await page.evaluate(() => scrollY > 0 && document.documentElement.scrollWidth <= innerWidth + 1));
-
-	const nativeScan = randomUUID();
-	await page.evaluate(scanId => {
-		window.lidarFixture.setStatus({ state: 'pending', scanId });
-		window.lidarFixture.announceNativeChange({ ownerId: 'different-owner' });
-		window.lidarFixture.announceNativeChange({ origin: 'https://different.invalid' });
-	}, nativeScan);
-	assert.deepEqual(await readActions(page), ['status', 'start', 'status', 'retry']);
-	await page.evaluate(() => window.lidarFixture.announceNativeChange());
-	await panel.getByRole('button', { name: 'Retry save' }).click();
-	await page.evaluate(scanId => {
-		const request = window.lidarFixture.requests.at(-1);
-		if (request.scanId !== scanId) throw new Error('Retry changed the native scan identity');
-		window.lidarFixture.reply(request, { state: 'saved', scanId, fileThingId: scanId });
-	}, nativeScan);
-	await saved.waitFor();
-	assert.deepEqual(await readActions(page), ['status', 'start', 'status', 'retry', 'status', 'retry']);
-
-	const host = page.locator('[data-settings-document="lidar-scan-controls"]');
+	await page.getByRole('heading', { name: 'LiDAR scans', exact: true }).waitFor();
+	await panel.getByRole('button', { name: 'Scan with LiDAR' }).waitFor();
+	const scanId = '510fbf8b-5c32-4ddc-8089-c70b392d3aae';
+	const card = page.locator('[data-thing-id="' + scanId + '"]');
+	await card.getByText('Not saved to Thingtime · 10.6 GiB · Partial', { exact: true }).waitFor();
+	const starting = await readActions(page);
+	assert.ok(starting.every(action => action === 'status'));
+	const before = starting.length;
 	await enableCurrentPageBuilder(page);
-	await host.getByRole('button', { name: 'Edit scan layout' }).click();
-	await host.getByRole('button', { name: 'Open Builder inspector' }).click();
-	const selector = page.getByRole('combobox', { name: 'Select block' });
-	const text = page.getByRole('textbox', { name: 'Block text' });
-	for (const [id, label] of [['lidar-title', 'Editable room scan'], ['lidar-start', 'Capture this room']]) {
-		await selector.selectOption(id);
-		await text.fill(label);
-		await text.blur();
+	for (const [key, id, text] of [['lidar-library-toolbar', 'lidar-library-title', 'My LiDAR scans'], ['lidar-library-save-button', 'scan-save', 'Save this scan']]) {
+		const host = key === 'lidar-library-save-button' ? card.locator('[data-settings-document="' + key + '"]') : page.locator('[data-settings-document="' + key + '"]');
+		await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
+		await host.getByRole('button', { name: 'Open Builder inspector' }).click();
+		await page.getByRole('combobox', { name: 'Select block' }).selectOption(id);
+		await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(text);
+		await page.getByRole('textbox', { name: 'Block text', exact: true }).blur();
+		await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+		await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/v1/things') && response.request().method() === 'POST'), host.getByRole('button', { name: 'Save layout', exact: true }).click()]);
+		assert.equal(flatten(layouts.get('settings-' + key).crystal.blocks).find(block => block.id === id).text, text);
 	}
-	await page.getByRole('button', { name: 'Close builder' }).click();
-	await Promise.all([
-		page.waitForResponse(response => response.url().endsWith('/api/v1/things') && response.request().method() === 'POST'),
-		host.getByRole('button', { name: 'Save layout', exact: true }).click()
-	]);
-	assert.equal(flatten(layout.crystal.blocks).find(block => block.id === 'lidar-title').text, 'Editable room scan');
-	assert.equal(flatten(layout.crystal.blocks).find(block => block.id === 'lidar-start').text, 'Capture this room');
+	await page.getByRole('button', { name: 'Builder on current page', exact: true }).press('Enter');
+
+	await card.getByRole('button', { name: 'Save this scan', exact: true }).click();
+	assert.ok(await page.getByRole('menu').last().evaluate(element => { const r = element.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1; }));
+	await page.screenshot({ path: join(evidence, profile + '-device-save-menu.png'), fullPage: true });
+	await page.getByRole('menuitem', { name: /Device only/ }).click();
+	await page.evaluate(() => {
+		const request = window.lidarFixture.requests.at(-1);
+		if (request.action !== 'save' || request.destination !== 'device') throw Error('Wrong local save');
+		const scans = [
+			{ scanId: request.scanId, createdAt: '2026-11-12T01:00:00Z', byteCount: 11360000000, frameCount: 40, available: true, deviceSaved: true, isPartial: true }
+		];
+		window.lidarFixture.setStatus({ state: 'idle', scans });
+		window.lidarFixture.reply(request, { state: 'device-saved', scanId: request.scanId, scans });
+	});
+	await card.getByText('Device only · 10.6 GiB · Partial', { exact: true }).waitFor();
+	assert.deepEqual((await readActions(page)).slice(before), ['save']);
+	await card.click({ button: 'right' });
+	await page.getByRole('menuitem', { name: /Save to Thingtime/ }).click();
+	assert.ok(await page.getByRole('menu').last().evaluate(element => { const r = element.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1; }));
+	await page.screenshot({ path: join(evidence, profile + '-cloud-save-menu.png'), fullPage: true });
+	await page.getByRole('menuitem', { name: /Cloud/ }).click();
+	await page.evaluate(() => {
+		const request = window.lidarFixture.requests.at(-1);
+		if (request.action !== 'save' || request.destination !== 'cloud') throw Error('Wrong cloud save');
+		window.lidarFixture.reply(request, { state: 'saving', scanId: request.scanId });
+	});
+	await panel.getByRole('status', { name: 'Saving LiDAR scan' }).waitFor();
+	assert.equal(await page.locator('.ttLidarIndicator').count(), 1);
+	assert.equal(await card.count(), 1);
+	await page.evaluate(() => {
+		const request = window.lidarFixture.requests.at(-1);
+		const scans = [{ scanId: request.scanId, createdAt: '2026-11-12T01:00:00Z', byteCount: 11360000000, frameCount: 40, available: true, deviceSaved: true, isPartial: true, fileThingId: request.scanId }];
+		window.lidarFixture.reply(request, { state: 'saved', scanId: request.scanId, fileThingId: request.scanId, scans });
+	});
+	await card.getByText('Cloud · 10.6 GiB · Partial', { exact: true }).waitFor();
+	assert.equal(await card.getByRole('button', { name: 'Save this scan', exact: true }).count(), 0);
+	await page.getByRole('combobox', { name: 'Scan view' }).selectOption('list');
+	await card.waitFor();
+	await page.getByRole('textbox', { name: 'Search LiDAR scans' }).fill('no match');
+	await page.getByText('No scans match your search.').waitFor();
+	await page.getByRole('textbox', { name: 'Search LiDAR scans' }).fill('');
+	await card.waitFor();
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+	await page.screenshot({ path: join(evidence, profile + '-library.png'), fullPage: true });
+	await page.getByText('End of Things').scrollIntoViewIfNeeded();
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
 	await page.reload();
-	await panel.getByRole('heading', { name: 'Editable room scan' }).waitFor();
-	await panel.getByRole('button', { name: 'Capture this room' }).click();
+	await page.getByRole('heading', { name: 'My LiDAR scans', exact: true }).waitFor();
+	await card.getByRole('button', { name: 'Save this scan', exact: true }).waitFor();
 	await page.evaluate(() => window.lidarFixture.changeIdentity());
-	await panel.waitFor({ state: 'detached' });
-	assert.deepEqual(await readActions(page), ['status', 'start', 'suspend']);
+	await card.waitFor({ state: 'detached' });
+	assert.equal((await readActions(page)).at(-1), 'suspend');
 	assert.deepEqual(errors, []);
-	await page.goto(origin + '/lidar-fixture?mode=unsupported');
-	await panel.getByText('LiDAR scanning requires a supported iPhone or iPad.').waitFor();
-	assert.equal(await panel.getByRole('button', { name: 'Capture this room' }).count(), 0);
 	await page.goto(origin + '/lidar-fixture?mode=outdated');
-	await panel.getByText('Update the Thingtime iOS app to use LiDAR scanning.').waitFor();
-	assert.deepEqual(await readActions(page), []);
+	await page.getByText('Update the Thingtime iOS app to browse all scans and choose Device only or Cloud.').waitFor();
+	assert.equal(await page.getByRole('button', { name: 'Scan with LiDAR', exact: true }).count(), 0);
 }
 
 async function exerciseBrowserFallback() {

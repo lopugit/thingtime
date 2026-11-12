@@ -1,4 +1,4 @@
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { requireThingtimeCapability, requireActiveThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import type { VerificationContext } from './verificationPolicy';
 import { passwordApprovalRequest, passwordRequest } from './client';
 import { createBrowserPasskeyAssertion, prepareBrowserPasskeyRegistration, requireNoExcludedBrowserPasskey, BrowserPasskeyExcludedError, BROWSER_PASSKEY_EXCLUDED_MESSAGE, validateBrowserPasskeyRequest, type BrowserPasskeyRequest } from './browserPasskey';
@@ -46,6 +46,8 @@ export function providerApprovalBudget(request: ProviderRequest, receivedAt: num
 }
 /** Secrets exist only in this invocation. No response leaves before durable exact readback. */
 export async function runProviderCeremony(request: ProviderRequest, password: string, selected: ProviderSelection | null, vault: Vault, signal: AbortSignal, attempt: BrowserProviderAttempt = {}) {
+  request = validateProviderRequest(request);
+  if (Object.prototype.hasOwnProperty.call(request.publicKey.extensions || {}, 'appid')) await ensureBrowserProvider(signal, request);
   signal.throwIfAborted();
   const selectedId = selected?.id || '', credentialId = selected?.credentialId;
   if (request.type === 'get' && (!selected || !selectedId || !matchesProviderChoice(request, selected)))
@@ -105,8 +107,10 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
     passwordFieldValue(saved.entry, 'credentialId') !== prepared.response.id) throw new Error('The saved passkey could not be verified. Registration was not completed.');
   return prepared.response;
 }
-export async function ensureBrowserProvider(signal: AbortSignal) {
-  await requireThingtimeCapability('api.passwords', '1.5.0');
+export async function ensureBrowserProvider(signal: AbortSignal, request?: BrowserPasskeyRequest) {
+  const appid = request?.type === 'get' && Object.prototype.hasOwnProperty.call(request.publicKey.extensions || {}, 'appid');
+  await requireThingtimeCapability('api.passwords', appid ? '1.9.1' : '1.5.0');
+  if (appid) await requireActiveThingtimeCapability('api.passwords', '1.9.1');
   signal.throwIfAborted();
 }
 

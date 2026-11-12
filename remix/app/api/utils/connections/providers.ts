@@ -1,10 +1,11 @@
+import { FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR, safeProviderError } from './providerErrors';
 import { oauthClientConfig } from './oauthConfig';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 import { fail, type Fail } from './shared';
-import { GOOGLE_SERVICES, serviceGroupFor } from '../../../connections/catalog';
+import { GOOGLE_SERVICES, NAMED_PROVIDER_PERMISSIONS, serviceGroupFor } from '../../../connections/catalog';
 import { ownerVaultConfigured } from '../auth/vaultCipher';
 
 // Third-party feed providers — the adapter registry behind
@@ -50,6 +51,7 @@ export type OAuthTokens = {
   // is near/past, otherwise the sync surfaces a "reconnect" error
   expiresAt?: string | null;
   scopes?: string[];
+  requestedScopes?: string[];
   confirmedScopes?: string[];
   providerUserId?: string | null;
 };
@@ -83,6 +85,11 @@ export type ConnectField = {
   // must never be stored — adapters exchange them for session tokens that go
   // in the secure blob
   secret?: boolean;
+};
+
+export type ConnectionDiagnostics = {
+  grantedScopes: string[] | null;
+  checks: { name: string; status: 'available' | 'permission-denied' | 'unauthorized' | 'unavailable' | 'skipped' }[];
 };
 
 export type ConnectionProvider = {
@@ -120,6 +127,8 @@ export type ConnectionProvider = {
   // pair with the refresh JWT — no client credentials involved); OAuth
   // providers put their refresh grant on oauth.refreshTokens instead
   refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
+  // Fixed, read-only probes owned by the adapter; no caller URL or field dispatch.
+  diagnose?: (tokens: OAuthTokens, access: { allowContentProbe: boolean }) => Promise<ConnectionDiagnostics>;
   fetchFeed: (
     account: { providerAccountId: string; config: Record<string, any> },
     opts: { limit: number; tokens?: OAuthTokens | null; pages?: number }
@@ -480,7 +489,8 @@ const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
 // One guarded fetch for every outbound provider call: validates the target,
 // then walks redirects by hand re-validating each hop.
 const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
-  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
   const method = init.method || 'GET';
   let target = url;
   let headers = new Headers(init.headers);
@@ -627,11 +637,13 @@ export const authedJson = async (
   url: string,
   opts: {
     token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>;
+    completeResponse?: boolean; signal?: AbortSignal;
   } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
     const resp = await guardedFetch(url, {
       method: opts.method || 'GET',
+      signal: opts.signal,
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'application/json',
@@ -643,11 +655,19 @@ export const authedJson = async (
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
     if (!resp.ok) {
-      await resp.body?.cancel().catch(() => {});
+      let detail: string | null = null;
+      try {
+        // Error-parser resource bound only; never a user-content limit.
+        const text = await readBoundedBody(resp, 16 * 1024);
+        if (text !== null) detail = safeProviderError(url, resp.status, JSON.parse(text));
+      } catch {
+        // Malformed, interrupted and oversized errors retain generic copy.
+      }
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
-      return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
+      return fail(status, detail || (status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`));
     }
-    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    // Only fixed service actions opt in; user-supplied feed URLs retain the bounded reader.
+    const text = opts.completeResponse ? await resp.text() : await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
     try {
       return { ok: true, data: JSON.parse(text) };
@@ -1688,14 +1708,36 @@ const GRAPH = 'https://graph.facebook.com/v23.0';
 
 export async function readConnectionFacebookPermissions(tokens: OAuthTokens): Promise<string[] | undefined> {
   const result = await authedJson(`${GRAPH}/me/permissions?fields=permission,status`, { token: tokens.accessToken });
-  if (result.ok === false || !Array.isArray(result.data?.data)) return undefined;
+  if (result.ok === false || !Array.isArray(result.data?.data) || result.data?.paging?.next || !result.data.data.every((item: any) =>
+    item && typeof item.permission === 'string' && ['granted', 'declined', 'expired'].includes(item.status))) return undefined;
   return result.data.data.flatMap((item: { permission?: unknown; status?: unknown }) =>
-    item?.status === 'granted' && typeof item.permission === 'string' ? [item.permission] : []);
+    item?.status === 'granted' && NAMED_PROVIDER_PERMISSIONS.facebook.some(permission => permission.scope === item.permission) ? [String(item.permission)] : []);
 }
+
+const facebookCheck = (name: string, result: { ok: true; data: any } | Fail): ConnectionDiagnostics['checks'][number] => ({
+  name, status: result.ok === true ? (Array.isArray(result.data?.data) ? 'available' : 'unavailable') :
+    (result.error === FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR || result.error === 'Facebook denied this operation. Check the app’s posts permission and account access.') ? 'permission-denied' :
+    result.error === 'Facebook authorization is invalid or expired. Reconnect this account.' ? 'unauthorized' : 'unavailable'
+});
+
+const diagnoseFacebook = async (tokens: OAuthTokens, access: { allowContentProbe: boolean }): Promise<ConnectionDiagnostics> => {
+  const grantedScopes = await readConnectionFacebookPermissions(tokens) ?? null;
+  // Provider consent does not authorize content use through a Thingtime grant.
+  if (!access.allowContentProbe) return { grantedScopes, checks: ['posts', 'shares', 'likes', 'comments'].map(name => ({ name, status: 'skipped' })) };
+  const probe = (fields: string) => authedJson(`${GRAPH}/me/posts?fields=${encodeURIComponent(fields)}&limit=1`, { token: tokens.accessToken });
+  const minimal = facebookCheck('posts', await probe('id,message,created_time'));
+  const checks = [minimal];
+  // Keep optional field failures separate. Never fetch another page or emit content.
+  for (const [name, field] of [['shares', 'shares'], ['likes', 'likes.summary(true)'], ['comments', 'comments.summary(true)']]) {
+    checks.push(minimal.status === 'available' ? facebookCheck(name, await probe(`id,${field}`)) : { name, status: 'skipped' });
+  }
+  return { grantedScopes, checks };
+};
 
 const facebookProvider: ConnectionProvider = {
   id: 'facebook',
   name: 'Facebook posts',
+  diagnose: diagnoseFacebook,
   icon: '📘',
   auth: 'oauth2',
   contentVisibility: 'personal',
@@ -1720,7 +1762,7 @@ const facebookProvider: ConnectionProvider = {
       const winner = long.ok !== false && long.data?.access_token ? long.data : short.data;
       return {
         ok: true,
-        tokens: { accessToken: String(winner.access_token), expiresAt: expiresAtFrom(winner.expires_in), scopes: ['public_profile', 'user_posts'] }
+        tokens: { accessToken: String(winner.access_token), expiresAt: expiresAtFrom(winner.expires_in), requestedScopes: ['public_profile', 'user_posts'] }
       };
     },
     resolveAccountFromTokens: async (tokens) => {
@@ -1772,6 +1814,7 @@ const facebookAccountProvider: ConnectionProvider = {
   ...facebookProvider,
   id: 'facebook-account',
   name: 'Facebook account',
+  diagnose: (tokens) => diagnoseFacebook(tokens, { allowContentProbe: false }),
   accountOnly: true,
   about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
   oauth: {
@@ -1783,7 +1826,7 @@ const facebookAccountProvider: ConnectionProvider = {
     },
     exchangeCode: async (input) => {
       const result = await facebookProvider.oauth!.exchangeCode(input);
-      return result.ok === false ? result : { ok: true, tokens: { ...result.tokens, scopes: ['public_profile'] } };
+      return result.ok === false ? result : { ok: true, tokens: { ...result.tokens, requestedScopes: ['public_profile'] } };
     }
   },
   fetchFeed: async () => ({ ok: true, items: [] })
@@ -2050,6 +2093,10 @@ const youtubeAccountProvider: ConnectionProvider = {
         )
       )
     );
+    // A successful empty uploads playlist is valid. Total request failure is
+    // not: preserve a safe failure instead of stamping the account successful.
+    const failed = lists.find(({ result }) => result.ok === false);
+    if (lists.length && lists.every(({ result }) => result.ok === false) && failed?.result.ok === false) return failed.result;
     const items: ExternalFeedItem[] = [];
     for (const { channel, result } of lists) {
       if (result.ok === false) continue;

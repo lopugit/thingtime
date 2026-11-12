@@ -1,5 +1,52 @@
 # Attachments and media
 
+Photos pending source discovery uses transfer-admissions 1.8.0. The live exact
+run writes sequenced metadata pages; full-owner `read-source-index` reads private
+atomic source Things without a run handle after Pause/expiry. See
+[the source-index contract](../sync-source-index.md), `sourceIndex.ts`, native
+`PhotoSourceIndexOutbox`, and the source-index cases in the built transfer
+admission fixture. Metadata never substitutes for verified Files publication.
+
+Ordinary iOS folder Backup uploads use independent `fileUploadPolicyVersion`
+1.1.0 and saved v5 `uploadPolicy`; they share Photos device/folder budgets without
+advertising CPU, scan or download enforcement. See
+[iOS folder upload policy](../ios-folder-upload-policy.md), `uploadPolicy.test.ts`,
+the folder cases in `photoSettingsRecovery.test.ts`, native scoped-policy tests
+and `scripts/test-folder-upload-limits-ui.mjs`.
+
+`attachments.ts` reconciles opted-in multipart retries through exact provider
+part metadata (`api.attachment-upload-parts` 1.3 / transfer-admissions 1.7).
+`privateS3.ts` uses a one-part lookup; `localAttachmentStorage.ts` exercises the
+same boundary with real stored checksums. Native `NativeFileSession`, deferred
+transport and browser `cloudTransport.ts` skip only verified accepted parts,
+retain full legacy grants and final fingerprints, and preserve all hourly
+consumption. Run attachment/provider, transport and capability tests plus native
+multipart/session-owner race tests; exercise real multi-allowance resume after
+host replacement before delivery.
+
+Photos transfer settings are visible on the saved device/folder/config cards.
+`PhotoTransferScopeControls` uses the iOS automation 1.6 native policy bridge;
+`NativePhotoTransferPolicyStore`, `NativePhotoUploadBudget` and the background
+admission calendar share device/folder limits across config workers. Config
+policy remains in the canonical saved Thing. Run the visible saved-card browser
+check and native scope/legacy-budget regressions. Closed transfer-admission
+1.5.1 diagnostics distinguish actual configuration/destination changes from
+permission, expiry and other transfer conflicts; raw server errors stay private.
+`files/inventory.ts` queues exact-path observations behind two active snapshots
+instead of rejecting concurrent Photos reservations (`api.files` 1.13.1).
+Exercise five concurrent reserves through the built HTTP API, plus FIFO,
+cancellation, access revalidation and deadline checks in `inventory.test.ts`.
+
+iOS automatic setup uses native device pairing 1.2.0 to queue same-scope
+status behind connection work with fresh authority and independent cancellation.
+`MobileDeviceBridgeQueueTests` reproduces startup contention beyond the former
+client delay; `syncEnrollmentRecoveryBusy.test.ts` exercises natural recovery
+through durable admission. See [device sync configs](../device-sync-configs.md).
+`folderSetupRecovery.ts` narrows only an unexecuted version-1 Two-way setup to
+the exact saved deletion-disabled Backup. `syncJobJournal.ts` audits all scoped
+execution stores and records the old job atomically with admission;
+`folderSetupRecovery.test.ts` covers no-effects, Pause/CAS and storage failures.
+
 Folder management and its sync configs share the editable device UI. Enrollment
 and config-scoped activity live in `fileSync/`; shared file payloads use the
 protected `attachments/attachmentBlobs.ts` lifecycle and
@@ -7,6 +54,29 @@ protected `attachments/attachmentBlobs.ts` lifecycle and
 still authorize the attachment before resolving physical content. See
 [device sync configs](../device-sync-configs.md) and the matching `TESTING.md`
 checklist for quota, concurrent reference/deletion and installed-app acceptance.
+Streaming publication fences are recorded by `streamingForegroundSync.ts` via
+the final native/cloud publication hooks in `cloudSyncPort.client.ts` and
+`cloudTransport.ts`, after staging. `nativeSyncTasks.client.ts` queues exact
+saved-job recovery under the root lock; `syncJobJournal.ts` preserves the job ID
+and requires the normal worker validation before effects.
+An approved native Photos upload that carries direct publication marks the
+original ID immediately before that native request, after its source and
+authority checks. A later browser metadata replay does not mark it twice.
+Ordinary byte-only native staging retains the final publication hook.
+For a legacy marked file upload whose source changed, `files.ts` can occupy its
+original Timeline operation ID with a terminal no-effect receipt. The client
+requires `api.files` 1.13.0, validates the exact file ID, operation ID and
+expected revision, and retains the journal on missing, pending or refused
+responses. The fence is owner-authorized and accounted through the normal
+Timeline transaction; it does not bind staged bytes or create a file revision.
+Only an exact terminal or completed receipt permits the old row to advance.
+For Mac 1.22.0, `mobileFolders.client.ts` and `desktopFolders.client.ts` also
+negotiate a metadata-only `inspect-stamp` action through the existing Electron
+and Mac folder bridge. `foregroundSyncContext.ts` uses it solely for the
+captured source of a local file upload after fresh saved policy and native grant
+checks. `execute.ts` and `cloudSyncPort.client.ts` keep the captured fingerprint
+provisional until `cloudTransport.ts` checks uploaded byte digests or the
+canonical verified ready attachment. Other reads retain full inspection.
 
 **Image presentation.** The shared upload-first `ProfileMediaField` opens
 `ImagePresentationDialog` for profile avatar/banner and subspace icon/banner.
@@ -31,6 +101,19 @@ contract and fixture](../file-sync-transfer-admissions.md). Browser session
 replacement cleans unbound browser drafts. Exact file-sync provenance fences
 both the cleanup query and deletion claim. Explicit abort, expiry and live
 admission checks still apply.
+
+The 1.5 transfer-admission contract adds an explicit Photos-only background-file
+opt-in. Only `attachments/privateS3.ts` can describe a canonical regional provider
+target; local adapters retain foreground behavior. Native URLSession recovery,
+five-minute automatic retry and current publication authority remain separate
+from a continued-task progress presentation. Run the private S3/attachment and
+capability tests plus `scripts/test-file-sync-transfer-admissions.mts` against
+the built isolated API. `scripts/test-photo-sync-stable-ui.mjs` checks editable
+Photos settings, stable desktop/mobile progress and saved transfer limits.
+`nativePhotoRun.client.ts` recovers unchanged saved-settings authority holds only
+through fresh grant/config verification and normal native authorization; its
+WebView-lifetime retry cooldown is five minutes. The focused
+`mobileFolders.client.test.ts` covers refusal, grants, pauses and unrelated holds.
 
 The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
 explicit supported backup mode for persisted paging/integrity assertions.
@@ -862,3 +945,4 @@ streaming may defer a paired folder without authorizing any effect, child or
 checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
 still reads both replicas afresh. The canonical mixed fixture reports queued
 peer deferrals before first confirmed file alongside byte/hash/recovery proof.
+- Local file-sync recovery details: `pagedRunJournal.reservedPublication` performs an owner/root/run-fenced read of the original reserved operation and cloud file binding; `SyncProgressViewer` shows its safe identity and receipt markers only inside the expanded Progress → Recovery details disclosure. This diagnostic does not authorize publication, reset saved work, or interpret a missing server receipt as a terminal fence.

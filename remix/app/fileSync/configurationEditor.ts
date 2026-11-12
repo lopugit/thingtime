@@ -2,6 +2,7 @@ import { SYNC_INTERVALS } from './syncJobJournal';
 import type { SyncResourceDraft } from '../components/Devices/syncResourceControlsBlocks';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
+import { createEnrollmentDiagnostics, enrollmentDiagnosticsEnabled, type EnrollmentPhase, type EnrollmentFacts } from './syncEnrollmentDiagnostics';
 
 export type PhotoAutomationDraft = { speed: string; speedUnit: 'Mbps' | 'MB/s'; data: string; dataUnit: 'MB' | 'GB'; notificationIntervalMs: string };
 /** Explicit Save & sync authorization survives the boundary between the
@@ -25,15 +26,26 @@ export const SYNC_ENROLLMENT_RECOVERED_EVENT = 'tt:sync-enrollment-recovered';
 export const SYNC_ENROLLMENT_WAKE_EVENT = 'tt:sync-enrollment-wake';
 export const configurationDraftKey = (scope: ConfigurationEditorScope) => CONFIGURATION_DRAFT_PREFIX + JSON.stringify(scope);
 const enrollmentClaims = new Map<string, { cancellation?: AbortController }>();
+const enrollmentDiagnostics = enrollmentDiagnosticsEnabled ? createEnrollmentDiagnostics() : null;
+if (enrollmentDiagnostics && typeof window !== 'undefined') Object.defineProperty(window, '__thingtimeSyncEnrollmentDiagnostics', {
+	configurable: true, value: Object.freeze({ read: (scope: ConfigurationEditorScope, targetId?: string) => {
+		if (scope?.origin !== window.location.origin) return [];
+		return enrollmentDiagnostics.read(configurationDraftKey({ origin: scope.origin, ownerId: scope.ownerId, dataPlane: scope.dataPlane, deviceId: scope.deviceId }), targetId);
+	} })
+});
 /** UI and background discovery share the same draft storage fence. */
-export function claimSyncEnrollment(scope: ConfigurationEditorScope, cancellation?: AbortController) {
+export function claimSyncEnrollment(scope: ConfigurationEditorScope, cancellation?: AbortController, diagnosticTargetId?: string) {
 	const key = configurationDraftKey(scope);
 	if (enrollmentClaims.has(key)) return null;
 	const claim = { cancellation };
 	enrollmentClaims.set(key, claim);
-	return () => {
-		if (enrollmentClaims.get(key) === claim) enrollmentClaims.delete(key);
+	const diagnostic = enrollmentDiagnostics?.begin(key, cancellation?.signal, diagnosticTargetId);
+	const release = () => {
+		if (enrollmentClaims.get(key) === claim) { enrollmentClaims.delete(key); diagnostic?.release(); }
 	};
+	release.phase = (phase: EnrollmentPhase, signal?: AbortSignal, facts?: EnrollmentFacts) => { if (enrollmentClaims.get(key) === claim) diagnostic?.phase(phase, signal, facts); };
+	release.failed = (cause: unknown) => { if (enrollmentClaims.get(key) === claim) diagnostic?.failed(cause); };
+	return release;
 }
 export function cancelSyncEnrollmentRecovery(scope: ConfigurationEditorScope) {
 	enrollmentClaims.get(configurationDraftKey(scope))?.cancellation?.abort();

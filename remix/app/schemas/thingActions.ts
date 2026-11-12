@@ -11,20 +11,22 @@ export const THING_ACTIONS = {
   rename: { id: 'rename', command: 'rename', label: 'Rename', icon: '✏️', lucide: 'text-cursor-input' },
   edit: { id: 'edit', command: 'edit', label: 'Edit', icon: '✏️', lucide: 'pen-line' },
   share: { id: 'share', command: 'share', label: 'Share / permissions', icon: '🌐', lucide: 'share-2' },
+  archive: { id: 'archive', command: 'archive', label: 'Archive', icon: '📦', lucide: 'package', hint: 'Hide in your Things library' },
+  restore: { id: 'restore', command: 'restore', label: 'Restore', icon: '↩️', lucide: 'package-open', hint: 'Show in your Things library' },
   delete: { id: 'delete', command: 'delete', label: 'Delete', icon: '🗑️', lucide: 'trash-2', danger: true },
   'send-to-lopu': { id: 'send-to-lopu', command: 'send-to-lopu', label: 'Send to Lopu', icon: '🦄', lucide: 'send' }
 } as const;
 
 export type ThingActionId = keyof typeof THING_ACTIONS;
 export const THING_ACTIONS_PATH = '/api/v1/things/actions';
-export const THING_ACTIONS_REQUIREMENTS = { 'api.things-actions': '1.0.0' } as const;
+export const THING_ACTIONS_REQUIREMENTS = { 'api.things-actions': '1.1.0' } as const;
 
-export type ThingActionRequest = { id: string; action: 'send-to-lopu' };
+export type ThingActionRequest = { id: string; action: 'send-to-lopu' | 'archive' | 'restore' };
 export const parseThingActionRequest = (input: unknown): ThingActionRequest => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Choose a Thing action.');
   const value = input as Record<string, unknown>;
   if (Object.keys(value).some(key => key !== 'id' && key !== 'action') ||
-      typeof value.id !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value.id) || value.action !== 'send-to-lopu')
+      typeof value.id !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value.id) || (typeof value.action !== 'string' || !['send-to-lopu', 'archive', 'restore'].includes(value.action)))
     throw new TypeError('Choose a supported Thing action and exact Thing ID.');
-  return { id: value.id, action: value.action };
+  return { id: value.id, action: value.action as ThingActionRequest['action'] };
 };

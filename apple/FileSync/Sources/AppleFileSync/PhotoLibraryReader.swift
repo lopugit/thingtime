@@ -57,6 +57,7 @@ struct OrderedPhotoCheckpoint: Codable {
     var undated = 0
     var indexed = PhotoLibraryReader.IndexedLibrary()
     var unavailable = 0
+    var unavailableReadFailures: Int?
     var passID: UUID? = UUID()
 }
 
@@ -103,7 +104,7 @@ public struct PhotoOriginalDownloadControl: Sendable {
     }
 }
 
-/// One temporary original at a time, shared by bounded range reads. PhotoKit has
+/// A bounded set of temporary originals, shared by bounded range reads. PhotoKit has
 /// no public random-access resource API, so exports are file-backed, never held
 /// in one Data value. The cache is private, ephemeral and partitioned by grant.
 public final class PhotoLibraryReader: @unchecked Sendable {
@@ -194,9 +195,43 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         public var assetKey: String { PhotoLibraryReader.hash(Data(resource.asset.utf8)) }
     }
     private var prefetched: PreparedCloudOriginal?
-    private var cached: (scope: Scope, resource: PhotoResource, entry: MobileFolderReader.Entry, native: MobileFolderReader.Entry, bookmark: Data)?
-    public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
-                queueDirectory: URL? = nil) {
+    private struct CachedOriginal {
+        let scope: Scope
+        let resource: PhotoResource
+        let entry: MobileFolderReader.Entry
+        let native: MobileFolderReader.Entry
+        let bookmark: Data
+        let ownedDirectory: URL?
+        // A borrowed cloud original owns its own cleanup. Keep its lifetime
+        // while referenced; eviction must never delete its directory directly.
+        let borrowed: PreparedCloudOriginal?
+    }
+    private var originals: [CachedOriginal] = []
+    private let maximumOriginals: Int
+    private let reusableOriginalBytes: Int64
+    private func removeOriginal(at index: Int) {
+        let original = originals.remove(at: index)
+        if let directory = original.ownedDirectory { try? FileManager.default.removeItem(at: directory) }
+    }
+    private func trimOriginals(keeping resource: PhotoResource? = nil) {
+        // This is a reuse budget, not an input-size limit. A larger original is
+        // valid and retained alone across consecutive reads until competing work needs space.
+        while originals.count > maximumOriginals || (originals.count > 1 && originals.reduce(Int64(0), { min(reusableOriginalBytes + 1, $0 + min(reusableOriginalBytes + 1, $1.entry.size)) }) > reusableOriginalBytes) {
+            guard let index = originals.firstIndex(where: { $0.resource != resource }) else { break }
+            removeOriginal(at: index)
+        }
+    }
+    public convenience init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
+                            queueDirectory: URL? = nil) {
+        // Five upload siblings and their five lookahead originals can reuse
+        // verified bytes. This never limits the size of an accepted original.
+        self.init(provider: provider, transport: transport, queueDirectory: queueDirectory,
+                  maximumCachedOriginals: 10, reusableOriginalBytes: 128 * 1024 * 1024)
+    }
+    init(provider: any PhotoResourceProvider, transport: (any RustInventoryTransport)?, queueDirectory: URL? = nil,
+         maximumCachedOriginals: Int, reusableOriginalBytes: Int64) {
+        precondition(maximumCachedOriginals > 0 && reusableOriginalBytes > 0 && reusableOriginalBytes < Int64.max / 2)
+        self.maximumOriginals = maximumCachedOriginals; self.reusableOriginalBytes = reusableOriginalBytes
         self.queueDirectory = queueDirectory
         self.provider = provider
         #if os(macOS)
@@ -206,11 +241,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         #endif
         client = selected.map { RustInventoryClient(transport: $0) }
     }
-    deinit { if let directory { try? FileManager.default.removeItem(at: directory) } }
+    deinit { for original in originals { if let directory = original.ownedDirectory { try? FileManager.default.removeItem(at: directory) } }; if let directory { try? FileManager.default.removeItem(at: directory) } }
     public static func hash(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
     public func access() -> String { provider.access() }
     private func require() throws { try Task.checkCancellation(); guard ["full", "limited"].contains(provider.access()) else { throw Failure.unavailable } }
-    private func clear() { cached = nil; if let directory { try? FileManager.default.removeItem(at: directory) }; directory = nil }
+    private func clear() { while !originals.isEmpty { removeOriginal(at: originals.count - 1) }; if let directory { try? FileManager.default.removeItem(at: directory) }; directory = nil }
     public func discard() { lock.lock(); defer { lock.unlock() }; clear(); membership = nil }
     private func requireClient() throws -> RustInventoryClient {
         guard let client else { throw RustInventoryTransportFailure.unavailable }
@@ -245,7 +280,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func scanEntry(_ resource: PhotoResource, scope: Scope) throws -> MobileFolderReader.Entry {
-        if let cached, cached.scope == scope, cached.resource == resource {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        if originals.contains(where: { $0.scope == scope && $0.resource == resource }) {
             return try materialize(resource, scope: scope).0
         }
         try require(); try provider.validate(resource)
@@ -265,10 +301,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func scanEntries(_ resources: ArraySlice<PhotoResource>, scope: Scope,
-                             authorize: () throws -> Void = {}, allowCloudGaps: Bool = false,
+                             authorize: () throws -> Void = {}, allowCloudGaps: Bool = false, allowReadGaps: Bool = false,
                              download: PhotoOriginalDownloadControl? = nil, beginDownload: () -> Bool = { true },
-                             cloudGap: (PhotoResource) -> Void = { _ in },
+                             cloudGap: (PhotoResource) -> Void = { _ in }, gapReason: (PhotoResource, String) -> Void = { _, _ in },
                              progress: () -> Void = {}) throws -> [MobileFolderReader.Entry] {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
         let client = try requireClient()
         for resource in resources { try authorize(); try require(); try provider.validate(resource) }
         let observed: [MobileFolderReader.Entry?] = try client.run("photoObservations", scope: scope,
@@ -285,7 +322,10 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                 do { result = try materialize(resource, scope: scope, download: download, beginDownload: beginDownload).0 }
                 catch Failure.cloudOriginal where allowCloudGaps {
                     try authorize(); try require(); try provider.validate(resource)
-                    cloudGap(resource); return nil
+                    gapReason(resource, "cloud-download"); cloudGap(resource); return nil
+                } catch Failure.readFailed where allowReadGaps {
+                    try authorize(); try require(); try provider.validate(resource)
+                    gapReason(resource, "photo-read"); cloudGap(resource); return nil
                 }
             }
             try authorize(); progress()
@@ -323,18 +363,27 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     private func materialize(_ resource: PhotoResource, scope: Scope, download: PhotoOriginalDownloadControl? = nil,
                              beginDownload: () -> Bool = { true }) throws -> (MobileFolderReader.Entry, MobileFolderReader.Entry, Data) {
         try require(); try provider.validate(resource)
-        if let cached, cached.scope == scope, cached.resource == resource {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        if let index = originals.firstIndex(where: { $0.scope == scope && $0.resource == resource }) {
+            let cached = originals[index]
             try MobileFolderReader.access(cached.bookmark) { try validateNative(cached.native, root: $0) }
+            originals.remove(at: index); originals.append(cached)
             return (cached.entry, cached.native, cached.bookmark)
         }
         _ = try requireClient()
-        clear()
+        // A changed current resource cannot reuse the previous revision's bytes.
+        for index in originals.indices.reversed() where originals[index].resource.path == resource.path { removeOriginal(at: index) }
+        trimOriginals()
+        // A different working original must not coexist with an oversized
+        // reusable copy. The previous read has finished under this same lock.
+        if originals.count == 1, originals[0].entry.size > reusableOriginalBytes { removeOriginal(at: 0) }
         if let prefetched, prefetched.scope == scope, prefetched.resource == resource {
             let bookmark = try FolderBookmark.create(prefetched.directory)
             let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
             try require(); try provider.validate(resource)
             let entry = try project(native, resource: resource)
-            cached = (scope, resource, entry, native, bookmark)
+            originals.append(.init(scope: scope, resource: resource, entry: entry, native: native, bookmark: bookmark, ownedDirectory: nil, borrowed: prefetched))
+            trimOriginals(keeping: resource)
             return (entry, native, bookmark)
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-" + UUID().uuidString, isDirectory: true)
@@ -356,7 +405,10 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
             try require(); try provider.validate(resource)
             let entry = try project(native, resource: resource)
-            cached = (scope, resource, entry, native, bookmark); return (entry, native, bookmark)
+            originals.append(.init(scope: scope, resource: resource, entry: entry, native: native, bookmark: bookmark, ownedDirectory: root, borrowed: nil))
+            directory = nil
+            trimOriginals(keeping: resource)
+            return (entry, native, bookmark)
         } catch { clear(); throw error }
     }
     public func scan(scope: Scope) throws -> [MobileFolderReader.Entry] {
@@ -389,7 +441,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     private func resolve(path: String, scope: Scope) throws -> PhotoResource? {
         try require()
-        let hint = cached.flatMap { $0.scope == scope && $0.resource.path == path ? $0.resource : nil }
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        let hint = originals.last(where: { $0.scope == scope && $0.resource.path == path })?.resource
             ?? membership.flatMap { $0.scope == scope ? $0.resources[path] : nil }
         if let hint {
             do { try provider.validate(hint); return hint }
@@ -491,6 +544,37 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return source
     }
 
+    /// Discover and persist metadata before any original is materialized.
+    public func discoverQueueIndex(scope: Scope, request: PhotoBackupQueueRequest, preparedDeferred: PreparedCloudOriginal? = nil,
+                                   activity: (CaptureProgress) -> Void = { _ in }) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        let store = try queueStore(scope: scope, request: request)
+        try store.enableSourceIndex()
+        let (source, _) = try batchSnapshot(scope: scope, store: store, replaceStale: true, startWithSingleAsset: true,
+                              preparedDeferred: preparedDeferred?.resource, activity: activity)
+        activity(.indexed(source.indexed))
+    }
+    public func discoverQueueIndexLookahead(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        let store = try queueStore(scope: scope, request: request)
+        try store.enableSourceIndex()
+        if let ordered = provider as? any OrderedPhotoResourceProvider { _ = try store.lookahead(provider: ordered, batchId: batchId) }
+    }
+    public func rotateQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws {
+        lock.lock(); defer { lock.unlock() }
+        try queueStore(scope: scope, request: request).rotateSourceIndex()
+    }
+    public func pendingQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws -> PhotoSourceIndexPage? {
+        lock.lock(); defer { lock.unlock() }
+        return try queueStore(scope: scope, request: request).pendingSourceIndex()
+    }
+    public func acknowledgeQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest, page: PhotoSourceIndexPage) throws {
+        lock.lock(); defer { lock.unlock() }
+        try queueStore(scope: scope, request: request).acknowledgeSourceIndex(page)
+    }
+
     public func queueBatchEntries(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws -> [MobileFolderReader.Entry] {
         lock.lock(); defer { lock.unlock() }
         try require()
@@ -502,6 +586,19 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             try remember(source.resources, scope: scope, revision: source.revision)
         }
         return entries
+    }
+
+    /// Warm only local observation hashes for the next bounded date page while
+    /// current originals are on the wire. Cloud gaps stay in their canonical
+    /// deferred flow; this does not admit another active queue selection.
+    public func prepareQueueLookahead(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID,
+                                      authorize: () throws -> Void = {}) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require(); try authorize()
+        guard let ordered = provider as? any OrderedPhotoResourceProvider else { return }
+        let resources = try queueStore(scope: scope, request: request).lookahead(provider: ordered, batchId: batchId)
+        _ = try scanEntries(resources[...], scope: scope, authorize: authorize, allowCloudGaps: true, allowReadGaps: true)
+        try require(); try authorize()
     }
 
     public func finishQueueBatch(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
@@ -614,6 +711,9 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             }
             report(legacy: false)
             let retainedGaps = Set(batch?.1.selection.attempts?.flatMap(\.unavailable) ?? [])
+            var batchReasons = Dictionary(uniqueKeysWithValues: (batch?.1.selection.attempts ?? []).flatMap { attempt in
+                attempt.unavailable.map { ($0, attempt.reasonByPath?[$0] ?? "cloud-download") }
+            })
             var batchGaps = Set<String>(), batchEntries: [MobileFolderReader.Entry] = []
             if prepared.coverage == "scanning" {
                 // An interrupted async job is discarded before a new capture starts.
@@ -624,13 +724,13 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                     var gaps = Set(resources.map(\.path).filter(retainedGaps.contains))
                     skipped += gaps.count
                     let eligible = resources.filter { !retainedGaps.contains($0.path) }
-                    let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
+                    let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, allowReadGaps: batch != nil && allowCloudGaps, download: download, beginDownload: {
                             if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
                             gaps.insert(resource.path); skipped += 1; report()
-                        }) { indexed += 1; report() }
+                        }, gapReason: { resource, reason in batchReasons[resource.path] = reason }) { indexed += 1; report() }
                     if !entries.isEmpty {
                         if batch != nil { batchEntries += entries }
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
@@ -642,7 +742,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                             generation: generation, fields: ["paths": gaps.sorted()])
                     }
                 }
-                if let batchStore, let batch { batchStatus = try batchStore.prepare(batch.1, unavailable: batchGaps, entries: batchEntries) }
+                if let batchStore, let batch { batchStatus = try batchStore.prepare(batch.1, unavailable: batchGaps, entries: batchEntries, reasons: batchReasons) }
             }
             try authorize(); try require()
             guard indexed + skipped == start.resources.count, allowCloudGaps || skipped == 0 else { throw Failure.changed }

@@ -128,7 +128,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 			journal.close();
 			journal = await openSyncJournal(factory);
 		},
-		port: (cloudRootId?: string) =>
+		port: (cloudRootId?: string, beforeLocalPublication?: (operationId: string) => Promise<void>) =>
 			createCloudSyncPort(
 				run,
 				{
@@ -139,6 +139,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 						throw Error('Downloads do not open an upload source');
 					},
 					localTarget: target,
+					beforeLocalPublication,
 					cloudRootId
 				},
 				runtime
@@ -164,6 +165,29 @@ test('nested downloads use the same durable run and recover lost native publicat
 	assert.ok(done.operations.every((o) => o.confirmed));
 	assert.deepEqual(f.counts(), before);
 	f.journal().close();
+});
+test('a download records the publication fence only after staging and source checks, then recovers the original receipt', async () => {
+	const f = await fixture();
+	const marked: string[] = [];
+	const mark = async (id: string) => { marked.push(id); };
+	f.set('remote');
+	await assert.rejects(executeSyncRun(f.run, f.port(undefined, mark)), /Cloud source changed/);
+	assert.deepEqual(marked, [f.run.operations[0].id], 'failed file staging never claims an uncertain publication');
+	assert.equal(f.local.has('nested/file.bin'), false);
+	f.journal().close();
+
+	const lost = await fixture();
+	const published: string[] = [];
+	const publish = async (id: string) => { published.push(id); };
+	await assert.rejects(executeSyncRun(lost.run, lost.port(undefined, publish)), /lost local publication reply/);
+	const original = lost.run.operations.at(-1)!.id;
+	assert.equal(published.filter(id => id === original).length, 1);
+	await lost.reopen();
+	const before = lost.counts();
+	await executeSyncRun((await lost.journal().read(scope))!, lost.port(undefined, publish));
+	assert.equal(lost.counts().publishes, before.publishes, 'receipt lookup prevents a second native publication');
+	assert.equal(published.filter(id => id === original).length, 1, 'the recovered receipt does not mint a new dispatch');
+	lost.journal().close();
 });
 test('staged downloads reject altered source, invalid stage proof and native destination races', async () => {
 	for (const kind of ['remote', 'local', 'stage', 'origin']) {

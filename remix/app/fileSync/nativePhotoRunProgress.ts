@@ -2,12 +2,17 @@ const stages = ['ready', 'preparing', 'uploading', 'waiting', 'complete', 'pause
 const waits = ['wifi', 'network', 'offline', 'charging', 'data-budget'] as const;
 const counters = ['photos', 'videos', 'other', 'wifiBytes', 'mobileBytes', 'unknownBytes'] as const;
 const activityPhases = ['verifying', 'indexing', 'checking-originals', 'downloading', 'checking-cloud', 'uploading', 'publishing', 'waiting', 'complete'] as const;
-const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'device-storage', 'photo-read', 'cloud-request', 'saved-settings', 'destination-review', 'retry'] as const;
+const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'device-storage', 'photo-read', 'cloud-request', 'saved-settings', 'destination-review', 'transfer-permission', 'transfer-expired', 'transfer-missing', 'transfer-state', 'grant-changed', 'queue-changed', 'retry'] as const;
 const backgroundStatuses = ['active', 'declined', 'waiting', 'complete'] as const;
+const backgroundEndCauses = ['system-ended', 'execution-expired', 'worker-cancelled', 'worker-failed', 'completed', 'checkpointed-wait'] as const;
 export type NativePhotoActivityPhase = (typeof activityPhases)[number];
 export type NativePhotoContinuation = { requested: boolean; status: (typeof backgroundStatuses)[number] };
+export type NativePhotoUnavailableReasons = { 'cloud-download': number; 'photo-read': number };
 type DiscoveredPhoto = { kind: 'photo' | 'video'; capturedAt?: string };
+const failureOperations = ['manifest', 'check-photo-run', 'reserve-photo-original', 'parts', 'complete', 'publish', 'revoke', 'revoke-photo-run', 'local-grant', 'queue'] as const;
 export type NativePhotoRunActivity = {
+    backgroundEnd?: { cause: (typeof backgroundEndCauses)[number]; at: string; measuredUnits: number; lastProgressAt?: string };
+	failureOperation?: (typeof failureOperations)[number];
 	phase: NativePhotoActivityPhase;
 	indexed?: { photos: number; videos: number; files: number };
 	indexing?: { unit: 'assets' | 'files'; completed: number; total: number };
@@ -27,13 +32,27 @@ export type NativePhotoRunProgress = {
 	minimumPartBytes?: number;
 	pendingOriginals?: number;
 	unavailableOriginals?: number;
+	unavailableReasons?: NativePhotoUnavailableReasons;
 	confirmed: Record<(typeof counters)[number], number>;
 	currentFile?: { confirmedBytes: number; sentBytes: number; totalBytes: number };
 	uploadBytesPerSecond?: number;
 	continuation?: 'active' | 'held';
 	activity?: NativePhotoRunActivity;
 };
-export type NativePhotoRunStatus = { configurationRevision: string | null; photoRunProgress: NativePhotoRunProgress | null };
+export type NativePhotoRunStatus = { configurationRevision: string | null; photoRunProgress: NativePhotoRunProgress | null; wake?: NativePhotoRunWake };
+const wakeReasons = ['inactive', 'identity', 'missing', 'authorization-required', 'paused', 'needs-review', 'source-changed', 'source-unavailable', 'conditions', 'backoff', 'budget'] as const;
+export type NativePhotoRunWake = { status: 'running' | 'queued' | 'waiting' | 'refused'; reason?: (typeof wakeReasons)[number]; continuation?: NativePhotoContinuation['status'] };
+export function parseNativePhotoRunWake(value: unknown): NativePhotoRunWake {
+    if (!record(value) || !['running', 'queued', 'waiting', 'refused'].includes(String(value.status)) ||
+        (value.reason !== undefined && !wakeReasons.some(reason => reason === value.reason)) ||
+        (['waiting', 'refused'].includes(String(value.status)) && value.reason === undefined) ||
+        (['running', 'queued'].includes(String(value.status)) && value.reason !== undefined) ||
+        (value.continuation !== undefined && !backgroundStatuses.some(status => status === value.continuation)) ||
+        (value.continuation === 'active' && value.status !== 'running'))
+        throw Error('Native Photos did not confirm the foreground wake.');
+    return { status: value.status as NativePhotoRunWake['status'], ...(value.reason ? { reason: value.reason as NativePhotoRunWake['reason'] } : {}),
+        ...(value.continuation ? { continuation: value.continuation as NativePhotoRunWake['continuation'] } : {}) };
+}
 const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const date = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
@@ -65,8 +84,15 @@ function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 		activity.cloudPreparationFraction = cloudFraction;
 	const reason = activityReasons.find(candidate => candidate === value.reason);
 	if (reason) activity.reason = reason;
+	const operation = failureOperations.find(candidate => candidate === value.failureOperation);
+	if (operation) activity.failureOperation = operation;
 	const backgroundRequest = backgroundStatuses.find(candidate => candidate === value.backgroundRequest);
 	if (backgroundRequest) activity.backgroundRequest = backgroundRequest;
+    const end = value.backgroundEnd;
+    if (record(end) && backgroundEndCauses.some(cause => cause === end.cause) && date(end.at) && whole(end.measuredUnits)) {
+        activity.backgroundEnd = { cause: end.cause as (typeof backgroundEndCauses)[number], at: end.at, measuredUnits: end.measuredUnits,
+            ...(date(end.lastProgressAt) ? { lastProgressAt: end.lastProgressAt } : {}) };
+    }
 	if (Array.isArray(events)) {
 		// Native sends at most twelve events, already newest first.
 		activity.events = events.slice(0, 12).flatMap(event => {
@@ -101,11 +127,18 @@ export function parseNativePhotoRunStatus(configurationRevision: unknown, photoR
 		file = { confirmedBytes: currentFile.confirmedBytes, sentBytes: currentFile.sentBytes, totalBytes: currentFile.totalBytes };
 	}
 	const activity = parseActivity(photoRunProgress.activity);
+	const reasons = photoRunProgress.unavailableReasons;
+	// Optional reason telemetry may lag an older client; never discard a valid run for it.
+	const unavailableReasons = record(reasons) && whole(reasons['cloud-download']) && whole(reasons['photo-read']) &&
+		Object.keys(reasons).every(key => key === 'cloud-download' || key === 'photo-read') &&
+		whole(unavailableOriginals) && reasons['cloud-download'] + reasons['photo-read'] === unavailableOriginals
+		? { 'cloud-download': reasons['cloud-download'], 'photo-read': reasons['photo-read'] } : undefined;
 	const progress = {
 		stage, syncWait, retryAt, minimumPartBytes, pendingOriginals, unavailableOriginals, uploadBytesPerSecond, continuation,
 		confirmed: Object.fromEntries(counters.map(key => [key, confirmed[key]])),
 		...(file ? { currentFile: file } : {}),
-		...(activity ? { activity } : {})
+		...(activity ? { activity } : {}),
+		...(unavailableReasons ? { unavailableReasons } : {})
 	} as NativePhotoRunProgress;
 	return { configurationRevision, photoRunProgress: progress };
 }

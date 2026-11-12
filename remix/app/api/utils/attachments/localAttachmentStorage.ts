@@ -119,7 +119,6 @@ const assertPartNumber = (value: number): number => {
 const newVersionId = () => `v${Date.now().toString(36)}-${randomBytes(8).toString('hex')}`;
 const sha256Base64 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('base64');
 const etagFor = (checksumSha256: string) => `"${createHash('md5').update(checksumSha256).digest('hex')}"`;
-const expiresAt = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
 const isEnoent = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
 
 type UploadRecord = { objectKey: string; attachmentId: string; createdAt: string };
@@ -323,12 +322,16 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			const exp = String(Math.floor(now() / 1000) + expiresIn);
 			const fields = ['part', objectKey, uploadId, String(partNumber), checksumSha256, String(contentLength), exp];
 			const params = new URLSearchParams({ op: 'part', key: objectKey, upload: uploadId, part: String(partNumber), checksum: checksumSha256, length: String(contentLength), exp, sig: await sign(fields) });
-			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(expiresIn), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
+			return { url: `${urlPrefix}?${params}`, expiresAt: new Date(Number(exp) * 1000).toISOString(), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
 		},
 
-		async listParts({ objectKey, uploadId }) {
+		async listParts({ objectKey, uploadId, partNumber }) {
 			assertObjectKey(objectKey);
 			await readUpload(uploadId);
+			if (partNumber !== undefined) {
+				const part = await readJson<PartRecord>(partMeta(uploadId, partNumber));
+				return part ? [part] : [];
+			}
 			let names: string[] = [];
 			try {
 				names = await readdir(path.join(uploadDir(uploadId), 'parts'));
@@ -479,7 +482,7 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			const type = encodeParam(contentType);
 			const fields = ['get', objectKey, versionId, disposition, type, exp];
 			const params = new URLSearchParams({ op: 'get', key: objectKey, version: versionId, disposition, type, exp, sig: await sign(fields) });
-			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(DOWNLOAD_URL_TTL_SECONDS) };
+			return { url: `${urlPrefix}?${params}`, expiresAt: new Date(Number(exp) * 1000).toISOString() };
 		},
 
 		async signDownloadRange({ objectKey, versionId, offset, length }) {

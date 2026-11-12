@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { syncConnectionGlanceBlocks, withStableSyncGlance } from './syncConnectionGlanceBlocks';
+import { migratePhotoAutomationLabels } from './PhotoAutomationControls';
+import { syncResourceField } from './syncResourceControlsBlocks';
 import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
@@ -113,26 +116,34 @@ test('a completed batch does not close a Photos queue with pending or unavailabl
  const state = { paused: false, rootsReady: true, hasRoot: true, taskPaused: false, running: false, photos: true };
  const progress = { stage: 'complete' as const, confirmed: 2, total: 2, photoAccess: 'limited' as const };
  assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 1, unavailable: 0 } } }), 'More Photos originals are queued.');
- assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 0, unavailable: 1 } } }), 'Partial backup · some originals are unavailable.');
+ assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 0, unavailable: 1 } } }), 'Partial backup · waiting for Photos originals.');
  assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 0, unavailable: 0 } } }), 'Selected photos backed up.');
  assert.equal(syncFolderActivityLabel({ ...state, running: true, progress: { ...progress, stage: 'transferring', photoQueue: { pending: 5, unavailable: 0 } } }),
   'Uploading this batch · 2 of 2 operations confirmed');
 });
 
-test('photo queue counts are distinct editable blocks and only render observed positive counts', () => {
+test('photo queue reserves distinct editable values, keeping unknown separate from zero and explaining retries', () => {
  assert.deepEqual(photoQueueDisplay({ pending: 1, unavailable: 2 }), {
-  order: 'Photos queue · newest first', pending: '1 original pending', unavailable: '2 originals unavailable'
+  order: 'Photos queue · newest first', pending: '1 original pending', unavailable: '2 originals waiting for Photos'
  });
- assert.equal(photoQueueDisplay({ pending: 0, unavailable: 0 })?.unavailable, '');
+ assert.equal(photoQueueDisplay({ pending: 0, unavailable: 0 })?.unavailable, '0 originals waiting for Photos');
+ assert.equal(photoQueueDisplay({})?.pending, '— originals pending');
+ assert.equal(photoQueueDisplay({})?.unavailable, '— originals waiting for Photos');
+ assert.equal(photoQueueDisplay({ unavailable: 3, unavailableReasons: { 'cloud-download': 2, 'photo-read': 1 } })?.unavailable,
+  '2 awaiting download · 1 awaiting Photos read retry');
+ assert.equal(photoQueueDisplay({ unavailable: 3, unavailableReasons: { 'cloud-download': 5, 'photo-read': 1 } })?.unavailable,
+  '3 originals waiting for Photos');
  assert.equal(photoQueueDisplay({ pending: -1, unavailable: 2 }), undefined);
  const migrated = settingsDocumentBlocks(withSyncFolderQuickBlocks(syncFolderCardBlocks));
  for (const id of ['order', 'pending', 'unavailable']) assert.ok(findBlock(migrated, 'folder-card-photo-queue-' + id));
+ for (const id of ['folder-card-photo-queue-pending-state', 'folder-card-photo-unavailable-state'])
+  assert.equal(findBlock(migrated, id)?.type, 'element');
 });
 
 test('Photos activity exposes individual editable fields and preserves custom card blocks', () => {
  const original = [{ id: 'custom-summary', type: 'element' as const, tag: 'p', text: 'Keep my custom summary' }];
  const blocks = withSyncFolderQuickBlocks(original);
- for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time', 'indexing-count', 'live-indexed', 'latest-found'])
+ for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time', 'indexing-count', 'latest-found'])
   assert.ok(findBlock(blocks, 'folder-card-activity-' + id));
  assert.equal(findBlock(blocks, 'custom-summary'), original[0]);
  assert.deepEqual(withSyncFolderQuickBlocks(blocks), blocks);
@@ -154,8 +165,54 @@ test('Photos preparation can request continued execution before counts without r
   activity: { phase: 'downloading' as const, downloadFraction: 0, backlogOriginals: 0 } } };
  const display = nativePhotoActivityDisplay(active);
  assert.equal(display?.downloadPercent, 0);
- assert.equal(display?.indexed, '');
+ assert.equal(display?.indexed, 'Not reported yet');
  assert.equal(display?.backlog, '0 originals');
  assert.equal(nativePhotoActivityDisplay({ ...active, stale: true })?.downloadPercent, undefined);
  assert.equal(nativePhotoRunGlance(active).upload.rate, 'Upload speed unavailable');
+});
+
+ test('Photos activity reserves editable metrics and logs before the first native report', () => {
+ const display = nativePhotoActivityDisplay(undefined, false, true)!;
+ assert.equal(display.indexed, 'Not reported yet');
+ assert.equal(display.downloadPercent, undefined);
+ assert.deepEqual(display.events, []);
+ const blocks = withSyncFolderQuickBlocks(syncFolderCardBlocks);
+ assert.equal(findBlock(blocks, 'folder-card-activity')?.tag, 'details');
+ assert.equal(findBlock(blocks, 'folder-card-activity')?.props?.open, true);
+ for (const metric of ['indexed', 'prepared', 'backlog']) assert.equal(findBlock(blocks, `folder-card-activity-${metric}-state`)?.type, 'element');
+ assert.equal(findBlock(blocks, 'folder-card-activity-history-viewport')?.css?.height, '160px');
+ const customized = structuredClone(blocks);
+ findBlock(customized, 'folder-card-activity-phase')!.text = 'My backup phase';
+ assert.equal(findBlock(withSyncFolderQuickBlocks(customized), 'folder-card-activity-phase')?.text, 'My backup phase');
+ });
+
+test('average upload wording migrates exact stock labels and preserves custom wording', () => {
+ const original = syncResourceField('speed', 'Maximum upload speed', 'Default', 'decimal');
+ const migrated = migratePhotoAutomationLabels(original);
+ assert.ok(JSON.stringify(migrated).includes('Average upload speed'));
+ assert.equal(JSON.stringify(migrated).includes('Maximum upload speed'), false);
+ const customized = structuredClone(original);
+ customized[0].text = 'My desired upload rate';
+ assert.equal(migratePhotoAutomationLabels(customized)[0].text, 'My desired upload rate');
+ assert.deepEqual(migratePhotoAutomationLabels(migrated), migrated);
+});
+
+test('Photos can omit only the stock download direction without changing general or customized sync cards', () => {
+ const general = syncConnectionGlanceBlocks();
+ assert.ok(findBlock(general, 'connection-glance-download'));
+ const photos = withStableSyncGlance(general, true);
+ assert.equal(findBlock(photos, 'connection-glance-download'), null);
+ assert.ok(findBlock(photos, 'connection-glance-upload'));
+ const customized = structuredClone(general);
+ findBlock(customized, 'connection-glance-download-title')!.text = 'My downloaded files';
+ assert.equal(findBlock(withStableSyncGlance(customized, true), 'connection-glance-download-title')?.text, 'My downloaded files');
+});
+
+
+test('Photos authority diagnostics show the closed failed operation independently of concurrent phase', () => {
+ const view = { progress: { stage: 'needs-review', confirmed: { photos: 0, videos: 0, other: 0, wifiBytes: 0, mobileBytes: 0, unknownBytes: 0 },
+  activity: { phase: 'waiting', reason: 'transfer-expired', failureOperation: 'reserve-photo-original' } } } as NativePhotoRunView;
+ const display = nativePhotoActivityDisplay(view)!;
+ assert.match(display.reason, /expired or was revoked/); assert.match(display.reason, /Reserving an original/);
+ assert.doesNotMatch(display.reason, /saved backup settings/);
 });

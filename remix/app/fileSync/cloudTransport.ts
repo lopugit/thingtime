@@ -17,6 +17,7 @@ import {
 	CLOUD_FILE_REQUIREMENTS,
 	cloudFileSyncEntry,
 	parseCloudFile,
+	parseCloudFileNoEffectFence,
 	type CloudFile
 } from './cloudFile';
 import { cloudWriteCommit, parseCloudWrite, isCloudFolderWrite, type CloudWrite } from './cloudWrite';
@@ -31,7 +32,7 @@ export const CLOUD_TRANSFER_REQUIREMENTS = {
 	...CLOUD_FILE_REQUIREMENTS,
 	'api.files': '1.8.1',
 	'api.attachment-uploads': '1.7.0',
-	'api.attachment-upload-parts': '1.1.0',
+	'api.attachment-upload-parts': '1.3.0',
 	'api.attachment-upload-complete': '1.4.0',
 	'api.actions-run': '1.7.0'
 } as const;
@@ -233,6 +234,13 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		m.from === 'local' && m.source.kind === 'file' && !m.source.symbolicLink && !m.path.includes('/') && nativePhotoAssetKey(m.path)
 			? { publication: { expectedRevision: write.before?.revision ?? null } } : {};
 	const fileId = stagingTargetId ?? write.before?.id ?? write.operation.id;
+	let publicationMarked = false;
+	const markNativePublication = async () => {
+		if (publicationMarked) return;
+		await runtime.beforeFilePublication?.(write.operation.id);
+		publicationMarked = true;
+		check();
+	};
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
 		if (
@@ -249,7 +257,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
 		const command = cloudWriteCommit(write, content);
 		if (!retained && !replayOnly) await runtime.automaticStoragePlacement?.admit(m, true);
-		if (write.guardDestination && !replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
+		if (!replayOnly && !publicationMarked) await runtime.beforeFilePublication?.(write.operation.id);
 		check();
 		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
 		if (retained && result.retained !== true) throw Error('The server did not confirm version retention.');
@@ -266,6 +274,15 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		const result = await json(
 			'/api/v1/files?' + new URLSearchParams({ id: fileId, operationId: write.operation.id, ...(retained ? { kind: 'retained-version' } : {}) })
 		);
+		if (result.terminal !== undefined) {
+			await negotiateRequirements({ 'api.files': '1.13.0' });
+			check();
+			if (result.receipt !== null || retained || stagingTargetId) throw Error('Invalid terminal file receipt.');
+			const fence = parseCloudFileNoEffectFence(result.terminal);
+			if (fence.id !== fileId || fence.operationId !== write.operation.id || fence.expectedRevision !== (write.before?.revision ?? null))
+				throw Error('Terminal file receipt changed the original operation.');
+			return { status: 'terminal', fence };
+		}
 		if (result.receipt === null) return { status: 'missing' };
 		const file = parseCloudFile(result.receipt?.file);
 		receipt(file);
@@ -274,6 +291,24 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		// rejects reuse with a different expected revision/folder/name, and never
 		// uploads again after an accepted-write/lost-response interruption.
 		return { status: 'complete', receipt: await commit(file.content, true) };
+	};
+	const fence = async (): Promise<SyncReceiptLookup> => {
+		if (retained || stagingTargetId || m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file')
+			throw Error('Only an original file upload can be terminally fenced.');
+		await negotiateRequirements({ 'api.files': '1.13.0' });
+		check();
+		const input = parseCloudFileNoEffectFence({ kind: 'terminal-no-effect', id: fileId,
+			operationId: write.operation.id, expectedRevision: write.before?.revision ?? null });
+		const result = await json('/api/v1/files', input);
+		if (result.status === 'complete') {
+			if (result.replayed !== true || result.receipt?.file === undefined) throw Error('Invalid completed file fence response.');
+			// The immutable original commit is the only accepted complete receipt.
+			return lookup();
+		}
+		if (result.status !== 'terminal') throw Error('Invalid terminal file fence response.');
+		const saved = parseCloudFileNoEffectFence(result.fence);
+		if (JSON.stringify(saved) !== JSON.stringify(input)) throw Error('Terminal file fence changed the original operation.');
+		return { status: 'terminal', fence: saved };
 	};
 	const reserve = async (size: number, plan = contentPartPlan(size)) => {
 		if (m.kind !== 'copy') throw Error('Only a file copy can reserve bytes.');
@@ -311,7 +346,9 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		await negotiate(); await runtime.authorizeMutation?.(signal); check();
 		const upload = await reserve(source.size);
 		if (upload.state === 'ready') return null;
-		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval), ...photoPublication(approval) }, signal);
+		const publication = photoPublication(approval);
+		if ('publication' in publication) await markNativePublication();
+		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval), ...publication }, signal);
 		check(); return queued;
 	};
 
@@ -358,7 +395,9 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				transferred?.(null);
 				await runtime.authorizeMutation?.(signal);
 				await sourceCheck();
-				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval), ...photoPublication(nativeApproval) }, signal, progress);
+				const publication = photoPublication(nativeApproval);
+				if ('publication' in publication) await markNativePublication();
+				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval), ...publication }, signal, progress);
 				await sourceCheck();
 				if (!uploaded?.fingerprint || !equalContentFingerprints(uploaded.fingerprint, m.source.fingerprint!))
 					throw Error('Native upload does not match the planned fingerprint.');
@@ -379,7 +418,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						let uploaded: Awaited<ReturnType<NonNullable<FingerprintSource['uploadPart']>>>;
 						try {
 							uploaded = await source.uploadPart(
-								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
+								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length, ...(nativeApproval ? { authorization: structuredClone(nativeApproval) } : {}) },
 								signal
 							);
 						} catch (error) {
@@ -387,7 +426,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							transferred?.(null);
 							throw error;
 						}
-						payloadBytes = source.nativePartPayloadBytes && uploaded?.payloadBytes === length ? length : null;
+						payloadBytes = source.nativePartPayloadBytes && (uploaded?.payloadBytes === length || (uploaded?.alreadyUploaded === true && uploaded.payloadBytes === 0)) ? uploaded.payloadBytes! : null;
 						check();
 						if (!checkedNativePart) await sourceCheck();
 						if (typeof uploaded?.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(uploaded.sha256)) throw Error('Invalid native upload digest.');
@@ -403,6 +442,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							partNumber = i + 1;
 						const signed = await json('/api/v1/attachments/uploads/parts', {
 							uploadId: upload.id,
+							reconcileAcceptedParts: true,
 							parts: [{ partNumber, checksumSha256: checksum }]
 						});
 						const part = signed.parts?.[0];
@@ -421,6 +461,14 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							throw Error('Invalid cloud upload destination.');
 						await sourceCheck();
 						await runtime.authorizeMutation?.(signal);
+						if (part.alreadyUploaded !== undefined && typeof part.alreadyUploaded !== 'boolean') throw Error('Invalid cloud upload acceptance proof.');
+						if (part.alreadyUploaded === true) {
+							payloadBytes = 0;
+							digests.set(digest, i * 32);
+							transferred?.(0);
+							progress?.(offset + length, source.size);
+							continue;
+						}
 						await sourceCheck();
 						const transferAbort = new AbortController();
 						const deadline = createSyncTransferDeadline(AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : [])]));
@@ -473,6 +521,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	return {
 		deferUpload,
 		lookup,
+		fence,
 		stage,
 		async read() {
 			await negotiate();
@@ -488,6 +537,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			transferred?: (bytes: number | null) => void): Promise<SyncReceipt> {
 			const previous = await lookup();
 			if (previous.status === 'complete') return previous.receipt;
+			if (previous.status === 'terminal') throw Error('Original file publication is terminally fenced.');
 			if (m.kind === 'trash') return commit(write.before!.content);
 			if (!source) throw Error('Pinned source bytes are unavailable.');
 			return commit(await stage(source, progress, transferred));
@@ -564,6 +614,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
 				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');
 			} else if (input.folderId !== write.cloudRootId) throw Error('Folder root changed before publication.');
+			await runtime.beforeFilePublication?.(write.operation.id);
 			return receipt((await json('/api/v1/files', input)).folder);
 		}
 	};

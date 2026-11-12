@@ -3,7 +3,7 @@ import { DEFAULT_PHOTO_AUTOMATION, type FileSyncConfiguration } from '~/fileSync
 import type { ConfigurationDraft } from '~/fileSync/configurationEditor';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import type { WebpageBlock } from '../Builder/webpageBlocks';
+import { findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 import { syncResourceAction, syncResourceControlStyle, syncResourceField, syncResourceOperation } from './syncResourceControlsBlocks';
 
@@ -28,8 +28,8 @@ function displayBytes(value: number | undefined, multiplier: number): string {
 function draftFrom(policy?: Policy): Draft {
 	const dataUnit = (policy?.uploadBytesPerHour ?? 0) >= volumes.GB ? 'GB' : 'MB';
 	return {
-		speed: displayBytes(policy?.uploadBytesPerSecond, speeds.Mbps),
-		speedUnit: 'Mbps',
+		speed: displayBytes(policy?.uploadBytesPerSecond, speeds['MB/s']),
+		speedUnit: 'MB/s',
 		data: displayBytes(policy?.uploadBytesPerHour, volumes[dataUnit]),
 		dataUnit,
 		notificationIntervalMs: String((policy?.notificationIntervalMs ?? DEFAULT_PHOTO_AUTOMATION.notificationIntervalMs) / 60_000)
@@ -91,7 +91,47 @@ const blocks: WebpageBlock[] = [{
 	]
 }];
 
-export function PhotoAutomationControls({ policy, draft, disabled, availability, scopeKey, accountTransport, onChange, onValidityChange }: {
+const legacyLabels = structuredClone(blocks);
+// Match exact stock nodes so saved custom wording and layouts remain untouched.
+const speedLabel = (nodes: WebpageBlock[]): void => {
+ for (const node of nodes) {
+  if (node.text === 'Maximum upload speed') node.text = 'Average upload speed';
+  if (node.props?.['aria-label'] === 'Maximum upload speed') node.props['aria-label'] = 'Average upload speed';
+  if (node.id === 'photo-backup-speed-help') node.text += ' Background transfers are scheduled to this average; individual transfers can be faster.';
+  if (node.children) speedLabel(node.children);
+ }
+};
+speedLabel(blocks);
+const previousAverageBlocks = structuredClone(blocks);
+// Keep each input and unit independently editable while sharing one compact row.
+const fields = blocks[0].children!;
+for (const [field, unit] of [['speed', 'speed-unit'], ['data', 'data-unit']] as const) {
+ const inputIndex = fields.findIndex(node => node.id === `${field}-input`);
+ const input = fields[inputIndex], selectIndex = fields.findIndex(node => node.id === `photo-${unit}`);
+ const select = fields[selectIndex];
+ if (input && select) {
+  fields.splice(inputIndex, 1, { id: `photo-${field}-value-row`, type: 'element', tag: 'div',
+   css: { display: 'grid', 'grid-template-columns': 'minmax(0, 1fr) 90px', gap: '8px', 'min-width': '0', 'align-items': 'center' }, children: [input, select] });
+  const oldSelect = fields.indexOf(select); if (oldSelect >= 0) fields.splice(oldSelect, 1);
+  const oldLabel = fields.findIndex(node => node.id === `photo-${unit}-label`); if (oldLabel >= 0) fields.splice(oldLabel, 1);
+ }
+}
+const speedHelp = findBlock(blocks, 'photo-backup-speed-help');
+if (speedHelp) speedHelp.text = 'Blank speed uses 0.625 MB/s (5 Mbps). Background uploads follow this average; individual uploads may be faster.';
+blocks[0].children = fields.filter(node => node.id !== 'photo-backup-data-help');
+const notificationHelp = findBlock(blocks, 'photo-backup-notification-help');
+if (notificationHelp) notificationHelp.text = '0 turns notifications off. iOS notification permission is required.';
+export function migratePhotoAutomationLabels(nodes: WebpageBlock[]): WebpageBlock[] {
+ return nodes.map(node => {
+  const legacy = findBlock(legacyLabels, node.id), previous = findBlock(previousAverageBlocks, node.id), current = findBlock(blocks, node.id);
+  if (current && ((legacy && JSON.stringify(legacy) === JSON.stringify(node)) || (previous && JSON.stringify(previous) === JSON.stringify(node)))) return current;
+  return node.children ? { ...node, children: migratePhotoAutomationLabels(node.children) } : node;
+ });
+}
+
+export function PhotoAutomationControls({ policy, draft, disabled, availability, scopeKey, accountTransport, onChange, onValidityChange, transferScope, generalUploads = false }: {
+	transferScope?: 'device' | 'folder' | 'configuration';
+ generalUploads?: boolean;
 	policy?: Policy;
 	draft?: Draft;
 	disabled: boolean;
@@ -123,14 +163,26 @@ export function PhotoAutomationControls({ policy, draft, disabled, availability,
 		let parsed: Policy;
 		try { parsed = parseDraft(next); }
 		catch { onChange(next); return; }
-		// Unit and cadence edits should not round an untouched stored ceiling.
-		if (policy?.uploadBytesPerSecond !== undefined && next.speed === current.speed && next.speedUnit === current.speedUnit)
-			parsed.uploadBytesPerSecond = policy.uploadBytesPerSecond;
-		if (policy?.uploadBytesPerHour !== undefined && next.data === current.data && next.dataUnit === current.dataUnit)
-			parsed.uploadBytesPerHour = policy.uploadBytesPerHour;
+		// Display/unit conversion is byte-exact. Every field comes from this
+		// complete draft, including edits made before an unrelated field event.
 		onChange(next, parsed);
 	};
-	return <SettingsDocumentHost documentKey="photo-backup-automation-controls" defaultDocument={blocks} scopeKey={scopeKey} title="Photos backup settings" accountTransport={accountTransport}>
+    const scopeBlocks = React.useMemo(() => {
+        if (!transferScope) return blocks;
+        const copy = structuredClone(blocks);
+        const fieldset = copy[0];
+        fieldset.props = { ...fieldset.props, 'aria-label': `${transferScope === 'device' ? 'Device' : transferScope === 'folder' ? 'Folder' : 'Configuration'} ${generalUploads ? '' : 'Photos '}upload limits` };
+        fieldset.children = fieldset.children?.filter(node => !['photo-backup-notification-help', 'notification-interval-ms-label', 'notification-interval-ms-input', ...(transferScope === 'folder' ? ['photo-backup-speed-help'] : [])].includes(node.id)).map(node => {
+            if (node.id === 'photo-backup-limits-heading') node.text = transferScope === 'device' ? 'Device upload limits' : transferScope === 'folder' ? 'Folder upload limits' : 'Configuration upload limits';
+            if (node.id === 'photo-backup-speed-help') node.text = `MB/s = megabytes per second; Mbps = megabits per second. Blank inherits. The strictest limits apply.${generalUploads ? '' : ' Apple manages iCloud downloads.'}`;
+            if (node.id === 'speed-input') node.props = { ...node.props, placeholder: 'Inherit' };
+            return node;
+        });
+        const input = findBlock(copy, 'speed-input');
+        if (input) input.props = { ...input.props, placeholder: 'Inherit' };
+        return copy;
+    }, [transferScope, generalUploads]);
+	return <SettingsDocumentHost documentKey={transferScope ? `${generalUploads ? 'sync-upload' : 'photo-backup'}-${transferScope}-limits` : 'photo-backup-automation-controls'} defaultDocument={scopeBlocks} migrateBlocks={transferScope ? undefined : migratePhotoAutomationLabels} scopeKey={scopeKey} title={generalUploads ? "Upload settings" : "Photos backup settings"} accountTransport={accountTransport}>
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
 			scope={{ resources: { ...current, ids, disabled, availability, error, hasError: !!error } }}
 			actions={Object.fromEntries(keys.map(key => [syncResourceOperation(key), ({ value }: { value?: unknown }) => change(key, value)]))}>
@@ -138,3 +190,12 @@ export function PhotoAutomationControls({ policy, draft, disabled, availability,
 		</TransientBlockHost>}
 	</SettingsDocumentHost>;
 }
+
+/** Always visible beside the saved policy, independently editable in Builder. */
+export const photoUploadSaveBlocks: WebpageBlock[] = [{ id: 'photo-limit-save-row', type: 'element', tag: 'div',
+ css: { display: 'flex', 'flex-wrap': 'wrap', gap: '8px', 'align-items': 'center', 'margin-top': '8px' }, children: [
+ { id: 'photo-limit-save', type: 'element', tag: 'button', text: '{limits.label}',
+  props: { type: 'button', disabled: '{limits.disabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'save' } },
+  css: { ...syncResourceControlStyle, 'min-height': '44px' } },
+ { id: 'photo-limit-save-status', type: 'element', tag: 'span', text: '{limits.status}', props: { role: 'status' } }
+] }];

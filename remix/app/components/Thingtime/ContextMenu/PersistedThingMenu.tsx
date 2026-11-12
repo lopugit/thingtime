@@ -85,7 +85,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, 'share-preview': true, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false,
     'storage-placement': !!user?.id && !user.temporary && thing?.author?.id === user.id && { href: storageHref }
-  }, [...builderNavigation, ...extensions]);
+  }, [...builderNavigation, ...extensions], id);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
       switch (event.action.command) {
