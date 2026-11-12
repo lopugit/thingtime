@@ -33,9 +33,26 @@ export function approved(p, reviews) {
     if (!latest.has(review.user.login) || latest.get(review.user.login).id < review.id) latest.set(review.user.login, review);
   }
   if ([...latest.values()].some(r => r.state === 'CHANGES_REQUESTED')) return false;
-  const marker = `<!-- thingtime-lopu-merge-ready:v1 head=${p.head.sha} base=${p.base.sha} -->`;
   const r = latest.get('github-actions[bot]');
-  return r?.state === 'APPROVED' && r.commit_id === p.head.sha && (r.body || '').includes(marker);
+  if (r?.state !== 'APPROVED' || r.commit_id !== p.head.sha) return false;
+  // The approval is bound to the exact reviewed HEAD -- the only tree this ever
+  // merges, and the tree every required check in tested() ran against.
+  //
+  // It is deliberately NOT bound to p.base.sha. GitHub's pulls API reports
+  // base.sha as a snapshot of the base branch from the PR's last
+  // synchronization, not the live tip, and it is not the baseRefOid the review
+  // controller records in the marker. 'develop' advances continuously (979
+  // commits past #1254's base.sha while that PR sat clean, approved and
+  // green), so requiring equality with either value made every stored approval
+  // expire within minutes: Lopu re-approved #1254 four times at one unchanged
+  // head and settlement still reported needs-review. Base freshness is not
+  // this function's job and is still enforced, in the two places that can do
+  // it correctly: mergeable_state 'behind' is rejected by the allowlist in
+  // settle() whenever a ruleset requires an up-to-date branch, and the live
+  // base tip is held fixed across the whole settlement below. Keep requiring a
+  // well-formed base token so a truncated or hand-edited marker still fails.
+  const marker = /<!-- thingtime-lopu-merge-ready:v1 head=([0-9a-f]{40}) base=[0-9a-f]{40} -->/u.exec(r.body || '');
+  return marker?.[1] === p.head.sha;
 }
 export function tested(checks, statuses, base) {
   const latest = new Map();
@@ -58,11 +75,22 @@ export async function settle({ repo, number, api, threads, apply = false }) {
   const path = `pulls/${number}`;
   const initial = await api(path);
   if (!eligible(initial, repo)) return 'ineligible';
-  const liveRefs = async p => {
-    const baseRef = await api(`git/ref/heads/${encodeURIComponent(p.base.ref)}`);
-    const headRef = await api(`git/ref/heads/${encodeURIComponent(p.head.ref)}`);
-    return baseRef.object?.sha === p.base.sha && headRef.object?.sha === p.head.sha;
+  // Read the base branch's LIVE tip and fence it against itself for the rest of
+  // the settlement, rather than against the stale pulls-API p.base.sha. This
+  // still aborts if the base moves mid-decision -- the actual race this guards
+  // -- but is satisfiable on a base branch that receives commits, which the
+  // previous equality check was not (it returned 'changed' forever).
+  const liveBase = async p => {
+    const ref = await api(`git/ref/heads/${encodeURIComponent(p.base.ref)}`);
+    if (!sha.test(ref.object?.sha || '')) throw new Error('Incomplete base ref');
+    return ref.object.sha;
   };
+  const liveHead = async p => {
+    const ref = await api(`git/ref/heads/${encodeURIComponent(p.head.ref)}`);
+    return ref.object?.sha === p.head.sha;
+  };
+  const baseTip = await liveBase(initial);
+  const liveRefs = async p => await liveHead(p) && await liveBase(p) === baseTip;
   const inspect = async () => {
     const p = await api(path);
     if (!eligible(p, repo) || identity(p) !== identity(initial) || !await liveRefs(p)) return 'changed';
