@@ -1,6 +1,8 @@
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 
 export const DEVICE_DRAWER_SECTION_IDS = [
+	'overview',
+	'watch',
 	'node',
 	'location',
 	'permissions',

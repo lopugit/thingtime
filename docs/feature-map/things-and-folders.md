@@ -1186,3 +1186,19 @@ shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry
 Existing explicit limits/drafts remain intact; ordinary connection progress is
 independent from native CPU/scan telemetry. The paused-start browser harness
 exercises unsupported iOS capabilities and retained controls at both widths.
+
+### Device and scan library navigation — 2026-11-12
+
+`ThingsPage.tsx` routes `/things?lidar=1` to `LidarScanLibraryPage`, using the
+shared Thing browser cards and action slots. The Things context/settings menus
+link LiDAR scans and Unfiled files; New also links the scanner. Setup belongs
+beneath the device item and is shown only after native status confirms setup
+is needed. `MobileDeviceSetupEntry.tsx` subscribes to origin/owner/generation
+scoped pairing observations. Device Show Folder remains a context action.
+`deviceLocation.client.ts` requests ten newest observations per cursor; the
+saved `/devices/location` composition owns the inline Show more control and
+collapsed filters/locate controls. See `docs/native-lidar-scans.md` and the
+Device location / LiDAR sections of `TESTING.md` for acceptance requirements.
+
+Rendered regression entry points: `remix/scripts/device-details.browser.mjs`
+and `remix/scripts/lidar-scan.browser.mjs` (isolated synthetic fixtures).

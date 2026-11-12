@@ -4,7 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
 import { createBrowserRouter, RouterProvider, useRouteLoaderData } from 'react-router';
 import { LidarScanProvider } from '../app/components/NativeBridge/LidarScanProvider';
-import { LidarScanControls } from '../app/components/NativeBridge/LidarScanControls';
+import { LidarScanLibraryPage } from '../app/components/NativeBridge/LidarScanLibraryPage';
+import { ThingtimeProvider } from '../app/Providers/ThingtimeProvider';
 import { lidarAppLink } from '../app/components/NativeBridge/lidarScanBridge';
 import { PageActionSurface } from '../app/components/Builder/PageActionSurface';
 import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
@@ -17,13 +18,14 @@ const ownerId = 'fixture-lidar-owner';
 type Request = { action: string; requestId: string; ownerId: string; origin: string; scanId?: string };
 const requests: Request[] = [];
 let savedNotifications = 0;
-let status: Record<string, unknown> = { state: 'idle', supported: mode !== 'unsupported' };
+const scans = ['510fbf8b-5c32-4ddc-8089-c70b392d3aae', '610fbf8b-5c32-4ddc-8089-c70b392d3aae', '710fbf8b-5c32-4ddc-8089-c70b392d3aae'].map((scanId, index) => ({ scanId, createdAt: `2026-11-${12-index}T01:00:00Z`, byteCount: index === 0 ? 11_360_000_000 : 1024, frameCount: 40, available: index !== 2, isPartial: index === 0, deviceSaved: index === 1 }));
+let status: Record<string, unknown> = { state: 'idle', supported: mode !== 'unsupported', scans };
 const reply = (request: Request, result: Record<string, unknown>) => window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
 	detail: { type: 'lidar-scan-result', payload: { ...request, supported: true, ...result } }
 }));
 if (mode !== 'browser') {
 	window.thingtimeNativeBridge = {
-		version: '1.0.0', platform: 'ios', isNativeWebView: true, lidarVersion: mode === 'outdated' ? '0.9.0' : '1.0.0',
+		version: '1.0.0', platform: 'ios', isNativeWebView: true, lidarVersion: mode === 'outdated' ? '1.0.0' : '1.1.0',
 		postMessage(message: ThingtimeBridgeMessage) {
 			if (message.type !== 'lidar-scan') return;
 			const request = message.payload as Request;
@@ -55,12 +57,12 @@ function Fixture() {
 	return <LidarScanProvider ownerId={identity.pending ? undefined : data.user.id} generation={identity.generation}>
 		<h1>Things</h1>
 		<PageActionSurface actionEnabled><WebpageBlocksRenderer blocks={authored} componentsByRef={{}} interactive /></PageActionSurface>
-		<LidarScanControls onSaved={() => { savedNotifications++; }} />
+		<LidarScanLibraryPage />
 		<div style={{ minHeight: '80vh' }} />
 		<footer>End of Things</footer>
 	</LidarScanProvider>;
 }
-const router = createBrowserRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }], {
+const router = createBrowserRouter([{ id: 'root', path: '*', element: <ThingtimeProvider storageKey="lidar-library-isolated-acceptance" accountId={ownerId} exposeGlobals={false}><CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture></ThingtimeProvider> }], {
 	hydrationData: { loaderData: { root: { user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' } } }
 });
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);

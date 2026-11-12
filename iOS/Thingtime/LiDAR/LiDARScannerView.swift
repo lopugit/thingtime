@@ -119,12 +119,12 @@ struct LiDARScannerView: View {
                 .accessibilityAddTraits(.isHeader)
             Text("Move slowly around the area you want to capture. Thingtime records depth, camera frames, and the available 3D mesh.")
                 .foregroundStyle(.white.opacity(0.78))
-            Text("Scans can use substantial storage. When you finish, the scan stays on this device and Thingtime saves a private Thing.")
+            Text("Scans can use substantial storage. Capture stays on this device. Choose Device only or Cloud in your LiDAR library when you save to Thingtime.")
                 .foregroundStyle(.white.opacity(0.78))
             if let accountLabel {
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Save to").font(.caption).foregroundStyle(.white.opacity(0.75))
+                        Text("Account").font(.caption).foregroundStyle(.white.opacity(0.75))
                         Text(accountLabel).font(.subheadline.weight(.semibold))
                     }
                 } icon: {
@@ -163,7 +163,7 @@ struct LiDARScannerView: View {
                 .buttonStyle(.plain)
         case .saved(let capture):
             status(capture.isPartial ? "Partial scan saved" : "Scan saved on this device",
-                   icon: "checkmark.circle", description: capture.statusDetail ?? "Waiting for Thingtime to save the private Thing.")
+                   icon: "checkmark.circle", description: capture.statusDetail ?? "Open the LiDAR library to choose Device only or Cloud.")
             Button("Close", action: onClose)
                 .frame(minHeight: 44)
                 .buttonStyle(.plain)
@@ -206,8 +206,8 @@ struct LiDARScannerView: View {
                 Text("\(stats.frameCount.formatted()) frames · \(ByteCountFormatter.string(fromByteCount: stats.bytes, countStyle: .file))")
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.82))
-                primaryButton("Finish & Save", icon: "stop.fill", action: model.finish)
-                    .accessibilityHint("Stops recording and saves the scan as a private Thing.")
+                primaryButton("Finish capture", icon: "stop.fill", action: model.finish)
+                    .accessibilityHint("Stops recording and keeps the scan on this device without uploading it.")
             case .finalizing:
                 HStack(spacing: 10) {
                     ProgressView().tint(.white).accessibilityHidden(true)

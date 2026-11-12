@@ -155,6 +155,34 @@ authoritative.
   exact remaining human-only dependency after supported recovery. Record source,
   synthetic, deployed, installed and live-provider evidence separately.
 
+## Compact, collapsible multi-section interfaces
+
+User guidance (12 November 2026):
+
+> “multi-section pages with config/settings and many UI parts should always have headings and minimal info and be collapsable/expandable please defaulted to collapsed please”
+
+- Treat compact progressive disclosure as a foundational layout rule. Give each
+  section a clear heading, a concise useful summary where needed, and an
+  accessible expand/collapse control. Start configuration, settings and other
+  multi-section device surfaces collapsed; preserve deliberate user choices
+  when the surface explicitly remembers them. Do not expand every section on
+  first render or mount expensive hidden content merely to populate summaries.
+- Keep the main browsing surface focused on its Things. Give substantial tools
+  such as LiDAR capture their own page, with clear navigation back. Use ordinary
+  Thing browser cards, selection and context menus for saved and pending items;
+  distinguish device-only storage from an explicit cloud save.
+- Put secondary actions in the relevant Thing or page context menu instead of
+  crowding breadcrumbs and headers. Keep setup beside or directly below its
+  device item, and hide setup once that device is already configured. Preserve
+  a keyboard- and touch-accessible menu trigger; right-click cannot be the only
+  way to reach an action.
+- Show the ten most recent location-log entries initially, newest first. Put an
+  inline **Show more** control immediately below the list to fetch the next page.
+  This is a presentation batch size, never a retention or total-history limit.
+- Compose headings, summaries, controls and repeated fields as individually
+  editable Builder blocks. Check collapsed, expanded, menu, loading, empty and
+  error states at desktop and mobile widths, including the bottom of the page.
+
 ## Power users: no arbitrary product limits
 
 Thingtime is for power users and should stay simple to use at any scale. Do not

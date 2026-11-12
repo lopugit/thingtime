@@ -32,11 +32,12 @@ final class LiDARUploadOutbox {
         fileprivate var uploadId: String?
         fileprivate var staged: FileVersionExport.Content?
         fileprivate(set) var receipt: Receipt?
+        fileprivate(set) var deviceSavedAt: Date?
         fileprivate var discardedAt: Date?
         fileprivate var archiveRelocated = false
 
         private enum CodingKeys: String, CodingKey {
-            case version, id, scope, createdAt, capture, fingerprint, uploadId, staged, receipt, discardedAt
+            case version, id, scope, createdAt, capture, fingerprint, uploadId, staged, receipt, deviceSavedAt, discardedAt
         }
 
         fileprivate var operationId: String { id.uuidString.lowercased() }
@@ -135,6 +136,53 @@ final class LiDARUploadOutbox {
         let entry = try owned(id, scope: scope)
         try checkDiscard(entry)
         return entry
+    }
+
+    /// A device-only Thing is a local catalogue entry. This path deliberately
+    /// has no transport: neither scan bytes nor catalogue metadata leave iOS.
+    func saveOnDevice(id: UUID, scope: FileSyncOwnerScope) throws {
+        var entry = try owned(id, scope: scope)
+        try checkDiscard(entry)
+        guard let capture = entry.capture, capture.frameCount > 0,
+              FileManager.default.fileExists(atPath: capture.archiveURL.path) else { throw Failure.missingCapture }
+        if entry.deviceSavedAt == nil {
+            entry.deviceSavedAt = Date()
+            try write(entry)
+        }
+    }
+
+    /// Safe browser projection. Paths and upload credentials remain native.
+    /// Reservations without a completed archive remain visible for recovery.
+    func library(scope: FileSyncOwnerScope, errors: [UUID: String] = [:]) throws -> [[String: Any]] {
+        let formatter = ISO8601DateFormatter()
+        return try entries(scope: scope).map { entry in
+            var result: [String: Any] = [
+                "scanId": entry.operationId, "createdAt": formatter.string(from: entry.createdAt),
+                "byteCount": entry.capture?.byteCount ?? 0, "frameCount": entry.capture?.frameCount ?? 0,
+                "isPartial": entry.capture?.isPartial ?? false, "deviceSaved": entry.deviceSavedAt != nil,
+                "available": entry.capture.map { FileManager.default.fileExists(atPath: $0.archiveURL.path) } ?? false
+            ]
+            if let receipt = entry.receipt { result["fileThingId"] = receipt.fileThingId }
+            if let detail = entry.capture?.statusDetail { result["detail"] = String(detail.prefix(240)) }
+            if let error = errors[entry.id] { result["error"] = String(error.prefix(240)) }
+            return result
+        }
+    }
+
+    /// Keep the v1 status contract usable while older deployed pages ignore the
+    /// additive catalogue. A device-only save is complete, never an upload queue.
+    func legacyStatus(scope: FileSyncOwnerScope, errors: [UUID: String] = [:]) throws -> [String: Any] {
+        let entries = try entries(scope: scope)
+        if let pending = entries.last(where: {
+            $0.receipt == nil && $0.deviceSavedAt == nil && ($0.capture != nil || errors[$0.id] != nil)
+        }) {
+            return ["state": "pending", "scanId": pending.operationId,
+                    "error": errors[pending.id] ?? "Saved on this device. Choose Cloud to save this scan to your private Things."]
+        }
+        if let saved = entries.last(where: { $0.receipt != nil }), let receipt = saved.receipt {
+            return ["state": "saved", "scanId": saved.operationId, "fileThingId": receipt.fileThingId]
+        }
+        return ["state": "idle"]
     }
 
     /// A cloud file ID is also the scan ID. Only this native outbox can
