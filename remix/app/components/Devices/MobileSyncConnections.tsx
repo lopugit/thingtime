@@ -78,6 +78,7 @@ import { readCloudFolderInventoryPages } from '~/fileSync/cloudInventoryPages.cl
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
 import { approveMobileSyncTarget } from '~/fileSync/mobileSyncTarget.client';
 import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/foregroundSync';
+import { photoStartupOutcome, syncStartup, syncStartupMessage } from '~/fileSync/syncStartup';
 import { runPagedForegroundCloudSync } from '~/fileSync/pagedForegroundSync';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
@@ -174,6 +175,7 @@ function Connections({
 		[viewBusy, setBusy] = useState(false),
 		[notice, setNotice] = useState('');
 	const nativeTask = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
+	const startup = useSyncExternalStore(syncStartup.subscribe, syncStartup.read, syncStartup.read);
 	const transferSession = useRef<{ id: string; session: ReturnType<typeof createTransferActivitySession> } | null>(null);
 	const ownNativeTask = nativeTask && nativeTask.scope.ownerId === scope.ownerId &&
 		nativeTask.scope.origin === scope.origin && nativeTask.scope.deviceId === scope.deviceId && nativeTask.scope.dataPlane === scope.dataPlane
@@ -983,13 +985,24 @@ function Connections({
 		!transferErrors[draft.id] && !admissionFailed[draft.id] && savedLocalRecoveryWaitsForLane(selectedLaneInput));
 	const selectedRoutineRetryQueued = !!(selectedPendingLane && selectedLaneInput && draft && !error && !storageError &&
 		!transferErrors[draft.id] && !admissionFailed[draft.id] && savedLocalRecoveryRetryQueuedOnLane(selectedLaneInput));
+	// Startup receipts bridge route changes; fresh native observations supersede
+	// them as work finishes or waits, without turning a cached receipt into proof.
+	const startupView = startup ? { ...startup, entries: startup.entries.map(entry => {
+		if (ownNativeTask && syncScopeKey(ownNativeTask.scope) === syncScopeKey(entry.scope)) return { ...entry,
+			outcome: ownNativeTask.status === 'error' ? 'error' as const : ownNativeTask.waiting ? 'waiting' as const : ownNativeTask.active ? 'running' as const : ownNativeTask.status === 'complete' ? 'complete' as const : 'paused' as const };
+		const saved = connections.find(row => row.id === entry.scope.rootId), observed = nativePhotoRuns.get(entry.scope.rootId);
+		return entry.scope.origin === scope.origin && entry.scope.deviceId === scope.deviceId && saved && observed && !observed.stale && observed.revision === saved.updatedAt
+			? { ...entry, outcome: photoStartupOutcome({ configurationRevision: observed.revision, photoRunProgress: observed.progress }) } : entry;
+	}) } : null;
+	const startupNotice = automaticEnabled ? syncStartupMessage(startupView, scope, generation, window.location.origin) : '';
 	const renderHeader = () => <SyncEditorBlocks documentKey="file-sync-folder-editor" title="Folders & sync configs" blocks={syncFolderEditorBlocks}
 		scopeKey={key} accountTransport={reviewTransport} scope={{ editor: {
 			canChoose: !!folderManagement, chooseDisabled: !rootsReady || !loaded || busy || !!folderManagement?.busy || !!folderManagement?.transferring,
 			busy: viewBusy || !!folderManagement?.busy, cold: (viewBusy || folderManagement?.busy) && !roots.length && !connections.length,
 			description: appOwned ? 'Choose a folder, then set where its files go. You can add more than one sync config to each folder.' :
 				'Choose a folder and set where its files go. This app can run supported transfers while it is open.',
-			notice: folderManagement?.waiting ? 'Folder access will refresh when Thingtime is active.' : notice,
+			notice: folderManagement?.waiting ? 'Folder access will refresh when Thingtime is active.' : notice ||
+				(startupNotice || (nativePhotoTransferActive || ownNativeTask?.active ? ownNativeTask?.waiting ? 'Sync is waiting for saved conditions.' : 'Sync is in progress' : '')),
 			error: storageError || error || folderManagement?.error || ''
 		} }} actions={{
 			choose: () => { if (rootsReady && loaded && !busy && !folderManagement?.busy && !folderManagement?.transferring) return folderManagement?.run({ action: 'choose' }); },

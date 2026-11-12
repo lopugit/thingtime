@@ -11,6 +11,13 @@ private struct DeferredUploadTestScheduler: NativeDeferredUploadScheduling {
     func cancel() {}
 }
 
+private struct WakePhotosProvider: PhotoResourceProvider {
+    func access() -> String { "full" }
+    func inventory() throws -> [PhotoResource] { throw PhotoLibraryReader.Failure.readFailed }
+    func validate(_ resource: PhotoResource) throws { throw PhotoLibraryReader.Failure.readFailed }
+    func write(_ resource: PhotoResource, to url: URL) throws { throw PhotoLibraryReader.Failure.readFailed }
+}
+
 private actor PhotoBatchTestGate {
     private var opened = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -600,6 +607,77 @@ final class NativeFileUploadJobTests: XCTestCase {
         var paused = reopened; paused.pauseByUser(); try store.write(paused)
         XCTAssertEqual(try store.lookup(paused)?.userPaused, true)
         XCTAssertEqual(try store.lookup(paused)?.activity?.backgroundEnd, reopened.activity?.backgroundEnd)
+    }
+
+    func testForegroundEntryWakeStartsSameFutureLocalRunOnceWithoutResumeOrNewEpoch() async throws {
+        for source in [nil, NativePhotoRunRecord.RetrySource.automaticCheck, .systemInterruption, .conditions] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = NativePhotoRunStore(directory: directory), now = Date()
+            var run = try budgetWaitingRun(now: now)
+            run.stage = source == nil ? "complete" : "waiting"; run.retrySource = source; run.retryAt = now.addingTimeInterval(300)
+            if source == .conditions { run.syncWait = "charging" }
+            try store.write(run)
+            let attempted = expectation(description: "Exact saved local run reaches real grant validation")
+            var reads = 0
+            let grants = MobileFolderStore(load: { scope in
+                XCTAssertEqual(scope, run.scope); reads += 1; attempted.fulfill()
+                throw NativePhotoRunActivity.SourceFailure.grantChanged
+            }, save: { _, _ in XCTFail("Foreground wake must not grant access") })
+            let conditions = NativePhotoDownloadConditions()
+            let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler(),
+                grants: grants, photos: PhotoLibraryReader(provider: WakePhotosProvider()), conditions: conditions)
+            worker.activate(foreground: true); worker.verifiedForegroundScope(run.scope)
+            conditions.setNetwork("wifi"); conditions.setCharging(true)
+            func wake() throws -> [String: String] { try worker.wakePhotoRun(scope: run.scope, configurationId: run.authorization.id,
+                rootId: run.rootId, deviceId: run.authorization.scope.deviceId, configurationRevision: run.authorization.updatedAt,
+                grantRevision: run.grantRevision) }
+            XCTAssertEqual(try wake()["status"], "running")
+            XCTAssertEqual(try wake()["status"], "running")
+            let admitted = try XCTUnwrap(store.lookup(run))
+            XCTAssertEqual(admitted.runId, run.runId); XCTAssertEqual(admitted.epoch, run.epoch)
+            XCTAssertEqual(admitted.batch, run.batch); XCTAssertEqual(admitted.captureId, run.captureId)
+            XCTAssertNil(admitted.userPaused); XCTAssertTrue(admitted.armed)
+            await fulfillment(of: [attempted], timeout: 2)
+            XCTAssertEqual(reads, 1, "Duplicate foreground entries reuse one worker")
+            XCTAssertEqual(try store.lookup(run)?.stage, "needs-review", "Waking cannot bypass the actual grant check")
+            worker.disarm(matching: run.scope)
+        }
+    }
+
+    func testForegroundWakePreservesPauseIdentityBudgetAndShorterExternalOrUnknownBarriers() throws {
+        for scenario in ["paused", "review", "revision", "grant", "owner", "conditions", "budget", "server", "unknown",
+                         "short-server-interrupted", "short-unknown-interrupted", "short-server-conditions", "short-unknown-conditions"] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = NativePhotoRunStore(directory: directory), now = Date()
+            var run = try budgetWaitingRun(now: now)
+            run.stage = "waiting"; run.retryAt = now.addingTimeInterval(scenario.hasPrefix("short-") ? 30 : 300)
+            run.retrySource = scenario.contains("server") ? .transferBackoff : nil
+            if scenario == "paused" { run.pauseByUser() }
+            if scenario == "review" { run.armed = false; run.stage = "needs-review" }
+            if scenario == "budget" { run.retrySource = .budget; run.syncWait = "data-budget" }
+            if scenario.hasSuffix("interrupted") { run.deferAfterSystemInterruption(now: now) }
+            if scenario.hasSuffix("conditions") { run.deferRetry(until: now.addingTimeInterval(300), source: .conditions, now: now) }
+            if scenario.hasPrefix("short-") {
+                XCTAssertEqual(run.retrySource, scenario.contains("server") ? .transferBackoff : nil,
+                    "Extending a local delay cannot relabel a future external/unknown barrier")
+            }
+            try store.write(run)
+            let conditions = NativePhotoDownloadConditions()
+            let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler(),
+                photos: PhotoLibraryReader(provider: WakePhotosProvider()), conditions: conditions)
+            worker.activate(foreground: true); worker.verifiedForegroundScope(run.scope)
+            conditions.setNetwork("wifi"); conditions.setCharging(scenario != "conditions")
+            let owner = scenario == "owner" ? try FileSyncOwnerScope(ownerId: "other", url: run.scope.origin) : run.scope
+            let result = try worker.wakePhotoRun(scope: owner, configurationId: run.authorization.id, rootId: run.rootId,
+                deviceId: run.authorization.scope.deviceId,
+                configurationRevision: scenario == "revision" ? "changed" : run.authorization.updatedAt,
+                grantRevision: scenario == "grant" ? String(repeating: "b", count: 64) : run.grantRevision)
+            XCTAssertTrue(["waiting", "refused"].contains(result["status"] ?? ""), scenario)
+            XCTAssertEqual(try store.lookup(run), run, "\(scenario) must preserve the exact saved checkpoint and retry")
+            worker.disarm(matching: run.scope)
+        }
     }
 
 }

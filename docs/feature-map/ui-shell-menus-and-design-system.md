@@ -38,6 +38,16 @@ for the bridge, archive and hardware acceptance.
 
 ## Native mobile background presence
 
+`NativeSyncBootstrap` also owns device file-sync startup across ordinary app
+pages. App entry, native bridge readiness and foreground return wake the shared
+sync worker; visiting device files/sync observes the same startup state rather
+than creating another scheduler. The editable status and canonical Lopu
+notification follow scoped admission results. Effect replay and overlapping
+lifecycle signals must not duplicate runs or notifications. Explicit Pause,
+saved transfer conditions, server retry deadlines and identity changes remain
+authoritative. See the app-entry checks under **iOS Photos launch and retry** in
+`TESTING.md`.
+
 `MobileDevicePresenceBootstrap` owns the Activity manager preference and identity
 fence. `mobileDeviceBridge` negotiates iOS pairing bridge 1.1.0 before requesting
 `presence(enabled:true)`; 1.0.0 hosts retain foreground `status`. Identity changes

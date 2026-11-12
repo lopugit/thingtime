@@ -743,6 +743,20 @@ Regressions: `NativeUploadBackgroundTests`, `NativeFileUploadJobTests`,
 `native-history` scenarios in `test-explicit-sync-start-ui.mjs`. Simulator and
 browser fixtures do not establish a physical iOS background guarantee.
 
+Photos automation 1.8.0 adds the exact-scope `wake-photo-run` foreground-entry
+operation. `NativeSyncBootstrap` uses the existing discovery/worker path across
+app pages, and `syncStartup` keeps only scoped presentation receipts for the
+editable status and canonical Lopu notification. Local cadence may wake early;
+explicit Pause, server/unknown retry barriers and transfer budgets remain
+binding. Repeated navigation must preserve active runs and receipts. The native
+reply distinguishes running, queued, waiting and refused work, independently
+of a continued-processing lease. See `iOS/README.md` and the app-entry checklist
+under **iOS Photos launch and retry** in `TESTING.md`.
+`MobileFolderControlRequests` isolates only negotiated startup list/status/wake
+requests from the serialized scan/upload lane. Its token cancellation and
+fresh paired-device checks are covered by `MobileFolderControlTests` and the
+client `mobileFolders.client.test.ts` regressions.
+
 ### Android current-file upload continuation
 
 `NativeUploadContinuation.java` owns one nonpersistent, token-scoped OS lease.
@@ -1186,6 +1200,13 @@ shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry
 Existing explicit limits/drafts remain intact; ordinary connection progress is
 independent from native CPU/scan telemetry. The paused-start browser harness
 exercises unsupported iOS capabilities and retained controls at both widths.
+
+Prepared Photos originals reuse the scoped reader cache in
+`apple/FileSync/Sources/AppleFileSync/PhotoLibraryReader.swift`. Preserve live
+provider/revision and staged-file checks across concurrent part reads; cache
+budgets never impose a file-size limit. `PhotoOriginalCacheTests` covers sibling
+lookahead reuse, invalidation, ownership cleanup and oversized originals, alongside
+the shared `PhotoLibraryTests` suite.
 
 ### Device and scan library navigation — 2026-11-12
 

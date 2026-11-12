@@ -282,7 +282,8 @@ async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<Retur
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
-export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean; signal?: AbortSignal }, wakeConditions = false) {
+export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean; signal?: AbortSignal; foregroundStart?: boolean }, wakeConditions = false,
+	startup?: { foregroundStart: boolean; admitted(): void }) {
 	if (folderEnrollment) {
 		if (resume || automaticPhoto) return;
 		throw Error('Another sync config is waiting for device approval. Finish that approval before starting a transfer.');
@@ -300,7 +301,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 	if (photoHost && supportsSoleNativePhotoRun(adapter.bridge) && reviewed.configuration.sourceKind === 'photos') {
 		if (!activityManager.enabled('sync.automation')) throw Error('Enable automatic file sync in Activity manager before starting Photos backup.');
 		return armNativePhotoRun({ reviewed, scope: binding, generation, adapter, automatic: !!automaticPhoto || !!resume,
-			discoverySignal: automaticPhoto?.signal, isPaused: nativeSyncTasks.isPaused, resumeScope: nativeSyncTasks.resumeScope });
+			discoverySignal: automaticPhoto?.signal, foregroundStart: automaticPhoto?.foregroundStart, isPaused: nativeSyncTasks.isPaused, resumeScope: nativeSyncTasks.resumeScope });
 	}
 
 	const progressKey = 'tt:sync-progress:' + syncScopeKey(binding);
@@ -542,7 +543,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (resumeJob && sameFolderUploadPolicySource(resumeJob.reviewed.configuration, reviewed.configuration) && JSON.stringify(resumeJob.reviewed) !== JSON.stringify(reviewed)) resumeJob = undefined;
 				if (automaticPhoto && (prior?.state === 'attention' || prior?.state === 'complete' ||
 					JSON.stringify(prior?.reviewed) !== JSON.stringify(reviewed))) resumeJob = undefined;
-				if (automaticPhoto && resumeJob && !syncJobDue(resumeJob, Date.now(), automaticPhoto.wakeConditions)) return;
+				if (automaticPhoto && resumeJob && !syncJobDue(resumeJob, Date.now(), automaticPhoto.wakeConditions, automaticPhoto.foregroundStart)) return;
 				const verifyCurrentPhoto = async () => {
 					const { localRootId, remoteFolderId } = reviewed.configuration;
 					await host.authorizeDevice(binding.ownerId, binding.deviceId, signal); check();
@@ -591,7 +592,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					(prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) &&
 					JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) await cancelPriorBackupCapture();
 				check();
-				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID(), automaticPhoto, wakeConditions) :
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID(), automaticPhoto, wakeConditions, startup?.foregroundStart) :
 					jobs!.admit(reviewed, crypto.randomUUID(), photoAutomation ? PHOTO_AUTOMATION_INTERVAL_MS : intervalMs, photoSettings, automaticPhoto ? { previous: prior } : undefined);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
@@ -603,6 +604,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				}
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				startup?.admitted();
 				if (photoAutomation && supportsNativePhotoRuns(capabilities)) {
 					try {
 						await host.requireCapability('api.file-sync-transfer-admissions', '1.2.0'); check();

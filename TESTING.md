@@ -12674,6 +12674,52 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS Photos launch and retry
 
+- Exercise five concurrent originals with preparation lookahead and multiple
+  upload parts. Count real resource exports and inventory observations: unchanged
+  originals must be reused between verification and part reads instead of being
+  exported and hashed again after each sibling switch. Preserve provider access,
+  exact resource revision and native file-stamp checks on cache hits. Test edits,
+  removal, revoked access, tampered staging bytes, owner/root changes and cleanup.
+  Exceed the reusable cache byte budget with one large video: consecutive reads
+  must retain that valid original without rejecting its size or rebuilding it
+  for every part; competing resources may evict reusable entries safely.
+- Open an unrelated Thingtime page first with enabled local Photos and folder
+  sync configs. Without visiting Device setup or pressing Retry, verify the
+  app-wide lifecycle wake admits each eligible config and starts its existing
+  worker. Visit and revisit device files/sync during that work: the editable
+  status shows immediate progress without resetting counters or moving the
+  layout. Confirm the single Lopu startup notification follows verified
+  admission, and failed or unavailable configs never produce an all-started
+  success message.
+- Repeat cold start, native bridge readiness, route navigation, foreground
+  return, React effect replay and simultaneous wake signals. Verify one active
+  operation per config and no duplicate startup notification. Change account,
+  API origin, data plane or paired device during discovery and confirm stale
+  callbacks cannot start work or announce success for the new identity.
+- Hold an automatically started ordinary-folder transfer open, navigate to
+  another app route, and verify Photos discovery/wake and other saved-config
+  admission still finish. Queued folder siblings must drain after the active
+  transfer releases its existing lane; navigation must neither cancel it nor
+  run the just-completed sibling again. Hold discovery itself separately and
+  confirm immediate checking feedback, then one acknowledged startup message.
+- Keep one config explicitly paused and exercise Wi-Fi-only, charging-only,
+  speed limits, hourly budgets and server Retry-After separately. App entry
+  must preserve those settings and waits; it must not request new folder or
+  Photos permission, wake an unrelated device, or convert a refused config
+  into success. Reopen after a transient interruption and verify an eligible
+  existing run resumes automatically with the same receipts and no Retry tap.
+- Extend a future server/unknown retry deadline with a longer local interruption
+  delay, then foreground the app. Verify the earlier external barrier is not
+  relabeled as wakeable local cadence. For foreground-entry continuation, check
+  accepted, queued, OS-declined, already-active and held/cancelled outcomes;
+  periodic and connectivity callbacks must not submit continued tasks.
+- With a long native scan held open, exercise the negotiated startup control
+  lane's list/status/wake requests. Verify independent cancellation, fresh
+  paired-device verification before reply, wrong-owner and obsolete-token
+  refusal, and unchanged data-operation identity. Old hosts must keep the
+  serialized path. Include more than two saved setup intents and a revoked
+  Photos grant: drain only after durable progress, stop on no progress, and
+  never announce all configs started while an enabled one remains unverified.
 - Reopen a current native build with an enabled private Photos backup and an
   older unfinished journal. Interrupt the native scan while the app is inactive,
   including the legacy “Folder access paused” reply. Verify that foreground
