@@ -2,6 +2,7 @@ import { BrowserExtensionAccountBridge } from './components/Passwords/BrowserExt
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { MobileDevicePresenceBootstrap } from './components/Devices/MobileDevicePresenceBootstrap';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
+import { SyncStartupNotice } from './fileSync/SyncStartupNotice';
 import { RemoteSyncBootstrap } from './fileSync/RemoteSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
@@ -163,6 +164,7 @@ export default function App() {
         {mounted && nativeOwner ?
           <><MobileDevicePresenceBootstrap ownerId={nativeOwner} generation={identity.generation} />
           <NativeSyncBootstrap ownerId={nativeOwner} generation={identity.generation} />
+          <SyncStartupNotice ownerId={nativeOwner} generation={identity.generation} />
           <RemoteSyncBootstrap ownerId={nativeOwner} generation={identity.generation} /></> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth

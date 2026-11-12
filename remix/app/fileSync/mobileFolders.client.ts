@@ -1,5 +1,5 @@
 import { parsePhotoTransferPolicy, supportsNativePhotoTransferPolicy, supportsNativeUploadPolicy, type PhotoTransferPolicy } from './photoTransferPolicy';
-import { parseNativePhotoRunStatus, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
+import { parseNativePhotoRunStatus, parseNativePhotoRunWake, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
 import type { FileSyncApproval } from './configuredPlan';
 import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -58,7 +58,7 @@ export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: 
 export type NativePathStamp = Pick<SyncEntry, 'path' | 'id' | 'version' | 'kind' | 'size'>;
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
-export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
+export type FolderRequest = { control?: 'photos-startup-v1'; deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
 	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
@@ -68,6 +68,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'set-upload-policy'; deviceId: string; rootId?: string; uploadPolicy: PhotoTransferPolicy }
 	| { action: 'read-photo-transfer-policy'; deviceId: string; rootId?: string }
 	| { action: 'set-photo-transfer-policy'; deviceId: string; rootId?: string; photoTransferPolicy: PhotoTransferPolicy }
+	| { action: 'wake-photo-run'; activation: 'foreground-entry'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
 	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
 	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string; explicitPause?: true }
@@ -191,6 +192,8 @@ export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
 export const supportsSoleNativePhotoRun = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.2.0');
+export const supportsNativePhotoForegroundWake = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.8.0');
 export const supportsNativePhotoContinuation = (bridge: FolderCapabilities | undefined = getNativeBridge(), minimum = '1.0.0') =>
 	supportsSoleNativePhotoRun(bridge) && capabilitySatisfies(bridge?.filePhotoContinuationVersion ?? '', minimum);
 export const supportsNativePhotoRuns = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -491,11 +494,15 @@ export function parseMobileFolderResult(
 				payload.deviceId !== request.authorization.scope.deviceId || payload.photoRunProgress == null) throw Error('Native Photos did not confirm sole execution.');
 			result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
 		}
-	} else if (request.action === 'photo-run-status') {
+	} else if (request.action === 'photo-run-status' || request.action === 'wake-photo-run') {
 		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.deviceId !== request.deviceId)
 			throw Error('Native Photos run status scope changed.');
 		result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
 	}
+    if (request.action === 'wake-photo-run') {
+        if (payload.photoWakeRevision !== request.configurationRevision) throw Error('Native Photos wake settings changed.');
+        result.photoRunStatus!.wake = parseNativePhotoRunWake(payload.photoRunWake);
+    }
 	if (request.action === 'run-photo-in-background') {
 		const status = payload.photoContinuationStatus;
 		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId ||
@@ -963,6 +970,10 @@ export function requestMobileFolders(
 	if (!bridge || !supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
 	if (signal.aborted) return Promise.reject(cancelledFolderRequest());
 	const input = structuredClone(request);
+	const startupControl = supportsNativePhotoForegroundWake(bridge) && ['list', 'photo-run-status', 'wake-photo-run'].includes(input.action);
+	// Only native 1.8 acknowledges independent identities for these controls.
+	if (startupControl) input.control = 'photos-startup-v1';
+	else delete input.control;
 	const origin = window.location.origin;
 	const generation = rootIdentity.read().generation;
 	const check = () => {
@@ -971,7 +982,9 @@ export function requestMobileFolders(
 			throw cancelledFolderRequest();
 	};
  const send = async () => {
+  check();
   const result = await requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
+  check();
   if ((input.action === 'set-upload-policy' && result.uploadPolicy) || (input.action === 'set-photo-transfer-policy' && result.photoTransferPolicy)) {
    check();
    const [{ openSyncJournal }, { wakeUploadPolicyJobs, SYNC_UPLOAD_POLICY_CHANGED_EVENT }] = await Promise.all([import('./journal.client'), import('./syncJobJournal')]);
@@ -983,7 +996,7 @@ export function requestMobileFolders(
   return result;
  };
  // Preferences and local denials bypass the long-running folder request slot.
- if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
+ if (startupControl || bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
 	const run = (folderRequestTails.get(bridge) ?? Promise.resolve()).then(async () => {
 		check();
 		let result: FolderResult;
@@ -1038,6 +1051,8 @@ function requestMobileFoldersNow(
 		throw Error('Update Thingtime to manage device and folder Photos upload settings.');
 	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
 		throw Error('This iPhone does not support starting continued Photos work.');
+    if (request.action === 'wake-photo-run' && !supportsNativePhotoForegroundWake(bridge))
+        throw Error('Update Thingtime to wake an existing Photos backup immediately.');
 	if (request.action === 'arm-photo-run' && request.continueInBackground !== undefined &&
 		(request.continueInBackground !== true || request.execution !== 'native' || request.resume !== true || !supportsNativePhotoContinuation(bridge, '1.1.0')))
 		throw Error('This iPhone does not support requesting continued Photos work at backup start.');
@@ -1448,4 +1463,14 @@ export async function requestNativePhotoBackground(ownerId: string,
 	signal.throwIfAborted();
 	if (!result.photoContinuation) throw Error('Native Photos did not confirm the background request.');
 	return result.photoContinuation;
+}
+
+/** No permission prompt, Resume or new authorization epoch. Foreground entry may request the existing finite continued task. */
+export async function wakeNativePhotoRun(ownerId: string,
+ scope: { rootId: string; configurationId: string; deviceId: string; configurationRevision: string },
+ signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoRunStatus> {
+ const result = await request(ownerId, { action: 'wake-photo-run', activation: 'foreground-entry', ...scope }, signal);
+ signal.throwIfAborted();
+ if (!result.photoRunStatus?.wake) throw Error('Native Photos did not confirm the foreground wake.');
+ return result.photoRunStatus;
 }

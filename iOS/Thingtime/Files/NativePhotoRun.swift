@@ -6,6 +6,7 @@ import UIKit
 /// original reservations from the current policy. No credentials or signed
 /// object requests are written to the run journal.
 struct NativePhotoRunRecord: Codable, Equatable, Sendable {
+    enum RetrySource: String, Codable, Sendable { case automaticCheck, systemInterruption, conditions, budget, transferBackoff }
     let scope: FileSyncOwnerScope
     let authorization: NativeUploadAuthorization
     let grantRevision: String
@@ -16,6 +17,7 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     var batch: PhotoBackupQueueBatch?
     var armed = true
     var retryAt = Date.distantPast
+    var retrySource: RetrySource?
     var retryCloudGaps = false
     var foregroundOwner: Bool?
     var stage: String?
@@ -69,7 +71,13 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     mutating func deferAfterSystemInterruption(now: Date = Date()) {
         guard armed, userPaused != true else { return }
         stage = "waiting"
-        retryAt = max(retryAt, now.addingTimeInterval(300))
+        let localRetry = now.addingTimeInterval(300)
+        deferRetry(until: localRetry, source: .systemInterruption, now: now)
+    }
+    mutating func deferRetry(until proposed: Date, source: RetrySource, now: Date = Date()) {
+        let retainExternal = retryAt > now && (retrySource == nil || retrySource == .transferBackoff || retrySource == .budget)
+        retryAt = max(retryAt, proposed)
+        if !retainExternal { retrySource = source }
     }
     mutating func pauseByUser() {
         armed = false; userPaused = true; continuedHold = nil; stage = "paused"
