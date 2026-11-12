@@ -495,6 +495,37 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return source
     }
 
+    /// Discover and persist metadata before any original is materialized.
+    public func discoverQueueIndex(scope: Scope, request: PhotoBackupQueueRequest, preparedDeferred: PreparedCloudOriginal? = nil,
+                                   activity: (CaptureProgress) -> Void = { _ in }) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        let store = try queueStore(scope: scope, request: request)
+        try store.enableSourceIndex()
+        let (source, _) = try batchSnapshot(scope: scope, store: store, replaceStale: true, startWithSingleAsset: true,
+                              preparedDeferred: preparedDeferred?.resource, activity: activity)
+        activity(.indexed(source.indexed))
+    }
+    public func discoverQueueIndexLookahead(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        let store = try queueStore(scope: scope, request: request)
+        try store.enableSourceIndex()
+        if let ordered = provider as? any OrderedPhotoResourceProvider { _ = try store.lookahead(provider: ordered, batchId: batchId) }
+    }
+    public func rotateQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws {
+        lock.lock(); defer { lock.unlock() }
+        try queueStore(scope: scope, request: request).rotateSourceIndex()
+    }
+    public func pendingQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws -> PhotoSourceIndexPage? {
+        lock.lock(); defer { lock.unlock() }
+        return try queueStore(scope: scope, request: request).pendingSourceIndex()
+    }
+    public func acknowledgeQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest, page: PhotoSourceIndexPage) throws {
+        lock.lock(); defer { lock.unlock() }
+        try queueStore(scope: scope, request: request).acknowledgeSourceIndex(page)
+    }
+
     public func queueBatchEntries(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws -> [MobileFolderReader.Entry] {
         lock.lock(); defer { lock.unlock() }
         try require()

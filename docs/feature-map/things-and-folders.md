@@ -731,6 +731,18 @@ Timeline publication stays in the shared runner. Scheduler refusal falls back to
 foreground; actual background completion and relaunch acceptance remain open.
 
 
+Photos automation 1.7.0 records closed background-session endings and actual
+last-progress measurements. `NativePhotoContinuedProgress` preserves all five
+siblings' measured work as exact publication receipts arrive; cloud preparation
+uses resource-fenced real download fractions. The existing activity row renders
+ending cause/time and retains last discovery/index values outside indexing.
+`nativePhotoProgressLifecycle` invalidates lease-active certainty on resume/focus;
+the hook scopes cached counts by owner, origin, device, plane and generation.
+Regressions: `NativeUploadBackgroundTests`, `NativeFileUploadJobTests`,
+`nativePhotoRunProgress.test.ts`, and the `native-lifecycle`, `native-scope`,
+`native-history` scenarios in `test-explicit-sync-start-ui.mjs`. Simulator and
+browser fixtures do not establish a physical iOS background guarantee.
+
 ### Android current-file upload continuation
 
 `NativeUploadContinuation.java` owns one nonpersistent, token-scoped OS lease.

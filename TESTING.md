@@ -12568,6 +12568,23 @@ transfer, whole-account snapshots or production deployment.
   or duplicate signed fields. Legacy grants stay at 120 seconds; background
   grants stay within 600 seconds and both saved expiries. Revoke during signing
   and confirm no grant is returned. Preserve canonical finalization and receipts.
+- [ ] Before the incremental original backlog is known, feed real discovery
+  and serialized iCloud callbacks into the actual Progress object. Its finite
+  fraction must be nonzero and change, using the known PhotoKit/library and
+  resource work rather than a negative total or fabricated heartbeat. The final
+  verification/checkpoint unit cannot complete before verified termination.
+- [ ] Run five concurrent originals near completion. Publishing one receipt
+  must preserve every sibling's partial system Progress; real serialized iCloud
+  callbacks advance measured units without upload bytes. A late callback from an
+  old resource must not alter its replacement, and a fresh lease/process must
+  not replay historical measured units. Expiration/cancellation remain failures.
+- [ ] End a continued lease while its WebView cannot receive hints, then return
+  to the same page without visibilitychange. A native lifecycle hint/focus must
+  clear stale active certainty through a fresh read without requesting another
+  continued session. Keep known counts/index/discovery visible with historical
+  labels during upload, completion, Pause and status failure; clear them
+  synchronously on owner/origin/device/plane/generation changes. Show the closed
+  prior-session cause/time in expanded activity without raw errors.
 - [ ] Deliver the same continued-task object before and after completion and a
   distinct conflicting object. Complete each at most once; never end a valid
   active task because its callback is redelivered. A clean deferred pass keeps
@@ -16225,3 +16242,29 @@ never print the file-download JSON, encryption metadata or signed URL.
   `NativePhotoTransferPolicyTests`/`NativeFolderUploadPolicyTests`, and
   `node remix/scripts/test-folder-upload-limits-ui.mjs`. Real native byte and
   installed-device acceptance are separate from mocks and test-bundle builds.
+
+### Incremental Photos source index (12 November 2026)
+
+- At terminal or resumed nonempty nil progress, retain the last actual indexed
+  item and counts. Empty/new-pass state resets it; matching same-run history can
+  restore a pre-fix journal. Count and retain the first item of a restarted pass.
+
+- Negotiate transfer-admissions1.8.0 on the exact origin; older origins retain
+  the outbox and report unavailable indexing. Discover the newest asset and
+  inspect the private server index before any original publication.
+- Restart with an uncertain metadata reply; require the exact same page/request
+  identity, one charged observation per resource, and no duplicate file/Timeline
+  revision. Exercise unavailable cloud/read originals and subsequent recovery.
+- Page a growing scan using its discovery watermark; appends and status updates
+  preserve cursor progress. A pass change explicitly invalidates the cursor.
+  Partial metadata and missing records never seal a complete scan or claim zero
+  unknown resources. Separate local discovery from cloud acknowledgements.
+- Verify wrong device/owner/origin, Pause, revocation, config revision, destination
+  privacy and quota failures refuse metadata writes. Owner reads remain private
+  and available after Pause/expiry. Old unstamped saved copies are unknown until
+  a verified same-scope already-backed check establishes proof without uploading.
+- Discard a multi-page index, retry cleanup, and reject late writes to its
+  tombstone. Delete a disposable configuration through the canonical API and
+  verify index children and their accounted bytes cascade without orphaning.
+- Run native outbox/discovery tests, parser/manifests and built HTTP transfer
+  fixture. Simulator/build evidence does not establish physical background work.

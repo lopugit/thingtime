@@ -534,6 +534,25 @@ owner resumes. Existing system-only holds recover with fresh authorization
 for the same connection. Charging, network and budget waits still obey the
 saved transfer settings.
 
+Photos automation 1.7.0 adds a closed, timestamped background-session ending
+(`system-ended`, `execution-expired`, `worker-cancelled`, `worker-failed`,
+`completed`, or `checkpointed-wait`) with the last measured progress time and
+units. This is session history, not proof that automatic backup is stopped or
+that the whole library is complete. Foreground reentry refreshes native status
+without requesting a new continued session. Known discovery/index counts remain
+visible as historical values outside indexing, and owner/origin/device/plane/
+generation changes immediately hide the prior protected view.
+
+System Progress uses a finite denominator for known library discovery, known
+originals and their preparation, with one final verification/checkpoint unit.
+Undiscovered original backlog is not invented; newly discovered real work may
+extend that denominator. Negative totals would keep fractionCompleted at zero.
+
+Measured iCloud progress belongs to one serialized original resource. Late
+callbacks cannot advance a replacement resource. Each concurrent original keeps
+its own byte fraction when a sibling publishes; no heartbeat or elapsed-time
+progress is reported. The scheduler still decides actual background execution.
+
 Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
 the latest photo or video capture time when available. The scoped **Backup
 activity** also shows measured file counts, the selected batch, iCloud download

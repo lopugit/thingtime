@@ -160,6 +160,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Keep measured Photos background progress monotonic across concurrent
+  originals and real iCloud preparation, refresh stale active status on native
+  foreground reentry, retain historical indexing/discovery feedback, and show a
+  closed session-ending cause/time without changing automatic backup or Pause.
+  Physical-device scheduling remains an independent acceptance gate. **Codex (AI)**
+
+- 2026-11-12: Persist pending Photos discovery incrementally through the approved
+  sync-run authority, with durable native metadata retries, private owner reads,
+  explicit partial counts and verified publication reconciliation. See
+  [source-index contract](../docs/sync-source-index.md) and
+  [PR1489 validation](../PRs/1489-codex-ios-photos-cloud-index-persist-incremental-photos-source-index.md). — **Codex (AI)**
 - **2026-11-12 — iOS automatic setup:** Native device pairing 1.2.0 queues
   same-scope status checks behind startup connection work, revalidates authority
   for each caller, and preserves scoped cancellation. Removed the ineffective

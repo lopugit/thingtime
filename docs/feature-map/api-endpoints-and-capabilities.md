@@ -1031,3 +1031,8 @@ The canonical client checker also exposes the fixed same-origin `active-api`
 source. Connections requires modern and active API capability maps; an older
 shared API behind a newer frontend cannot enable service actions. Neither
 manifest-supplied foreign URLs nor frontend-only versions establish support.
+
+Photos source discovery extends the existing sync-transfer-admissions route at
+1.8.0; both manifest generators consume its canonical docs entry. Scoped native
+writes, owner reads/discard and watermark pagination share that route; no generic
+Things permission is delegated. See [source index](../sync-source-index.md).

@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.7.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.6.0"
+    static let photoAutomationVersion = "1.7.0"
     static let uploadPolicyVersion = "1.1.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
@@ -115,7 +115,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     }
     private var photoTransferContinuation: UIBackgroundTaskIdentifier = .invalid
     var conditionsChanged: (() -> Void)?
-    var photoProgressChanged: ((Bool) -> Void)?
+    var photoProgressChanged: ((Bool, Bool) -> Void)?
     init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore(), inventories: MobileFolderInventory? = nil) {
         self.inventories = inventories ?? MobileFolderInventory(transport: RustEmbeddedInventoryTransport.default); self.photos = PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default); self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
@@ -155,7 +155,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         photoProgressObserver = NotificationCenter.default.addObserver(forName: NativeDeferredUpload.photoProgressChanged,
             object: nil, queue: .main) { [weak self] notice in
                 let immediate = notice.userInfo?["immediate"] as? Bool == true
-                MainActor.assumeIsolated { self?.photoProgressChanged?(immediate) }
+                let lifecycle = notice.userInfo?["lifecycle"] as? Bool == true
+                MainActor.assumeIsolated { self?.photoProgressChanged?(immediate, lifecycle) }
             }
     }
     static func suspendsForLifecycle(state: UIApplication.State, photoPermissionPending: Bool, hasContinuation: Bool) -> Bool {
