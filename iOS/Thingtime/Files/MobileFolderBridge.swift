@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.7.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.7.0"
+    static let photoAutomationVersion = "1.8.0"
     static let uploadPolicyVersion = "1.1.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
@@ -115,6 +115,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     }
     private var photoTransferContinuation: UIBackgroundTaskIdentifier = .invalid
     var conditionsChanged: (() -> Void)?
+    private let controlRequests = MobileFolderControlRequests()
     var photoProgressChanged: ((Bool, Bool) -> Void)?
     init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore(), inventories: MobileFolderInventory? = nil) {
         self.inventories = inventories ?? MobileFolderInventory(transport: RustEmbeddedInventoryTransport.default); self.photos = PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default); self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
@@ -146,6 +147,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         }
         observer = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.controlRequests.cancelAll(.inactive)
                 guard let self, Self.suspendsForLifecycle(state: UIApplication.shared.applicationState,
                     photoPermissionPending: self.photoPermissionPending, hasContinuation: self.background?.canContinue == true ||
                     self.photoTransferContinuation != .invalid || self.inventoryJob.map { $0.continuation != .invalid } == true) else { return }
@@ -181,6 +183,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     }; networkMonitor.cancel(); task?.cancel() }
     enum Suspension: Equatable { case inactive, requestCancelled, contextChanged }
     func suspend(_ reason: Suspension = .contextChanged) {
+        if reason != .requestCancelled { controlRequests.cancelAll(reason) }
         background?.finish(success: false); background = nil
         endPhotoTransferContinuation()
         foregroundWait?.resume(throwing: CancellationError()); foregroundWait = nil
@@ -701,10 +704,59 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let requestedAction = payload["action"] as? String,
               let action = Optional(requestedAction == "upload-part-authorized" ? "upload-part" : requestedAction),
-              ["read-upload-policy", "set-upload-policy", "read-photo-transfer-policy", "set-photo-transfer-policy", "list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "arm-photo-run", "photo-run-status", "pause-photo-runs", "run-photo-in-background", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["read-upload-policy", "set-upload-policy", "read-photo-transfer-policy", "set-photo-transfer-policy", "list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "arm-photo-run", "wake-photo-run", "photo-run-status", "pause-photo-runs", "run-photo-in-background", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
-        if action == "suspend" { if requestId == id { suspend(.requestCancelled) }; return }
+        if action == "suspend" {
+            if controlRequests.cancel(id, reason: .requestCancelled) { return }
+            if requestId == id { suspend(.requestCancelled) }; return
+        }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
+        if let control = payload["control"] {
+            guard control as? String == "photos-startup-v1", MobileFolderControlRequests.supports(action), requestId != id else {
+                reply("mobile-files-result", base.merging(["error": "Invalid Photos startup control."]) { _, new in new }); return
+            }
+            let cancelled: (Suspension) -> Void = { reason in
+                if reason == .inactive { reply("mobile-files-result", base.merging(["syncWait": "inactive"]) { _, new in new }) }
+                else if reason == .requestCancelled {
+                    reply("mobile-files-result", base.merging(["error": "Folder request was cancelled."]) { _, new in new })
+                }
+            }
+            guard let token = controlRequests.begin(requestId: id, scope: scope, action: action,
+                configurationId: payload["configurationId"] as? String, cancelled: cancelled) else {
+                reply("mobile-files-result", base.merging(["error": "Another folder request is running."]) { _, new in new }); return
+            }
+            let controlTask = Task<Void, Never> { [weak self, weak webView] in
+                defer { self?.controlRequests.finish(token) }
+                guard let self, let webView else { return }
+                let check = { [weak self, weak webView] in
+                    try Task.checkCancellation()
+                    guard self?.controlRequests.isCurrent(token) == true, let webView, currentRoot() == root,
+                          let current = webView.url, LopuVoiceContract.sameOrigin(current, root) else { throw CancellationError() }
+                    guard UIApplication.shared.applicationState == .active else { throw NativeUploadAuthorization.Wait.inactive }
+                }
+                do {
+                    try check(); try await verifyOwner(scope, check); try check()
+                    self.controlRequests.verified(scope); try check()
+                    guard let pairedDevice, let verifyDevice else { throw MobileFolderStore.Failure.invalid }
+                    let device = try await pairedDevice(scope, check); try check()
+                    if let expected = payload["deviceId"] as? String, expected != device { throw MobileFolderStore.Failure.changed }
+                    await self.performFolderRequest(payload, action: action, owner: owner, scope: scope, operation: token.operation,
+                        base: base, webView: webView, root: root, currentRoot: currentRoot, cookies: cookies,
+                        verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, pairedDevice: pairedDevice,
+                        verifiedDevice: device, currentOperation: { self.controlRequests.isCurrent(token) }, reply: reply)
+                } catch is CancellationError { }
+                catch {
+                    guard self.controlRequests.isCurrent(token) else { return }
+                    if let wait = error as? NativeUploadAuthorization.Wait {
+                        reply("mobile-files-result", base.merging(["syncWait": wait.rawValue]) { _, new in new })
+                    } else {
+                        reply("mobile-files-result", base.merging(["error": Self.folderErrorMessage(error)]) { _, new in new })
+                    }
+                }
+            }
+            controlRequests.attach(controlTask, to: token)
+            return
+        }
         if requestedAction == "upload-part-authorized", !((payload["upload"] as? [String: Any])?["authorization"] is [String: Any]) {
             reply("mobile-files-result", base.merging(["error": "The authorized folder uploader requires the exact saved sync authorization. No legacy upload was started."]) { _, new in new })
             return
@@ -764,6 +816,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             return
         }
         if action == "pause-photo-runs" {
+            controlRequests.cancelWakes(scope: scope)
             // Only removes authority from the exact owner/origin. Works
             // offline and returns no owner content, handles or other scopes.
             do {
@@ -773,6 +826,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             return
         }
         if action == "cancel-deferred-upload" {
+            controlRequests.cancelWakes(scope: scope, configurationId: payload["configurationId"] as? String)
             // Pause is a local denial, not another upload slot. It must be
             // able to fence the exact running request even when offline.
             do {
@@ -789,7 +843,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             }
             return
         }
-        guard task == nil else { reply("mobile-files-result", base.merging(["error": "Another folder request is running."]) { _, new in new }); return }
+        guard task == nil, !controlRequests.contains(id) else { reply("mobile-files-result", base.merging(["error": "Another folder request is running."]) { _, new in new }); return }
         let operation = UUID(); generation = operation; requestId = id
         let inactiveReply = {
             var wait = base
@@ -844,14 +898,17 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                       verifyOwner: @escaping (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
                                       verifyDevice: ((MobileDevicePairing.Scope, String, @escaping () throws -> Void) async throws -> Void)?,
                                       check: @escaping () throws -> Void,
-                                      pairedDevice: ((MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> String)?, reply: @escaping (String, [String: Any]) -> Void) async {
+                                      pairedDevice: ((MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> String)?,
+                                      verifiedDevice: String? = nil, currentOperation: (() -> Bool)? = nil,
+                                      reply: @escaping (String, [String: Any]) -> Void) async {
         do {
             try check()
             try await verifyOwner(scope, check); try check()
+            controlRequests.verified(scope); try check()
             if UIApplication.shared.applicationState != .background { NativeDeferredUpload.shared.verifiedForegroundScope(scope) }
             var result: [String: Any] = [:]
             var inspectedGrant: MobileFolderStore.Grant?
-            var inventoryDevice: String?
+            var inventoryDevice: String? = verifiedDevice
             var checkedApproval: MobileFolderStore.WriteApproval?
             if action == "conditions" {
                 let battery = UIDevice.current.batteryState
@@ -883,7 +940,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 }
                 else {
                     let grant = try self.store.grant(scope, id: rootId)
-                    guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "arm-photo-run", "photo-run-status", "run-photo-in-background", "photo-queue-finish"].contains(action) else { throw MobileFolderStore.Failure.invalid }
+                    guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "arm-photo-run", "wake-photo-run", "photo-run-status", "run-photo-in-background", "photo-queue-finish"].contains(action) else { throw MobileFolderStore.Failure.invalid }
                     if action == "arm-photo-run" {
                         let authorization = try self.decode(payload["authorization"], as: NativeUploadAuthorization.self)
                         let exclusive = payload["execution"] as? String == "native"
@@ -916,13 +973,41 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 rootId: rootId, deviceId: authorization.scope.deviceId)
                         }
                         inventoryDevice = authorization.scope.deviceId; inspectedGrant = grant
-                    } else if action == "photo-run-status" || action == "run-photo-in-background" {
+                    } else if action == "photo-run-status" || action == "wake-photo-run" || action == "run-photo-in-background" {
                         guard grant.sourceKind == "photos", let verifyDevice, let device = payload["deviceId"] as? String,
                               let configuration = payload["configurationId"] as? String, NativePhotoRunRecord.validHandle(device),
                               NativePhotoRunRecord.validHandle(configuration) else { throw MobileFolderStore.Failure.invalid }
                         try await verifyDevice(scope, device, check); try check()
                         result = ["rootId": rootId, "configurationId": configuration, "deviceId": device]
-                        if action == "run-photo-in-background" {
+                        if action == "wake-photo-run" {
+                            guard let revision = payload["configurationRevision"] as? String, !revision.isEmpty, revision.utf8.count <= 128 else {
+                                throw MobileFolderStore.Failure.invalid
+                            }
+                            guard payload["activation"] as? String == "foreground-entry", webView.window != nil else {
+                                throw MobileFolderStore.Failure.invalid
+                            }
+                            result["photoWakeRevision"] = revision
+                            var wake = try NativeDeferredUpload.shared.wakePhotoRun(scope: scope,
+                                configurationId: configuration, rootId: rootId, deviceId: device,
+                                configurationRevision: revision, grantRevision: NativeUploadPartStaging.grantRevision(grant))
+                            if wake["status"] == "running" {
+                                // An app/page foreground entry is the initiating
+                                // action. Periodic/online status reads never enter
+                                // this route. Retain the same finite lease if live.
+                                let requested = Task { @MainActor in
+                                    try await NativeDeferredUpload.shared.requestContinuedPhotoRun(scope: scope, rootId: rootId,
+                                        configurationId: configuration, deviceId: device, configurationRevision: revision)
+                                }
+                                wake["continuation"] = try await requested.value
+                            } else if wake["status"] == "queued" || wake["status"] == "waiting" {
+                                wake["continuation"] = "waiting"
+                            }
+                            result["photoRunWake"] = wake
+                            let progress = try NativeDeferredUpload.shared.photoRunProgress(scope: scope,
+                                configurationId: configuration, rootId: rootId, deviceId: device)
+                            result["photoRunProgress"] = progress.map { $0 as Any } ?? NSNull()
+                            if let revision = progress?["configurationRevision"] { result["configurationRevision"] = revision }
+                        } else if action == "run-photo-in-background" {
                             guard let revision = payload["configurationRevision"] as? String, !revision.isEmpty, revision.utf8.count <= 128,
                                   webView.window != nil else { throw MobileFolderStore.Failure.invalid }
                             // The verified click belongs to the native runner.
@@ -1397,7 +1482,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             reply("mobile-files-result", result)
         }
         catch let wait as NativeUploadAuthorization.Wait {
-            guard generation == operation, !Task.isCancelled else { return }
+            guard currentOperation?() ?? (generation == operation), !Task.isCancelled else { return }
             if wait != .inactive { guard (try? check()) != nil else { return } }
             var result = base
             if let rootId = payload["rootId"] as? String { result["rootId"] = rootId }

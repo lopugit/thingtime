@@ -52,11 +52,11 @@ export type SyncJob = {
 };
 export const syncJobCanPause = (job: SyncJob | null) => !!job && ['runnable', 'scheduled', 'attention'].includes(job.state);
 export const syncJobEnabled = (job: SyncJob) => job.intervalMs !== undefined && ['runnable', 'scheduled'].includes(job.state);
-export const syncJobDue = (job: SyncJob, now: number, wakeConditions = false) => {
+export const syncJobDue = (job: SyncJob, now: number, wakeConditions = false, foregroundStart = false) => {
 	const canWake = wakeConditions && job.waitReason !== undefined && !['paused', 'data-budget'].includes(job.waitReason);
 	return Number.isSafeInteger(now) && (job.state === 'runnable' || job.state === 'scheduled') &&
 		(job.retryAt === undefined || now >= job.retryAt || canWake) &&
-		(job.state === 'runnable' || now >= job.nextRunAt!);
+		(job.state === 'runnable' || foregroundStart || now >= job.nextRunAt!);
 };
 
 /** Stop the admitted cycle even when completion just scheduled its next run.
@@ -302,8 +302,8 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				const { localImport: _import, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
 				return { ...rest, state };
 			}),
-		begin: (expected: SyncJob, now: number, id: string, photo?: { wakeConditions: boolean }, wakeConditions = false) => change(expected, current => {
-			if (!syncJobDue(current, now, photo?.wakeConditions ?? wakeConditions)) return null;
+		begin: (expected: SyncJob, now: number, id: string, photo?: { wakeConditions: boolean; foregroundStart?: boolean }, wakeConditions = false, foregroundStart = false) => change(expected, current => {
+			if (!syncJobDue(current, now, photo?.wakeConditions ?? wakeConditions, photo?.foregroundStart ?? foregroundStart)) return null;
 			const { retryAt: _retry, waitReason: _wait, minimumPartBytes: _part, automaticPhotoRevision: _blocked, nextRunAt: _due, pendingFolderValidation: _validation, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
 			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(photo ? { intervalMs: PHOTO_AUTOMATION_INTERVAL_MS } : {}), ...(current.state === 'runnable' && localImport ? { localImport } : {}), ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
 		}),

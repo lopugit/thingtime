@@ -45,7 +45,7 @@ export const syncFolderEditorBlocks: WebpageBlock[] = [
 	syncWhen('folders-loading-visible', 'editor.cold', [
 		syncElement('folders-loading', 'progress', '', { 'aria-label': 'Loading folders and sync configs' }, { display: 'block', width: '64px', height: '4px', 'margin-block': '8px' })
 	]),
-	present('folders-notice-visible', 'editor.notice', syncElement('folders-notice', 'p', '{editor.notice}', { role: 'status' }, muted)),
+	syncElement('folders-notice', 'p', '{editor.notice}', { role: 'status', 'aria-atomic': true }, { ...muted, 'min-height': '1.5em' }),
 	present('folders-error-visible', 'editor.error', syncElement('folders-error', 'p', '{editor.error}', { role: 'alert' }, muted))
 ];
 

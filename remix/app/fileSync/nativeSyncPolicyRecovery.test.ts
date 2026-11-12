@@ -23,7 +23,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
   const module = async (path: string, namedExports: Record<string, unknown>) => (mock as any).module(new URL(path, import.meta.url).href, { namedExports });
   await module('../activity/activityManager.ts', { activityManager: { enabled: () => true } });
   await module('../utils/rootIdentity.ts', { rootIdentity: { read: () => ({ pending: false, generation: 0 }) } });
-  await module('./syncEnrollmentRecovery.client.ts', { recoverSavedSyncEnrollments: async () => {} });
+  await module('./syncEnrollmentRecovery.client.ts', { recoverSavedSyncEnrollments: async () => ({ pendingLocalIntents: 0, durableProgress: false }) });
   await module('./journal.client.ts', { openSyncJournal: async () => ({ close() {}, jobs: () => ({ list: async () => ({ jobs }) }) }) });
   await module('./nativeSyncHost.client.ts', { getNativeSyncAdapter: () => adapter, isNativeSyncAdapterCurrent: () => true, createNativeSyncHost: async () => ({ origin: () => origin }) });
   await module('./nativeSyncTasks.client.ts', {

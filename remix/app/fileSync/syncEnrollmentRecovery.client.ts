@@ -41,7 +41,9 @@ export function chooseSavedIntentRecovery(status: RemoteSyncStatus, candidate: R
  * replay settings writes, prompt for a grant, or invent another scheduler. */
 export async function recoverSavedSyncEnrollments(ownerId: string, generation: number, signal: AbortSignal, adapter?: NativeSyncAdapter) {
 	let storage: Storage;
-	try { storage = window.localStorage; if (!storage || typeof storage.key !== 'function') return; } catch { return; }
+	const progress = { durableProgress: false };
+	try { storage = window.localStorage; if (!storage || typeof storage.key !== 'function') return { pendingLocalIntents: null, durableProgress: progress.durableProgress }; }
+	catch { return { pendingLocalIntents: null, durableProgress: progress.durableProgress }; }
 	const rendererOrigin = window.location.origin;
 	const checkIdentity = () => {
 		signal.throwIfAborted();
@@ -92,6 +94,7 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 				current();
 				const previous = state.raw;
 				state.raw = persistConfigurationDrafts(storage, key, previous, next);
+				progress.durableProgress ||= state.raw !== previous;
 				state.drafts = next;
 				window.dispatchEvent(new CustomEvent(SYNC_ENROLLMENT_RECOVERED_EVENT, { detail: { key, previous, raw: state.raw } }));
 			};
@@ -176,4 +179,20 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 			} finally { window.removeEventListener('storage', changed); release(); }
 		}
 	}
+	checkIdentity();
+	// BATCH bounds work, not acknowledgement coverage. Unprocessed/failed exact
+	// local intents remain unknown admissions until a later verified batch.
+	let pendingLocalIntents: number | null = 0;
+	try {
+		for (let index = 0; index < storage.length; index++) {
+			const key = storage.key(index); if (!key) continue;
+			const scope = savedScope(key, ownerId); if (!scope) continue;
+			if (adapter?.platform === 'ios' && scope.origin !== rendererOrigin) continue;
+			for (const draft of readConfigurationDrafts(storage.getItem(key), scope.deviceId)) {
+				if (draft.enrollment?.transport === 'local' && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' &&
+					!nativeSyncTasks.isPaused({ ...scope, rootId: draft.id })) pendingLocalIntents++;
+			}
+		}
+	} catch { pendingLocalIntents = null; }
+	return { pendingLocalIntents, durableProgress: progress.durableProgress };
 }
