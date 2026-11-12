@@ -3118,11 +3118,12 @@ email whose link points at the attacker.
       return exact 206 bytes for the signed version and Range; altered key,
       version, method, expiry, signature, or missing/changed Range must fail.
       Range-only URLs must never serve a whole object or a clamped range.
-- [ ] Download all (PR: download-all attachments): a post with two or more
-      stored attachments shows a `Download all · N files · size` pill under its
-      gallery/file rows (single-file posts and linked-only galleries show none).
-      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
-      first, then saves `<post opener>.zip`; unzip it and confirm every stored
+- [ ] Download all: at desktop and narrow mobile widths, posts and comments
+      with multiple stored attachments show no inline `Download all` pill or
+      bulk-download control in their media lightbox. Open the post/comment ⋯
+      context menu and choose **Files → Download all files (N files)**. This
+      fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1` first,
+      then saves `<post opener>.zip`; unzip it and confirm every stored
       file is present in gallery order with duplicate names suffixed ` (2)`,
       linked media listed in `links.txt`, and moderation-pending/blocked files
       absent for other viewers. The post ⋯ menu shows a **Files** section with
