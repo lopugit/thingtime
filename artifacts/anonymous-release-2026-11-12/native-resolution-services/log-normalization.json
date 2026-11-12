@@ -1,0 +1,23 @@
+{
+  "scope": "ANSI control sequences and trailing whitespace only; exact original bytes retained as deterministic gzip",
+  "files": [
+    {
+      "path": "verification-final/build.log",
+      "rawSha256": "c5c292a6f61ec34ff4116f247612e93ddd9cea3198891dbeebc52befb667f1bd",
+      "readableSha256": "9b82c7bca6e1a696e300ce0aba23071b27b195ba60b1d315b4cbdf6c49d4b7d4",
+      "rawCopy": "verification-final/build.log.raw.gz"
+    },
+    {
+      "path": "verification-final/lint.log",
+      "rawSha256": "2930a00fbe78e47e154b1bb46bb24f148c5c7393d06c9c1f558b78350af9f037",
+      "readableSha256": "9ee7962e2a7df3cf8a8d58a4765e878d0514fa5164e49d252fcdccb5a96df61c",
+      "rawCopy": "verification-final/lint.log.raw.gz"
+    },
+    {
+      "path": "verification-final/typecheck.log",
+      "rawSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "readableSha256": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+      "rawCopy": "verification-final/typecheck.log.raw.gz"
+    }
+  ]
+}

@@ -23,7 +23,7 @@ test('requiring the fixture does not execute it; opt-in still requires an exact 
 test('compiled fixture negotiates actual available account operations and refuses registered-only or false-ready advertisements', () => {
  const { assertNativeManifest, failureReceipt } = require(fixture);
  const manifest = () => ({ schemaVersion: 1, origin: 'http://127.0.0.1:19885', runtime: { provider: 'sqlite', ready: true },
-  features: { 'api.root-data': { version: '1.2.0' }, 'api.auth-register': { version: '1.4.0' }, 'api.login': { version: '1.0.0' } }, registeredFeatures: { 'api.things': { version: '1.64.0' } },
+  features: { 'api.root-data': { version: '1.2.0' }, 'api.auth-register': { version: '1.4.0' }, 'api.login': { version: '1.0.0' } }, registeredFeatures: { 'api.things': { version: '1.65.0' }, 'api.builder-workspaces': { version: '1.2.0' } },
   operations: [
    { path: '/api/root-data', methods: ['GET'], availableMethods: ['GET'] },
    { path: '/api/v1/auth/register', methods: ['POST'], availableMethods: ['POST'] },
@@ -40,6 +40,8 @@ test('compiled fixture negotiates actual available account operations and refuse
  assert.throws(() => assertNativeManifest({ ...docsShape, ok: false }, flat));
  for (const mutate of [value => { value.runtime.ready = false; }, value => { value.origin = 'https://other.invalid'; },
   value => { value.features['api.auth-register'].version = '1.3.0'; }, value => { delete value.features['api.login']; },
+  value => { value.registeredFeatures['api.builder-workspaces'].version = '1.1.0'; },
+  value => { value.features['api.builder-workspaces'] = value.registeredFeatures['api.builder-workspaces']; },
   value => { value.features['api.things'] = value.registeredFeatures['api.things']; }, value => { value.operations[0].availableMethods = []; }]) {
   const value = manifest(); mutate(value); assert.throws(() => assertNativeManifest(value));
  }

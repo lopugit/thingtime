@@ -16,7 +16,7 @@ export type WorkspaceSnapshot = {
 	nextCursor: number | null;
 };
 export async function workspaceRequest(rootId: string, body?: Record<string, unknown>, cursor?: number): Promise<any> {
-	await requireThingtimeCapability('api.builder-workspaces', '1.0.1');
+	await requireThingtimeCapability('api.builder-workspaces', '1.2.0');
 	const response = await fetch(
 		body
 			? '/api/v1/builder/workspaces'

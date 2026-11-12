@@ -25,8 +25,20 @@ inside the actual content transaction, preserving document-owner accounting and
 writer actor attribution. `things/nativeCatalogReads.ts` supplies Component and
 Schema catalog chronology, saved libraries, popularity, families and actual
 decorations; text/relevance search remains explicitly unavailable. Native tests
-for both paths are in `test:native-things`. App/token namespaces, managed kinds,
-workspace/external-source audiences and full HTTP activation remain separate.
+for both paths are in `test:native-things`. App/token namespaces, managed kinds
+and full HTTP activation remain separate.
+
+`serviceWorkspaces/access.ts` uses canonical workspace membership and scoped
+record visibility on both providers. `things/nativeExternalAudienceReads.ts`
+resolves local account-link/source metadata without credentials or remote
+fetches. Its authorization snapshots use opaque request/transaction read epochs,
+invalidated on mutation and transaction exit. Native workspace setup is owned;
+delegated workspace writes and Maps vault support remain unavailable.
+`contentExecutionGate.ts` supports native hold attachment in the exact content
+transaction, accounting and completion receipts; `creationCheckpoint` workflows
+remain separate. The native runner includes workspace/external/hold regressions.
+Hosted workspace record pagination has no 5,000-record ceiling in
+`api.builder-workspaces` 1.2.0; both clients negotiate the compatible contract.
 
 Native persistence foundation (12 November 2026):
 `things/persistence.ts` defines internal semantic content reads/transactions,

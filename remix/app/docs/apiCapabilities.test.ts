@@ -875,11 +875,11 @@ test('native aggregate chat activities have origin-scoped capability coverage', 
 
 test('service workspace clients negotiate the native builder contract', () => {
  const manifest = createApiCapabilitiesManifest();
- assert.equal(manifest.features['api.builder-workspaces'], '1.1.0');
+ assert.equal(manifest.features['api.builder-workspaces'], '1.2.0');
  assert.equal(manifest.features['api.webpages-resolve'], '1.19.0');
 
- for (const actual of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), false);
- for (const actual of ['1.0.1', '1.0.2', '1.1.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), true);
+ for (const actual of [undefined, '1.0.1', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(actual, '1.2.0'), false);
+ for (const actual of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(actual, '1.2.0'), true);
 });
 
 test('comment media readers require the attachment metadata projection', () => {

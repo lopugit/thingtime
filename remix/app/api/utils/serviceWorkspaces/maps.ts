@@ -5,10 +5,12 @@ import { listUserVault, revealUserVaultValue } from '../lopu/userVault';
 import { workspaceAccess, WorkspaceError } from './workspaces';
 import { isServiceStaff } from '../../../schemas/serviceWorkspace';
 import type { WorkspaceAccess } from './access';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
 
 // Only these explicitly browser/server-designated entries can power a workspace.
 // Ambiguous duplicate names fail closed instead of silently selecting a credential.
 export async function workspaceMapKeys(access: WorkspaceAccess, includePlaces = false) {
+	if (getBoundThingsPersistence(null)) throw new WorkspaceError(503, 'Native workspace Maps credentials require their canonical local vault adapter');
 	const { entries, groups } = await listUserVault(access.ownerId);
 	const select = async (key: string) => {
 		const matches = entries.filter(
@@ -70,6 +72,7 @@ export async function workspacePlace(user: PublicUser, input: any) {
 export async function configureWorkspaceMaps(user: PublicUser, input: any) {
 	const access = await workspaceAccess(user, input.rootId);
 	if (user.id !== access.ownerId) throw new WorkspaceError(403, 'Only the workspace owner can select Vault credentials');
+	if (getBoundThingsPersistence(null)) throw new WorkspaceError(503, 'Native workspace Maps credentials require their canonical local vault adapter');
 	const { groups } = await listUserVault(access.ownerId);
 	const groupId = input.environmentId;
 	if (groupId !== null && groupId !== '__auto__' && !groups.some((group) => group.id === groupId))

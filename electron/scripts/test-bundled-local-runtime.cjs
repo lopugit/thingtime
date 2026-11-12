@@ -71,6 +71,8 @@ async function fixture(directory) {
   assert.equal(flatResponse.status, 200, 'The flat capability manifest must be served by the built API.');
   const flatManifest = await flatResponse.json();
   assert.equal(flatManifest.features?.['api.things'], manifest.features['api.things'].version, 'Both built manifests must publish the same Things contract.');
+  assert.equal(manifest.features?.['api.builder-workspaces']?.version, '1.2.0', 'The built API must publish the workspace contract without the record ceiling.');
+  assert.equal(flatManifest.features?.['api.builder-workspaces'], '1.2.0', 'Both built manifests must agree on workspace compatibility.');
   if (Object.hasOwn(flatManifest, 'origin')) assert.equal(flatManifest.origin, origin);
   const registration = await fetch(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'bundled-mongo-synthetic', password: crypto.randomBytes(24).toString('base64url'), email: 'fixture@example.invalid' }) });
   assert.equal(registration.status, 200, 'Normal registration did not succeed.');

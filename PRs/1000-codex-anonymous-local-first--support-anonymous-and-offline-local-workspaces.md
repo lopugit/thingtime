@@ -2,6 +2,37 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native resolution permissions and holds — 12 November 2026
+
+Shared workspace access now supports the selected SQLite provider, including
+canonical owner setup, customer-scoped reads and transaction-visible revocation.
+External-source reads use only local relationship metadata. Permission snapshots
+are isolated by profile/request/transaction and invalidated by writes and exit;
+concurrent contexts cannot overwrite a shared viewer's authority.
+
+Trusted held content follows canonical creation, accounting and receipt checks.
+Native hold attachment requires the exact session and current hold identity,
+including when two differently bound holds have identical storage size. Failed
+quota or receipt operations roll back. Ordinary client input cannot mint a hold.
+
+Workspace records no longer have a 5,000-record ceiling; both clients negotiate
+the compatible 1.2.0 contract. Generic native Things, full resolve and workspace
+HTTP remain gated. Delegated workspace writes, Maps vault support and broader
+creation workflows are incomplete. SQLite remains the portable embedded option;
+MongoDB remains an explicit desktop option behind shared feature services.
+
+Verification retains 25 passing command results across two batches, reporting
+3,484 test passes and nine skips. Six test-only compiler diagnostics from the
+initial attempt are corrected and retained; runtime source stayed unchanged
+between batches. TypeScript/ratchet, lint (0 errors / 376 warnings), packaged
+build/integrity and actual Mongo/SQLite HTTP restart pass. Both built manifests
+verify workspace 1.2.0, with native full-workspace availability still withheld.
+Current Nitro SHA-256:
+`6add91618637e6b62040e8e849359eaf7f684e09e3bef07ea20f610454600f5d`.
+No iOS runtime or full native Builder UI acceptance is claimed by this checkpoint.
+
+[Current verification evidence and limitations](../artifacts/anonymous-release-2026-11-12/native-resolution-services/README.md).
+
 ## Shared native Builder and current main integration — 12 November 2026
 
 Integrated freshly fetched main `f2538e19257bcfdf35ba050e7b187c94ea2252c0`

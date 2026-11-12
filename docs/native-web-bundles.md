@@ -1,5 +1,29 @@
 # Native web bundles and offline runtime
 
+## Database portability and maintenance
+
+Keep SQLite as the embedded local provider for iOS and machines that cannot run
+MongoDB. Keep local MongoDB as an option on supported desktop systems. Each
+profile selects its provider explicitly; supporting both does not imply running
+two databases, automatic migration, or duplicate writes.
+
+Feature behavior, validation, permissions, portable Things and lifecycle rules
+belong in shared canonical services. Providers implement semantic persistence
+operations beneath those services. Exercise their shared behavior contracts on
+both providers, with additional tests for provider-specific transactions,
+indexes, migrations and performance. Avoid separate Mongo and SQLite feature
+implementations or pretending an unrestricted Mongo query translator supplies
+equivalent authorization and transaction semantics. Some existing Mongo-coupled
+services still need this separation before full offline parity is available.
+
+MongoDB currently publishes official server builds for Linux, Windows and macOS,
+not an iOS server distribution. Maintaining a custom iOS port is outside this
+architecture. SQLite is an in-process database library with no separate server
+process. Sources: [MongoDB platforms](https://www.mongodb.com/docs/manual/administration/install-community/)
+and [SQLite architecture](https://www.sqlite.org/about.html), checked 12 November
+2026. This platform decision does not establish iOS runtime acceptance; the
+Keychain, bundled API and physical-device checks below remain required.
+
 ## Canonical native content services — 12 November 2026
 
 The canonical Things service now has native Data/Folder and saved
@@ -39,8 +63,22 @@ Mongo's text-search contract. Scanning is not indexed-query parity.
 
 Native draft preview uses the protected host's public database identity, matching
 root-data, while preserving owner and origin checks. This handler correction
-does not enable the full webpage-resolve contract: service-workspace and external
-source audiences still require native authorization adapters.
+does not enable the full webpage-resolve HTTP contract.
+
+Workspace audience reads now use shared membership, moderation and linked-customer
+rules. Native owner setup reuses canonical account and content writers; delegated
+workspace writes and Maps credentials still require their protected adapters.
+External-source reads use local link/source metadata only, with no OAuth refresh,
+credential reads or outbound fetch. Permission snapshots are scoped to the actual
+request/transaction and invalidated by mutation, commit and rollback. A reused
+viewer object cannot carry a positive grant into another local profile.
+
+Trusted native creation and hold attachment share canonical validation, accounting
+and Timeline completion checks. Attaching a hold requires the exact transaction
+and current hold identity; stale replacement and quota failures roll back. Ordinary
+client input cannot mint these protected fields. The broader creation checkpoint
+coordinator remains unavailable, and positive compiled-server resolution plus
+actual rendered Builder acceptance are still required before HTTP activation.
 
 Generic native Things HTTP remains unavailable. This service slice does not yet
 support the full `api.things` contract: app/PAT namespaces, composed hooks,

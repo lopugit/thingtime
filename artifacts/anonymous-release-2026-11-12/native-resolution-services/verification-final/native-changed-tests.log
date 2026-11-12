@@ -1,0 +1,15 @@
+✔ registered SQLite account creates and attaches real protected holds with immutable receipt completion and atomic refusal (452.299292ms)
+✔ SQLite external audience unit fixtures retain canonical account/source/inherit and negative-ACL semantics (25.108833ms)
+✔ SQLite external audience metadata filters ignore malformed/foreign links and wrong source fields (7.710666ms)
+✔ SQLite external audience memo coalesces clones and misses without truncating relationship pages (629.793041ms)
+✔ same Viewer reused concurrently by a native transaction and another unlinked profile cannot exchange audience snapshots (8.786792ms)
+✔ native external audience snapshots observe transactional unlink and fresh request authority without stale viewer expansion (6.181583ms)
+✔ native external memo cannot replay a positive snapshot in a later request or escaped async scope (5.38125ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1526.32125

@@ -528,7 +528,7 @@ test('functional demo capabilities advertise compatible catalog and install cont
 
  test('workspace provider diagnostics are explicitly versioned', () => {
   const features = thingtimeCapabilityManifest('https://workspace.test').features;
-  assert.equal(features['api.builder-workspaces'].version, '1.1.0');
+  assert.equal(features['api.builder-workspaces'].version, '1.2.0');
  });
 
 
@@ -818,7 +818,7 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.65.0', '1.49.2'], ['api.things-update', '1.28.0', '1.18.1'], ['api.things-import', '1.15.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.9.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.3.0', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.65.0', '1.49.2'], ['api.things-update', '1.28.0', '1.18.1'], ['api.things-import', '1.15.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.9.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.3.0', '2.1.0'], ['api.builder-workspaces', '1.2.0', '1.1.0']]) {
   assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);

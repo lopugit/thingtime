@@ -4,7 +4,8 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { createThing, getThing, updateThing, viewerOf } from '../things/things';
 import type { PublicUser } from '../auth/users';
 import { findUserByUsername } from '../auth/users';
-import { loadWorkspaceAccess, MAX_WORKSPACE_RECORDS, workspaceCanWrite, type WorkspaceAccess } from './access';
+import { loadWorkspaceAccess, workspaceCanWrite, type WorkspaceAccess } from './access';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
 import {
 	SERVICE_FIELDS,
 	SERVICE_KINDS,
@@ -119,6 +120,7 @@ export async function workspaceAccess(user: PublicUser, rootId: unknown): Promis
 }
 export async function readWorkspace(user: PublicUser, rootId: unknown, cursor = 0) {
 	const access = await workspaceAccess(user, rootId);
+	if (getBoundThingsPersistence(null)) throw new WorkspaceError(503, 'Native workspace dashboard Maps credentials require their canonical local vault adapter');
 	const records = access.records.filter((r) => access.visibleIds.has(r.id)).sort((a, b) => a.id.localeCompare(b.id));
 	const maps = await workspaceMapKeys(access).catch(() => ({ browserKey: null, groups: [] }));
 	const start = Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : 0;
@@ -173,6 +175,7 @@ export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 	if (!isServiceKind(input.kind)) throw new WorkspaceError(400, 'Unknown record type');
 	const kind = input.kind;
 	if (!workspaceCanWrite(access, kind)) throw new WorkspaceError(403, 'Your role cannot change these records');
+	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	let values: Record<string, any>;
 	try {
 		values = validateServiceValues(kind, input.values, access.config.timeZone);
@@ -202,7 +205,6 @@ export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 	if (existing && existing.kind !== kind) throw new WorkspaceError(409, 'Record type cannot change');
 	if (existing && (typeof input.expectedUpdatedAt !== 'string' || input.expectedUpdatedAt !== existing.updatedAt))
 		throw new WorkspaceError(409, 'This record changed. Refresh before saving your edits.');
-	if (!existing && access.records.length >= MAX_WORKSPACE_RECORDS) throw new WorkspaceError(409, 'Workspace record limit reached');
 	if (kind === 'link') {
 		const duplicate = access.records.find(
 			(r) =>
@@ -258,6 +260,7 @@ export async function archiveWorkspaceRecord(user: PublicUser, input: any) {
 	const record = access.records.find((r) => r.id === input.id);
 	if (!record) throw new WorkspaceError(404, 'Record not found');
 	if (!workspaceCanWrite(access, record.kind)) throw new WorkspaceError(403, 'Your role cannot archive this record');
+	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	if (record.kind === 'member' && record.values.userId === access.ownerId) throw new WorkspaceError(400, 'The workspace owner is always an Admin');
 	if (input.expectedUpdatedAt !== record.updatedAt) throw new WorkspaceError(409, 'Record changed. Refresh first.');
 	check(
@@ -273,6 +276,7 @@ export async function archiveWorkspaceRecord(user: PublicUser, input: any) {
 export async function moveWorkspaceVisit(user: PublicUser, input: any) {
 	const access = await workspaceAccess(user, input.rootId);
 	if (!isServiceStaff(access.role)) throw new WorkspaceError(403, 'Only staff can schedule visits');
+	if (getBoundThingsPersistence(null) && user.id !== access.ownerId) throw new WorkspaceError(503, 'Native delegated workspace writes require transaction-bound role authorization');
 	const visit = relatedRecord(access, id(input.id), 'visit');
 	let values;
 	try {

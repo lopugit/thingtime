@@ -1,5 +1,6 @@
 import { getBoundThingsPersistence } from './persistenceContext';
 import { NATIVE_ORDINARY_CONTENT_KINDS, nativeOrdinaryThingSupported, nativeOrdinaryUnavailable, insertNativeOrdinaryThing, updateNativeOrdinaryThing, deleteNativeOrdinaryThing } from './nativeOrdinaryPersistence';
+import { ensureNativeExtAccountIds, ensureNativeExtSourced } from './nativeExternalAudienceReads';
 import { withGatewayWork } from '../deployment/environmentGateway';
 import { currentUserIdentityRepository } from '../auth/userIdentityRepository';
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
@@ -620,6 +621,8 @@ const extAccountIdsLoad = new WeakMap<object, Promise<void>>();
 // same viewer reference per doc, so the home-DB links query runs at most once
 // per request path instead of once per external post on the page.
 const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
+  const native = ensureNativeExtAccountIds(viewer);
+  if (native) return native;
   if (!viewer?.id || viewer.extAccountIds) return viewer;
   let load = extAccountIdsLoad.get(viewer);
   if (!load) {
@@ -695,6 +698,8 @@ const extSourcedResolution = new WeakMap<object, Map<string, Promise<void>>>();
 // indexed existence check per previously-unseen post; the feed path primes
 // instead, so this only ever fires for single-doc reads.
 const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
+  const native = ensureNativeExtSourced(viewer, postId);
+  if (native) return native;
   if (!viewer?.id || !postId) return viewer;
   let asked = extSourcedResolution.get(viewer);
   if (!asked) {
@@ -1474,7 +1479,7 @@ export const createThing = async (
   if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
-  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => key !== 'timelineCapture') || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
+  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => !['timelineCapture', 'executionHold'].includes(key)) || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
 
   // saves (the user's personal library) and shares (public social reposting)
   // are first-party surfaces — an app acting as the user must not write into
@@ -3130,7 +3135,6 @@ export const canViewInherited = async (
   });
   if (ancestorDenied) return false;
   if (terminal) {
-    if (getBoundThingsPersistence(null) && (hasExtSourcedAudience(terminal) || hasExtacctAudience(terminal) || workspaceRootFor(terminal))) return false;
     // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
     // their comment chains) resolve live against the viewer's connections —
     // loaded lazily here and memoised on the viewer object for the request path.
@@ -3139,12 +3143,12 @@ export const canViewInherited = async (
     // found-post fallback below (withFoundPostGrant spreads the same viewer).
     // It also has to precede the hidden-link viewer below, since withThingLink
     // spreads `viewer` and would otherwise snapshot it before the memo lands.
-    if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
-    if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
+    if (hasExtSourcedAudience(terminal)) viewer = await ensureExtSourced(viewer, terminal.shareId);
+    if (hasExtacctAudience(terminal)) viewer = await ensureExtAccountIds(viewer);
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
-    if (getBoundThingsPersistence(null)) return false;
     if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
+    if (getBoundThingsPersistence(null)) return false;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }

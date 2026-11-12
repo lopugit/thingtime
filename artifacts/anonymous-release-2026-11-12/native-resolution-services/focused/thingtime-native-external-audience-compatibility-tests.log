@@ -1,0 +1,21 @@
+(node:40665) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40665) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ a linked viewer sees every chain entry converging on one external post, at any stagger (3.487959ms)
+✔ a viewer who sources nothing is denied, and the denial is memoised too (0.219542ms)
+✔ a viewer linked to some OTHER account is denied this post (0.102291ms)
+✔ linked comment references share external membership reads without sharing source permissions (1.008875ms)
+✔ SQLite external audience unit fixtures retain canonical account/source/inherit and negative-ACL semantics (105.823416ms)
+✔ SQLite external audience metadata filters ignore malformed/foreign links and wrong source fields (19.903708ms)
+✔ SQLite external audience memo coalesces clones and misses without truncating relationship pages (2313.383375ms)
+✔ same Viewer reused concurrently by a native transaction and another unlinked profile cannot exchange audience snapshots (17.086916ms)
+✔ native external audience snapshots observe transactional unlink and fresh request authority without stale viewer expansion (9.944834ms)
+✔ native external memo cannot replay a positive snapshot in a later request or escaped async scope (10.329208ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4888.300417

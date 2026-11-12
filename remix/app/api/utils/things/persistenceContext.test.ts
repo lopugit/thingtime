@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BSON } from 'mongodb';
-import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead } from './persistenceContext';
+import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead, nativeThingsReadMemoKey } from './persistenceContext';
 import { getThingsTransactionBinding, type ThingsPersistence, type ThingsTransaction } from './persistence';
 import type { TimelinePersistence } from '../timeline/persistence';
 import { createNativeHomeAuthRepositories } from '../documentStore/nativeUserIdentities';
@@ -32,6 +32,67 @@ async function fixture(t: TestContext) {
  });
  return { provider, auth, context, run: <T>(work: () => T | Promise<T>) => auth.run(() => context.run(work)) };
 }
+
+test('native memo identities are empty and isolated by live request and exact SQLite transaction', async t => {
+ const f = await fixture(t);
+ assert.equal(nativeThingsReadMemoKey(), null);
+ await assert.rejects(f.auth.run(() => nativeThingsReadMemoKey()), /request scope/);
+ const keys = new Set<object>();
+ for (let request = 0; request < 2; request++) await f.run(async () => {
+  let requestKey = nativeThingsReadMemoKey()!;
+  assert.deepEqual(Reflect.ownKeys(requestKey), []);
+  assert.equal(nativeThingsReadMemoKey(), requestKey);
+  assert.equal(keys.has(requestKey), false); keys.add(requestKey);
+  const repository = getBoundThingsPersistence(ownerId)!;
+  for (let transaction = 0; transaction < 2; transaction++) {
+   let effectKey!: object;
+   const previousRequestKey = requestKey;
+   await repository.transaction('write', async tx => {
+   assert.equal(getThingsTransactionBinding(tx, ownerId).kind, 'native');
+   const key = nativeThingsReadMemoKey()!;
+   assert.equal(nativeThingsReadMemoKey(), key);
+   assert.equal(keys.has(key), false); keys.add(key);
+   assert.deepEqual(Reflect.ownKeys(key), []);
+   assert.equal(Object.getPrototypeOf(key), null); assert.equal(Object.isFrozen(key), true);
+   await Promise.resolve(); assert.equal(nativeThingsReadMemoKey(), key);
+   await tx.insert(document(`memo-${request}-${transaction}`));
+   const mutated = nativeThingsReadMemoKey()!;
+   assert.notEqual(mutated, key); assert.equal(keys.has(mutated), false); keys.add(mutated);
+   await tx.readExact(`memo-${request}-${transaction}`);
+   assert.equal(nativeThingsReadMemoKey(), mutated);
+   tx.afterCommit(async () => { effectKey = nativeThingsReadMemoKey()!; assert.notEqual(effectKey, previousRequestKey); assert.notEqual(effectKey, key); });
+   });
+   requestKey = nativeThingsReadMemoKey()!;
+   assert.equal(requestKey, effectKey);
+   assert.equal(keys.has(requestKey), false); keys.add(requestKey);
+  }
+ });
+ assert.equal(keys.size, 14);
+});
+
+test('memo keys reject expired descendants, invalid native bindings and caught transaction failures', async t => {
+ const f = await fixture(t);
+ let resume!: () => void, descendant!: Promise<unknown>;
+ const release = new Promise<void>(resolve => { resume = resolve; });
+ await f.run(() => { descendant = release.then(() => nativeThingsReadMemoKey()); });
+ resume(); await assert.rejects(descendant, /request scope/);
+ let resumeTransaction!: () => void, transactionDescendant!: Promise<unknown>;
+ const transactionRelease = new Promise<void>(resolve => { resumeTransaction = resolve; });
+ await assert.rejects(f.run(async () => {
+  await getBoundThingsPersistence(ownerId)!.transaction('write', async () => {
+   transactionDescendant = transactionRelease.then(() => nativeThingsReadMemoKey());
+  });
+  resumeTransaction(); await assert.rejects(transactionDescendant, /request scope/);
+ }), /request scope/);
+ await assert.rejects(f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async () => {
+  assert.throws(() => getBoundThingsPersistence('foreign'), /request scope/);
+  assert.throws(() => nativeThingsReadMemoKey(), /request scope/);
+ })), /request scope/);
+ const previous = Object.getOwnPropertyDescriptor(globalThis, NATIVE_HOME_HOST_KEY);
+ Object.defineProperty(globalThis, NATIVE_HOME_HOST_KEY, { configurable: true, value: undefined });
+ try { assert.throws(() => nativeThingsReadMemoKey(), /request scope/); }
+ finally { if (previous) Object.defineProperty(globalThis, NATIVE_HOME_HOST_KEY, previous); else Reflect.deleteProperty(globalThis, NATIVE_HOME_HOST_KEY); }
+});
 
 test('real SQLite request selection preserves exact transaction binding and expires cached handles', async t => {
  const f = await fixture(t); let repository!: ThingsPersistence, transaction!: ThingsTransaction;

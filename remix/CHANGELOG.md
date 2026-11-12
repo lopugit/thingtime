@@ -160,6 +160,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Reuse workspace authorization and trusted creation holds on SQLite,
+  with local external-source audience reads and mutation-scoped permission
+  snapshots. Preserve canonical accounting, receipt and private-data boundaries.
+  Remove the workspace record ceiling with the compatible 1.2.0 contract; full
+  native workspace/Things/resolve HTTP and iOS runtime acceptance remain pending.
+  See [PR #1000's note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
 - 2026-11-12: Extend SQLite Builder services with transaction-checked collaborator
   writes, canonical dependency resolution and native catalog reads. Bind draft
   preview to the protected runtime's public database identity. Full native Things,

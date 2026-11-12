@@ -4,17 +4,25 @@ import { applyUserStorageDelta } from '../storage/userStorage';
 import { currentContentStorageSizeBytes, StorageMutationError } from '../storage/storageCore';
 import { newThingMutationCapture, recordThingMutation, type ThingMutationCapture } from '../timeline/recordMutation';
 import { getThingsTransactionBinding, matchesThingVersion, type StoredThing, type ThingsPersistence, type ThingsTransaction } from './persistence';
+import { contentExecutionHold } from './contentExecutionGate';
 
 /** Temporary admission boundary for the first canonical service vertical slice.
  * Unsupported composition/namespace families remain unavailable until their
  * canonical dependencies have semantic ports; they never fall through to Mongo. */
 export const NATIVE_ORDINARY_CONTENT_KINDS = ['data', 'folder', 'component', 'schema', 'webpage'] as const;
 export function nativeOrdinaryThingSupported(row: StoredThing): boolean {
+ if (row.executionHold != null) {
+  try { contentExecutionHold(row.executionHold); } catch { return false; }
+ }
  const contentKinds = Array.isArray(row.thingtime) ? row.thingtime.filter((kind: string) => kind !== BUILDER_THING_KIND) : [];
  return contentKinds.length === 1 && NATIVE_ORDINARY_CONTENT_KINDS.some(kind => kind === contentKinds[0]) &&
   row.appId == null && row.sandboxSpace == null && row.sandboxExpiresAt == null && row.targetId == null &&
-  row.executionHold == null && row.creationCheckpoint == null && row.libraryArchived !== true && row.subspacePrivate !== true &&
-  row.extended?.serviceWorkspaceId == null && row.crystal?.workspaceId == null &&
+  row.creationCheckpoint == null && row.libraryArchived !== true && row.subspacePrivate !== true &&
+  // Workspace records and page bindings use the same owned Data/Webpage
+  // writes. Their audience is resolved by the canonical workspace service;
+  // delegated workspace mutations retain their separate authorization gate.
+  (row.extended?.serviceWorkspaceId == null || contentKinds[0] === 'webpage') &&
+  (row.crystal?.workspaceId == null || contentKinds[0] === 'data') &&
   (!Array.isArray(row.acl) || !row.acl.some((entry: string) => { const value = entry.startsWith('-') ? entry.slice(1) : entry; return value === 'tt:extsourced' || value.startsWith('tt:extacct/') || value === 'tt:inherit'; }));
 }
 export const nativeOrdinaryUnavailable = () => ({ ok: false as const, status: 503, error: 'This operation requires canonical dependencies that are not yet available on native storage' });

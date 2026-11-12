@@ -1,10 +1,12 @@
 import { isTimelinePersistence } from '../timeline/persistence';
+import { isDeepStrictEqual } from 'node:util';
 import { getThingsCollection } from '../mongodb/collections';
 import { readTimelineEntries } from '../timeline/repository';
 import type { TimelineEvent } from '../../../timeline/contract';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { withBoundTimelineRead } from './persistenceContext';
+import { getThingsTransactionBinding, matchesThingVersion, type ThingsTransaction } from './persistence';
 
 export const CREATION_COMPLETION_ADAPTER = 'reviewed-creation-graph-result';
 export type ContentExecutionHold = {
@@ -24,14 +26,26 @@ export function contentExecutionHold(input: ContentExecutionHold): ContentExecut
 /** Trusted composition may attach a new hold to an already-restored ordinary
  * folder. Never replace an active hold or change user content/timestamps. The
  * envelope delta and epoch belong to the same current-owner transaction. */
-export async function attachContentExecutionHold(things: any, before: any, input: ContentExecutionHold, session: any) {
+export async function attachContentExecutionHold(things: any, before: any, input: ContentExecutionHold, session: any, transaction?: ThingsTransaction) {
  const hold = contentExecutionHold(input);
- if (!session?.inTransaction?.() || !before?.ownerId || currentContentStorageSizeBytes(before) === null) throw new StorageMutationError(409, 'storage_conflict', 'Execution hold requires accounted owned content');
+ const native = isTimelinePersistence(things);
+ if (native) {
+  if (!transaction || !before?.ownerId) throw new StorageMutationError(409, 'storage_conflict', 'Execution hold requires its native content transaction');
+  const binding = getThingsTransactionBinding(transaction, before.ownerId);
+  if (binding.kind !== 'native' || binding.session !== session) throw new StorageMutationError(409, 'storage_conflict', 'Execution hold requires the exact native content session');
+  things.assertTransaction(binding.session);
+ }
+ if ((!native && !session?.inTransaction?.()) || !before?.ownerId || currentContentStorageSizeBytes(before) === null) throw new StorageMutationError(409, 'storage_conflict', 'Execution hold requires accounted owned content');
+ const expected = { id: before.shareId, identity: before._id, updatedAt: before.updatedAt, headId: before.timelineHeadId ?? null, sizeBytes: before.sizeBytes };
+ if (native) {
+  const current = await transaction!.readExact(before.shareId);
+  if (!current || current.ownerId !== before.ownerId || !matchesThingVersion(current, expected) || !isDeepStrictEqual(current.executionHold, before.executionHold)) throw new StorageMutationError(409, 'storage_conflict', 'Content changed before attaching execution hold');
+ }
  if (before.executionHold && JSON.stringify(before.executionHold) !== JSON.stringify(hold) && await contentExecutionHeld(before, things, session)) throw new StorageMutationError(409, 'storage_conflict', 'Another creation still owns this content');
  const after = { ...before, executionHold: hold }; after.sizeBytes = thingStorageSizeBytes(after);
  await applyUserStorageDelta(before.ownerId, after.sizeBytes - before.sizeBytes, session);
- const changed = await things.updateOne({ _id: before._id, shareId: before.shareId, ownerId: before.ownerId, timelineHeadId: before.timelineHeadId, sizeBytes: before.sizeBytes }, { $set: { executionHold: hold, sizeBytes: after.sizeBytes } }, { session });
- if (changed.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Content changed before attaching execution hold');
+ const changed = native ? await transaction!.compareAndSwap(expected, after) : (await things.updateOne({ _id: before._id, shareId: before.shareId, ownerId: before.ownerId, timelineHeadId: before.timelineHeadId, sizeBytes: before.sizeBytes }, { $set: { executionHold: hold, sizeBytes: after.sizeBytes } }, { session })).matchedCount === 1;
+ if (!changed) throw new StorageMutationError(409, 'storage_conflict', 'Content changed before attaching execution hold');
  await recordCreationContentEpoch(things, before, after, session);
 }
 

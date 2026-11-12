@@ -43,6 +43,26 @@ from these service fixtures.
   anonymous requests, missing identity and expired scopes must refuse. Test the
   composed handler and keep full resolve HTTP unavailable until its workspace
   and external-source audience contract is supported.
+- Native workspace authorization must use canonical account/workspace creation
+  for its positive fixtures, preserve Admin/staff/customer/B2B visibility, read
+  beyond internal page windows, and reject foreign roots, PATs and moderated
+  membership. Revoke membership or a customer link inside a transaction and
+  verify the same viewer immediately loses access, including after commit.
+  Shared hosted/native access rules must accept workspaces beyond the former
+  5,000-record ceiling; negotiate `api.builder-workspaces` 1.2.0.
+- External-source audience fixtures must distinguish home account links from
+  content source relations, preserve legacy link identity, and ignore credential
+  expiry as a read-permission signal. Exercise negative ACLs, inherited roots,
+  source/link removal, reused viewer snapshots and simultaneous different
+  profiles. Cached positives must not survive a mutation, commit, rollback or
+  expired context. Relationship unit fixtures are not provider-connection E2E.
+- Held native content must use trusted canonical creation/attachment and actual
+  Timeline receipts. Ordinary input cannot mint a protected hold. Verify valid
+  completion, wrong actor/binding/count, immutable conflicting receipts, reopen,
+  exact session, stale same-size hold replacement and atomic quota rollback.
+  Label synthetic ledger fault injection separately from canonical lifecycle
+  acceptance. Keep HTTP unavailable until the complete advertised contract has
+  positive compiled-server and rendered-UI acceptance.
 
 When integrating parallel API additions, reject the earlier colliding capability
 version before mutation. The combined Things 1.65 contract must refuse 1.64 for

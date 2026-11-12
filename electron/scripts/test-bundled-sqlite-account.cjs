@@ -218,6 +218,8 @@ function assertNativeManifest(manifest, { kind = 'well-known', expectedOrigin = 
   assert.match(version(manifest.features?.['api.login']) || '', /^1\./);
   assert.equal(Object.hasOwn(manifest.features || {}, 'api.things'), false);
   assert.ok(manifest.registeredFeatures?.['api.things']);
+  assert.equal(version(manifest.registeredFeatures?.['api.builder-workspaces']), '1.2.0');
+  assert.equal(Object.hasOwn(manifest.features || {}, 'api.builder-workspaces'), false, 'Partial native workspace services must not advertise the full HTTP contract.');
  });
  check('manifest-operations', () => { for (const [route, method, available] of [['/api/root-data', 'GET', true], ['/api/v1/auth/register', 'POST', true], ['/api/v1/login', 'POST', true], ['/api/v1/things', 'GET', false]]) {
   const operation = manifest.operations?.find(item => item.path === route && item.methods.includes(method));

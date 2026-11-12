@@ -1,0 +1,18 @@
+[attachments] session replacement draft scan failed (NativeHomeMongoUnavailableError)
+[notifications] emit failed: Native notification history was saved; external delivery is unavailable
+✔ real Nitro dispatcher uses protected SQLite composition for canonical registration/login/session/roster and actor preconditions (1934.7675ms)
+✔ protected SQLite bootstrap pins keys/profile/file, reopens and reports only tested operation readiness (33.662583ms)
+✔ malformed selection, missing/mismatched protected keys, symlinks and populated foreign files refuse before composition (3.487125ms)
+✔ native operation/origin/selection preconditions refuse before handler and preserve expected-plane semantics (19.468542ms)
+✔ concurrent requests enter separate async repository scopes, active shutdown refuses and errors remain sanitized (5.563959ms)
+✔ cross-site webmail verification navigation remains token-validated while cross-site fetch/mutations refuse (5.005084ms)
+✔ applied protected JWT/vault identity must remain pinned on every admitted request (4.591ms)
+✔ normal disposal and failed composition validation retire the owned composition/provider/key copies exactly once (7.723708ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2536.262459

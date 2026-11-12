@@ -15,6 +15,7 @@ type Scope = {
 const scopes = new AsyncLocalStorage<Scope>();
 type ActiveTransaction = { scope: Scope; transaction: ThingsTransaction; selectionScope: ThingsScope; active: boolean; failed: boolean; failure: unknown };
 const transactions = new AsyncLocalStorage<ActiveTransaction>();
+const readMemoKeys = new WeakMap<object, object>();
 const refuse = (scope?: Scope): never => {
  const error = new Error('Things persistence: expired or foreign request scope');
  if (scope) scope.failure ??= error;
@@ -39,6 +40,24 @@ function activeTransaction(scope: Scope): ActiveTransaction | undefined {
  return active;
 }
 const poison = (active: ActiveTransaction | undefined, error: unknown) => { if (active?.active && !active.failed) { active.failed = true; active.failure = error; } };
+
+/** Empty opaque cache identity only. Fresh native transactions cannot inherit
+ * authorization memo state from request preparation or an earlier transaction.
+ * Request/provider/identity and transaction lifetimes are checked on every read. */
+export function nativeThingsReadMemoKey(): object | null {
+ const scope = scopes.getStore();
+ if (!scope) {
+  if (currentUserIdentityRepository() || hasNativeHomeSelection()) return refuse();
+  return null;
+ }
+ check(scope);
+ const identity = activeTransaction(scope)?.transaction ?? scope;
+ const existing = readMemoKeys.get(identity);
+ if (existing) return existing;
+ const key: object = Object.freeze(Object.create(null));
+ readMemoKeys.set(identity, key);
+ return key;
+}
 
 /** An internal selection, never authentication. Canonical services establish
  * actor authority and authorize all read candidates before exposing content.
@@ -140,14 +159,20 @@ function createBoundRepository(scope: Scope, ownerId: string | null): ThingsPers
    // protected binding by identity. Guard its semantic methods in place.
    for (const key of ['readExact', 'readBatch', 'readWindow', 'insert', 'compareAndSwap', 'remove', 'folderAncestors', 'folderChildren', 'lockFolder'] as const) {
     const operation = transaction[key] as (...args: any[]) => Promise<any>;
-    (transaction as any)[key] = (...args: any[]) => guard(() => operation(...args));
+    (transaction as any)[key] = (...args: any[]) => guard(async () => {
+     const result = await operation(...args);
+     if (['insert', 'compareAndSwap', 'remove', 'lockFolder'].includes(key) && result !== false && result !== null) {
+      readMemoKeys.delete(transaction); readMemoKeys.delete(scope);
+     }
+     return result;
+    });
    }
    const afterCommit = transaction.afterCommit;
-   transaction.afterCommit = effect => { check(scope); afterCommit(() => transactions.exit(() => guard(effect))); };
+   transaction.afterCommit = effect => { check(scope); afterCommit(() => transactions.exit(() => { readMemoKeys.delete(scope); return guard(effect); })); };
    const active: ActiveTransaction = { scope, transaction, selectionScope: source.scope, active: true, failed: false, failure: undefined };
    return transactions.run(active, async () => {
     try { const result = await work(transaction); activeTransaction(scope); check(scope); return result; }
-    finally { active.active = false; }
+    finally { active.active = false; readMemoKeys.delete(scope); }
    });
   })),
   close() { closed = true; source.close(); }
