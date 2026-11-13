@@ -169,3 +169,24 @@ checks desktop/mobile rendering and saved controls.
 The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
 covers saved/embedded render declarations, exact saved content and both embed
 placements with rendered/data views and reload.
+
+
+## Private Messenger notification delivery
+
+`app/api/utils/messenger/messageNotifications.ts` runs cursor-paged, bounded
+post-commit fanout through canonical `notifications.emitNotificationOnce`.
+`sendMessage` and exact-request reconciliation both schedule this request-owned
+work. Every recipient retains current `resolveChatAccess` checks (including
+linked-subspace access); message content stays in the chat. Active members get
+`chat-message`; pending members get one coalesced `chat-request`, and acceptance
+never replays it. Muted delivery retains history only. The notification registry,
+UI copy/preferences, APNs and email template share these actor-preserving types.
+Event deduplication and request coalescing use the existing protected root
+`uniqueKeys` index; notification IDs retain their ordinary random identities. External delivery after persistence
+is best effort, not an exactly-once transport guarantee. API contracts are
+`api.chats-messages` 1.7.0 and notification list/settings 1.9.0. Run
+`test:messenger`, `test:notifications`, `test:api-capabilities` and the Messenger
+manual checklist in `TESTING.md`.
+`node remix/scripts/verify-message-notifications.mjs --ui` exercises the compiled
+handler with a disposable replica, synthetic Character and owner, and isolated
+Chrome receiver views. See `TESTING.md` for its optional browser prerequisites.

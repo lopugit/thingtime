@@ -7430,6 +7430,25 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
+- [ ] With a distinct Character sender and an independently signed-in recipient,
+      send an ordinary DM and an unknown-sender request. Verify actor-attributed
+      bell/history entries, request acceptance without replay, and conversation
+      links on desktop/mobile. Keep message text and attachment metadata out of
+      notifications and native/email payloads. Retry the exact send request ID;
+      history and native delivery must not duplicate. Muting retains history
+      only; disabling push retains history but hides bell/delivery. Revoke chat
+      or subspace membership before fanout and verify no new disclosure. Test
+      groups beyond one recipient batch without missing members or unbounded
+      concurrent delivery. Physical device display remains a separate check.
+
+Run `node remix/scripts/verify-message-notifications.mjs` from the repository
+root after the canonical Remix build, with `mongod` on PATH. It owns a unique
+loopback replica and synthetic accounts and exercises the compiled Vercel
+handler through HTTP. Add `--ui` with Playwright available (or
+`PLAYWRIGHT_MODULE` pointing to its module) for desktop/390px receiver checks;
+`CHROMIUM_EXECUTABLE` may select an installed Chrome for Testing binary.
+The harness removes its browser, server and disposable database on exit.
+
 Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
 running dev stack (86 live-API checks: permissions, requests, receipts,
 reactions, custom emojis, generic-things escape hatches). Then in a browser:

@@ -102,3 +102,14 @@ test('category chips and the type dropdown never contradict each other', () => {
   assert.equal(withNotificationCategory(typed, 'system').type, 'action-run');
   assert.equal(withNotificationCategory(typed, 'all').type, 'action-run');
 });
+
+
+test('Character chat notifications retain the actor and link to conversations or requests', () => {
+  for (const type of ['chat-message', 'chat-request'] as const) {
+    const href = type === 'chat-request' ? '/messages?view=requests' : '/messages?chat=chat-id';
+    const item = row({ type, actorId: 'character', actorName: 'Watchdog', href });
+    assert.equal(isSystemNotification(item), false);
+    assert.equal(notificationHeadline(item).actor, 'Watchdog');
+    assert.equal(notificationHref(item), href);
+  }
+});

@@ -388,7 +388,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	const manifest = createApiCapabilitiesManifest();
 
 	assert.equal(manifest.features['api.notifications-devices'], '1.3.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.8.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.9.0');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
@@ -403,8 +403,8 @@ test('notification contracts publish the history filters and the system family a
 	const manifest = createApiCapabilitiesManifest();
 
 	// Preserve both subspace notifications and private recording reminders.
-	assert.equal(manifest.features['api.notifications-list'], '1.8.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.8.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.9.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.9.0');
 	assert.equal(manifest.features['api.things-vote'], '1.2.0');
 });
 
@@ -569,8 +569,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	assert.equal(manifest.features['api.subspaces-delete'], '1.3.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
-	assert.equal(manifest.features['api.notifications-list'], '1.8.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.8.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.9.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.9.0');
 });
 
 test('subspace join requests + posting-approval requests publish their contract versions', () => {
@@ -1179,7 +1179,7 @@ test('provider icons negotiate their own public route without changing OAuth con
 
 
 test('incoming share message contracts advertise uncapped content consistently', () => {
- const required = { 'api.chats-messages': '1.6.0', 'api.chats-messages-edit': '1.3.0' };
+ const required = { 'api.chats-messages': '1.7.0', 'api.chats-messages-edit': '1.3.0' };
  const route = createApiCapabilitiesManifest(Object.keys(routeModules));
  const runtime = thingtimeCapabilityManifest('https://incoming-share.test');
  for (const [feature, version] of Object.entries(required)) {

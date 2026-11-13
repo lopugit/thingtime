@@ -160,6 +160,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Save private Messenger message/request notifications in canonical
+  bell/history with Character attribution, content-free previews, muted-history
+  handling, retry deduplication and bounded post-commit delivery. **Codex (AI)**
+
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
   cached results during explicitly permitted filter changes while clearing
