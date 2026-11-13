@@ -8,6 +8,16 @@ on:
         required: false
         default: 0
         type: number
+      retirement_deployment_ids:
+        description: JSON array of reviewed deployment IDs; manual PR 0 maintenance only
+        required: false
+        default: ''
+        type: string
+      retirement_dry_run:
+        description: Verify the exact retirement selection without changing deployments
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -99,6 +109,9 @@ jobs:
       head_ref: ${{ steps.plan.outputs.head_ref }}
       expected_ready_at: ${{ steps.plan.outputs.expected_ready_at }}
     env:
+      PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
+      PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      PREVIEW_RETIREMENT_REPORT_PATH: ${{ runner.temp }}/preview-retirement-report.json
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -206,6 +219,9 @@ jobs:
       issues: write
       pull-requests: write
     env:
+      PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
+      PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      PREVIEW_RETIREMENT_REPORT_PATH: ${{ runner.temp }}/preview-retirement-report.json
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -286,6 +302,15 @@ jobs:
         with:
           name: pr-preview-receipt-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/pr-preview-upload-receipt.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Preserve sanitized retirement policy and candidate decisions
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-retirement-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/preview-retirement-report.json
           if-no-files-found: ignore
           retention-days: 7
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
@@ -540,7 +541,7 @@ const deployEnvironment = async ({ config, payload, pullRequest, environment, ro
 		const ready = await waitForDeployment(config, pullRequest, environment, deployment);
 		await assertCurrentPullRequest(config, payload);
 		row.persistentUrl = await assignAlias(config, pullRequest, environment, ready);
-		await verifyPublishedPreview(row.persistentUrl);
+		await verifyPublishedPreview(row.persistentUrl, { fetcher: fetchProtectedDeployment });
 		await assertCurrentPullRequest(config, payload);
 		row.status = 'ready';
 		row.builtAt = deploymentBuiltAt(ready);

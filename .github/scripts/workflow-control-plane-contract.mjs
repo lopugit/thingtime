@@ -1318,10 +1318,28 @@ export function assertControlPlaneContract() {
     /github\.event\.client_payload\.admin_preview == '1'[\s\S]*environment: vercel-develop-pr-control/u,
     "admin preview dispatches are authenticated in the protected controller environment",
   );
-  assert.doesNotMatch(
-    adminPreviewPrepareJob,
-    /VERCEL_API_TOKEN|secrets\.(?!CONFLICT_RESOLVER_PAT\b)/u,
-    "admin preview preparation may use only the existing repository automation PAT, never a Vercel or other credential",
+  // Policy admission already requires this exact protected HMAC credential.
+  // Keep the exception closed to those two names; builds still receive none.
+  const assertAdminPrepareCredentials = (job) => {
+    assert.doesNotMatch(
+      job,
+      /VERCEL_API_TOKEN|secrets\.(?!(?:CONFLICT_RESOLVER_PAT|THINGTIME_CI_ROUTER_SECRET)\b)/u,
+      "admin preview preparation permits only its repository PAT and scoped policy HMAC, never Vercel or unrelated credentials",
+    );
+    assert.match(
+      job,
+      /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u,
+      "admin preparation binds the policy HMAC to its exact existing secret name",
+    );
+  };
+  assertAdminPrepareCredentials(adminPreviewPrepareJob);
+  assert.throws(
+    () => assertAdminPrepareCredentials(adminPreviewPrepareJob.replace("secrets.THINGTIME_CI_ROUTER_SECRET", "secrets.VERCEL_DEPLOY_TOKEN")),
+    /never Vercel or unrelated credentials/u,
+  );
+  assert.throws(
+    () => assertAdminPrepareCredentials(`${adminPreviewPrepareJob}\n      VERCEL_API_TOKEN: forbidden`),
+    /never Vercel or unrelated credentials/u,
   );
   assert.match(
     adminPreviewPrepareJob,

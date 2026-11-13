@@ -1,3 +1,4 @@
+import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { appendFile } from 'node:fs/promises';
@@ -28,7 +29,7 @@ export function requireStorageReady(manifest, health, origin, minimumVersion = '
   return { state: 'ready', accountingVersion: health.storageAccounting.expectedVersion };
 }
 
-async function readStorageJson(origin, path, { fetcher = fetch, signal } = {}) {
+async function readStorageJson(origin, path, { fetcher = fetchProtectedDeployment, signal } = {}) {
   // Never follow a health endpoint to a login, a different origin or a proxy target.
   if (new URL(origin).origin !== origin || !origin.startsWith('https://')) throw failure('invalid-origin');
   let response;
