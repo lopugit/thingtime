@@ -792,6 +792,16 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+### Branch health diagnostics
+
+Health frontend 1.0.1, MongoDB 1.0.3, Nitro 1.3.1 and Vercel 1.0.1 preserve
+the selected Branch target. `health/statusTarget.ts` checks anonymously, rejects
+redirects and bounds headers, bodies and legacy fallback by one 3.5s deadline.
+Only an observed 401/403 from the exact platform-generated branch/deployment
+origin gets the redacted authentication-required label. No bypass credential is
+sent, so public diagnostics cannot grant access to protected previews.
+Run `test:api-capabilities` and verify the footer at desktop/mobile widths.
+
 ## Request cost controls
 
 `server/handlers/thingtime-capabilities.ts` hashes the complete exact-origin

@@ -733,6 +733,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Deployment request cost controls
 
+- 2026-11-13: Preserve the Status footer's Branch target while identifying exact platform 401/403 responses as authentication required. Keep diagnostics anonymous, refuse redirects and bound response bodies/fallback by one deadline. No preview-access bypass is introduced. **Codex (AI)**
+
+- 2026-11-13: Forward optional exact preview-retirement IDs and a typed dry-run
+  flag to the already-merged protected controller. Preserve ordinary event
+  defaults; keep policy/credential checks and deletion in the protected job.
+  Add caller-contract coverage and dry-run-first rollout notes. Remove the
+  obsolete standalone promotion runner already forbidden by that contract;
+  promotion remains in the protected controller. **Codex (AI)**
+
 - 2026-11-13: Add server-only automation support for protected preview gateways,
   conditional exact-origin capability discovery, bounded publication reads with
   visible degraded/retry state, and cancellable device polling/state retries.

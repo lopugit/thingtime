@@ -16,6 +16,16 @@ on:
         description: Existing open same-repository PR (any base branch) to preview in the develop environment
         required: true
         type: number
+      retirement_deployment_ids:
+        description: JSON array of reviewed obsolete deployment IDs; requires pr_number 0
+        required: false
+        default: ''
+        type: string
+      retirement_dry_run:
+        description: Verify the selected retirements and save a decision artifact without deleting
+        required: false
+        default: false
+        type: boolean
   repository_dispatch:
     types: [develop-pr-preview-controller]
   schedule:
@@ -35,4 +45,6 @@ jobs:
       # workflow_dispatch values arrive as strings, while workflow_call enforces
       # the reusable workflow's declared number type before creating any jobs.
       pr_number: ${{ fromJSON(inputs.pr_number || '0') }}
+      retirement_deployment_ids: ${{ inputs.retirement_deployment_ids || '' }}
+      retirement_dry_run: ${{ inputs.retirement_dry_run || false }}
     secrets: inherit

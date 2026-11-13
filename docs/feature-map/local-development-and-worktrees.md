@@ -219,3 +219,13 @@ Swift sources, authorization, rates and native active-slot policy are unchanged.
 attachment UI against a separate synthetic storage origin. It rejects missing
 GET CORS, then verifies an exact-origin response downloads decrypted bytes at
 desktop and mobile widths. See TESTING.md for invocation and production checks.
+
+## Protected preview retirement listener
+
+`.github/workflows/develop-pr-preview.yml` forwards optional exact deployment
+selection and a boolean dry-run flag to the separately deployed `github-actions`
+controller. Run `node remix/scripts/workflow-caller-contract.mjs` for the thin
+listener contract. See [the rollout](../../README.md#reviewed-preview-retirement)
+and the preview-retention checklist in [TESTING.md](../../TESTING.md). Policy,
+authorization and execution remain protected controller work; the caller adds no
+runner, secret handling or deletion implementation.

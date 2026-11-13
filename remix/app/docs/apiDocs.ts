@@ -4596,6 +4596,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-frontend',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'health',
     title: 'Frontend health',
     endpoint: '/api/v1/health/frontend',
@@ -4607,6 +4609,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters to check the current origin.',
       'Pass target or origin query parameters when checking another Thingtime environment.',
       'Read ok, state, statusCode, responseMs, and shellDetected for diagnostics.',
@@ -4629,8 +4632,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-mongodb',
-    contractVersion: '1.0.2',
-    featureVersion: '1.0.2',
+    contractVersion: '1.0.3',
+    featureVersion: '1.0.3',
     group: 'health',
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
@@ -4642,6 +4645,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime MongoDB health.',
       'Pass target or origin query parameters to compare another deployment when supported.',
       'Read connected, host, dbName, custom, pingMs, collections, replicaSet, checkedAt, and error.',
@@ -4669,8 +4673,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.3.1',
+    featureVersion: '1.3.1',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
@@ -4683,6 +4687,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
       'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
@@ -4730,6 +4735,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-vercel',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'health',
     title: 'Vercel health',
     endpoint: '/api/v1/health/vercel',
@@ -4741,6 +4748,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current Vercel deployment status.',
       'Pass target or origin query parameters for remote environment checks when supported.',
       'Read configured, state, label, hasError, and error for UI diagnostics.',

@@ -14960,6 +14960,14 @@ separate from deterministic discovery/lease tests.
   controller reads require the exact repository/ref and a fresh timestamp,
   return only the policy and no revision/audit data. Wrong signatures, stale
   requests and DB failure must refuse cleanup. Check both manifest generators.
+- Run `node remix/scripts/workflow-caller-contract.mjs` after changing preview
+  dispatch inputs. Confirm selected retirement IDs default to empty, dry-run
+  remains boolean/false, and the listener only forwards to `github-actions`.
+  After controller rollout, dry-run a reviewed exact-ID batch with PR 0 and
+  inspect the private policy/decision artifact before any deletion. Ordinary
+  scheduled/PR events must preserve existing behavior. Confirm the obsolete
+  standalone product promotion workflow stays absent while the protected Lopu
+  manager retains its promotion component.
 - Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
   active current-head protection, opt-in inactive open-PR expiry, failed policy
   reads and stable/production/gateway/alias protection. Real Vercel deletion is
@@ -16463,3 +16471,11 @@ never print the file-download JSON, encryption metadata or signed URL.
   Buffered old stdout/exit/error events must not settle or fail replacement requests; Rust search failures must
   preserve deterministic local search. Verify the installed signed daemon stays healthy and serves real searches
   after recovery, with bounded worker restarts and preserved settings. See `Commander/docs/TESTING.md`.
+
+
+## Protected Branch health diagnostics — 13 November 2026
+
+- [ ] On public production, select Branch in the Status footer; confirm its actual branch target is retained and normally reachable while protection is off.
+- [ ] With a controlled exact-platform branch 401/403, verify Frontend, Nitro, MongoDB and Vercel show authentication required without cookies or an automation credential crossing the proxy; unrelated targets remain unavailable.
+- [ ] Reject redirect responses, never follow a login redirect, and stop stalled response bodies plus legacy fallback within one 3.5-second deadline. Run `test:api-capabilities`.
+- [ ] Inspect status labels and refresh controls at desktop/mobile widths, scroll top to bottom, and confirm no clipping or overflow.
