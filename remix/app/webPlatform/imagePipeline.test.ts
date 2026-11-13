@@ -342,7 +342,7 @@ test('SVG prologue detection stays linear on untrusted comment bytes', () => {
 	const hostile = `<!--${'--><!--'.repeat(585)}`.slice(0, 4096);
 	const started = process.hrtime.bigint();
 	assert.equal(startsSvgDocument(hostile), false);
-	assert.ok(process.hrtime.bigint() - started < 100_000_000n, 'prologue scan must not backtrack');
+	assert.ok(process.hrtime.bigint() - started < BigInt(100_000_000), 'prologue scan must not backtrack');
 });
 test('static SVG renders locally while text, animation and external dependencies fail', async () => {
 	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="#ff0000"/></svg>';
