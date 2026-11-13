@@ -722,6 +722,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Deployment request cost controls
 
+- 2026-11-13: Repair only the built gateway acceptance harness for Nitro's MongoDB driver factory export and compatible gateway feature versions. Keep actual driver instrumentation, major-version refusal and transport assertions; runtime behavior is unchanged. **Codex (AI)**
+
 - 2026-11-13: Preserve the Status footer's Branch target while identifying exact platform 401/403 responses as authentication required. Keep diagnostics anonymous, refuse redirects and bound response bodies/fallback by one deadline. No preview-access bypass is introduced. **Codex (AI)**
 
 - 2026-11-13: Forward optional exact preview-retirement IDs and a typed dry-run

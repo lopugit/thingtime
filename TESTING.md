@@ -16467,3 +16467,9 @@ never print the file-download JSON, encryption metadata or signed URL.
 - [ ] With a controlled exact-platform branch 401/403, verify Frontend, Nitro, MongoDB and Vercel show authentication required without cookies or an automation credential crossing the proxy; unrelated targets remain unavailable.
 - [ ] Reject redirect responses, never follow a login redirect, and stop stalled response bodies plus legacy fallback within one 3.5-second deadline. Run `test:api-capabilities`.
 - [ ] Inspect status labels and refresh controls at desktop/mobile widths, scroll top to bottom, and confirm no clipping or overflow.
+
+
+## Built gateway harness compatibility — 13 November 2026
+
+- [ ] Build both client and server before `test:environment-gateway:acceptance`. Confirm instrumentation resolves the MongoClient exported by the actual Nitro driver bundle (factory, default or namespace), with a callable connect method; never substitute a separate driver copy for command evidence.
+- [ ] The manifest check must accept compatible `api.environment-gateway` updates from1.2.1 while rejecting older or breaking-major versions. Preserve actual API registration/cookie/write/promotion/rollback checks and the zero follower Mongo dial assertion.
