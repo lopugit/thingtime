@@ -57,9 +57,14 @@ import { bundleFromPlan, readTransferClipboard, writeTransferClipboard, MAX_CLIP
 import { transferChecksum, type TransferBundle } from '~/utils/thingTransfer/archive';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
 import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
+import { ThingsPinnedSection } from './ThingsPinnedSection';
+import { useThingPathPins } from './useThingPathPins';
+import { pinPathKey, thingPinPath, orderPinned, type ThingPinPath } from './thingPathPins';
+import type { ThingPinControl } from './ThingPinControls';
 import { browseMenuPosition } from './browseInteraction';
 import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
 import { thingStorageHref } from './thingStorageNavigation';
+import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
   THINGS_GROUP_OPTIONS,
@@ -499,7 +504,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     (async () => {
       let cursor: string | null = folderId;
       const visited = new Set<string>();
-      for (let hop = 0; cursor && hop < 64 && !visited.has(cursor); hop += 1) {
+      while (cursor && !cancelled && !visited.has(cursor)) {
         visited.add(cursor);
         const known = folderMeta[cursor];
         if (known) {
@@ -687,7 +692,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const searchMode = q.trim().length > 0;
 
-	const visibleDevices = useMemo<DeviceRuntimeState[]>(() => {
+	const allVisibleDevices = useMemo<DeviceRuntimeState[]>(() => {
 		if (!devicesEnabled || kindFilter !== 'all' || (!searchMode && folderId)) return [];
 		const query = q.trim().toLocaleLowerCase();
 		if (!query) return deviceStore.devices;
@@ -710,21 +715,21 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 		});
 	}, [deviceStore.devices, devicesEnabled, folderId, kindFilter, q, searchMode]);
 
-  const displayItems = useMemo(() => {
+  const unpinnedDisplayItems = useMemo(() => {
     const rows = searchMode
       ? (searchResults || []).filter(thing => archiveOnly ? thing.libraryArchived === true : !archiveReady || !thing.libraryArchived)
       : browseItems;
-    if (searchMode || folderId || locationPicker || !visibleDevices.length) return rows;
-    const represented = new Map(visibleDevices.map(device => [device.deviceId, device.summary?.rootFolderId]));
+    if (searchMode || folderId || locationPicker || !allVisibleDevices.length) return rows;
+    const represented = new Map(allVisibleDevices.map(device => [device.deviceId, device.summary?.rootFolderId]));
     return rows.filter(thing => !(isFolder(thing) && thing.author?.id === user?.id &&
       thing.crystal?.metadata?.deviceFolderRole === 'root' && represented.get(thing.crystal?.metadata?.deviceId) === thing.id));
-  }, [archiveOnly, archiveReady, browseItems, folderId, locationPicker, searchMode, searchResults, user?.id, visibleDevices]);
+  }, [archiveOnly, archiveReady, browseItems, folderId, locationPicker, searchMode, searchResults, user?.id, allVisibleDevices]);
 
   const breadcrumbs = useMemo(() => {
     const trail: { id: string; name: string; icon?: string }[] = [];
     let cursor = folderId;
     const visited = new Set<string>();
-    while (cursor && !visited.has(cursor) && trail.length < 64) {
+    while (cursor && !visited.has(cursor)) {
       visited.add(cursor);
       const meta = folderMeta[cursor];
       trail.unshift({ id: cursor, name: meta?.name || '…', icon: meta?.icon });
@@ -734,6 +739,94 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   }, [folderId, folderMeta]);
 
   const columnsPath = useMemo<(string | null)[]>(() => [null, ...breadcrumbs.map((crumb) => crumb.id)], [breadcrumbs]);
+
+  // Scope follows navigation, never a search, type filter, grouping or layout.
+  const pathForFolder = useCallback((target: string | null): ThingPinPath | null => {
+    const parents: string[] = [], visited = new Set<string>();
+    let cursor = target;
+    while (cursor) {
+      if (visited.has(cursor) || !folderMeta[cursor]) return null;
+      visited.add(cursor); parents.unshift(cursor); cursor = folderMeta[cursor].folderId;
+    }
+    return thingPinPath(builderMode ? '/builder' : '/things', parents);
+  }, [builderMode, folderMeta]);
+  const currentPinPath = useMemo(() => pathForFolder(folderId) || [builderMode ? '/builder' : '/things', 'unresolved', folderId || 'root'], [pathForFolder, folderId, builderMode]);
+  const pinPaths = (view === 'columns' && !searchMode ? columnsPath : [folderId]).map(pathForFolder).filter((path): path is ThingPinPath => path !== null);
+  const pins = useThingPathPins(pinPaths, !locationPicker && !!pathForFolder(folderId));
+  const currentPins = pins.state(currentPinPath);
+  const currentPinKey = pinPathKey(currentPinPath);
+  const [reorderingPinPath, setReorderingPinPath] = useState<string | null>(null);
+  const [menuPinPath, setMenuPinPath] = useState<ThingPinPath | null>(null);
+  const [hydratedPins, setHydratedPins] = useState<{ identity: string; things: Record<string, ThingsThing> }>({ identity: '', things: {} });
+  const pinIdentity = pins.identity;
+  const pinPresentations = Object.assign({}, ...pinPaths.map(path => pins.state(path).presentations || {})) as Record<string, ThingsThing>;
+  const pinPresentationsKey = JSON.stringify(pinPresentations);
+  const hydrated = useMemo(() => ({ ...(hydratedPins.identity === pinIdentity ? hydratedPins.things : {}), ...JSON.parse(pinPresentationsKey) }), [hydratedPins, pinIdentity, pinPresentationsKey]) as Record<string, ThingsThing>;
+  const hydratedRef = useRef(hydrated); hydratedRef.current = hydrated;
+  const failedHydration = useRef<{ identity: string; ids: Set<string> }>({ identity: pinIdentity, ids: new Set() });
+  if (failedHydration.current.identity !== pinIdentity) failedHydration.current = { identity: pinIdentity, ids: new Set() };
+  const [hydrationRetry, setHydrationRetry] = useState(0);
+  const [hydrationStatus, setHydrationStatus] = useState<{ identity: string; loading: string[]; failures: Record<string, string> }>({ identity: '', loading: [], failures: {} });
+  const deviceIdsKey = JSON.stringify(deviceStore.devices.map(device => device.deviceId).sort());
+  const allPinIdsKey = JSON.stringify([...new Set(pinPaths.flatMap(path => pins.state(path).ids))]);
+  useEffect(() => {
+    if (!pins.enabled) return;
+    const operation = new AbortController();
+    const deviceIds = new Set(JSON.parse(deviceIdsKey) as string[]);
+    const ids = (JSON.parse(allPinIdsKey) as string[]).filter(id => !deviceIds.has(id));
+    const known = new Set(Object.values(folderPages).flat().map(thing => thing.id));
+    const missing = ids.filter(id => !known.has(id) && !hydratedRef.current[id] && !failedHydration.current.ids.has(id));
+    setHydrationStatus(previous => ({ identity: pinIdentity, loading: missing, failures: previous.identity === pinIdentity ? previous.failures : {} }));
+    void (async () => {
+      // Exact target hydration avoids scanning unrelated library pages. Bounded
+      // request concurrency is a processing detail, not a pin count limit.
+      for (let index = 0; index < missing.length && !operation.signal.aborted; index += 4) {
+        await Promise.all(missing.slice(index, index + 4).map(async id => {
+          try {
+            const result = await apiRef.current.v1.things.get({ id }, { expectedActor: user?.id, expectedDataPlane: dataPlane, expectedApiOrigin: window.location.origin, signal: operation.signal });
+            if (!operation.signal.aborted && result?.thing) setHydratedPins(previous => ({ identity: pinIdentity, things: { ...(previous.identity === pinIdentity ? previous.things : {}), [id]: result.thing } }));
+            else if (!operation.signal.aborted) throw Object.assign(Error('A pinned Thing is unavailable.'), { status: 404 });
+          } catch (cause: any) {
+            if (operation.signal.aborted) return;
+            failedHydration.current.ids.add(id);
+            const error = cause?.status === 403 || cause?.status === 404 ? 'A pinned Thing is no longer available. Retry pins to refresh this path.' : 'Could not load a pinned Thing. Retry pins to reconnect.';
+            setHydrationStatus(previous => ({ identity: pinIdentity, loading: previous.identity === pinIdentity ? previous.loading : [], failures: { ...(previous.identity === pinIdentity ? previous.failures : {}), [id]: error } }));
+          }
+        }));
+      }
+      if (!operation.signal.aborted) setHydrationStatus(previous => previous.identity === pinIdentity ? { ...previous, loading: [] } : previous);
+    })();
+    return () => { operation.abort(); };
+  }, [allPinIdsKey, pinIdentity, pins.enabled, user?.id, dataPlane, deviceIdsKey, folderPages, hydrationRetry]);
+  const pinCandidates = dedupeById([...unpinnedDisplayItems, ...Object.values(folderPages).flat(), ...Object.values(hydrated)]).filter(thing =>
+    currentPins.ids.includes(thing.id) && (kindFilter === 'all' || (kindFilter === 'apps' ? isBuilderApp(thing) : primaryKindOf(thing) === kindFilter)) &&
+    (!q.trim() || unpinnedDisplayItems.some(row => row.id === thing.id) || [thingDisplayName(thing), ...thing.tags].join(' ').toLocaleLowerCase().includes(q.trim().toLocaleLowerCase())) &&
+    (archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived));
+  const displayItems = unpinnedDisplayItems.filter(thing => !currentPins.ids.includes(thing.id));
+  const visibleDevices = allVisibleDevices.filter(device => !currentPins.ids.includes(device.deviceId));
+  const pinnedCandidatesFor = (target: string | null): ThingsThing[] => target === folderId && (view !== 'columns' || searchMode)
+    ? pinCandidates : dedupeById([...(itemsFor(target) || []), ...Object.values(folderPages).flat(), ...Object.values(hydrated)]).filter(thing => pins.state(pathForFolder(target) || currentPinPath).ids.includes(thing.id) && (archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived));
+  const selectionOrderRef = useRef<ThingsThing[]>([]);
+  selectionOrderRef.current = view === 'columns' && !searchMode
+    ? dedupeById(columnsPath.flatMap(target => {
+      const ids = pins.state(pathForFolder(target) || currentPinPath).ids;
+      return [...orderPinned(pinnedCandidatesFor(target), ids, thing => thing.id), ...(itemsFor(target) || []).filter(thing => !ids.includes(thing.id))];
+    }))
+    : [...orderPinned(pinCandidates, currentPins.ids, thing => thing.id), ...(groupBy === 'kind' ? groupThings(displayItems, groupBy).flatMap(group => group.items) : displayItems)];
+  const pinControl = (id: string, label: string, path = currentPinPath): ThingPinControl => {
+    const target = path.length > 1 ? path[path.length - 1] : null;
+    const visibleThings = pinnedCandidatesFor(target);
+    const visible = new Set([...visibleThings.map(thing => thing.id), ...(target === null ? allVisibleDevices.map(device => device.deviceId) : [])]);
+    const ids = pins.state(path).ids.filter(value => visible.has(value));
+    const moveTo = (index: number) => {
+      const next = ids.filter(value => value !== id); next.splice(Math.max(0, Math.min(next.length, index)), 0, id);
+      void pins.mutate(path, { operation: 'reorder', thingIds: next }).catch(() => {});
+    };
+    return { id, label, pinned: ids.includes(id), reordering: reorderingPinPath === pinPathKey(path), index: ids.indexOf(id), count: ids.length,
+      moveBy: offset => moveTo(ids.indexOf(id) + offset),
+      moveBefore: (target, after) => { const next = ids.filter(value => value !== id); const index = next.indexOf(target); if (index >= 0) moveTo(index + (after ? 1 : 0)); } };
+  };
+  const pinStateFor = (thing: ThingsThing, path = currentPinPath) => pins.enabled ? { pinned: (selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing]).every(target => pins.state(path).ids.includes(target.id)) } : undefined;
 
   // columns view needs every folder on the path loaded — fetch from an effect,
   // never from the view's render (setState during render is a React error)
@@ -745,11 +838,20 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 	const cutIds = useMemo(() => new Set(clipboard?.mode === 'cut' ? clipboard.ids : []), [clipboard]);
 
   const selectedThings = useMemo(() => {
-    const all = searchMode ? searchResults || [] : Object.values(folderPages).flat();
+    const all = [...(searchMode ? searchResults || [] : Object.values(folderPages).flat()), ...Object.values(hydrated)];
     const byId = new Map(all.map((thing) => [thing.id, thing]));
     return [...selection].map((id) => byId.get(id)).filter(Boolean) as ThingsThing[];
-  }, [selection, folderPages, searchMode, searchResults]);
+  }, [selection, folderPages, searchMode, searchResults, hydrated]);
 
+  const applyPinAction = useCallback((thing: ThingsThing, action: ThingsItemAction, path = currentPinPath): boolean => {
+    if (!pins.enabled || !['pin', 'unpin', 'reorder-pins'].includes(action)) return false;
+    if (action === 'reorder-pins') setReorderingPinPath(pinPathKey(path));
+    else {
+      const targets = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
+      for (const target of targets) void pins.mutate(path, { operation: action as 'pin' | 'unpin', thingId: target.id }).catch(() => {});
+    }
+    return true;
+  }, [currentPinPath, pins, selection, selectedThings]);
   const [libraryArchivePending, setLibraryArchivePending] = useState(false);
   const libraryActionFor = useCallback((thing: ThingsThing) => {
     if (!archiveReady || !archiveScope || libraryArchivePending || thing.inode || thing.executionHeld || (thing.creationProgress && thing.creationProgress.phase !== 'complete')) return;
@@ -898,7 +1000,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         return;
       }
       if (event.shiftKey && anchorRef.current) {
-        const order = displayItems.map((entry) => entry.id);
+        const order = selectionOrderRef.current.map((entry) => entry.id);
         const from = order.indexOf(anchorRef.current);
         const to = order.indexOf(thing.id);
         if (from !== -1 && to !== -1) {
@@ -910,12 +1012,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       if (event.shiftKey) toggleSelect(thing);
       else openThing(thing);
     },
-    [displayItems, openThing, toggleSelect]
+    [openThing, toggleSelect]
   );
 
   const selectAll = useCallback(() => {
-		setSelection((prev) => (prev.size === displayItems.length ? new Set() : new Set(displayItems.map((thing) => thing.id))));
-  }, [displayItems]);
+		setSelection(prev => selectionOrderRef.current.length && selectionOrderRef.current.every(thing => prev.has(thing.id)) ? new Set() : new Set(selectionOrderRef.current.map(thing => thing.id)));
+  }, []);
 
 	const copyToClipboard = useCallback((mode: 'copy' | 'cut', ids: string[]) => {
       if (!ids.length) return;
@@ -1355,6 +1457,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
+      if (applyPinAction(thing, action)) return;
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
         case 'share-preview': openSharePreview(thingShareLink(thing)); break;
@@ -1433,7 +1536,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [dataPlane, archive, changeLibraryArchive, copyLink, copyToClipboard, duplicateThings, libraryActionFor, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
+    [applyPinAction, dataPlane, archive, changeLibraryArchive, copyLink, copyToClipboard, duplicateThings, libraryActionFor, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1499,9 +1602,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         anchorRef.current = thing.id;
       }
       setMenuThing(thing);
+      setMenuPinPath(currentPinPath);
       itemMenu.openAtPointer(event);
     },
-    [backgroundMenu.closeMenu, itemMenu.openAtPointer, selection] // eslint-disable-line react-hooks/exhaustive-deps
+    [backgroundMenu.closeMenu, currentPinPath, itemMenu.openAtPointer, selection] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // right-click the browse canvas (not an item): create/paste/arrange/select
@@ -1513,9 +1617,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       if (domSelection && !domSelection.isCollapsed && domSelection.toString().length > 0) return;
       itemMenu.closeMenu();
       setMenuThing(null);
+      const column = target?.closest?.('[data-pin-parent]');
+      const parent = column?.getAttribute('data-pin-parent');
+      setMenuPinPath(parent !== undefined && parent !== null ? pathForFolder(parent || null) : currentPinPath);
       backgroundMenu.openAtPointer(event);
     },
-    [backgroundMenu.openAtPointer, itemMenu.closeMenu] // eslint-disable-line react-hooks/exhaustive-deps
+    [backgroundMenu.openAtPointer, currentPinPath, itemMenu.closeMenu, pathForFolder] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
 	const onDeviceContextMenu = useCallback((deviceId: string, event: React.MouseEvent) => {
@@ -1529,15 +1636,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
 
-  const itemMenuModel = useMemo(
-    () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, allowCreation: !archiveOnly, libraryAction: libraryActionFor(menuThing) }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane, archiveOnly, libraryActionFor]
-  );
+  const itemMenuModel = 			menuThing ? buildThingsItemMenu({ pinState: pinStateFor(menuThing, menuPinPath || currentPinPath), thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, allowCreation: !archiveOnly, libraryAction: libraryActionFor(menuThing) }) : { sections: [] };
 
   const onItemMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
+      if (applyPinAction(menuThing, action.command as ThingsItemAction, menuPinPath || currentPinPath)) return;
       switch (action.command) {
         case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
         case 'open-builder':
@@ -1600,30 +1704,27 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [copyLink, menuThing, navigate, onItemAction, openThing, pasteClipboardTo]
+    [applyPinAction, copyLink, currentPinPath, menuPinPath, menuThing, navigate, onItemAction, openThing, pasteClipboardTo]
   );
 
-  const backgroundMenuModel = useMemo(
-    () =>
-      buildThingsBackgroundMenu({
+  const backgroundMenuModel =       buildThingsBackgroundMenu({
+        reorderPins: pins.enabled,
         clipboardCount: clipboard?.ids.length || 0,
-        itemCount: displayItems.length,
+        itemCount: selectionOrderRef.current.length,
         allowCreation: !archiveOnly,
         libraryNavigation: !locationPicker && !builderMode && !archiveOnly,
         sort,
         groupBy,
         view,
         displayMode
-      }),
-    [clipboard?.ids.length, displayItems.length, archiveOnly, locationPicker, builderMode, sort, groupBy, view, displayMode]
-  );
-	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
+      });
+	const deviceMenuModel = { sections: [...buildThingEntityMenu(pins.enabled && menuDeviceId ? { [currentPins.ids.includes(menuDeviceId) ? 'unpin' : 'pin']: true, 'reorder-pins': true } : {}).sections, { id: 'device-navigation', actions: [{
 		id: 'open-device-page', label: 'Open device page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
 	}, { id: 'open-device-settings', label: 'Quick view', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
 	}, { id: 'open-device-sync', label: 'Folders & sync configs', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncPageHref(menuDeviceId) : '/things'
 	}, { id: 'show-device-folder', label: 'Show Folder', icon: '🗂️', lucide: 'folder', command: 'show-device-folder'
 	}, { id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
-	}] }] }), [menuDeviceId]);
+	}] }] };
 
   const onBackgroundMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
@@ -1634,6 +1735,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         displayMode?: ThingsDisplayMode;
       };
       switch (action.command) {
+        case 'reorder-pins': setReorderingPinPath(pinPathKey(menuPinPath || currentPinPath)); break;
         case 'import':
           setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
           break;
@@ -1660,7 +1762,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [currentPinPath, menuPinPath, folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -1758,8 +1860,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const eventlessItemContextMenu: ThingsItemHandlers['onItemContextMenu'] = (_thing, event) => { event.preventDefault(); event.stopPropagation(); };
   const itemHandlers: ThingsItemHandlers = {
+    pinControlFor: thing => pinControl(thing.id, thingDisplayName(thing)),
     builderMode,
-    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) }) }),
+    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ pinState: pinStateFor(thing), thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) }) }),
     itemHref: (thing: ThingsThing) => thing.libraryArchivePresentation === 'metadata' ? undefined : locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
 
     locationSearch: searchParams.toString(),
@@ -1800,12 +1903,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const loading = archivePending || (loadingKeys.has(currentKey) && !folderPages[currentKey]);
 	const deviceSurfaceLoading = devicesEnabled && kindFilter === 'all' && (searchMode || !folderId) && deviceStore.loading && !visibleDevices.length;
 	const canPaintContent = !loading || visibleDevices.length > 0;
-  const allSelected = displayItems.length > 0 && displayItems.every((thing) => selection.has(thing.id));
+  const allSelected = selectionOrderRef.current.length > 0 && selectionOrderRef.current.every(thing => selection.has(thing.id));
   const moveDisabledIds = new Set(selectedThings.filter(isFolder).map((thing) => thing.id));
   // group-by renders one titled section per kind (grid/list; columns is
   // already hierarchical)
   const groupedSections = groupBy === 'kind' && view !== 'columns' ? groupThings(displayItems, groupBy) : null;
 	const devicePresentation = {
+    devicePinControlFor: (state: DeviceRuntimeState) => pinControl(state.deviceId, state.summary?.name || 'Device'),
 		devices: visibleDevices,
     deviceFooter: (state: DeviceRuntimeState) => mobileSetupStatus && mobileSetupStatus.state !== 'paired' && mobileSetupStatus.deviceId === state.deviceId ? <Box padding={3}><MobileDeviceSetupEntry /></Box> : null,
     deviceSetup: devicesEnabled && !folderId && !searchMode && kindFilter === 'all' && mobileSetupStatus && mobileSetupStatus.state !== 'paired' && !visibleDevices.some(state => state.deviceId === mobileSetupStatus.deviceId) ? <Box border="1px solid var(--tt-border, #ececef)" borderRadius="16px" padding={3}><Text fontWeight={600} marginBottom={2}>This device</Text><MobileDeviceSetupEntry /></Box> : null,
@@ -1815,13 +1919,36 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 		onDeviceSelect: (id: string) => setSelectedDevice(current => current === id ? null : id),
 		onDeviceContextMenu
 	};
-	const searchResultCount = (searchResults || []).length + visibleDevices.length;
+  const handlersForFolder = (target: string | null): ThingsItemHandlers => {
+    const path = pathForFolder(target);
+    if (!path) return itemHandlers;
+    return { ...itemHandlers,
+      pinControlFor: thing => pinControl(thing.id, thingDisplayName(thing), path),
+      itemMenuFor: thing => buildThingsItemMenu({ pinState: pinStateFor(thing, path), thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) }),
+      onItemAction: (thing, action) => { if (!applyPinAction(thing, action, path)) onItemAction(thing, action); },
+      onItemContextMenu: (thing, event) => { onItemContextMenu(thing, event); setMenuPinPath(path); }
+    };
+  };
+  const renderPinned = (target = folderId, compact = false) => {
+    const path = pathForFolder(target);
+    if (!path) return null;
+    const candidates = pinnedCandidatesFor(target);
+    return <ThingsPinnedSection controller={pins} path={path} items={candidates}
+      loadingTargets={hydrationStatus.identity === pinIdentity && pins.state(path).ids.some(id => hydrationStatus.loading.includes(id))}
+      targetError={hydrationStatus.identity === pinIdentity ? pins.state(path).ids.filter(id => !hydrated[id]).map(id => hydrationStatus.failures[id]).find(Boolean) : undefined}
+      retryTargets={() => { failedHydration.current.ids.clear(); setHydrationStatus(previous => ({ ...previous, failures: {} })); setHydrationRetry(value => value + 1); void pins.reload(path).catch(() => {}); }} devices={target === null ? allVisibleDevices : []} handlers={handlersForFolder(target)}
+      devicePresentation={devicePresentation} displayMode={displayMode} list={compact || view === 'list'} compact={compact} reordering={reorderingPinPath === pinPathKey(path)}
+      onReorderingChange={value => setReorderingPinPath(value ? pinPathKey(path) : null)} schemaRenderFor={schemaRenderFor} />;
+  };
+	const searchResultCount = (searchResults || []).length + allVisibleDevices.length;
   const deviceContextMenu = (
 		<ThingContextMenu
 			{...deviceMenu.menuProps}
 			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
 			model={deviceMenuModel}
 			onAction={({ action }) => {
+        if (action.command === 'reorder-pins') setReorderingPinPath(currentPinKey);
+        if ((action.command === 'pin' || action.command === 'unpin') && menuDeviceId) void pins.mutate(currentPinPath, { operation: action.command, thingId: menuDeviceId }).catch(() => {});
         if (action.command === 'inspect-device' && menuDeviceId) openDeviceQuickView(menuDeviceId);
         if (action.command === 'show-device-folder' && menuDeviceId && user?.id && dataPlane) {
           void openDeviceCloudFolder({ deviceId: menuDeviceId, ownerId: user.id, dataPlane, requests: api.v1.deviceFolders,
@@ -2158,6 +2285,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           )}
 
           <Box flex={1} minHeight="45vh" minWidth={0} onContextMenu={onBackgroundContextMenu}>
+            {(view !== 'columns' || searchMode) && renderPinned()}
 						{loading && !archivePending && !archiveOnly && !visibleDevices.length && (
               <Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
                 Loading your things… 🌀
@@ -2258,7 +2386,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
                 displayMode={displayMode}
                 handlers={itemHandlers}
-                itemsFor={itemsFor}
+                itemsFor={target => (itemsFor(target) || []).filter(thing => !pins.state(pathForFolder(target) || currentPinPath).ids.includes(thing.id))}
+                handlersForFolder={handlersForFolder}
+                pinnedForFolder={target => renderPinned(target, true)}
+                hasPinnedForFolder={target => pinnedCandidatesFor(target).length > 0}
                 onOpenFolderAt={(_depth, id) => navigateToFolder(id)}
                 path={columnsPath}
                 schemaRenderFor={schemaRenderFor}
@@ -2274,7 +2405,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               />
             )}
 
-						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !deviceSurfaceLoading && (
+						{canPaintContent && !displayItems.length && !pinCandidates.length && !visibleDevices.length && !allVisibleDevices.length && !searching && !deviceSurfaceLoading && (
               <Flex
                 alignItems="center"
                 border="1px dashed var(--tt-border, #ececef)"

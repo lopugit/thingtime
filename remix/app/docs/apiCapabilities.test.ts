@@ -1,3 +1,4 @@
+import { THING_BROWSER_PIN_REQUIREMENTS } from '../utils/thingBrowserPins';
 import { LIBRARY_ARCHIVE_READ_REQUIREMENTS } from '~/schemas/libraryArchive';
 import { PAGE_COLLECTION_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesSourceInputReferences } from '../schemas/authoredControls';
 import { THING_STORAGE_CLOUD_WRITE_REQUIREMENTS, THING_STORAGE_POLICY_PATH, THING_STORAGE_POLICY_REQUIREMENTS } from '../utils/thingStoragePolicy';
@@ -1273,4 +1274,15 @@ test('Archive extended reads reject the deployed Component-only 1.62 contract', 
   const runtime = thingtimeCapabilityManifest('https://archive.test').features['api.things'].version;
   for (const version of [current, runtime]) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), true);
   for (const version of [undefined, '1.62.0', '1.62.99', '2.0.0']) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), false);
+});
+
+test('private path pins register both manifests and reject missing or incompatible client capabilities', () => {
+  const feature = 'api.things-pins', minimum = THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'];
+  const runtime = thingtimeCapabilityManifest('https://pins.test');
+  assert.equal(typeof routeModules['v1/things/pins'], 'function');
+  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features[feature], minimum);
+  assert.equal(runtime.features[feature].version, minimum);
+  assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/things/pins'), { feature, path: '/api/v1/things/pins', methods: ['GET', 'POST'] });
+  for (const version of [undefined, '0.9.9', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, minimum), true);
 });

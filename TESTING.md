@@ -87,6 +87,18 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Exercise iconized Thing links and shared persisted-Thing menus outside the library. Confirm the authenticated viewer, rather than cached ownership or a Builder marker alone, determines the default editor link.
 - [ ] At desktop and narrow mobile widths, open menus near viewport edges, use keyboard focus/Enter/Escape and touch overflow controls, scroll top to bottom, and verify no clipping, horizontal overflow or obstructed menu actions. Edit, save and reload one representative Builder Thing through the opened editor.
 
+## Thing browser pins (2026-11-13)
+
+- [ ] Pin and unpin Things from both right-click and touch overflow menus. Verify private personal placement leaves the underlying Thing, its ACL and other users unchanged; include apps, folders, data, files and paired device cards.
+- [ ] Pin the same Thing in Things and Builder and under distinct parent paths. Reorder each independently and reload. Switching grid/list/columns, kind, search, group and sort must not create a new pin scope or reset saved order.
+- [ ] Enter **Reorder pins** from an item and the background menu. Drag with mouse and touch, including moving the first pin to the end; use arrow keys/Home/End and Move earlier/later controls. Finish with **Done** and verify ordinary opening, selection and folder moves still work.
+- [ ] Verify each visible column reads and edits its own parent path. Filtered reorders preserve a hidden middle pin's slot; an older pinned item outside the first content page still appears after reload. Navigate to an otherwise empty parent with a pin already cached from another parent, then reload: the pin must appear both times. Pins remain ahead of ordinary sorted content without duplicates.
+- [ ] Select all and Shift-select across pinned and ordinary entries, including a filter where every visible entry is pinned. Compact columns retain readable labels and usable reorder controls.
+- [ ] Pin an owned archived protected item. Its safe metadata card survives pagination and reload without revealing source bodies, participants or media. Active protected items and another owner's archive are refused; restoring the item removes an ineligible protected pin from reads.
+- [ ] In two sessions, make conflicting pin changes. Verify revision fencing, refresh/retry, no lost pins and no duplicate records. Switch account/origin/data plane during delayed reads and saves; no prior identity's pin state may appear or be written.
+- [ ] Refuse anonymous or wrong-account pin reads/writes and private/deleted targets. Verify paginated reads and capability negotiation, including missing/breaking feature versions, without changing the target Thing's access.
+- [ ] At desktop and narrow mobile widths, open edge menus and reorder controls, scroll top to bottom, and verify no clipping, horizontal overflow, accidental navigation or scrolling blocked outside the drag handle. Preserve usable content during refresh and show one inline failure/retry state.
+
 ## Builder app browser (2026-10-28)
 
 - [ ] At `/builder`, verify All apps is the default and app folders can be created and edited with name, description, upload-first icon and structured metadata. Reload and compare with exact Thing reads.

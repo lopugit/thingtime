@@ -30,6 +30,15 @@ and everything uses it.
 
 ## 3. One database: `thingtime` — and (almost) one collection
 
+Thing browser pins use two dedicated protected private kinds in the selected
+content plane: `thing-browser-pin` is one relational row per source and path;
+`thing-browser-pin-scope` retains a scalar revision for that exact origin,
+account, data plane and complete page/parent path. Both kinds use canonical
+logical-byte quota accounting on home storage and shared indexes. Empty scope
+headers retain their revision to prevent stale-intent replay; they are billed,
+not unbounded free control metadata. See [Thing browser pins](docs/thing-browser-pins.md).
+
+
 Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each

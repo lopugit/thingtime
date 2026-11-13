@@ -1,4 +1,6 @@
 import React from 'react';
+import type { ThingContextMenuModel } from '../Thingtime/ContextMenu/contextMenuModel';
+import { ThingPinControls, type ThingPinControl } from './ThingPinControls';
 import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 
 import { Box, Button, Checkbox, Flex, Grid, IconButton, Image, Text } from '@chakra-ui/react';
@@ -117,6 +119,7 @@ const ThingPreviewBox = ({
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
+  | 'pin' | 'unpin' | 'reorder-pins'
   | 'share-preview'
   | 'history'
   | 'send-to-lopu'
@@ -145,11 +148,12 @@ export type ThingsItemAction =
 
 export type ThingsItemHandlers = {
   compact?: boolean;
+  pinControlFor?: (thing: ThingsThing) => ThingPinControl | undefined;
   itemActions?: (thing: ThingsThing) => React.ReactNode;
   builderMode?: boolean;
   menuZIndex?: number;
   itemHref?: (thing: ThingsThing) => string;
-  itemMenuFor?: (thing: ThingsThing) => import('../Thingtime/ContextMenu/contextMenuModel').ThingContextMenuModel;
+  itemMenuFor?: (thing: ThingsThing) => ThingContextMenuModel;
   locationSearch?: string;
   clipboardCount?: number;
   ownerId?: string;
@@ -181,8 +185,14 @@ export type ThingsDevicePresentation = {
 	deviceMenuId?: string | null;
 	deviceFooter?: (state: DeviceRuntimeState) => React.ReactNode;
 	deviceSetup?: React.ReactNode;
+  devicePinControlFor?: (state: DeviceRuntimeState) => ThingPinControl | undefined;
 	onDeviceSelect?: (deviceId: string) => void;
 	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
+};
+
+const PIN_DROP_SX = {
+  '&[data-pin-drop-target="before"]': { boxShadow: 'inset 0 3px 0 var(--tt-accent, #f472b6)' },
+  '&[data-pin-drop-target="after"]': { boxShadow: 'inset 0 -3px 0 var(--tt-accent, #f472b6)' }
 };
 
 const pendingCommandCount = (state: DeviceRuntimeState): number =>
@@ -197,7 +207,7 @@ const noopDeviceSelect = () => {};
 // thing, drop target + highlight on folders. Desktop only — mobile keeps
 // tap-to-open and cut/paste.
 const dragSourceProps = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
-  handlers.isMobile
+  handlers.isMobile || handlers.pinControlFor?.(thing)?.reordering
     ? {}
     : {
         draggable: true,
@@ -206,7 +216,7 @@ const dragSourceProps = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
       };
 
 const dropTargetProps = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
-  !isFolder(thing) || handlers.isMobile
+  !isFolder(thing) || handlers.isMobile || handlers.pinControlFor?.(thing)?.reordering
     ? {}
     : {
         onDragOver: (event: React.DragEvent) => handlers.onFolderDragOver(thing.id, event),
@@ -228,6 +238,7 @@ const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
 // Titles retain real hrefs for keyboard and middle-click navigation. Modifier
 // clicks use the same selection path as the surrounding tile or row.
 const handleItemClick = (thing: ThingsThing, handlers: ThingsItemHandlers, event: React.MouseEvent, onOpen?: () => void) => {
+  if (handlers.pinControlFor?.(thing)?.reordering) { event.preventDefault(); return; }
   const intent = browseClickIntent(event);
   if (intent === 'native') return;
   event.preventDefault();
@@ -268,7 +279,8 @@ const TitleLink = ({
 );
 
 export const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
-  <Box className="thing-item-controls" display="inline-flex" flexShrink={0}>
+  <Box className="thing-item-controls" data-visible={handlers.pinControlFor?.(thing)?.pinned || undefined} display="inline-flex" alignItems="center" flexShrink={0}>
+  <ThingPinControls control={handlers.pinControlFor?.(thing)?.reordering ? undefined : handlers.pinControlFor?.(thing)} />
   <ThingActionMenuButton label={`${thingDisplayName(thing)} actions`} zIndex={handlers.menuZIndex} identity={`${handlers.ownerId}:${thing.id}`}
     model={handlers.itemMenuFor?.(thing) || buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
       actCount: handlers.selected.has(thing.id) ? Math.max(1, handlers.selected.size) : 1,
@@ -285,14 +297,16 @@ export const ItemSelection = ({ thing, handlers }: { thing: ThingsThing; handler
   </Box>
 );
 
-const DeviceControls = ({ state, selected, menuOpen, onSelect, onContextMenu }: {
+const DeviceControls = ({ state, selected, menuOpen, onSelect, onContextMenu, pinControl }: {
   state: DeviceRuntimeState; selected: boolean; menuOpen: boolean; onSelect?: (id: string) => void;
   onContextMenu?: (id: string, event: React.MouseEvent) => void;
+  pinControl?: ThingPinControl;
 }) => (
-  <Flex className="thing-item-controls" data-visible={selected || menuOpen || undefined} position="absolute" right={2} top={2} alignItems="center" gap={2}
+  <Flex className="thing-item-controls" data-visible={selected || menuOpen || pinControl?.pinned || undefined} position="absolute" right={2} top={2} alignItems="center" gap={2}
     onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-    <Checkbox aria-label={`Select ${state.summary?.name || 'device'}`} colorScheme="pink" isChecked={selected} onChange={() => onSelect?.(state.deviceId)} size="sm" />
-    {onContextMenu && <IconButton aria-label={`${state.summary?.name || 'Device'} actions`} aria-haspopup="menu" aria-expanded={menuOpen} icon={<MoreHorizontal size={16} />}
+    <ThingPinControls control={pinControl?.reordering ? undefined : pinControl} />
+    {!pinControl?.reordering && <Checkbox aria-label={`Select ${state.summary?.name || 'device'}`} colorScheme="pink" isChecked={selected} onChange={() => onSelect?.(state.deviceId)} size="sm" />}
+    {onContextMenu && !pinControl?.reordering && <IconButton aria-label={`${state.summary?.name || 'Device'} actions`} aria-haspopup="menu" aria-expanded={menuOpen} icon={<MoreHorizontal size={16} />}
       size="xs" variant="ghost" onClick={event => onContextMenu(state.deviceId, event)} />}
   </Flex>
 );
@@ -341,7 +355,8 @@ export const ThingsGridView = ({
 	onDeviceSelect,
 	onDeviceContextMenu,
 	deviceFooter,
-	deviceSetup
+	deviceSetup,
+  devicePinControlFor
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -351,10 +366,10 @@ export const ThingsGridView = ({
 	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
 		{devices.map((state) =>
 			state.summary ? (
-				<Box key={`device:${state.deviceId}`} minWidth={0}>
+				<Box key={`device:${state.deviceId}`} minWidth={0} data-pin-id={devicePinControlFor?.(state)?.pinned ? state.deviceId : undefined} sx={PIN_DROP_SX}>
 					<DeviceCard
 					device={state.summary}
-					controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
+					controls={<DeviceControls pinControl={devicePinControlFor?.(state)} state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 					onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -362,7 +377,8 @@ export const ThingsGridView = ({
 					selected={selectedDeviceId === state.deviceId}
 					snapshot={state.snapshot}
 				/>
-					{deviceFooter?.(state)}
+					{devicePinControlFor?.(state)?.reordering && <Flex justifyContent="center" paddingY={1}><ThingPinControls control={devicePinControlFor(state)} /></Flex>}
+          {deviceFooter?.(state)}
 				</Box>
 			) : null
 		)}
@@ -381,6 +397,7 @@ export const ThingsGridView = ({
           alignItems="center"
           cursor="pointer"
           data-thing-id={thing.id}
+          data-pin-id={handlers.pinControlFor?.(thing)?.pinned ? thing.id : undefined}
           direction="column"
           gap={1}
           onClick={(event) => handleItemClick(thing, handlers, event)}
@@ -389,7 +406,7 @@ export const ThingsGridView = ({
           padding={3}
           position="relative"
           role="group"
-          sx={{ ...BROWSE_CONTROLS_SX, paddingTop: '44px', '@media (hover: none), (pointer: coarse)': {
+          sx={{ ...PIN_DROP_SX, ...BROWSE_CONTROLS_SX, paddingTop: '44px', '@media (hover: none), (pointer: coarse)': {
             ...BROWSE_CONTROLS_SX['@media (hover: none), (pointer: coarse)'], paddingTop: '56px'
           } }}
           transition="box-shadow 120ms ease, background 120ms ease"
@@ -422,6 +439,7 @@ export const ThingsGridView = ({
             {thing.author?.id === handlers.ownerId && <Button size="sm" variant="ghost" onClick={() => handlers.onItemAction(thing, 'edit')}>Edit app</Button>}
           </Flex>}
           <RecordingThingTranscript thing={thing} />
+          {handlers.pinControlFor?.(thing)?.reordering && <ThingPinControls control={handlers.pinControlFor(thing)} />}
           {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
@@ -437,6 +455,7 @@ export const ThingsListView = ({
   handlers,
   onToggleAll,
   allSelected,
+  hideHeader = false,
   displayMode,
 	schemaRenderFor,
 	devices = [],
@@ -446,12 +465,14 @@ export const ThingsListView = ({
 	onDeviceSelect,
 	onDeviceContextMenu,
 	deviceFooter,
-	deviceSetup
+	deviceSetup,
+  devicePinControlFor
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
   onToggleAll: () => void;
   allSelected: boolean;
+  hideHeader?: boolean;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
 } & ThingsDevicePresentation) => (
@@ -460,10 +481,10 @@ export const ThingsListView = ({
 			<Box {...CARD_STYLES} overflow="hidden" padding={0}>
 				{devices.map((state) =>
 					state.summary ? (
-						<Box key={`device:${state.deviceId}`} minWidth={0}>
+						<Box key={`device:${state.deviceId}`} minWidth={0} data-pin-id={devicePinControlFor?.(state)?.pinned ? state.deviceId : undefined} sx={PIN_DROP_SX}>
 							<DeviceListRow
 							device={state.summary}
-							controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
+							controls={<DeviceControls pinControl={devicePinControlFor?.(state)} state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 							onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -471,7 +492,8 @@ export const ThingsListView = ({
 							selected={selectedDeviceId === state.deviceId}
 							snapshot={state.snapshot}
 						/>
-							{deviceFooter?.(state)}
+							{devicePinControlFor?.(state)?.reordering && <Flex justifyContent="center" paddingY={1}><ThingPinControls control={devicePinControlFor(state)} /></Flex>}
+          {deviceFooter?.(state)}
 						</Box>
 					) : null
 				)}
@@ -480,7 +502,7 @@ export const ThingsListView = ({
 		{deviceSetup}
 		{items.length ? (
   <Box {...CARD_STYLES} overflow="hidden">
-    <Flex
+    {!hideHeader && <Flex
       alignItems="center"
       borderBottom="1px solid var(--tt-border, #ececef)"
       color="var(--tt-muted, #9a9aa6)"
@@ -512,7 +534,7 @@ export const ThingsListView = ({
         Updated
       </Text>
       <Box width="24px" />
-    </Flex>
+    </Flex>}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
       return (
@@ -525,13 +547,14 @@ export const ThingsListView = ({
           borderBottom="1px solid var(--tt-border, #ececef)"
           cursor="pointer"
           data-thing-id={thing.id}
+          data-pin-id={handlers.pinControlFor?.(thing)?.pinned ? thing.id : undefined}
           direction="column"
           onClick={(event) => handleItemClick(thing, handlers, event)}
           onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
           opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
           paddingX={3}
           paddingY={2}
-          sx={{ ...BROWSE_CONTROLS_SX, '&:last-of-type': { borderBottom: 'none' } }}
+          sx={{ ...PIN_DROP_SX, ...BROWSE_CONTROLS_SX, '&:last-of-type': { borderBottom: 'none' } }}
           userSelect="none"
         >
         <Flex alignItems="center" gap={3}>
@@ -547,7 +570,7 @@ export const ThingsListView = ({
           <Box display={handlers.compact ? 'none' : ['none', 'block']} width="90px">
             <VisibilityChip thing={thing} />
           </Box>
-          <Flex display={['none', null, 'flex']} flex="0.7" gap={1} minWidth={0} overflow="hidden">
+          <Flex display={handlers.compact ? 'none' : ['none', null, 'flex']} flex="0.7" gap={1} minWidth={0} overflow="hidden">
             {thing.tags.slice(0, 3).map((tag) => (
               <Text
                 key={tag}
@@ -574,6 +597,7 @@ export const ThingsListView = ({
           </Box>
         )}
         <RecordingThingTranscript thing={thing} />
+        {handlers.pinControlFor?.(thing)?.reordering && <ThingPinControls control={handlers.pinControlFor(thing)} />}
           {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
@@ -590,6 +614,9 @@ export const ThingsListView = ({
 export const ThingsColumnsView = ({
   path,
   itemsFor,
+  handlersForFolder,
+  pinnedForFolder,
+  hasPinnedForFolder,
   activeFolderAt,
   onOpenFolderAt,
   onNewFolder,
@@ -603,11 +630,15 @@ export const ThingsColumnsView = ({
 	onDeviceSelect,
 	onDeviceContextMenu,
 	deviceFooter,
-	deviceSetup
+	deviceSetup,
+  devicePinControlFor
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
   itemsFor: (folderId: string | null) => ThingsThing[] | undefined;
+  handlersForFolder?: (folderId: string | null) => ThingsItemHandlers;
+  pinnedForFolder?: (folderId: string | null) => React.ReactNode;
+  hasPinnedForFolder?: (folderId: string | null) => boolean;
   activeFolderAt: (depth: number) => string | null;
   onOpenFolderAt: (depth: number, folderId: string) => void;
   handlers: ThingsItemHandlers;
@@ -618,10 +649,12 @@ export const ThingsColumnsView = ({
 	<Flex {...CARD_STYLES} alignItems="stretch" minHeight="320px" overflowX="auto" padding={0} sx={{ WebkitOverflowScrolling: 'touch' }}>
     {path.map((folderId, depth) => {
       const items = itemsFor(folderId);
+      const columnHandlers = handlersForFolder?.(folderId) || handlers;
       const nextActive = activeFolderAt(depth);
       return (
         <Flex
           key={`${depth}-${folderId || 'root'}`}
+          data-pin-parent={folderId || ''}
           borderRight="1px solid var(--tt-border, #ececef)"
           direction="column"
           flexShrink={0}
@@ -634,10 +667,10 @@ export const ThingsColumnsView = ({
 					{depth === 0
 						? devices.map((state) =>
 								state.summary ? (
-									<Box key={`device:${state.deviceId}`} minWidth={0}>
+									<Box key={`device:${state.deviceId}`} minWidth={0} data-pin-id={devicePinControlFor?.(state)?.pinned ? state.deviceId : undefined} sx={PIN_DROP_SX}>
 										<DeviceListRow
 										device={state.summary}
-										controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
+										controls={<DeviceControls pinControl={devicePinControlFor?.(state)} state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 										onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -645,47 +678,50 @@ export const ThingsColumnsView = ({
 										selected={selectedDeviceId === state.deviceId}
 										snapshot={state.snapshot}
 									/>
-										{deviceFooter?.(state)}
+										{devicePinControlFor?.(state)?.reordering && <Flex justifyContent="center" paddingY={1}><ThingPinControls control={devicePinControlFor(state)} /></Flex>}
+          {deviceFooter?.(state)}
 									</Box>
 								) : null
 						  )
 						: null}
           {depth === 0 ? deviceSetup : null}
+          {pinnedForFolder?.(folderId)}
           {(items || []).map((thing) => {
-            const selected = handlers.selected.has(thing.id);
+            const selected = columnHandlers.selected.has(thing.id);
             const folder = isFolder(thing);
             const isOpenPath = folder && nextActive === thing.id;
             return (
               <Flex
                 key={thing.id}
 								background={isOpenPath ? 'var(--tt-surface, #fafafb)' : selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
-                {...dragSourceProps(thing, handlers)}
-                {...dropTargetProps(thing, handlers)}
-                {...dropHighlight(thing, handlers)}
+                {...dragSourceProps(thing, columnHandlers)}
+                {...dropTargetProps(thing, columnHandlers)}
+                {...dropHighlight(thing, columnHandlers)}
                 cursor="pointer"
                 data-thing-id={thing.id}
+          data-pin-id={columnHandlers.pinControlFor?.(thing)?.pinned ? thing.id : undefined}
                 direction="column"
-                onClick={(event) => handleItemClick(thing, handlers, event, folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined)}
-                sx={BROWSE_CONTROLS_SX}
-                onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
-                opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
+                onClick={(event) => handleItemClick(thing, columnHandlers, event, folder && !thingBuilderHref(thing, columnHandlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined)}
+                sx={{ ...PIN_DROP_SX, ...BROWSE_CONTROLS_SX }}
+                onContextMenu={(event) => columnHandlers.onItemContextMenu(thing, event)}
+                opacity={columnHandlers.cutIds.has(thing.id) ? 0.45 : 1}
                 paddingX={3}
                 paddingY="6px"
                 userSelect="none"
               >
                 <Flex alignItems="center" gap={2}>
-                  <ItemSelection handlers={handlers} thing={thing} />
+                  <ItemSelection handlers={columnHandlers} thing={thing} />
                   <ThingIconDisplay thing={thing} size={14} />
                   <TitleLink
                     flex="1"
                     fontSize="13px"
-                    handlers={handlers}
+                    handlers={columnHandlers}
                     noOfLines={1}
-                    onOpen={folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined}
+                    onOpen={folder && !thingBuilderHref(thing, columnHandlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined}
                     thing={thing}
                     wordBreak="break-all"
                   />
-                  <ItemMenu handlers={handlers} thing={thing} />
+                  <ItemMenu handlers={columnHandlers} thing={thing} />
                   {folder && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
                 </Flex>
                 {displayMode === 'preview' && !folder && (
@@ -694,11 +730,12 @@ export const ThingsColumnsView = ({
                   </Box>
                 )}
                 <RecordingThingTranscript thing={thing} />
-          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
+                {columnHandlers.pinControlFor?.(thing)?.reordering && <ThingPinControls control={columnHandlers.pinControlFor(thing)} />}
+          {columnHandlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{columnHandlers.itemActions(thing)}</Box>}
               </Flex>
             );
           })}
-					{items && !items.length && !(depth === 0 && devices.length) && (
+					{items && !items.length && !hasPinnedForFolder?.(folderId) && !(depth === 0 && devices.length) && (
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px" paddingX={3} paddingY={2}>
               Empty ✨
             </Text>

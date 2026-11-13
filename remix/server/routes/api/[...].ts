@@ -330,6 +330,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
+	'v1/things/pins': () => import('../../../app/routes/api/v1/things/pins/_pins'),
 	'v1/things/storage-policy': () => import('../../../app/routes/api/v1/things/storage-policy/_storage-policy'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),

@@ -160,6 +160,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. **Codex (AI)**
+
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and
   cloud saves; collapse device sections by default, page location history ten
   at a time, and move secondary navigation into context menus. Device setup
