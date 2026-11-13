@@ -22,12 +22,13 @@ const url = 'http://localhost/api/v1/marketing/publications';
 
 test('an anonymous visitor can read the publish state, and gets no audit trail', async () => {
 	const response = await loader({ request: new Request(url) });
-	assert.equal(response.status, 200);
+	assert.equal(response.status, 503);
 
 	const payload = await response.json();
-	assert.equal(payload.ok, true);
-	assert.deepEqual(payload.publications, { published: [], hidden: [], updatedAt: null }, 'an unreachable store publishes nothing rather than everything');
-	assert.ok(!('audit' in payload.publications), 'who switched each key is admin-only and must never reach a visitor');
+	assert.equal(payload.ok, false);
+	assert.equal(payload.freshness, 'unavailable');
+	assert.equal(payload.publications, undefined, 'an unreachable store is unavailable rather than a fabricated empty success');
+	assert.ok(!('audit' in (payload.publications ?? {})), 'who switched each key is admin-only and must never reach a visitor');
 	assert.ok(!('audit' in payload), 'nor at the top level');
 });
 

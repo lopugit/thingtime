@@ -159,7 +159,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
 	assert.equal(manifest.features['api.things-import']?.version, '1.14.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.17.0');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.1');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.2');
+
 
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
@@ -186,9 +187,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.2.0');
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
-  assert.equal(manifest.features['api.health-nitro']?.version, '1.3.0');
+  assert.equal(manifest.features['api.health-nitro']?.version, '1.3.1');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.6.0');
-  assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.2');
+  assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.3');
   for (const feature of ['api.mongodb-status', 'api.mongodb-status-data']) {
     assert.equal(manifest.features[feature]?.version, '1.0.1');
   }
@@ -350,7 +351,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.23.2');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
-    assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+    assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   }
 });
 
@@ -461,7 +462,7 @@ test('file finalization recovery requires the compatible upload-start correction
 
 test('crawler discovery endpoints publish their root paths and -docs twins on the origin manifest', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   const paths = (feature: string) => manifest.operations.filter((operation) => operation.feature === feature).map((operation) => operation.path).sort();
   assert.deepEqual(paths('api.seo-robots'), ['/robots.txt', '/robots.txt-docs']);
   assert.deepEqual(paths('api.seo-sitemap'), ['/sitemap.xml', '/sitemap.xml-docs']);
@@ -565,7 +566,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
     ['api.devices', '1.16.0', '1.10.0'],
-    ['api.devices-node-state', '1.15.1', '1.15.0'],
+    ['api.devices-node-state', '1.15.2', '1.15.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
@@ -579,7 +580,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
 test('host resource telemetry negotiates both additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://devices.test');
   for (const feature of ['api.devices', 'api.devices-node-state']) {
-    const current = feature === 'api.devices' ? '1.16.0' : '1.15.1';
+    const current = feature === 'api.devices' ? '1.16.0' : '1.15.2';
     assert.equal(manifest.features[feature]?.version, current);
     assert.equal(createApiCapabilitiesManifest().features[feature], current);
     for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));
@@ -724,8 +725,9 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.66.0', '1.49.2'], ['api.things-update', '1.29.0', '1.18.1'], ['api.things-import', '1.14.0', '1.12.0'], ['api.schemas', '1.3.0', '1.1.1'], ['api.things-bulk', '1.10.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.2.0', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.66.0', '1.49.2'], ['api.things-update', '1.29.0', '1.18.1'], ['api.things-import', '1.14.0', '1.12.0'], ['api.schemas', '1.3.0', '1.1.1'], ['api.things-bulk', '1.10.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.2.1', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
   assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features[feature], minimum), true);
+
 
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);
@@ -910,4 +912,15 @@ test('relational access management is origin-scoped, registered and explicitly n
   const operation = runtime.operations.find(operation => operation.path === '/api/v1/things/acl');
   assert.equal(operation?.feature, 'api.things-acl');
   assert.deepEqual(operation?.methods, ['GET', 'POST']);
+});
+
+test('MCP Apps bridge repair publishes a compatible patch on both origin manifests', () => {
+  const feature = 'api.chatgpt-mcp';
+  assert.equal(createApiCapabilitiesManifest().features[feature], '2.2.1');
+  assert.equal(thingtimeCapabilityManifest('https://mcp.example').features[feature].version, '2.2.1');
+  assert.equal(capabilitySatisfies('2.2.1', '2.2.0'), true);
+  assert.equal(capabilitySatisfies('2.2.0', '2.2.1'), false);
+  assert.equal(capabilitySatisfies('3.0.0', '2.2.1'), false);
+  assert.equal(capabilitySatisfies(undefined, '2.2.1'), false);
+
 });

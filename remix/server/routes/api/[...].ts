@@ -330,6 +330,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
+	'v1/things/pins': () => import('../../../app/routes/api/v1/things/pins/_pins'),
 	'v1/things/storage-policy': () => import('../../../app/routes/api/v1/things/storage-policy/_storage-policy'),
 	'v1/things/acl': () => import('../../../app/routes/api/v1/things/acl/_acl'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
@@ -395,6 +396,9 @@ const normalizeResponse = (value: unknown) => {
 };
 
 export default defineHandler(async (event) => {
+  // srvx attaches its socket-close listener lazily when signal is first read.
+  // Observe it before any asynchronous route work, including failures.
+  const requestSignal = event.req.signal;
   const refusedTest = agentTestRefusal();
   if (refusedTest) return refusedTest;
   const path = normalizePath(event.context.params?.path, event.req.url);
@@ -570,7 +574,7 @@ export default defineHandler(async (event) => {
         }
       }
     });
-    if (response.status >= 500 && path !== 'v1/admin/error-logs') {
+    if (!requestSignal.aborted && response.status >= 500 && path !== 'v1/admin/error-logs') {
       const code = await storageFailureFromResponse(response);
       await recordErrorLog(new Error(code ? 'Storage accounting requires recovery' : 'HTTP request returned a server error'), { source: code ? 'storage-accounting' : 'http-response', status: response.status, code });
     }
@@ -580,19 +584,19 @@ export default defineHandler(async (event) => {
       return err;
     }
 		if (err instanceof StorageMutationError) {
-      if (err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
+      if (!requestSignal.aborted && err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
 			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
 		}
 
     throw err;
   }
   } catch (error) {
-    if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
+    if (!requestSignal.aborted && !(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
   } finally {
     // Request-bound telemetry only. Health/discovery and proxy returns do not
     // warm clients or schedule polling; publication reuses an existing home pool.
-    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+    if (!requestSignal.aborted && !path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
       try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
     }
   }

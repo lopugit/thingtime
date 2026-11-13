@@ -3,7 +3,7 @@ import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATG
 import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_OPERATIONS, CREDENTIAL_IMPORT_VERSION } from '../credentials/importContract';
 
-export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type ApiHttpMethod = 'GET' | 'HEAD' | 'OPTIONS' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type ApiAuthMode = 'none' | 'optional' | 'session' | 'bearer' | 'session-or-bearer';
 
@@ -317,14 +317,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-		featureVersion: '1.15.1',
-		contractVersion: '1.15.1',
+		featureVersion: '1.15.2',
+		contractVersion: '1.15.2',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
-			'Version 1.15.1 keeps the snapshot storage charge consistent when optional telemetry is omitted. ' +
+			'Version 1.15.2 bounds concurrent snapshot collision retries to three attempts, rechecks ownership, and stops database work when the request is cancelled or its operation budget expires. Version 1.15.1 keeps the snapshot storage charge consistent when optional telemetry is omitted. ' +
 			'Version 1.16 adds an origin/account/content-plane scoped rootFolderId normal-folder reference; GET devices-folders checks whether it exists, POST materializes it on explicit navigation or a new connection save. It never grants native file access. Version 1.15 accepts an optional closed descriptorPatch containing required model and optional osVersion/appVersion. It updates only this credential-bound device metadata atomically with a newer complete state revision; omitted fields are preserved. Owner, name, platform and serial fields are forbidden. ' +
 			'Version 1.14 accepts optional state.resources with cpuPercent (0–100), memoryUsedBytes, memoryTotalBytes, diskUsedBytes, diskTotalBytes, diskReadBytesPerSecond, diskWriteBytesPerSecond, networkRxBytesPerSecond and networkTxBytesPerSecond. Optional networkLinkBitsPerSecond is a measured comparable per-direction capacity for the interfaces contributing throughput. Byte totals and link capacity are safe integers, rates are finite non-negative numbers, and unavailable fields are omitted. Interface names, addresses and mount paths are excluded. ' +
 			'Version 1.13 adds optional 64px PNG menu-item thumbnails with explicit menu-bar/application provenance. Remote image URLs and SVG are rejected; old nodes may omit both fields. Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
@@ -468,14 +468,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-commands',
-    featureVersion: '1.11.0',
-		contractVersion: '1.11.0',
+    featureVersion: '1.11.1',
+		contractVersion: '1.11.1',
 		group: 'devices',
 		title: 'Device command lease channel',
 		endpoint: '/api/v1/devices/node/commands',
 		summary: 'Claims, heartbeats and reports journal-backed device work.',
 		detail:
-			'Successful script.run reports require a bounded script result; only exact owner command reads expose stdout and stderr, and results expire after ten minutes. Shell exit failures and timeouts are reported inside the result, separately from transport completion. Report bodies are capped at 128 KiB. ' +
+			'Version 1.11.1 cancels idle polling with the request and avoids transactions when no queued command exists while preserving lease concurrency and the 500ms discovery cadence. Successful script.run reports require a bounded script result; only exact owner command reads expose stdout and stderr, and results expire after ten minutes. Shell exit failures and timeouts are reported inside the result, separately from transport completion. Report bodies are capped at 128 KiB. ' +
 			'Successful filesystem reports require a bounded result matching the leased operation. Byte results never enter event streams; terminal upload inputs are redacted and filesystem results are exposed only through the exact owner command read for ten minutes. Exact report retries retain their lease identity and content hash. ' +
       'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
 		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
@@ -710,13 +710,13 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
-		id: 'devices-events',
+		id: 'devices-events', contractVersion: '1.0.1', featureVersion: '1.0.1',
 		group: 'devices',
 		title: 'Device event stream',
 		endpoint: '/api/v1/devices/events',
 		summary: 'Returns a reconnectable, cursor-ordered NDJSON device event feed.',
 		detail:
-			'The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
+			'Version 1.0.1 stops event polling on client disconnect and bounds database operations. The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['Open with deviceId and optional cursor.', 'Process newline-delimited events.', 'Reconnect with the final cursor.'],
@@ -804,11 +804,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
   }),
   endpoint({
-    id: 'environment-gateway', contractVersion: '1.1.1', featureVersion: '1.1.1', group: 'deployment',
+    id: 'environment-gateway', contractVersion: '1.2.2', featureVersion: '1.2.2', group: 'deployment',
     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
-    detail: 'The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. No secrets or database configuration are published.',
-    auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET'],
+    detail: 'Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. No secrets or database configuration are published.',
+    auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET', 'HEAD', 'OPTIONS'],
+
     steps: ['Configure one stable alias and separate relay secret for each intended environment.', 'Negotiate api.environment-gateway 1.0.0 and the semantic operation being forwarded.', 'Compare the alias deploymentId with the local deployment identity before database access.'],
     requestExamples: [{ name: 'Discover gateway', description: 'Credential-free origin-scoped discovery.', method: 'GET' }],
     responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
@@ -1005,13 +1006,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'capabilities',
-		contractVersion: '1.2.0', featureVersion: '1.2.0',
+		contractVersion: '1.3.0', featureVersion: '1.3.0',
 		group: 'platform',
 		title: 'API capabilities',
 		endpoint: '/api/v1/capabilities',
 		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
 		detail:
-			'Version 1.2.0 permits an explicit custom data authority on HTTP loopback for an Electron-managed local backend; production and development authorities still require HTTPS. Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
+			'Version 1.3 adds conditional GET/HEAD and OPTIONS for the public discovery manifest, with private ETag revalidation. Version 1.2.0 permits an explicit custom data authority on HTTP loopback for an Electron-managed local backend; production and development authorities still require HTTPS. Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
 		auth: { mode: 'none', description: 'Public deployment metadata only: never an account, connection string, credential, or other database secret.' },
 		methods: ['GET'],
 		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
@@ -1023,7 +1024,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				body: {
 					ok: true,
 					schemaVersion: 1,
-					features: { 'api.capabilities': '1.2.0', 'api.devices': '1.0.0' },
+					features: { 'api.capabilities': '1.3.0', 'api.devices': '1.0.0' },
 					dataEnvironment: {
 						schemaVersion: 1,
 						id: 'development',
@@ -1437,7 +1438,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-mcp', contractVersion: '2.2.0', featureVersion: '2.2.0',
+    id: 'chatgpt-mcp', contractVersion: '2.2.1', featureVersion: '2.2.1',
     group: 'integrations',
     title: 'ChatGPT MCP gateway',
     endpoint: CHATGPT_MCP_PATH,
@@ -1449,6 +1450,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
       'POST JSON-RPC initialize, tools/list, prompts/list, resources/list, resources/read, and tools/call requests to this endpoint.',
+      'Review cards use the versioned UI resource and the MCP Apps ui/initialize handshake before ui/notifications/initialized and host tools/call; the old resource URI remains readable for historical callers.',
       'Use get_thingtime_thing or get_thingtime_things for known IDs and list_thingtime_comments for a known target; reserve list/search for discovery.',
       'Read the selected account confirmation preferences. For composed writes, preview the complete plan, review its diff, obtain confirmation when the effective policy requires it, then apply the exact signed receipt. Host approval requirements remain independent.'
     ],
@@ -4599,6 +4601,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-frontend',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'health',
     title: 'Frontend health',
     endpoint: '/api/v1/health/frontend',
@@ -4610,6 +4614,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters to check the current origin.',
       'Pass target or origin query parameters when checking another Thingtime environment.',
       'Read ok, state, statusCode, responseMs, and shellDetected for diagnostics.',
@@ -4632,8 +4637,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-mongodb',
-    contractVersion: '1.0.2',
-    featureVersion: '1.0.2',
+    contractVersion: '1.0.3',
+    featureVersion: '1.0.3',
     group: 'health',
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
@@ -4645,6 +4650,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime MongoDB health.',
       'Pass target or origin query parameters to compare another deployment when supported.',
       'Read connected, host, dbName, custom, pingMs, collections, replicaSet, checkedAt, and error.',
@@ -4672,8 +4678,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.3.1',
+    featureVersion: '1.3.1',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
@@ -4686,6 +4692,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
       'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
@@ -4733,6 +4740,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-vercel',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'health',
     title: 'Vercel health',
     endpoint: '/api/v1/health/vercel',
@@ -4744,6 +4753,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
+      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current Vercel deployment status.',
       'Pass target or origin query parameters for remote environment checks when supported.',
       'Read configured, state, label, hasError, and error for UI diagnostics.',
@@ -10758,14 +10768,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'seo-robots',
-    contractVersion: '1.0.0',
-    featureVersion: '1.0.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     group: 'social',
     title: 'robots.txt',
     endpoint: '/robots.txt',
-    summary: 'Crawler policy: everything is allowed for search engines and AI crawlers, plus the Sitemap location.',
+    summary: 'Production crawler policy and nonproduction crawl exclusion.',
+    notes: ['Version 1.1.1 serves deployment-local crawler policy without contacting the environment gateway, including when its API is older or unavailable.'],
     detail:
-      'Plain text (text/plain; charset=utf-8). `User-agent: *` / `Allow: /` welcomes every crawler; well-known AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended and others) are also named explicitly with Allow: /, by the owner’s decision to keep the site open to AI indexing. The final `Sitemap:` line points at this origin’s own /sitemap.xml. No account data or configuration is involved.',
+      'Version 1.1 disallows cooperative crawling on configured nonproduction deployments; production keeps its existing crawler policy. Platform authentication independently enforces preview access. Plain text (text/plain; charset=utf-8). On production, `User-agent: *` / `Allow: /` welcomes every crawler; well-known AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended and others) are also named explicitly with Allow: /, by the owner’s decision to keep the site open to AI indexing. The final `Sitemap:` line points at this origin’s own /sitemap.xml. No account data or configuration is involved.',
     auth: { mode: 'none', description: 'Crawlers fetch this publicly.' },
     methods: ['GET'],
     steps: ['Nothing to configure — crawlers fetch it automatically. Fork owners edit AI_CRAWLER_USER_AGENTS in app/api/utils/seo/sitemapCore.ts to change policy.'],
@@ -11872,6 +11883,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: ['Negotiate api.things-acl 1.0.0 at the selected origin.', 'Page all entries needed for editing and retain the returned revision.', 'Add or remove exact entries, optionally fencing the mutation with expectedAclRevision.'],
     requestExamples: [{ name: 'Read access entries', description: 'First page for an owned Thing.', method: 'GET', query: { id: '<thing-id>' } }, { name: 'Grant read access', description: 'Add one exact grant without rewriting other entries.', method: 'POST', body: { id: '<thing-id>', operation: 'add', entries: ['tt:user/alex'] } }],
     responseExamples: [{ status: 200, description: 'Access page.', body: { ok: true, entries: ['tt:user'], nextCursor: null, revision: '<revision>' } }, { status: 409, description: 'ACL changed; reload before replacement.' }]
+  }),
+  endpoint({
+    id: 'things-pins', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
+    title: 'Thing browser pins', endpoint: '/api/v1/things/pins', methods: ['GET', 'POST'],
+    summary: 'Private ordered pins scoped to an exact page and complete parent path.',
+    detail: 'GET path is a JSON array of stable page and ancestor identities. Follow nextCursor with the same revision until null, then sort combined pins by order; an authorization-filtered empty page can still have a cursor. A changed revision returns 409, requiring a fresh first page. Pins are independent for each origin, owning account, selected content plane and complete path. POST pin/unpin accepts thingId; reorder accepts the complete visible thingIds order. Every mutation requires the current revision (initially 0). A stale revision returns 409 without changing pins. Each pin is a private relational Thing; no target content, placement or audience is changed. Targets are reauthorized on every read and pin; missing, revoked and unsupported protected targets are omitted without an existence reason. An owned archived dedicated-content pin may include an optional presentation containing only its canonical minimal archive browser card (generic label, kinds and timestamps); protected source bodies, participants and media bindings are never returned. Active dedicated content and foreign-owner archived metadata remain unavailable. Owned device identities are supported only on the home content plane. App, device and scoped PAT callers are refused. Pin rows use canonical account storage admission, and scope revisions serialize concurrent first creation, pinning and reordering. There is no product pin count limit.',
+    auth: { mode: 'session-or-bearer', description: 'Full first-party user session or user JWT only.' },
+    steps: ['Negotiate api.things-pins 1.0.0 at the selected origin and active API.', 'Read the stable page and complete parent path.', 'Write the intended change with its current revision, then read back.'],
+    requestExamples: [{ name: 'Read pins', description: 'Root Thing browser pins.', method: 'GET', query: { path: '["/things"]' } }],
+    responseExamples: [{ status: 200, description: 'Private authorized pins in saved order.', body: { ok: true, revision: '0', pins: [] } }, { status: 409, description: 'Concurrent change requires refresh.', body: { ok: false, error: 'Pins changed. Refresh before trying again.' } }]
+
   }),
   endpoint({
     id: 'things-storage-policy',
@@ -15063,13 +15085,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'marketing-publications',
+    id: 'marketing-publications', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'marketing',
     title: 'Marketing publish state',
     endpoint: '/api/v1/marketing/publications',
     summary: 'Which parts of the generated /marketing suite an admin has published — the read the client gates every marketing surface on.',
     detail:
-      'Everything under /marketing (the hub, each category index, every generated page, each section inside a page, ' +
+      'Version 1.1 bounds public read work and adds freshness: live on successful reads. Dependency failure returns HTTP 503 with freshness: stale and cached public lists when available, or freshness: unavailable. Clients preserve cached content and show degraded status with Retry. Everything under /marketing (the hub, each category index, every generated page, each section inside a page, ' +
       'the social-image suite and each feature\u2019s image set) is admin-only until an admin publishes it, one key at a ' +
       'time. This endpoint returns the two key lists that decide what a visitor sees: `published` (keys switched on — ' +
       'hub, social, social:<feature>, category:<key>, page:<slug>) and `hidden` (section:<slug>#<id> keys switched off ' +
@@ -15085,7 +15107,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET without parameters.',
       'Gate each marketing surface on publications.published containing its key; drop sections whose key is in publications.hidden.',
       'Admins skip the gate client-side (they preview the unpublished suite) but still read the same lists to render publish controls.',
-      'Handle 429 when rate-limited (anonymous callers key by IP).'
+      'Handle 429 when rate-limited (anonymous callers key by IP), and 503 stale/unavailable responses with bounded retries respecting Retry-After.'
     ],
     requestExamples: [{ name: 'Read the publish state', description: 'The lists every /marketing route reads.', method: 'GET' }],
     responseExamples: [
@@ -15093,7 +15115,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Two published pages inside a published category, one hidden section, hub open.',
         body: {
-          ok: true,
+          ok: true, freshness: 'live',
           publications: {
             published: ['hub', 'category:landing', 'page:landing/feed', 'page:landing/messages'],
             hidden: ['section:landing/feed#social'],
@@ -15104,18 +15126,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'admin-marketing-publications',
+    id: 'admin-marketing-publications', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'admin',
     title: 'Publish / unpublish marketing surfaces',
     endpoint: '/api/v1/admin/marketing/publications',
     summary: 'Switch marketing hub, categories, pages, page sections and social image sets on or off, one key or a whole sweep at a time (admin only).',
     detail:
-      'POST { changes: [{ key, state }] } applies up to 2,000 changes in one atomic write to the marketing-publications ' +
+      'Version 1.1 bounds reads and adds freshness. A committed publish write remains ok with applied count even if readback is stale or unavailable; clients must not replay that write merely because confirmation data is unavailable. POST { changes: [{ key, state }] } applies up to 2,000 changes in one atomic write to the marketing-publications ' +
       'settings singleton. Every key is validated against the generated catalog (unknown keys 400 the whole batch, ' +
       'nothing is written), and each target accepts only its own state: hub, social, social:<feature>, category:<key> ' +
       'and page:<slug> take "published"; section:<slug>#<id> takes "hidden"; null clears either. Duplicate keys ' +
       'collapse to the last entry. GET returns the same state the public endpoint serves plus the per-key audit ' +
-      'trail (who, when). Both respond with the full new state so the client reconciles in one hop.',
+      'trail (who, when). Successful live readback includes the full new state. On stale or unavailable readback, preserve the committed write and reconcile with a later read; never replay it automatically.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin); the POST rate limit fails closed.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -15144,7 +15166,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Applied; full state with audit returned.',
         body: {
-          ok: true,
+          ok: true, freshness: 'live',
           applied: 2,
           publications: {
             published: ['hub', 'page:landing/feed'],
@@ -15154,6 +15176,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
+      { status: 200, description: 'Write committed; readback unavailable. Preserve the optimistic value and reconcile with GET.', body: { ok: true, applied: 2, freshness: 'unavailable' } },
+      { status: 503, description: 'Read temporarily unavailable.', body: { ok: false, freshness: 'unavailable', error: 'Marketing publishing is temporarily unavailable' } },
       { status: 400, description: 'A key the catalog does not generate.', body: { ok: false, error: 'Unknown page: landing/nope' } },
       { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]

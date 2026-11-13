@@ -178,6 +178,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   memberships, reactions, and authored schemas/Components. See
   [relational access](../docs/relational-access.md) and
   [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
+
+- 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
+
+- 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
+  MCP Apps bridge, advertise a fresh versioned UI resource, and preserve results
+  with one inline error on host failures. Correlate bounded requests and prevent
+  uncertain or stale Apply responses from retrying or changing a newer card.
+  Keep historical resource callers and legacy hosts compatible, and supply
+  complete demo review-page metadata so its confirmation controls render.
+  **Codex (AI)**
+
+
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
   cached results during explicitly permitted filter changes while clearing
@@ -728,6 +740,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   conflict, recovery, progress and priority controls to the installed app.
   Private leased requests preserve device-owned execution and account boundaries.
   [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+### Deployment request cost controls
+
+- 2026-11-13: Preserve the Status footer's Branch target while identifying exact platform 401/403 responses as authentication required. Keep diagnostics anonymous, refuse redirects and bound response bodies/fallback by one deadline. No preview-access bypass is introduced. **Codex (AI)**
+
+- 2026-11-13: Forward optional exact preview-retirement IDs and a typed dry-run
+  flag to the already-merged protected controller. Preserve ordinary event
+  defaults; keep policy/credential checks and deletion in the protected job.
+  Add caller-contract coverage and dry-run-first rollout notes. Remove the
+  obsolete standalone promotion runner already forbidden by that contract;
+  promotion remains in the protected controller. **Codex (AI)**
+
+- 2026-11-13: Add server-only automation support for protected preview gateways,
+  conditional exact-origin capability discovery, bounded publication reads with
+  visible degraded/retry state, and cancellable device polling/state retries.
+  Preserve signed gateway admission, account isolation and committed-write
+  reconciliation. Deployment-protection activation remains a separate live
+  rollout gate; no hosting migration. See [PR 1502 validation](../PRs/1502-codex-vercel-cost-reduction-reduce-preview-request-costs.md)
+  and the [cost-control checks](../TESTING.md#request-cost-controls-13-november-2026).
+  **Codex (AI)**
 
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 

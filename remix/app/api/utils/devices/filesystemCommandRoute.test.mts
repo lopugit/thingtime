@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 import { createHash } from 'node:crypto';
-let doc: any; const events: any[] = [], queries: any[] = [];
+let doc: any; let transactions = 0; const events: any[] = [], queries: any[] = [];
 const at = (o: any, key: string) => key.split('.').reduce((v, k) => v?.[k], o);
 const matches = (o: any, q: any): boolean => Object.entries(q).every(([key, value]: any) => {
   if (key === '$or') return value.some((clause: any) => matches(o, clause));
@@ -20,10 +20,10 @@ const collection = {
   },
   updateOne: async () => ({modifiedCount:0})
 };
-mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {namedExports:{getHomeThingsCollection:async()=>collection, withHomeMongoTransaction:async(fn:any)=>fn({})}});
+mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {namedExports:{getHomeThingsCollection:async()=>collection, withHomeMongoTransaction:async(fn:any)=>{transactions++;return fn({});}}});
 mock.module(new URL('./devices.ts', import.meta.url).href, {namedExports:{DEVICE_CONNECTOR_FRESHNESS_MS:30_000, appendDeviceEvent:async(event:any)=>events.push(event), deviceConnectorIsFresh:()=>true, deviceExistsForOwner:async(owner:string,id:string)=>owner==='owner'&&id==='mac'?{shareId:id}:null, newDeviceThing:()=>{throw Error('Not part of this test');}}});
 const {claimNextDeviceCommand, reportDeviceCommand, readDeviceCommand, listDeviceCommands}=await import('./deviceCommands');
-beforeEach(()=>{events.length=0; queries.length=0;doc={_id:'db-command',shareId:'cmd',thingtime:'device-command',ownerId:'owner',targetId:'mac',createdAt:new Date(),updatedAt:new Date(),crystal:{requestId:'write-1',kind:'filesystem',status:'queued',requiresApproval:false,approvalState:'not-required',lastReportKey:null,input:{op:'write',path:'sample.txt',transferId:'c510aa35-af02-46ad-a597-d786942fe4f1',offset:0,total:3,data:'YWJj',sha256:createHash('sha256').update('abc').digest('hex')}}};});
+beforeEach(()=>{transactions=0;events.length=0; queries.length=0;doc={_id:'db-command',shareId:'cmd',thingtime:'device-command',ownerId:'owner',targetId:'mac',createdAt:new Date(),updatedAt:new Date(),crystal:{requestId:'write-1',kind:'filesystem',status:'queued',requiresApproval:false,approvalState:'not-required',lastReportKey:null,input:{op:'write',path:'sample.txt',transferId:'c510aa35-af02-46ad-a597-d786942fe4f1',offset:0,total:3,data:'YWJj',sha256:createHash('sha256').update('abc').digest('hex')}}};});
 
 test('leased upload bytes reach only the node; validated replies are scoped, short-lived and redacted from history/events',async()=>{
   const claimed=await claimNextDeviceCommand('owner','mac',0); assert.equal(claimed.ok,true);if(!claimed.ok||!claimed.command)throw Error('not claimed');
@@ -47,4 +47,33 @@ test('wrong owner/device/lease and mismatched result cannot write or retrieve an
     const result=await reportDeviceCommand('owner','mac',{commandId:'cmd',leaseId:claimed.command.leaseId,eventId:'bad',status:'succeeded',result:{path:'sample.txt',offset:3,complete:true},...patch});assert.equal(result.ok,false);
   }
   assert.equal(doc.crystal.status,'claimed');assert.equal(doc.crystal.result,undefined);
+});
+
+test('idle command waits abort without opening transactions or continuing queue reads', async () => {
+  doc.crystal.status='succeeded';
+  const controller=new AbortController();
+  const pending=claimNextDeviceCommand('owner','mac',20_000,{signal:controller.signal});
+  await new Promise(resolve=>setTimeout(resolve,10));controller.abort();
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(transactions,0);
+  const count=queries.length;await new Promise(resolve=>setTimeout(resolve,30));assert.equal(queries.length,count);
+});
+test('competing claimers preserve exactly one command lease and no-op transactions are avoided', async () => {
+  const results=await Promise.all([claimNextDeviceCommand('owner','mac',0),claimNextDeviceCommand('owner','mac',0)]);
+  assert.equal(results.filter(value=>value.ok&&value.command).length,1);
+  assert.equal(events.filter(value=>value.eventType==='command.claimed').length,1);
+  transactions=0;
+  assert.equal((await claimNextDeviceCommand('owner','mac',0) as any).command,null);
+  assert.equal(transactions,0);
+});
+
+test('a command queued during an idle wait is still claimed on the next poll', async () => {
+  doc.crystal.status='succeeded';
+  const pending=claimNextDeviceCommand('owner','mac',50);
+  const timer=setTimeout(()=>{doc.crystal.status='queued';},5);
+  try {
+    const result=await pending;
+    assert.equal(result.ok,true);if(!result.ok)throw Error('Claim failed');
+    assert.equal(result.command?.id,'cmd');assert.equal(transactions,1);
+  } finally {clearTimeout(timer);}
 });

@@ -29,7 +29,7 @@ export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.resources': '1.0.0',
   'chatgpt.history': '2.0.0',
   'chatgpt.workflows': '2.0.0',
-  'chatgpt.ui': '1.1.0',
+  'chatgpt.ui': '1.1.1',
   'chatgpt.changes': '1.0.0',
   'chatgpt.capabilities': '2.0.0'
 } as const;
