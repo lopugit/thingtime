@@ -53,7 +53,7 @@ test('follower omits incompatible whole contracts without downgrading or inventi
   assert.equal(effective.origin, follower);
   assert.deepEqual(effective.gateway, thingtimeCapabilityManifest(follower).gateway);
   assert.equal(effective.features['api.passwords'].version, '1.3.0');
-  assert.equal(effective.features['api.environment-gateway'].version, '1.2.0');
+  assert.equal(effective.features['api.environment-gateway'].version, '1.2.1');
   for (const operation of effective.operations.filter(operation => isGatewayDataPath(operation.path))) {
     assert.ok(operation.methods.every(method => gatewaySupportsOperation(remote, operation.feature,
       effective.features[operation.feature].version, operation.path, method)));

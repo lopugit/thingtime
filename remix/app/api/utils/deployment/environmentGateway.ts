@@ -9,6 +9,13 @@ export const ENVIRONMENT_GATEWAY_VERSION = '1.0.0';
 export const GATEWAY_OWNERSHIP_TTL_MS = 5_000;
 export type GatewaySettings = { environment: string; origin: string; deploymentId: string; secret: string };
 export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
+export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass';
+/** A server-only platform credential, sent solely to the validated gateway origin. */
+export const gatewayProtectionHeaders = (settings: GatewaySettings): Record<string, string> => {
+  if (gatewayOrigin(settings.origin) !== settings.origin) throw new GatewayUnavailable();
+  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  return secret ? { [VERCEL_PROTECTION_BYPASS_HEADER]: secret } : {};
+};
 export type GatewayManifest = {
   schemaVersion: number; origin: string; gateway?: GatewayDescriptor | null;
   features: Record<string, { version: string }>;
@@ -98,7 +105,8 @@ export const createGatewayAuthority = (options: {
       if (!pending || pending.key !== key) {
         const promise = (async () => {
           const response = await (options.fetch || globalThis.fetch)(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin), {
-            redirect: 'error', cache: 'no-store', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5_000)
+            redirect: 'error', cache: 'no-store', credentials: 'omit',
+            headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected) }, signal: AbortSignal.timeout(5_000)
           });
           const manifest = await readManifest(response);
           if (manifest.schemaVersion !== 1 || manifest.origin !== selected.origin ||

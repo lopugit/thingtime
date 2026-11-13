@@ -123,7 +123,7 @@ const connectionOperations = [
   ['connections-oauth-callback', '/api/v1/connections/oauth/callback', 'GET'],
   ['connections-request', '/api/v1/connections/request', 'POST']
 ] as const;
-for (const [operation, path, method] of connectionOperations) for (const version of [undefined, '1.0.0', '3.0.0', '2.0.0', '2.1.0'])
+for (const [operation, path, method] of connectionOperations) for (const version of [undefined, '1.0.0', '3.0.0', '2.0.0', '2.0.1', '2.1.0'])
  test(`Connections ${operation} requires major2 before forwarding: ${version}`, async t => fixture(async () => {
   const manifest = aliasManifest();
   if (version) manifest.features[`api.${operation}`].version = version;
@@ -134,7 +134,7 @@ for (const [operation, path, method] of connectionOperations) for (const version
   const request = new Request(follower + path, { method, ...(method === 'POST' ? { body: 'synthetic' } : {}),
     headers: { authorization: 'Bearer synthetic' } });
   const response = await proxyEnvironmentRequest(request, authority!);
-  const supported = version === '2.0.0' || version === '2.1.0';
+  const supported = version === '2.0.1' || version === '2.1.0' || (version === '2.0.0' && operation !== 'connections-request');
   assert.equal(response.status, supported ? 200 : 409);
   assert.equal(mock.mock.callCount(), supported ? 1 : 0);
   if (!supported) assert.equal(request.bodyUsed, false);
@@ -238,4 +238,40 @@ test('a request cannot opt a proxy deployment into dedicated connections', async
   }));
   assert.ok(response instanceof Response); assert.deepEqual(await response.json(), { handler: 'gateway' });
   await assert.rejects(requireGatewayDatabaseAccess());
+}));
+
+test('gateway relay replaces spoofed bypass headers and never reflects the secret', async t => fixture(async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings,
+      fetch: async () => Response.json(aliasManifest()) }).current();
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, settings.origin);
+      const incoming = new Request(url, init);
+      assert.equal(incoming.headers.get('x-vercel-protection-bypass'), secret);
+      assert.equal(incoming.headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(incoming, settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return Response.json({ ok: true }, { headers: {
+        'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true'
+      } });
+    });
+    const response = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(response.status, 200);
+    assert.equal(calls, 1);
+    assert.equal(response.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(response.headers.has('x-vercel-set-bypass-cookie'), false);
+    assert.equal((await response.text()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
 }));
