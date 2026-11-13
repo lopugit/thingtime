@@ -10,9 +10,15 @@ export const gatewaySourcePaths = Object.freeze([
 const code = (text) => String(text || '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 export function gatewaySourceIssue(sources) {
   const [mongo, middleware, authority, policy] = gatewaySourcePaths.map((path) => code(sources[path]));
+  // Native-home branches also fence the selected provider before opening a
+  // Mongo connection. Recognize those exact assertions without permitting
+  // arbitrary work or a connection before gateway authorization.
+  const nativeProviderImport = /import\s*\{[^}]*\bassertMongoProviderAllowed\b[^}]*\}\s*from\s*['"]\.\.\/documentStore\/nativeHomeSelection['"]/.test(mongo);
+  const providerGuard = nativeProviderImport ? '(?:assertMongoProviderAllowed\\(\\);\\s*)?' : '';
+  const fencedConnect = new RegExp(`override\\s+async\\s+connect\\(\\)\\s*\\{\\s*${providerGuard}await\\s+requireGatewayDatabaseAccess\\(\\);\\s*${providerGuard}await\\s+super\\.connect\\(\\)`);
   if (!/import\s*\{[^}]*requireGatewayDatabaseAccess[^}]*\}\s*from\s*['"]\.\.\/deployment\/environmentGateway['"]/.test(mongo) ||
       !/class\s+GatewayMongoClient\s+extends\s+mod\.MongoClient/.test(mongo) ||
-      !/override\s+async\s+connect\(\)\s*\{\s*await\s+requireGatewayDatabaseAccess\(\);\s*await\s+super\.connect\(\)/.test(mongo)) return 'database-fence-missing';
+      !fencedConnect.test(mongo)) return 'database-fence-missing';
   const legacyIngress = /runAdmittedGatewayWork\(/.test(middleware);
   // The leased ingress keeps admission through response consumption and releases
   // it on completion, cancellation and errors instead of counting static traffic.

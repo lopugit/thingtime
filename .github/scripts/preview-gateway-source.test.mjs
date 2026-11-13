@@ -34,6 +34,23 @@ test('admits integrated source and preserves explicit dedicated branch opt-in', 
   assert.equal(gatewaySourceIssue(sources()), null);
   const value = sources(); value[gatewaySourcePaths[3]] = "export const mongoConnectionPolicy = 'dedicated';"; assert.equal(gatewaySourceIssue(value), null);
 });
+test('admits native-provider assertions without removing the database fence', () => {
+  const value = sources();
+  value[gatewaySourcePaths[0]] = "import { assertMongoProviderAllowed } from '../documentStore/nativeHomeSelection';\n" + value[gatewaySourcePaths[0]].replace(
+    'await requireGatewayDatabaseAccess(); await super.connect();',
+    'assertMongoProviderAllowed(); await requireGatewayDatabaseAccess(); assertMongoProviderAllowed(); await super.connect();');
+  assert.equal(gatewaySourceIssue(value), null);
+  for (const [before, after] of [
+    ['await requireGatewayDatabaseAccess();', ''],
+    ['await requireGatewayDatabaseAccess(); assertMongoProviderAllowed(); await super.connect();', 'await super.connect(); assertMongoProviderAllowed(); await requireGatewayDatabaseAccess();'],
+    ["import { assertMongoProviderAllowed } from '../documentStore/nativeHomeSelection';", ''],
+    ['assertMongoProviderAllowed();', 'openAnotherConnection();'],
+    ['await requireGatewayDatabaseAccess();', '/* await requireGatewayDatabaseAccess(); */'],
+  ]) {
+    const invalid = { ...value, [gatewaySourcePaths[0]]: value[gatewaySourcePaths[0]].replace(before, after) };
+    assert.equal(gatewaySourceIssue(invalid), 'database-fence-missing', before);
+  }
+});
 test('admits scoped lease ingress and authority while retaining the database fence', () => {
   assert.equal(gatewaySourceIssue(leasedSources()), null);
   const dedicated = leasedSources(); dedicated[gatewaySourcePaths[3]] = "export const mongoConnectionPolicy = 'dedicated';";
