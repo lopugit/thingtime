@@ -18,10 +18,11 @@ import { lockFolderDestination } from '../things/folderPlacement';
 import { appendTimelineEvent, readTimelineEntries } from '../timeline/repository';
 import { parseTimelineEvent, type TimelineEvent } from '../../../timeline/contract';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
-import { CLOUD_FILE_KIND, CLOUD_FILE_ADAPTER, parseCloudFile, parseCloudFileCommit, parseCloudFileRetention, type CloudFile, type CloudFileCommit } from '../../../fileSync/cloudFile';
+import { CLOUD_FILE_KIND, CLOUD_FILE_ADAPTER, parseCloudFile, parseCloudFileCommit, parseCloudFileRetention, parseCloudFileNoEffectFence, type CloudFile, type CloudFileCommit } from '../../../fileSync/cloudFile';
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const eventId = (ownerId: string, id: string, operationId: string, retained = false) => `file-${retained ? 'retain' : 'commit'}-${digest([ownerId, id, operationId])}`;
+const TERMINAL_FILE_ADAPTER = 'file-sync-terminal';
 const failure = (status: number, error: string) => ({ ok: false as const, status, error });
 const conflict = (message: string): never => { throw new StorageMutationError(409, 'storage_conflict', message); };
 const identity = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -59,6 +60,26 @@ export function createCloudFileService(overrides: Partial<{
 		if (file.id !== id || file.revision !== eid) conflict('File operation receipt changed identity');
 		return { file, requestHash: value.requestHash as string };
 	};
+	const terminalReceipt = (entry: any, ownerId: string, id: string, operationId: string) => {
+		const e = entry.event;
+		if (e.id !== eventId(ownerId, id, operationId) || e.ownerId !== ownerId || e.actorId !== ownerId || e.thingId !== id ||
+			e.operationId !== operationId || e.source !== 'api' || e.mode !== 'effect' || e.operation !== 'effect' ||
+			e.branchId !== 'main' || e.before !== null || e.after?.adapter !== TERMINAL_FILE_ADAPTER || e.after.version !== 1)
+			conflict('File operation identity is already occupied');
+		try {
+			const fence = parseCloudFileNoEffectFence(e.after.value);
+			if (fence.id !== id || fence.operationId !== operationId) conflict('File operation fence changed identity');
+			return fence;
+		}
+		catch { conflict('File operation fence is invalid'); }
+	};
+	const outcome = async (things: any, ownerId: string, id: string, operationId: string, session?: any) => {
+		const entry = (await deps.entries(things, ownerId, [eventId(ownerId, id, operationId)], session))[0];
+		if (!entry) return null;
+		return entry.event.after?.adapter === TERMINAL_FILE_ADAPTER
+			? { status: 'terminal' as const, fence: terminalReceipt(entry, ownerId, id, operationId) }
+			: { status: 'complete' as const, ...validateReceipt(entry, ownerId, id, operationId) };
+	};
 	const receipt = async (things: any, ownerId: string, id: string, operationId: string, session?: any, retained = false) => {
 		const eid = eventId(ownerId, id, operationId, retained);
 		const entry = (await deps.entries(things, ownerId, [eid], session))[0];
@@ -94,13 +115,46 @@ export function createCloudFileService(overrides: Partial<{
 			try {
 				const things = await deps.collection(); const doc = await owned(things, ownerId, id);
 				if (operationId !== undefined) {
-					const saved = await receipt(things, ownerId, id, operationId as string, undefined, retained);
+					if (!retained) {
+						const saved = await outcome(things, ownerId, id, operationId as string);
+						return { ok: true as const, receipt: saved?.status === 'complete' ? { file: saved.file } : null,
+							...(saved?.status === 'terminal' ? { terminal: saved.fence } : {}) };
+					}
+					const saved = await receipt(things, ownerId, id, operationId as string, undefined, true);
 					return { ok: true as const, receipt: saved ? { file: saved.file } : null };
 				}
 				return doc ? { ok: true as const, file: publicFile(doc) } : failure(404, 'File not found');
 			} catch (error) { return errorResult(error); }
 		},
-		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true; expectedFingerprint?: ContentFingerprint; syncSourceGrant?: { localRootId: string; grantRevision: string } }) {
+		async fence(ownerId: string, value: unknown) {
+			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
+			if (!ownerId) return failure(401, 'Unauthorized');
+			let input: ReturnType<typeof parseCloudFileNoEffectFence>;
+			try { input = parseCloudFileNoEffectFence(value); } catch { return failure(400, 'Invalid file publication fence'); }
+			const now = deps.now(), eid = eventId(ownerId, input.id, input.operationId);
+			const settled = (saved: NonNullable<Awaited<ReturnType<typeof outcome>>>) => {
+				if (saved.status === 'terminal') {
+					if (JSON.stringify(saved.fence) !== JSON.stringify(input)) conflict('File publication fence changed input');
+					return { ok: true as const, status: 'terminal' as const, fence: saved.fence, replayed: true };
+				}
+				return { ok: true as const, status: 'complete' as const, receipt: { file: saved.file }, replayed: true };
+			};
+			try {
+				const things = await deps.collection(); await owned(things, ownerId, input.id);
+				const prior = await outcome(things, ownerId, input.id, input.operationId); if (prior) return settled(prior);
+				return await deps.transaction(async session => {
+					await owned(things, ownerId, input.id, session);
+					const saved = await outcome(things, ownerId, input.id, input.operationId, session); if (saved) return settled(saved);
+					const event = parseTimelineEvent({ formatVersion: 1, id: eid, ownerId, thingId: input.id, branchId: 'main', parentIds: [],
+						operationId: input.operationId, actorId: ownerId, source: 'api', clientId: null, occurredAt: now.toISOString(),
+						mode: 'effect', operation: 'effect', label: 'File publication stopped without an effect', before: null,
+						after: { adapter: TERMINAL_FILE_ADAPTER, version: 1, value: input }, dependencies: [] } as TimelineEvent);
+					await deps.append(things, event, session, { plane: 'home' });
+					return { ok: true as const, status: 'terminal' as const, fence: input, replayed: false };
+				});
+			} catch (error) { return errorResult(error); }
+		},
+		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true; expectedFingerprint?: ContentFingerprint; syncSourceGrant?: { localRootId: string; grantRevision: string; sourceVersion?: string } }) {
 			if (context && !context.session?.inTransaction?.()) throw Error('File composition requires an active transaction');
 			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
 			if (!ownerId) return failure(401, 'Unauthorized');

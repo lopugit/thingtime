@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## One user-visible chat per task
+
+Original request (verbatim, 11 November 2026):
+
+> Can you find out which chat made all of these ??? :O And tell it not to and just use 1 chat for whatever it was doing? And to add this same instruction and example to AI_ALL.md please
+
+- Keep one existing user-visible chat for each task, including retries, recovery, release checks and completion monitoring. Resume that chat through supported continuation; never create or fork replacement chats, per-run chats or sidebar chats unless the user explicitly requests them. Retain and reuse the stable chat/task IDs. If creation has an uncertain outcome, inspect current state before retrying rather than creating a duplicate.
+- Bounded internal subagents may handle distinct work within the same chat when delegation is authorized; they must not create additional user-visible sidebar chats. Internal delegation does not reset retry budgets or task ownership.
+- This rule takes precedence over older five-minute retry and `/loop` defaults. Check whether the scheduler creates a new user-visible chat on each run before using it. If it cannot continue the existing chat, do not use it for task retries or monitoring. Where the runtime prohibits automations that track a specific task to completion, continue permitted work in the current chat; never substitute another scheduler or workaround.
+- If duplicates already exist, stop their duplicate work, preserve useful evidence and consolidate continuation into the original chat. Do not delete chat history or archive chats without authorization.
+- Example (11 November 2026): the “Add dismiss option to draft dialog” chat created the five-minute `finish-ios-draft-dismiss-release` automation, which produced repeated “Finish iOS draft dismiss release” chats; the user's screenshot showed eleven same-titled entries. The correct recovery is to stop the duplicate-producing automation and continue the release task in its original chat, preserving the existing history.
+
 ## Get it done; report decisions after completion
 
 Original request (verbatim):
@@ -154,6 +166,34 @@ authoritative.
 - Keep retries bounded, preserve sessions and unrelated data, and report the
   exact remaining human-only dependency after supported recovery. Record source,
   synthetic, deployed, installed and live-provider evidence separately.
+
+## Compact, collapsible multi-section interfaces
+
+User guidance (12 November 2026):
+
+> “multi-section pages with config/settings and many UI parts should always have headings and minimal info and be collapsable/expandable please defaulted to collapsed please”
+
+- Treat compact progressive disclosure as a foundational layout rule. Give each
+  section a clear heading, a concise useful summary where needed, and an
+  accessible expand/collapse control. Start configuration, settings and other
+  multi-section device surfaces collapsed; preserve deliberate user choices
+  when the surface explicitly remembers them. Do not expand every section on
+  first render or mount expensive hidden content merely to populate summaries.
+- Keep the main browsing surface focused on its Things. Give substantial tools
+  such as LiDAR capture their own page, with clear navigation back. Use ordinary
+  Thing browser cards, selection and context menus for saved and pending items;
+  distinguish device-only storage from an explicit cloud save.
+- Put secondary actions in the relevant Thing or page context menu instead of
+  crowding breadcrumbs and headers. Keep setup beside or directly below its
+  device item, and hide setup once that device is already configured. Preserve
+  a keyboard- and touch-accessible menu trigger; right-click cannot be the only
+  way to reach an action.
+- Show the ten most recent location-log entries initially, newest first. Put an
+  inline **Show more** control immediately below the list to fetch the next page.
+  This is a presentation batch size, never a retention or total-history limit.
+- Compose headings, summaries, controls and repeated fields as individually
+  editable Builder blocks. Check collapsed, expanded, menu, loading, empty and
+  error states at desktop and mobile widths, including the bottom of the page.
 
 ## Power users: no arbitrary product limits
 
@@ -617,6 +657,35 @@ fork once the owner decides. Write a note before a plan and a plan before a new
 (`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
 `TODO/claude-todo/README.md`) in the same change — those indexes are the entry
 points, not the individual files.
+
+### Everything is a Thing: shared actions and context menus
+
+- **Fundamental architecture rule:** build common actions on the unified Thing
+  model, shared context-menu system and canonical permission checks. A Thing's
+  kind, page, card renderer or browsing mode must not arbitrarily determine
+  whether a common Thing action exists. Extend the shared action contract and
+  its consumers instead of implementing separate copies for individual views.
+- **Archive example (owner guidance, 11 November 2026):** Archive belongs on
+  every Thing-backed context menu when the current user has the appropriate
+  permission, including posts, comments, apps, folders, Builder items and
+  ordinary Things. Adding Archive only to `/things`, or excluding `builderMode`,
+  does not deliver this feature. Everything is a Thing; the shared action must
+  follow the Thing wherever its context menu is presented.
+- Derive availability from the canonical action and permission contract for
+  the exact Thing, account and origin. Reauthorize on the server when executing;
+  a visible menu item never grants access. Preserve protected-system boundaries,
+  scoped-token restrictions, ownership and collaborator rules. A missing
+  adapter or unsupported surface is an implementation gap to resolve or report,
+  not permission to silently exclude that class of Things.
+- Keep the action's meaning, mutation path, feedback and state updates
+  consistent across consumers. For Archive, preserve content and relationships,
+  define its visibility semantics explicitly, and provide a discoverable
+  Archived/Restore path. Do not confuse archiving with deletion or file export.
+- Verify the shared contract and representative real consumers: post/feed and
+  detail menus, Builder app cards, folders and ordinary Things, on desktop and
+  mobile. Cover authorized and refused actions, refresh/reload and restoration.
+  A successful test of one page is not evidence that a shared feature works
+  everywhere; inspect the menu consumers and record any uncovered surface.
 
 ## Local development and worktrees
 

@@ -4,7 +4,7 @@ import { executeCloudFolderBatch, folderBatchFailure } from './cloudFolderBatch.
 import { eligibleFolderBatchEntry } from './folderBatch';
 import type { PriorityReadiness } from './priorityReadiness';
 import { executeCloudUploadBatch, uploadBatchFailure } from './cloudUploadBatch.client';
-import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES } from './uploadBatch';
+import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES, type UploadBatchFailure } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import { foregroundSyncContext } from './foregroundSyncContext';
@@ -15,7 +15,8 @@ import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
 import { prepareCloudOperationBinding } from './cloudBinding';
-import { executeSyncOperation, SyncObservationChangedError, type SyncOperation } from './execute';
+import { CloudParentMissing } from './cloudWrite';
+import { executeSyncOperation, SyncObservationChangedError, SyncTerminalOperationError, type SyncOperation } from './execute';
 import { decideSyncPath, sameSyncStamp, syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
@@ -48,7 +49,7 @@ export async function streamForegroundSync(
 		return;
 	const controller = new AbortController(),
 		signal = AbortSignal.any([outerSignal, controller.signal]);
-	const { check, authorize, runtime, readLocal, observeLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { check, authorize, runtime, readLocal, readLocalUploadSource, observeLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const };
 	const runs = input.journal.pagedRuns(access),
 		inventory = input.journal.inventory(access),
@@ -96,11 +97,12 @@ export async function streamForegroundSync(
 	};
 	if (JSON.stringify(spec.configuration) !== JSON.stringify(configuration))
 		throw Error('Restore the streaming transfer’s original settings before retrying.');
-	let state: PagedRunProgress = await runs.begin(spec),
-		indexed = (await runs.streamState(spec)).indexedSequence ?? (await runs.streamState(spec)).sequence,
+	let state: PagedRunProgress = await runs.begin(spec);
+	const savedStream = await runs.streamState(spec);
+	let indexed = savedStream.indexedSequence ?? savedStream.sequence,
 		indexState: 'indexing' | 'watching' | 'complete' = 'indexing',
 		skipped: number | undefined;
-	if (priorities && state.phase !== 'complete') await runs.enableStreamPriorities(spec);
+	if (priorities && state.phase !== 'complete' && !savedStream.terminal) await runs.enableStreamPriorities(spec);
 	if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
  let priorityReadiness: PriorityReadiness | undefined;
 	let lastProgress: ForegroundSyncProgress | undefined;
@@ -155,8 +157,9 @@ export async function streamForegroundSync(
 			currentScope: input.currentScope,
 			signal,
 			localTarget,
-			...(twoWay ? { beforeLocalPublication: markPublication } : {}),
+			beforeLocalPublication: markPublication,
 			readLocal,
+			readLocalUploadSource,
 			transfer: input.transfer,
 			openSource,
 			progress: (path, bytes, size, direction) => {
@@ -165,8 +168,34 @@ export async function streamForegroundSync(
 				report();
 			}
 		},
-		twoWay ? { ...runtime, beforeFilePublication: markPublication } : runtime
+		{ ...runtime, beforeFilePublication: markPublication }
 	);
+	/** A saved dispatch marker may represent a late in-flight POST. Only the
+	 * canonical terminal receipt can release that original identity. */
+	const retireChanged = async (operation: SyncOperation, conflict: boolean) => {
+		const reserved = await runs.reservedPublication(spec);
+		check();
+		if (!reserved || reserved.operationId !== operation.id) throw Error('Reserved publication changed during recovery.');
+		if (reserved.canonicalDispatched === false) {
+			state = await runs.skipUnpublishedStreamOperation(spec, operation.id, conflict);
+			return;
+		}
+		if (reserved.receiptPresent || reserved.confirmed || reserved.direction !== 'upload' || reserved.kind !== 'file' || !reserved.fileId || !port.fence)
+			throw Error('Preserve the published or uncertain revision receipt.');
+		const prior = await port.lookup(operation.id, scope);
+		check();
+		if (prior.status === 'pending') throw Error('Original file publication remains pending; retain its operation.');
+		const settled = prior.status === 'missing' ? (await authorize(), await port.fence(operation.id, scope)) : prior;
+		check();
+		if (settled.status === 'complete') {
+			state = await runs.confirm(spec, settled.receipt);
+			port.confirmed?.(operation, settled.receipt);
+			return;
+		}
+		if (settled.status !== 'terminal' || settled.fence.id !== reserved.fileId)
+			throw Error('Original file publication has no terminal receipt.');
+		state = await runs.skipUnpublishedStreamOperation(spec, operation.id, conflict, false, false, settled.fence);
+	};
 	// A revision counter closes the lost-wakeup race around durable reads.
 	let wakeRevision = 0;
 	const waiters = new Set<() => void>();
@@ -399,7 +428,8 @@ export async function streamForegroundSync(
 			const observations = observableBatchEntry(change.entry) ? await observeBatch(change) : undefined;
 			const provisional = observations?.has(change.entry.path) && observations.get(change.entry.path) === null;
 			const source = local
-				? provisional ? structuredClone(change.entry) : await readLocal(change.entry.path)
+				? provisional ? structuredClone(change.entry) : change.entry.kind === 'file'
+					? await readLocalUploadSource(change.entry) : await readLocal(change.entry.path)
 				: await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, change.entry.path, signal);
 			check();
 			const event = { ...change, generation };
@@ -442,11 +472,21 @@ export async function streamForegroundSync(
 				return;
 			}
 			const operation: SyncOperation = { id: crypto.randomUUID(), mutation: decision, confirmed: false };
-			const binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
-				node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path, provisional ? observations : undefined)),
-				operation: (path) => runs.find(spec, path),
-				previousTrash: async () => undefined
-			});
+			let binding;
+			try {
+				binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
+					node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path, provisional ? observations : undefined)),
+					operation: (path) => runs.find(spec, path),
+					previousTrash: async () => undefined
+				});
+			} catch (error) {
+				if (!local || !(error instanceof CloudParentMissing)) throw error;
+				// A positive child may arrive before its parent. Keep the source
+				// hint, but leave effects to the sealed full-tree reconciliation.
+				check();
+				state = await runs.appendStream(spec, event, null);
+				wake(); report(); return;
+			}
 			check();
 			state = await runs.appendStream(spec, event, binding);
 			wake();
@@ -515,6 +555,8 @@ export async function streamForegroundSync(
 						});
 						if (failures.length) {
 							await runs.recoverUploadBatch(spec);
+							if (!('kind' in batch) && failures.some(f => f.code === 'source-changed' && f.retryable === false))
+								await runs.retireUndispatchedUploadBatchFailures(spec, batch, failures as UploadBatchFailure[]);
 							const stop = failures.find(f => f.retryable || f.code === 'authority-changed' || f.code === 'invalid-member' || f.code === 'cancelled');
 							if (stop) throw 'kind' in batch ? folderBatchFailure(stop as import('./folderBatch').FolderBatchFailure) : uploadBatchFailure(stop as import('./uploadBatch').UploadBatchFailure);
 						}
@@ -528,15 +570,21 @@ export async function streamForegroundSync(
 					wake(); report(); continue;
 				}
 			} else await runs.recoverUploadBatch(spec);
-			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, batching, false, !!folderBulk);
+			let operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, batching, false, !!folderBulk);
 			await refreshReadiness();
 			check();
 			if (!operation) {
 				const status = await runs.streamState(spec);
 				check();
-				if (status.terminal) return;
-				await wait(observed);
-				continue;
+				if (!status.terminal) { await wait(observed); continue; }
+				if (await runs.streamReadyToFinish(spec)) { check(); return; }
+				// Once the producer is sealed, a missed bulk admission cannot wait
+				// for another input event. Claim one original operation through the
+				// journal's ordinary receipt and ancestor guards before sealing.
+				operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, false, false, false);
+				await refreshReadiness();
+				check();
+				if (!operation) throw Error('Preserve pending stream receipts until their original operations are ready.');
 			}
 			let applyEntered = false;
 			dispatching = { id: operation.id, first: false, marked: false };
@@ -549,12 +597,19 @@ export async function streamForegroundSync(
 					if (prior.status === 'pending') throw Error('Original dependent publication is still pending; retain its identity.');
 					if (prior.status === 'complete') {
 						state = await runs.confirm(spec, prior.receipt); port.confirmed?.(operation, prior.receipt);
+					} else if (prior.status === 'terminal') {
+						state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, false, false, prior.fence);
 					} else if (!rebind.undispatched) {
 						throw Error('Original child publication may still be in flight; preserve its identity for reconciliation.');
 					} else if (rebind.recovery || !rebind.parentId) {
-						await runs.deferTargetRebind(spec, operation.id);
+						const stream = await runs.streamState(spec);
+						check();
+						if (stream.terminal && (stream.indexedSequence ?? stream.sequence) === stream.sequence && !rebind.parentId)
+							state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false);
+						else await runs.deferTargetRebind(spec, operation.id);
 					} else {
-						const source = await readLocal(operation.mutation.path);
+						const source = operation.mutation.kind === 'copy' && operation.mutation.source.kind === 'file'
+							? await readLocalUploadSource(operation.mutation.source) : await readLocal(operation.mutation.path);
 						check();
 						if (operation.mutation.kind !== 'copy' || !sameSyncStamp(source, operation.mutation.source)) throw new SyncObservationChangedError(true, false);
 						const parentPath = operation.mutation.path.split('/').slice(0, -1).join('/');
@@ -568,35 +623,44 @@ export async function streamForegroundSync(
 				}
 				const receipt = await executeSyncOperation(operation, scope, { ...port, apply: async (op, currentScope) => {
 					applyEntered = true;
-					if (!twoWay) await markPublication(op.id);
 					check(); return port.apply(op, currentScope);
 				} }, signal);
 				check();
 				state = await runs.confirm(spec, receipt);
 				port.confirmed?.(operation, receipt);
 			} catch (error) {
-				// An explicit, transactional rejection of the first guarded
+				// A crash after the server fence but before journal retirement must
+				// consume that exact receipt without issuing another fence request.
+				if (error instanceof SyncTerminalOperationError) {
+					await authorize(); check();
+					const mutation = operation.mutation, targetSide = mutation.kind === 'copy' && mutation.from === 'local' ? 'remote' : 'local';
+					const targetChanged = mutation.kind === 'copy' && !sameSyncStamp(mutation.expectedTarget, await port.read(targetSide, mutation.path));
+					check();
+					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged, false, false, error.fence);
+				} else if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
+					// An explicit, transactional rejection of the first guarded
 				// dispatch proves no effect. A previous uncertain attempt still
 				// owns its original ID even if this retry is refused.
-				if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, true);
 				} else if (error instanceof AutomaticStoragePlacementExcluded && (!dispatching.marked || dispatching.first)) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false, false, dispatching.first);
 				} else if (error instanceof SyncObservationChangedError) {
-					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, error.targetChanged);
-				} else if (twoWay && applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
+					await retireChanged(operation, error.targetChanged);
+				} else if (applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
 					// Staging bytes has no live effect. A source or target may
-					// change mid-transfer; exact point reads decide whether to
-					// defer, while a persisted prior dispatch still forbids it.
+					// change mid-transfer in either one-way or two-way sync. Exact
+					// point reads decide whether to defer; a persisted prior
+					// dispatch still forbids retiring the original operation.
 					check();
 					const m = operation.mutation, targetSide = m.from === 'local' ? 'remote' : 'local';
 					let sourceChanged = false, targetChanged = false;
 					try {
-						sourceChanged = !sameSyncStamp(m.source, await port.read(m.from, m.path));
+						sourceChanged = !sameSyncStamp(m.source, m.from === 'local' && m.source.kind === 'file' && port.readLocalUploadSource
+							? await port.readLocalUploadSource(m.source) : await port.read(m.from, m.path));
 						targetChanged = !sameSyncStamp(m.expectedTarget, await port.read(targetSide, m.path));
 					} catch { check(); throw error; }
 					if (!sourceChanged && !targetChanged) throw error;
-					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged);
+					await retireChanged(operation, targetChanged);
 				} else throw error;
 			} finally {
 				dispatching = undefined; activeFile = undefined;
@@ -629,7 +693,7 @@ export async function streamForegroundSync(
 		const after = status.indexedSequence ?? status.sequence;
 		const source = local
 			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish, waitForFinish), async () => {
-				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+				await authorize(); check(); await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(spec.streaming!.captureId, after, signal, readyToFinish, {
@@ -684,7 +748,7 @@ export async function streamForegroundSync(
 		// shared journal assigns an ordered input position on each append.
 		const source = replica === 'local'
 			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish, waitForFinish), async () => {
-				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+				await authorize(); check(); await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(captureId, after, signal, readyToFinish, {

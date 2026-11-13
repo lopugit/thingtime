@@ -8,8 +8,8 @@ import WebKit
 /// never cross JavaScript: the native multipart client publishes the local TAR.
 @MainActor
 final class LiDARBridge {
-    static let version = "1.0.0"
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.lidarVersion = '1.0.0';",
+    static let version = "1.1.0"
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.lidarVersion = '1.1.0';",
                                     injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let outbox = LiDARUploadOutbox()
     private var generation = UUID()
@@ -20,6 +20,7 @@ final class LiDARBridge {
     private var startRequest: String?
     private var statusRequest: String?
     private var snapshot: [String: Any]?
+    private var libraryErrors: [UUID: String] = [:]
     private var reply: ((String, Any) -> Void)?
     private weak var scanner: UIViewController?
     private weak var notice: UIViewController?
@@ -37,7 +38,7 @@ final class LiDARBridge {
         notice?.dismiss(animated: false); notice = nil
         shareSheet?.dismiss(animated: false); shareSheet = nil
         scope = nil; activeID = nil; startRequest = nil; statusRequest = nil
-        snapshot = nil; reply = nil
+        snapshot = nil; libraryErrors = [:]; reply = nil
     }
 
     func handle(_ body: [String: Any], webView: WKWebView, root: URL,
@@ -49,7 +50,7 @@ final class LiDARBridge {
               let origin = payload["origin"] as? String, let requestedOrigin = URL(string: origin),
               LopuVoiceContract.sameOrigin(requestedOrigin, root),
               let action = payload["action"] as? String,
-              ["status", "start", "retry", "suspend"].contains(action),
+              ["status", "start", "retry", "save", "suspend"].contains(action),
               let requestedScope = try? FileSyncOwnerScope(ownerId: owner, url: root) else { return }
         if action == "suspend" {
             if scope == requestedScope { invalidate() }
@@ -59,7 +60,7 @@ final class LiDARBridge {
         }
         if let scope, scope != requestedScope { invalidate() }
         self.webView = webView; self.reply = reply
-        if action == "status", scope == requestedScope, session != nil {
+        if action == "status", scope == requestedScope, session != nil, task != nil || scanner != nil {
             statusRequest = request
             if let snapshot { emit(snapshot) }
             return
@@ -70,16 +71,17 @@ final class LiDARBridge {
                 "error": "A scan or save is already in progress."])
             return
         }
-        if action == "retry", (payload["scanId"] as? String).flatMap(UUID.init(uuidString:)) == nil {
+        if (action == "retry" || action == "save"), (payload["scanId"] as? String).flatMap(UUID.init(uuidString:)) == nil {
             reply("lidar-scan-result", ["requestId": request, "ownerId": owner,
                 "origin": requestedScope.origin.absoluteString, "state": "error", "supported": Self.supported,
                 "error": "Select the exact saved scan to retry."])
             return
         }
+        if action == "save", !["device", "cloud"].contains(payload["destination"] as? String ?? "") { return }
         nativePresentation = false
         begin(scope: requestedScope, request: request, action: action,
               retryID: (payload["scanId"] as? String).flatMap(UUID.init(uuidString:)),
-              webView: webView, root: root, currentRoot: currentRoot, cookies: cookies)
+              destination: payload["destination"] as? String, webView: webView, root: root, currentRoot: currentRoot, cookies: cookies)
     }
 
     /// Drawer and deep links use the current WebView's live identity. No URL or
@@ -126,7 +128,7 @@ final class LiDARBridge {
         }
     }
 
-    private func begin(scope target: FileSyncOwnerScope, request: String, action: String, retryID: UUID?,
+    private func begin(scope target: FileSyncOwnerScope, request: String, action: String, retryID: UUID?, destination: String? = nil,
                        webView: WKWebView, root: URL, currentRoot: @escaping () -> URL?,
                        cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie]) {
         session?.close(); session = nil
@@ -155,50 +157,38 @@ final class LiDARBridge {
                 guard user?["isCharacter"] as? Bool != true else { throw MobileDevicePairing.Failure.identity }
                 let name = (user?["username"] as? String) ?? (user?["displayName"] as? String) ?? target.ownerId
                 accountLabel = name + " · " + (target.origin.host ?? target.origin.absoluteString)
-                if action == "status" || action == "retry" {
+                if action == "status" || action == "retry" || action == "save" {
                     let entries = try outbox.entries(scope: target)
-                    if action == "retry", !entries.contains(where: { $0.id == retryID }) {
+                    if let retryID, !entries.contains(where: { $0.id == retryID }) {
                         task = nil; emit(["state": "error", "error": "This scan is not available in the selected account."])
                         return
                     }
-                    // Status refers to the newest actionable scan. Retry is
-                    // bound to its exact ID, even if newer scans now exist.
-                    let pending = entries.reversed().filter { $0.receipt == nil && (retryID == nil || $0.id == retryID) }
-                    var pendingID: UUID?
-                    var recoveryIssue: (id: UUID, error: LiDARTarArchive.ArchiveError)?
-                    for candidate in pending {
-                        do {
-                            let capture = try await outbox.recover(id: candidate.id, scope: target)
-                            try check()
-                            if capture != nil { pendingID = candidate.id; break }
-                        } catch let error as LiDARTarArchive.ArchiveError
+                    libraryErrors = [:]
+                    // Recover every retained reservation so an earlier partial
+                    // archive cannot disappear behind a more recent capture.
+                    for candidate in entries where candidate.capture == nil && (retryID == nil || candidate.id == retryID) {
+                        do { _ = try await outbox.recover(id: candidate.id, scope: target); try check() }
+                        catch let error as LiDARTarArchive.ArchiveError
                             where error == .damagedArchive || error == .recoveryUnavailable {
-                            try check()
-                            if recoveryIssue == nil { recoveryIssue = (candidate.id, error) }
+                            try check(); libraryErrors[candidate.id] = error.localizedDescription
                         }
                     }
                     task = nil
-                    if let pendingID {
-                        if action == "retry" {
-                            save(id: pendingID, scope: target, transport: transport, operation: operation, check: check)
+                    if let retryID {
+                        let entry = try outbox.entry(id: retryID, scope: target)
+                        if action == "save", destination == "device" {
+                            try check()
+                            try outbox.saveOnDevice(id: retryID, scope: target)
+                            emit(["state": "device-saved", "scanId": retryID.uuidString.lowercased()])
+                        } else if entry.capture != nil || entry.receipt != nil {
+                            save(id: retryID, scope: target, transport: transport, operation: operation, check: check)
                         } else {
-                            emit(["state": "pending", "scanId": pendingID.uuidString.lowercased(),
-                                  "error": "Saved on this device. Retry saving this scan to your Things."])
+                            emit(["state": "pending", "scanId": retryID.uuidString.lowercased(),
+                                  "error": libraryErrors[retryID] ?? "This scan has no completed archive to save yet."])
                         }
-                    } else if let recoveryIssue {
-                        emit(["state": recoveryIssue.error == .recoveryUnavailable ? "pending" : "error",
-                              "scanId": recoveryIssue.id.uuidString.lowercased(),
-                              "error": recoveryIssue.error.localizedDescription])
-                    } else if let retryID {
-                        let scanId = retryID.uuidString.lowercased()
-                        if let saved = entries.first(where: { $0.id == retryID })?.receipt {
-                            emit(["state": "saved", "scanId": scanId, "fileThingId": saved.fileThingId])
-                        } else {
-                            emit(["state": "error", "scanId": scanId, "error": "This scan has no completed archive to save."])
-                        }
-                    } else if let latest = entries.last(where: { $0.receipt != nil }), let receipt = latest.receipt {
-                        emit(["state": "saved", "scanId": latest.id.uuidString.lowercased(), "fileThingId": receipt.fileThingId])
-                    } else { emit(["state": "idle"]) }
+                    } else {
+                        emit(try outbox.legacyStatus(scope: target, errors: libraryErrors))
+                    }
                     return
                 }
                 guard Self.supported else {
@@ -206,7 +196,7 @@ final class LiDARBridge {
                 }
                 let id = UUID(uuidString: request)!
                 if let existing = try outbox.entries(scope: target).first(where: { $0.id == id }), existing.capture != nil || existing.receipt != nil {
-                    task = nil; save(id: id, scope: target, transport: transport, operation: operation, check: check); return
+                    task = nil; emit(["state": "pending", "scanId": id.uuidString.lowercased()]); return
                 }
                 _ = try outbox.reserve(id: id, scope: target)
                 try check(); task = nil; activeID = id
@@ -233,13 +223,14 @@ final class LiDARBridge {
             do { try self.outbox.record(capture, scope: target) }
             catch {
                 if self.generation == operation {
-                    self.emit(["state": "pending", "scanId": id.uuidString.lowercased(), "error": "The scan is saved on this device. Its upload could not be queued; reopen Scan to retry."])
+                    self.emit(["state": "pending", "scanId": id.uuidString.lowercased(), "error": "The scan is saved on this device. Reopen the LiDAR library to recover it."])
                 }
                 return
             }
             guard self.generation == operation else { return }
             self.scanner?.dismiss(animated: true); self.scanner = nil
-            self.save(id: id, scope: target, transport: transport, operation: operation, check: check)
+            self.emit(["state": "pending", "scanId": id.uuidString.lowercased(),
+                       "detail": "Captured on this device. Choose Device only or Cloud from the LiDAR library to save to Thingtime."])
         }, onClose: { [weak self] in
             guard let self, self.generation == operation else { return }
             self.scanner?.dismiss(animated: true); self.scanner = nil
@@ -286,6 +277,7 @@ final class LiDARBridge {
     private func emit(_ value: [String: Any]) {
         guard let scope else { return }
         var enriched = value
+        if let scans = try? outbox.library(scope: scope, errors: libraryErrors) { enriched["scans"] = scans }
         if let id = (value["scanId"] as? String).flatMap(UUID.init(uuidString:)),
            let capture = (try? outbox.entry(id: id, scope: scope))?.capture {
             enriched["isPartial"] = capture.isPartial

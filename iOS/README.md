@@ -529,17 +529,65 @@ when this check finishes. iOS uses the same callback for its resource limit
 and Cancel on the system UI. Either ends that session and retains the
 automatic backup and its checkpoint. The ordinary scheduler or next permitted
 foreground run can retry after the backoff. A new continued session requires
-an explicit action. **Pause sync** durably stops automatic backup until the
+an explicit foreground action. **Pause sync** durably stops automatic backup until the
 owner resumes. Existing system-only holds recover with fresh authorization
 for the same connection. Charging, network and budget waits still obey the
 saved transfer settings.
 
+Photos automation 1.7.0 adds a closed, timestamped background-session ending
+(`system-ended`, `execution-expired`, `worker-cancelled`, `worker-failed`,
+`completed`, or `checkpointed-wait`) with the last measured progress time and
+units. This is session history, not proof that automatic backup is stopped or
+that the whole library is complete. Foreground reentry refreshes native status
+without requesting a new continued session. Known discovery/index counts remain
+visible as historical values outside indexing, and owner/origin/device/plane/
+generation changes immediately hide the prior protected view.
+
+Photos automation 1.8.0 adds `wake-photo-run` for opening the app or a page and
+returning it to the foreground. The request binds the current owner, origin,
+device, source grant and saved configuration revision. It reuses the existing
+run and receipts, and can retire only proven local check/interruption delays.
+Explicit Pause, server or unknown retry barriers, hourly budgets and saved
+network/charging conditions remain binding. Ordinary status reads and periodic
+or connectivity callbacks do not request a new continued-processing session.
+An admitted foreground-entry action can ask the existing finite-work
+continued-processing slot to accompany the run. Queued work and OS refusal
+remain explicitly distinct from an active system lease; background URLSession
+transfers and opportunistic processing retain their existing recovery paths.
+The web app's shared startup receipt drives the editable sync-page status and
+one Lopu notification after all eligible local configurations acknowledge
+startup. It is presentation state, not new native execution authority.
+The negotiated `photos-startup-v1` control lane accepts only folder listing,
+Photos status and foreground wake. It uses independent request identities and
+fresh paired-device checks so a long folder scan cannot block startup; it never
+owns or cancels the serialized data-operation lane. Old clients retain the
+existing request serialization.
+
+Prepared Photos originals are reused across concurrent uploads and lookahead.
+The reader keeps a bounded cache scoped to the owner, root and exact resource
+revision, and still checks current provider access and the staged file's native
+stamp before reading. Its reusable-byte budget is a cache policy, not a maximum
+file size: a sole larger original remains available for consecutive part reads.
+Eviction cleans only owned temporary files; borrowed iCloud preparations retain
+their own lifetime. This avoids re-exporting and hashing an unchanged full
+original every time another upload takes its turn.
+
+System Progress uses a finite denominator for known library discovery, known
+originals and their preparation, with one final verification/checkpoint unit.
+Undiscovered original backlog is not invented; newly discovered real work may
+extend that denominator. Negative totals would keep fractionCompleted at zero.
+
+Measured iCloud progress belongs to one serialized original resource. Late
+callbacks cannot advance a replacement resource. Each concurrent original keeps
+its own byte fraction when a sibling publishes; no heartbeat or elapsed-time
+progress is reported. The scheduler still decides actual background execution.
+
 Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
 the latest photo or video capture time when available. The scoped **Backup
 activity** also shows measured file counts, the selected batch, iCloud download
-progress, cloud verification, and recent steps. The native queue prepares and
-uploads one newest asset group, including its companions, then discovers and
-uploads successive groups. The remaining original count stays unknown while
+progress, cloud verification, and recent steps. The native queue starts with the newest asset
+group, including its companions, then prepares batches of up to ten groups and
+uploads up to five originals concurrently while preparing lookahead work. The remaining original count stays unknown while
 unseen asset records can still contribute originals. The queue keeps exact
 selections and receipts across interruption. When PhotoKit proves the library
 is unchanged and full access is current, discovery can resume at a saved
@@ -558,11 +606,26 @@ among equally eligible items. Wi-Fi-only policy permits a local recheck after
 Photos has made an original available. Completion requires resolving all
 deferred originals visible to the current Photos grant.
 
-Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
-by default. An optional hourly budget uses the measured payload bytes from all
-managed Photos transfers on that account/origin/device, including failed
-attempts. Each capped connection checks that shared usage against its own cap;
-an uncapped connection does not inherit another connection's cap. If a single
+Photos automation 1.6.0 exposes upload settings on the device, Photo library
+folder, and each saved sync config without opening its Edit form. Device and
+folder policies are stored by the native app for the exact origin, owner,
+paired device and folder grant; the config policy remains part of its ordinary
+saved Thing. Changing a limit does not reset recorded usage. Device and folder
+ceilings are shared across their configs, and each config also enforces its own
+ceiling. Blank device/folder fields add no ceiling; a blank config speed retains
+625,000 bytes/s (5 Mbps). MB/s and Mbps are explicit, convertible display units.
+
+Hourly allowances include observed payload bytes from failed attempts and
+uncertain reservations after interruption. Existing unscoped usage is charged
+conservatively until its original window expires. Limits are checked before
+new admissions; already-admitted transfers may finish. Foreground writes are
+paced and background URLSession transfers use a persistent average admission
+schedule, which cannot guarantee an instantaneous wire-speed ceiling. Up to five
+durable daemon jobs can reserve future starts within their signed URL lifetime,
+so a paced batch does not depend on the app waking between parts. Foreground
+retries preserve a known pacing deadline instead of extending it to five minutes;
+unknown transient failures retain the five-minute backoff. iOS still controls
+background scheduling. If a single
 required provider part is larger than the allowance, the connection reports
 the minimum part size instead of exceeding the budget. A file may span multiple
 budget windows at its confirmed part boundaries. iCloud downloads use Apple's
@@ -592,6 +655,15 @@ unit-test fixture first verifies its disposable loopback account, then reuses
 that same account/origin's actual native grant for original-byte verification.
 It neither injects a grant nor changes Simulator privacy settings. Without the
 flag, the existing visible manual-consent fixture remains available.
+
+Add `THINGTIME_PHOTO_POLICY_TEST=1` to exercise the installed native bridge's
+device and folder policy set/read/clear operations after ordinary consent and
+pairing. The fixture checks exact scope and values, refuses an unpaired device,
+and keeps high fixture-only limits for the subsequent original-byte test. Its
+policy pass marker does not establish upload success; the original-byte phase
+must independently finish and verify published bytes. Local storage fixtures do
+not advertise the direct S3 background transport, and Simulator scheduling
+refusals are not physical-device background acceptance.
 
 Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
 compares downloaded cloud hashes and reopens the same saved backup.

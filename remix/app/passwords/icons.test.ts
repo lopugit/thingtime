@@ -72,3 +72,18 @@ test('automatic Website help upgrades only the shipped copy and preserves author
  const authored=[{...old,text:'My custom icon help'}];assert.strictEqual(migratePasswordIconBranding(authored),authored);
  const deleted:any[]=[];assert.strictEqual(migratePasswordIconBranding(deleted),deleted);
 });
+
+test('icon layout migration shrinks only shipped grid and native file control defaults', () => {
+ const legacyCss = { display: 'grid', gap: '10px', 'min-width': '0', margin: '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '10px' };
+ const upload: any = { id: 'icon-upload', type: 'element', tag: 'input', props: { type: 'file', name: 'icon-file' } };
+ const original: any[] = [{ id: 'icon-fields', type: 'element', tag: 'fieldset', css: legacyCss, children: [upload] }];
+ const migrated = migratePasswordIconBranding(original);
+ assert.equal(migrated[0].css?.['grid-template-columns'], 'minmax(0, 1fr)');
+ assert.equal(migrated[0].children?.[0].css?.['max-width'], '100%');
+ assert.deepEqual(original[0].css, legacyCss);
+ assert.equal(original[0].children[0].css, undefined);
+ assert.strictEqual(migratePasswordIconBranding(migrated), migrated);
+ const custom: any[] = [{ ...original[0], css: { ...legacyCss, padding: '24px' }, children: [{ ...upload, css: { width: '80%' } }] }];
+ assert.strictEqual(migratePasswordIconBranding(custom), custom);
+ const removed: any[] = []; assert.strictEqual(migratePasswordIconBranding(removed), removed);
+});

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { once } from 'node:events';
-import { access, chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -207,10 +207,23 @@ try {
 	const allowUploads = (userId: string, enabled: boolean) =>
 		expect('/api/v1/admin/users/public-uploads', { userId, enabled, scope: 'private' }, admin);
 	await allowUploads(owner.userId, true);
+    const nativeFixture = process.env.THINGTIME_TRANSFER_NATIVE_FIXTURE;
+    if (nativeFixture) {
+        await allowUploads(admin.userId, true);
+        const status = (await expect('/api/v1/admin/migrations', undefined, admin)).data;
+        if (status.migrations?.some((row: any) => row.id === 'backfill-user-storage-accounting' && row.pending > 0))
+            await expect('/api/v1/admin/migrations/run', { migration: 'backfill-user-storage-accounting' }, admin);
+        await writeFile(nativeFixture, JSON.stringify({ base, username: adminName, password, userId: admin.userId }), { mode: 0o600 });
+        await chmod(nativeFixture, 0o600);
+        console.log('NATIVE_SOURCE_INDEX_FIXTURE_READY ' + base);
+        await new Promise<void>(resolve => process.once('SIGUSR1', () => resolve()));
+        await rm(nativeFixture, { force: true });
+    } else {
+
 	const manifest = (await expect('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, base);
 	assert.ok(capabilitySatisfies(manifest.features['api.auth-accounts-remove']?.version, '1.0.1'));
-	assert.ok(capabilitySatisfies(manifest.features['api.file-sync-transfer-admissions']?.version, '1.5.0'));
+	assert.ok(capabilitySatisfies(manifest.features['api.file-sync-transfer-admissions']?.version, '1.8.0'));
 	assert.deepEqual(manifest.operations.find((operation: any) => operation.path === admissions).methods, ['POST']);
 	assert.ok(capabilitySatisfies(manifest.features['api.things']?.version, '1.53.0'));
 	assert.ok(capabilitySatisfies(manifest.features['api.things-update']?.version, '1.21.0'));
@@ -239,7 +252,7 @@ try {
 	async function reserve(parts: Buffer[], label: string, nested = false, photo = false) {
 		const sizeBytes = parts.reduce((sum, part) => sum + part.length, 0),
 			requestId = randomUUID(),
-			filename = photo ? sha(Buffer.from(label)).toString('hex') + '-photo.jpg' : label + '.bin';
+			filename = photo ? sha(Buffer.from(label)).toString('hex') + '-0-photo.jpg' : label + '.bin';
 		const { upload } = (
 			await expect(
 				uploads,
@@ -370,7 +383,7 @@ try {
 		await put(signed[0], single[0]);
 		await expect(admissions, complete(lease.admissionId), node);
 		const { version } = (await expect('/api/v1/attachments/content?fingerprint=1&id=' + upload.uploadId, undefined, owner)).data;
-		const path = sha(Buffer.from(label)).toString('hex') + '-photo.jpg';
+		const path = sha(Buffer.from(label)).toString('hex') + '-0-photo.jpg';
 		const command = { id: upload.requestId, operationId: upload.requestId, expectedRevision: null, name: path, folderId: root.id,
 			attachmentId: upload.uploadId, contentVersion: version, trashed: false, syncDestination: { rootId: root.id, path } };
 		return { upload, lease, command };
@@ -427,7 +440,7 @@ try {
 	const revokeRun = (runId: string) => ({ action: 'revoke-photo-run', runId });
 	const newOriginal = (runId: string, label: string, parts = single) => {
 		const sizeBytes = parts.reduce((sum, bytes) => sum + bytes.length, 0);
-		return { action: 'reserve-photo-original', runId, path: sha(Buffer.from(label)).toString('hex') + '-photo.jpg',
+		return { action: 'reserve-photo-original', runId, path: sha(Buffer.from(label)).toString('hex') + '-0-photo.jpg',
 			sourceVersion: 'original-' + label, sizeBytes,
 			fingerprint: { ...contentPartPlan(sizeBytes), sha256: sha(Buffer.concat(parts.map(sha))).toString('hex') } };
 	};
@@ -440,12 +453,106 @@ try {
 	await expect(admissions, { ...newOriginal(run.runId, 'invalid'), path: 'Child/original.jpg' }, node, 400);
 	await expect(admissions, { ...newOriginal(run.runId, 'invalid'), fingerprint: { partCount: 2 } }, node, 400);
 	await expect(admissions, checkRun(run.runId), node);
+
+    // Source metadata reaches Thingtime before any original reservation. It
+    // never fabricates a File or publication receipt, even on a complete scan.
+    const indexEpoch = randomUUID(), indexPass = randomUUID();
+    const indexEntry = (n: number) => ({ path: sha(Buffer.from('indexed-' + n)).toString('hex') + '-0-original.jpg',
+        assetKey: sha(Buffer.from('indexed-' + n)).toString('hex'), resourceIndex: 0, name: 'original.jpg', resourceVersion: 'resource-' + n, sourceVersion: 'source-' + n,
+        capturedAt: '2026-11-01T00:00:00.000Z', modifiedAt: null, assetKind: 'photo', originalCount: 1,
+        availability: 'pending', reason: null });
+    const indexPage = (sequence: number, entries: any[], inspectedAssets: number, complete = false) => ({
+        action: 'observe-photo-index', runId: run.runId, epoch: indexEpoch, passId: indexPass,
+        sequence, requestId: randomUUID(), entries,
+        progress: { inspectedAssets, totalAssets: 34, indexedResources: inspectedAssets, complete } });
+    const initialIndexPage = indexPage(1, Array.from({ length: 32 }, (_, n) => indexEntry(n)), 32);
+    await expect(admissions, initialIndexPage, owner, 401);
+    await expect(admissions, initialIndexPage, another, 404);
+    await expect(admissions, { ...initialIndexPage, folderId: root.id }, node, 400);
+    const usedBeforeIndex = (await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes;
+    assert.equal(typeof usedBeforeIndex, 'number');
+    const racedIndex = await Promise.all([expect(admissions, initialIndexPage, node), expect(admissions, initialIndexPage, node)]);
+    const indexed = racedIndex[0].data.receipt;
+    assert.equal(racedIndex[1].data.receipt.indexId, indexed.indexId);
+    assert.equal(racedIndex.filter(value => value.data.receipt.replayed).length, 1);
+    const usedAfterIndex = (await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes;
+    assert.ok(usedAfterIndex > usedBeforeIndex, 'Source metadata uses canonical account quota');
+    const initialRead = (await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, owner)).data.index;
+    assert.equal(initialRead.entries.length, 32); assert.equal(initialRead.scanComplete, false);
+    assert.equal(initialRead.remainingUndiscoveredResources, null);
+    assert.ok(initialRead.entries.every((entry: any) => entry.publication === null && entry.availability === 'pending'));
+    assert.equal((await expect(admissions, initialIndexPage, node)).data.receipt.replayed, true);
+    assert.equal((await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes, usedAfterIndex, 'Lost-reply replay never double charges');
+    await expect(admissions, { ...initialIndexPage, entries: [] }, node, 409);
+    await expect(admissions, indexPage(3, [], 32), node, 409);
+    await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, outsider, 404);
+    await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, node, 401);
+    await expect(things, { thingtime: ['sync-source-observation'], crystal: indexEntry(0) }, owner, 403);
+    await expect(admissions, indexPage(2, [indexEntry(32)], 33), node);
+    const paged = (await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, owner)).data.index;
+    assert.equal(paged.entries.length, 32); assert.ok(paged.after);
+    const tail = (await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId, after: paged.after }, owner)).data.index;
+    assert.equal(tail.entries.length, 1); assert.equal(tail.after, null);
+    await expect(admissions, indexPage(3, [{ ...indexEntry(0), availability: 'unavailable', reason: 'cloud-download' }], 33), node);
+    const movingTail = (await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId, after: paged.after }, owner)).data.index;
+    assert.equal(movingTail.observedThroughSequence, 2); assert.equal(movingTail.sequence, 3); assert.equal(movingTail.entries.length, 1);
+    await expect(admissions, indexPage(4, [], 34, true), node);
+    const incomplete = (await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, owner)).data.index;
+    assert.equal(incomplete.scanComplete, false); // missing metadata cannot seal
+    const finalIndexPage = indexPage(5, [indexEntry(33)], 34, true);
+    await expect(admissions, finalIndexPage, node);
+    const fullIndex = (await expect(admissions, { action: 'read-source-index', configurationId: saved.id }, owner)).data.index;
+    assert.equal(fullIndex.discoveredResources, 34); assert.equal(fullIndex.unavailableResources, 1);
+    assert.equal(fullIndex.scanComplete, true); assert.equal(fullIndex.remainingUndiscoveredResources, 0);
+    assert.ok(fullIndex.entries.every((entry: any) => entry.publication === null));
+    const catalog = (await expect(admissions, { action: 'list-source-indexes', configurationId: saved.id }, owner)).data.index;
+    assert.equal(catalog.indexes[0].indexId, indexed.indexId);
+    const legacyStatePage = { ...indexPage(1, [{ ...indexEntry(100), sourceVersion: null, availability: 'legacy-unverified' }], 1),
+        epoch: randomUUID(), passId: randomUUID(), progress: { inspectedAssets: 1, totalAssets: 1, indexedResources: 1, complete: true } };
+    const legacyStateId = (await expect(admissions, legacyStatePage, node)).data.receipt.indexId;
+    const legacyState = (await expect(admissions, { action: 'read-source-index', indexId: legacyStateId }, owner)).data.index;
+    assert.equal(legacyState.legacyUnverifiedResources, 1);
+    assert.equal(legacyState.entries[0].availability, 'legacy-unverified');
+    assert.equal(legacyState.entries[0].publication, null);
+
+    // A quota refusal rolls back the entire page; retry keeps its original ID.
+    const subscription = (await expect('/api/v1/admin/subscriptions?subjectType=user&subjectId=' + owner.userId, undefined, admin)).data.subscription;
+    const quotaPage = { ...indexPage(1, [indexEntry(99)], 1), epoch: randomUUID(), passId: randomUUID(),
+        progress: { inspectedAssets: 1, totalAssets: 1, indexedResources: 1, complete: true } };
+    const usedBeforeQuota = (await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes;
+    await expect('/api/v1/admin/subscriptions', { subjectType: 'user', subjectId: owner.userId,
+        tier: subscription.tier, tierVersionId: subscription.tierVersionId, overrides: { userStorageBytes: usedBeforeQuota } }, admin);
+    await expect(admissions, quotaPage, node, 507);
+    assert.equal((await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes, usedBeforeQuota);
+    await expect('/api/v1/admin/subscriptions', { subjectType: 'user', subjectId: owner.userId, clear: true }, admin);
+    const quotaIndexId = (await expect(admissions, quotaPage, node)).data.receipt.indexId;
+    const beforeDiscard = (await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes;
+    const discarded = (await expect(admissions, { action: 'discard-source-index', indexId: quotaIndexId }, owner)).data.index;
+    assert.equal(discarded.hasMore, false);
+    assert.equal((await expect(admissions, { action: 'read-source-index', indexId: quotaIndexId }, owner)).data.index.discarded, true);
+    assert.equal((await expect(admissions, { ...quotaPage, sequence: 2, requestId: randomUUID() }, node, 409)).data.code, 'source_index_discarded');
+    assert.ok((await expect('/api/v1/auth/me', undefined, owner)).data.user.storageUsedBytes < beforeDiscard);
+
+
 	// One owner authorization, then paired-only reserve/sign/upload/publish.
 	// Six originals cross the native four-original initial lookahead boundary.
 	const refilled: any[] = [];
+	const refillParts = Array.from({ length: 6 }, (_, i) => i === 4 ? multi : single);
+	const refillRequests = refillParts.map((parts, i) => newOriginal(run.runId, 'refill-' + i, parts));
+	// Match the installed native worker's five lanes. A shared path-observation
+	// ceiling must apply backpressure, rather than reject siblings and cancel
+	// the whole batch before its first publication.
+    const backedObservation = { ...indexEntry(34), path: refillRequests[0].path, assetKey: refillRequests[0].path.slice(0,64),
+        sourceVersion: refillRequests[0].sourceVersion };
+    const publicationIndex = { ...indexPage(1, [backedObservation], 1), epoch: randomUUID(), passId: randomUUID(),
+        progress: { inspectedAssets: 1, totalAssets: 1, indexedResources: 1, complete: true } };
+    const publicationIndexId = (await expect(admissions, publicationIndex, node)).data.receipt.indexId;
+    assert.equal((await expect(admissions, { action: 'read-source-index', indexId: publicationIndexId }, owner)).data.index.entries[0].publication, null);
+	const firstWave = await Promise.all(refillRequests.slice(0, 5).map(async request => (await expect(admissions, request, node)).data));
+	assert.equal(new Set(firstWave.map(row => row.uploadId)).size, 5);
 	for (let i = 0; i < 6; i++) {
-		const parts = i === 4 ? multi : single, request = newOriginal(run.runId, 'refill-' + i, parts);
-		const reserved = (await expect(admissions, request, node)).data;
+		const parts = refillParts[i], request = refillRequests[i];
+		const reserved = i < firstWave.length ? firstWave[i] : (await expect(admissions, request, node)).data;
 		assert.equal(reserved.state, 'reserved');
 		if (i === 0) {
 			const observer = await expect('/api/v1/login', { username: ownerName, password });
@@ -478,6 +585,10 @@ try {
 		refilled.push(published.file);
 	}
 	assert.equal(new Set(refilled.map(file => file.id)).size, 6);
+    const backedRead = (await expect(admissions, { action: 'read-source-index', indexId: publicationIndexId }, owner)).data.index;
+    assert.equal(backedRead.entries[0].publication.fileId, refilled[0].id);
+    assert.equal(backedRead.entries[0].publication.sourceVersion, refillRequests[0].sourceVersion);
+
 	for (const file of refilled) assert.deepEqual((await expect('/api/v1/files?id=' + file.id, undefined, owner)).data.file, file);
 	const differs = newOriginal(run.runId, 'refill-0', [Buffer.from('different original')]);
 	await expect(admissions, differs, node, 409);
@@ -485,7 +596,10 @@ try {
 	const interruptedRequest = newOriginal(run.runId, 'paused-run');
 	const interrupted = (await expect(admissions, interruptedRequest, node)).data;
 	saved = (await expect(things, { id: saved.id, crystal: { ...configuration, paused: true }, expectedUpdatedAt: saved.updatedAt }, { ...owner, method: 'PATCH' })).data.thing;
-	await expect(admissions, checkRun(run.runId), node, 409);
+	assert.equal((await expect(admissions, checkRun(run.runId), node, 409)).data.code, 'sync_configuration_changed');
+    await expect(admissions, indexPage(6, [], 34, true), node, 409);
+    assert.equal((await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, owner)).data.index.discoveredResources, 34);
+
 	await expect(admissions, interruptedRequest, node, 409);
 	await expect(admissions, signParts(interrupted.admissionId, single), node, 409);
 	await expect(admissions, openRun(), owner, 409);
@@ -534,6 +648,18 @@ try {
 	const needsManagedProof = (await expect(admissions, { ...openRun(), guardedReplacement: true }, owner)).data;
 	const occupied = await expect(admissions, { ...newOriginal(needsManagedProof.runId, 'manual-existing', updatedParts), guardedReplacement: true }, node, 409);
 	assert.equal(occupied.data.code, 'photo_path_conflict');
+    const legacyRequest = newOriginal(needsManagedProof.runId, 'manual-existing');
+    const legacyObservation = { ...indexEntry(35), path: legacyRequest.path, assetKey: legacyRequest.path.slice(0,64), sourceVersion: legacyRequest.sourceVersion };
+    const legacyPage = { ...indexPage(1, [legacyObservation], 1), runId: needsManagedProof.runId, epoch: randomUUID(), passId: randomUUID(),
+        progress: { inspectedAssets: 1, totalAssets: 1, indexedResources: 1, complete: true } };
+    const legacyId = (await expect(admissions, legacyPage, node)).data.receipt.indexId;
+    assert.equal((await expect(admissions, { action: 'read-source-index', indexId: legacyId }, owner)).data.index.entries[0].publication, null);
+    assert.equal((await expect(admissions, legacyRequest, node)).data.state, 'already-backed');
+    const legacyProof = (await expect(admissions, { action: 'read-source-index', indexId: legacyId }, owner)).data.index.entries[0].publication;
+    assert.equal(legacyProof.fileId, unrelated.requestId);
+    assert.equal((await expect('/api/v1/files?id=' + unrelated.requestId, undefined, owner)).data.file.revision, legacyProof.revision);
+
+
 	const guarded = await reserve(single, 'guarded', true);
 	const guard = (await expect(admissions, guarded, owner)).data;
 	const shared = (await expect(things, { id: child.id, acl: ['tt:all'], expectedUpdatedAt: child.updatedAt }, { ...owner, method: 'PATCH' })).data
@@ -598,9 +724,18 @@ try {
 	assert.ok(ownerAgain.cookie);
 	await expect('/api/v1/devices/disconnect', { deviceId: node.deviceId }, ownerAgain);
 	await expect(admissions, publish(logout.lease.admissionId), node, 401);
+    const cleanupOwner = { cookie: ownerAgain.cookie };
+    const beforeCascade = (await expect('/api/v1/auth/me', undefined, cleanupOwner)).data.user.storageUsedBytes;
+    await expect(things, { id: saved.id }, { ...cleanupOwner, method: 'DELETE' });
+    await expect(admissions, { action: 'read-source-index', indexId: indexed.indexId }, cleanupOwner, 404);
+    await expect(admissions, { action: 'read-source-index', indexId: publicationIndexId }, cleanupOwner, 404);
+    const afterCascade = (await expect('/api/v1/auth/me', undefined, cleanupOwner)).data.user.storageUsedBytes;
+    assert.ok(afterCascade < beforeCascade, 'Configuration deletion refunds relational metadata');
+
 	console.log(
-		'PASS built API: six paired-only Photos refills, guarded retained update/refusals, revoke/pause/rotation, scoped Photos publication and canonical two-way replay, staged-only refusal, multipart integrity, v4 save/readback, private placement, pause/revision/revocation, credential expiry, owner logout and device disconnect'
+		'PASS built API: incremental source index before publication, concurrent immutable replay/quota, partial counts, watermark paging, Pause/read retention, verified/legacy proof, discard/cascade accounting; six paired-only Photos refills, guarded retained update/refusals, revoke/pause/rotation, scoped Photos publication and canonical two-way replay, staged-only refusal, multipart integrity, v4 save/readback, private placement, pause/revision/revocation, credential expiry, owner logout and device disconnect'
 	);
+    }
 } finally {
 	await cleanup();
 	await rm(directory, { recursive: true, force: true });

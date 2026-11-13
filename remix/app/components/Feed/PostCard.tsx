@@ -58,6 +58,7 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { PostThingMenu } from './PostThingMenu';
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
 import { UpdownControl } from './UpdownControl';
@@ -583,10 +584,10 @@ const PostBody = ({
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
+    {post.type === 'thingtime' && post.thing && <PostLinkedThings subjectId={post.id} value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
     {post.attachmentsTruncated && <Link to={`/thing/${encodeURIComponent(post.id)}`} style={{ fontSize: '0.8rem' }}>View all attachments on the original Thing</Link>}
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
@@ -1367,6 +1368,7 @@ const CommentRow = (props: {
                 <MessageCircle size={13} strokeWidth={2.2} />
               </Flex>
               {reactControl}
+              {!pending && <PersistedThingMenu id={comment.id} label="Comment actions" openHref={`/post/${encodeURIComponent(comment.id)}`} />}
               {showVotesOnComments && commentUpdown}
               {(canReportComment || guestReportComment) && (
                 <Flex
@@ -2510,7 +2512,7 @@ function PostCardImpl(props: PostCardProps) {
             share copies a public original's tags, so a second chip row here
             would just duplicate it) */}
             <PostTextBody post={post} />
-            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (

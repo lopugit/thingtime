@@ -62,7 +62,7 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
     if (!operation || operation.busy || operation.excluded) return;
     operation.busy = true; setBusy(true); setError('');
     try {
-      await ensureBrowserProvider(operation.controller.signal);
+      await ensureBrowserProvider(operation.controller.signal, operation.request);
       const values = await loadProviderChoices(operation.request, vault, operation.controller.signal);
       if (live.current !== operation) return;
       setChoices(values); setLoaded(true); await inspectConfirmation(operation,values[0]?.id);

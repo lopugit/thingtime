@@ -33,7 +33,7 @@ export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFinger
 
 export type PhotoUploadPublication = { expectedRevision: string | null };
 export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval; publication?: PhotoUploadPublication };
-export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
+export type NativePartUpload = { authorization?: FileSyncApproval; uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
 export type NativeDeferredFileResult = { queued: boolean; scheduled: boolean };
 export type FingerprintSource = {
 	/** Queue immutable multipart admission with optional exact Photos publication. */
@@ -49,7 +49,7 @@ export type FingerprintSource = {
 
 	/** Native file-backed multipart upload. Resolves only after authenticated
 	 * signing, bounded storage upload and source checks; returns the part hash. */
-	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number }>;
+	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number; alreadyUploaded?: true }>;
 
 	/** Trusted native-part adapter validates the expected source before/after PUT.
 	 * Only removes duplicate wrapper checks; initial, pre-complete and final

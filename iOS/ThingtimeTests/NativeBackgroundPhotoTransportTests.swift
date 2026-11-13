@@ -100,8 +100,9 @@ final class NativeBackgroundPhotoTransportTests: XCTestCase {
         let task = NativeBackgroundUploadCompletionTask(timeoutNanoseconds: 1_000_000,
             beginAssertion: { _ in UIBackgroundTaskIdentifier(rawValue: 123) }, endAssertion: { _ in ended += 1 },
             completion: { completed += 1 })
-        task.expiration = { expired += 1 }
-        try await Task.sleep(nanoseconds: 10_000_000)
+        let deadline = expectation(description: "Background completion deadline fired")
+        task.expiration = { expired += 1; deadline.fulfill() }
+        await fulfillment(of: [deadline], timeout: 2)
         task.complete(true); task.complete(false)
         XCTAssertEqual(completed, 1); XCTAssertEqual(expired, 1); XCTAssertEqual(ended, 1)
         XCTAssertFalse(task.available)

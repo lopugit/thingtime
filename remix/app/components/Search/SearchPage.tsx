@@ -407,7 +407,7 @@ const StandardThingResult = React.memo(function StandardThingResult({
           <ExternalLink size={11} />
         </Flex>
       </Flex>
-      <ThingView label={label} thing={thing.crystal} />
+      <ThingView subjectId={thing.id} label={label} thing={thing.crystal} />
     </Box>
   );
 });

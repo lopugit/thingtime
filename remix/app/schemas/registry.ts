@@ -4291,6 +4291,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-s
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'sync-source-index', 'sync-source-observation',
   THING_METADATA_KIND,
   THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
   'backup-job', 'backup-job-event', ATTACHMENT_BLOB_THINGTIME,
@@ -4377,7 +4378,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['sync-source-index', 'sync-source-observation', 'post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4539,6 +4540,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
         { name: 'structured', type: 'boolean', required: false, description: 'Preserve the original JSON type of structured values.' }
       ], description: 'Ordered fields in the encrypted document: id, label, type and value. Defaults are username, password and website.' }
     ], example: { title: 'Example login', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: '' }, { id: 'password', label: 'Password', type: 'password', value: '' }] } },
+  ...['sync-source-index', 'sync-source-observation'].map(id => ({ id, version: 1, kind: 'crystal' as const, collection: null,
+    title: id === 'sync-source-index' ? 'Sync source index' : 'Sync source observation',
+    summary: 'Protected private source-discovery metadata; never proof of saved bytes.',
+    detail: 'Quota-accounted atomic Things with relational target links and canonical cascade deletion. The approved sync-run endpoint owns writes; full-owner scoped reads remain available after Pause or authorization expiry.',
+    createdVia: '/api/v1/files/sync-transfer-admissions', fields: [], example: {} })),
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
@@ -5654,6 +5660,15 @@ const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true
 		}
 		if (Object.keys(inputs).length) source.inputs = inputs;
 	}
+	if (rawSource.retainOnInputChange !== undefined) {
+		const retained = rawSource.retainOnInputChange;
+		if (!Array.isArray(retained) || retained.some(name => typeof name !== 'string' || !COMPONENT_ARG_NAME_PATTERN.test(name) ||
+			name.length > MAX_COMPONENT_ARG_NAME_CHARS || PROTOTYPE_POLLUTION_KEYS.has(name) || /(?:^id$|id$)/i.test(name) ||
+			!Object.prototype.hasOwnProperty.call(source.inputs || {}, name)) || new Set(retained).size !== retained.length) {
+			return fail(400, 'Component/page source.retainOnInputChange must list unique, non-ID source input names');
+		}
+		if (retained.length) source.retainOnInputChange = [...retained];
+	}
 	// refresh: 'load' (default — again after every control run), 'manual'
 	// (once, on load), or 'interval' (also every intervalMs — a clock, a
 	// live tally; bounded so a page can never poll the executor hard)
@@ -5857,16 +5872,20 @@ const sanitizeWebpageBlock = (
 		if (Object.keys(css).length) block.css = css;
 	}
 
-		if (raw.args !== undefined && raw.args !== null) {
-			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
-				return fail(400, `Block ${id} args must be an object of scalar arg values`);
+		for (const field of ['args', 'argBindings'] as const) {
+			if (raw[field] === undefined || raw[field] === null) continue;
+			if (typeof raw[field] !== 'object' || Array.isArray(raw[field])) {
+				return fail(400, `Block ${id} ${field} must be an object of scalar arg values`);
 			}
 			const args: Record<string, unknown> = {};
-			const entries = Object.entries(raw.args as Record<string, unknown>);
+			const entries = Object.entries(raw[field] as Record<string, unknown>);
 			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
-				return fail(400, `Block ${id} args can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
+				return fail(400, `Block ${id} ${field} can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
 			}
 			for (const [key, value] of entries) {
+				if (field === 'argBindings' && ['__proto__', 'constructor', 'prototype'].includes(key)) {
+					return fail(400, `Block ${id} argument binding key is reserved`);
+				}
 				if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
 					return fail(400, `Block ${id} arg key "${key.slice(0, 40)}" is not a valid arg name`);
 				}
@@ -5874,7 +5893,7 @@ const sanitizeWebpageBlock = (
 				if (scalar === null && value !== null) return fail(400, `Block ${id} arg ${key} must be a string, number, or boolean`);
 				if (scalar !== null) args[key] = scalar;
 			}
-			if (Object.keys(args).length) block.args = args;
+			if (Object.keys(args).length) block[field] = args;
 		}
 	// Source bindings can scope any editable subtree. Execution retains the
 	// same viewer-owned Action authorization as a component source.

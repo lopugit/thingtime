@@ -85,6 +85,7 @@ export const INSTALL_ACTION = '$install';
 /** Keyboard parity for named fields in Component and expanded page forms. */
 export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldset = false): void => {
 	const field = event.target as HTMLInputElement;
+	if (!ownsAuthoredControl(event.currentTarget as HTMLElement, field)) return;
 	if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
 	if (
 		event.key !== 'Enter' ||
@@ -102,7 +103,7 @@ export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldse
 	if (action === LOCAL_UI_ACTION) {
 		try {
 			const input = JSON.parse(submit.getAttribute('data-tt-action-inputs') || '{}');
-			if (input?.op !== 'search' && !(input?.op === 'query' && input.scope === 'page' && input.form === true)) return;
+			if (input?.op !== 'search' && !(input?.op === 'query' && input.form === true)) return;
 		} catch { return; }
 	}
 	event.preventDefault();
@@ -127,7 +128,16 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
+export const useTtActionClicks = (options?: {
+	identity?: object;
+	executionHeld?: boolean;
+	onUnowned?: TtActionUnownedHandler;
+	confirm?: TtActionConfirmHandler;
+	onLocal?: (inputs: Record<string, unknown>) => void;
+	onPending?: (action: string | null) => void;
+	onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void;
+	fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement;
+}) => {
 	const held = useContentExecutionHeld(options?.executionHeld);
 	const heldRef = React.useRef(held);
 	heldRef.current = held;
@@ -149,7 +159,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 	pendingRef.current = options?.onPending;
 	const fallbackGroupRef = React.useRef(options?.fallbackGroup);
 	fallbackGroupRef.current = options?.fallbackGroup;
-	const busyRef = React.useRef(false);
+	const busyRef = React.useRef<{ identity: object | null; active: boolean }>({ identity: null, active: false });
 	const handledCtrlGesture = React.useRef<HTMLElement | null>(null);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -163,13 +173,15 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 	// A local selection keeps the route generation. Account/access changes
 	// and real navigation retire async confirmations and completions.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
-	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key, held]);
+	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key, held, options?.identity]);
 	const identityRef = React.useRef(actionIdentity);
 	identityRef.current = actionIdentity;
+	if (busyRef.current.identity !== actionIdentity) busyRef.current = { identity: actionIdentity, active: false };
 	const navigate = useNavigate();
 
 	return React.useCallback(
 		(event: React.MouseEvent) => {
+			const busy = busyRef.current;
 			if (event.type === 'mousedown') { handledCtrlGesture.current = null; return; }
 			if (heldRef.current) {
 				if (event.type === 'click') { event.preventDefault(); event.stopPropagation(); }
@@ -216,21 +228,21 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
 						const group = fieldset && ownsAuthoredControl(wrapper, fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
 						if (input.op === 'query' && input.form === true) {
-							if (busyRef.current) return;
+							if (busy.active) return;
 							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 							if (invalid) { invalid.reportValidity(); return; }
 							const identity = identityRef.current;
-							busyRef.current = true; control.setAttribute('aria-busy', 'true');
+							busy.active = true; control.setAttribute('aria-busy', 'true');
 							void captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected)
 								.then(fields => { if (mountedRef.current && identity === identityRef.current) { localRef.current?.(localQueryFormInput(input, fields)); notifyComponentControlActivation(control); } })
 								.catch(error => { if (mountedRef.current && identity === identityRef.current) lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' }); })
-								.finally(() => { busyRef.current = false; control.removeAttribute('aria-busy'); });
+								.finally(() => { busy.active = false; control.removeAttribute('aria-busy'); });
 						} else { localRef.current?.(input); notifyComponentControlActivation(control); }
 					}
 				} catch {}
 				return;
 			}
-			if (busyRef.current) return;
+			if (busy.active) return;
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
 				notifyComponentControlActivation(control);
@@ -244,11 +256,11 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 			if (action === INSTALL_ACTION) {
 				const install = runtimeRef.current.install;
 				if (!install) return;
-				busyRef.current = true;
+				busy.active = true;
 				install()
 					.catch(() => false)
 					.finally(() => {
-						busyRef.current = false;
+						busy.active = false;
 					});
 				notifyComponentControlActivation(control);
 				return;
@@ -274,7 +286,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 			}
 			const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 			if (invalid) { invalid.reportValidity(); return; }
-			busyRef.current = true;
+			busy.active = true;
 			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;
 			const runApi = apiRef.current;
@@ -363,7 +375,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 					}
 				} finally {
 					control.removeAttribute('aria-busy');
-					busyRef.current = false;
+					busy.active = false;
 					if (mountedRef.current && identity === identityRef.current) reportPending?.(null);
 				}
 			})();

@@ -9,6 +9,7 @@ import { loadCollectionPages, type CollectionSource } from './collectionSource';
 import { MAP_POINTS_SOURCE_REQUIREMENTS } from '~/schemas/authoredControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { ownsAuthoredControl } from './authoredControlOwnership';
 import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
@@ -62,6 +63,9 @@ import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache 
 export type ThingSourceBinding = {
 	action: string;
 	inputs?: Record<string, SourceInputValue>;
+	// Opt in filter/view inputs whose changes may keep the previous result
+	// mounted while the next authorized read is pending. Target IDs stay exact.
+	retainOnInputChange?: string[];
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
 	stream?: LiveSourceStreamBinding;
@@ -80,6 +84,9 @@ export function resolveThingSourceInputs(inputs: ThingSourceBinding['inputs'], s
 export type ThingSourceScope = {
 	result: unknown;
 	state: ThingSourceState;
+	refreshing: boolean;
+	// Internal draft boundary: excludes only explicitly retained filter inputs.
+	targetIdentity: string;
 	error: string | null;
 	last: unknown;
 	viewer: unknown;
@@ -133,23 +140,37 @@ export const useThingSource = ({
 		: source?.inputs;
 	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
 	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
+	// Only explicitly designated filter/view inputs may retain a result across
+	// URL changes. An item/task ID remains part of the protected target by
+	// default, so opening another record cannot paint the old record's controls.
+	const retain = new Set(Array.isArray(source?.retainOnInputChange)
+		? source.retainOnInputChange.filter((name) => typeof name === 'string' && !/id$/i.test(name))
+		: []);
+	const targetInputs = Object.fromEntries(Object.entries(inputs).filter(([name]) => !retain.has(name)));
+	const sourceIdentity = JSON.stringify([sourceKey, targetInputs, cacheId, dataPlane, character?.id || null, held]);
 	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null, held]);
-	const initial = React.useMemo(
-		() => ({
+	const initial = React.useMemo(() => {
+		const cached = active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
+			? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
+			: undefined;
+		return {
 			identity: runtime.identity,
+			sourceIdentity,
 			binding,
-			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
-				: undefined,
-			error: null as string | null
-		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
-	);
+			status: (!active ? 'inert' : !canRun ? 'signed-out' : cached === undefined ? 'loading' : 'ok') as ThingSourceState,
+			result: cached,
+			error: null as string | null,
+			refreshing: active && canRun
+		};
+	}, [runtime.identity, sourceIdentity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]);
 	const [storedState, setState] = React.useState(initial);
+	const carry = (current: typeof initial): typeof initial =>
+		current.identity === runtime.identity && current.sourceIdentity === sourceIdentity && current.result !== undefined && initial.result === undefined
+			? { ...initial, result: current.result, status: 'ok', refreshing: true }
+			: initial;
 	// A new target must never render the preceding target's controls, even
 	// during the render before the effect starts its replacement request.
-	const state = storedState.identity === runtime.identity && storedState.binding === binding ? storedState : initial;
+	const state = storedState.identity === runtime.identity && storedState.binding === binding ? storedState : carry(storedState);
 	const currentIdentity = React.useRef({ identity: runtime.identity, binding });
 	currentIdentity.current = { identity: runtime.identity, binding };
 	const manual = source?.refresh === 'manual';
@@ -189,7 +210,7 @@ export const useThingSource = ({
 			// Shared-page action execution has its own stored-root authority and
 			// must never inherit this viewer's private session through a stream.
 			if (runtime.sharedRun || !signedIn || !liveSourceValid || !liveStream) {
-				setState({ identity: runtime.identity, binding, status: runtime.sharedRun ? 'inert' : 'error', result: undefined, error: runtime.sharedRun ? null : 'Live source is unavailable' });
+				setState({ ...initial, status: runtime.sharedRun ? 'inert' : 'error', result: undefined, error: runtime.sharedRun ? null : 'Live source is unavailable', refreshing: false });
 				return;
 			}
 			const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
@@ -209,17 +230,18 @@ export const useThingSource = ({
 			const receiveSnapshot = (result: unknown) => {
 				if (stale()) return;
 				writeSourceCache(viewerId, pageId, cacheId, result, binding);
-				setState({ identity: runtime.identity, binding, status: 'ok', result, error: null });
+				setState({ ...initial, status: 'ok', result, error: null, refreshing: false });
 				backoff = 500;
 			};
 			const revoke = () => {
 				forbidden = true;
 				clearSourceCache(viewerId, pageId, cacheId);
-				if (!stale()) setState({ identity: runtime.identity, binding, status: 'signed-out', result: undefined, error: 'Live source access is no longer available' });
+				if (!stale()) setState({ ...initial, status: 'signed-out', result: undefined, error: 'Live source access is no longer available', refreshing: false });
 			};
-			setState((current) => current.identity === runtime.identity && current.binding === binding
-				? { ...current, error: null, ...(current.result === undefined ? { status: 'loading' as ThingSourceState } : {}) }
-				: initial);
+			setState((current) => {
+				const next = current.identity === runtime.identity && current.binding === binding ? current : carry(current);
+				return { ...next, error: null, refreshing: true, status: next.result === undefined ? 'loading' : 'ok' };
+			});
 			void (async () => {
 				try {
 					await requireThingtimeCapability(liveStream.feature, liveStream.minimumVersion);
@@ -236,7 +258,7 @@ export const useThingSource = ({
 							});
 						} catch (error: any) {
 							if (stale() || controller.signal.aborted || error?.terminal || forbidden) break;
-							setState((current) => current.identity === runtime.identity && current.binding === binding ? { ...current, error: 'Live source disconnected; reconnecting' } : current);
+							setState((current) => current.identity === runtime.identity && current.binding === binding ? { ...current, refreshing: true, error: 'Live source disconnected; reconnecting' } : current);
 						}
 						if (!stale() && !controller.signal.aborted && !forbidden) {
 							await pause(backoff);
@@ -247,7 +269,7 @@ export const useThingSource = ({
 					if (!stale() && !controller.signal.aborted) {
 						const failure = sourceFailure(error, false);
 						setState((current) => current.identity === runtime.identity && current.binding === binding
-							? { ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }
+								? { ...current, status: failure.clear || current.result === undefined ? failure.status : 'ok', error: failure.error, refreshing: false, ...(failure.clear ? { result: undefined } : {}) }
 							: current);
 					}
 				}
@@ -262,17 +284,17 @@ export const useThingSource = ({
 		// Install card to "Loading…" on each tick unmounts the button under the
 		// pointer); install itself re-resolves the page, so nothing is stale
 		setState((current) => {
-			if (current.identity !== runtime.identity || current.binding !== binding) return initial;
-			return (current.result === undefined && current.status !== 'not-installed') || current.status === 'signed-out' || current.status === 'inert'
-				? { ...current, status: 'loading' }
-				: current;
+			const next = current.identity === runtime.identity && current.binding === binding ? current : carry(current);
+			return next.status === 'not-installed' ? next : { ...next, refreshing: true, status: next.result === undefined ? 'loading' : 'ok' };
 		});
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			const clear = failure.clear || !!cursorPages;
+			const clear = failure.clear;
 			if (clear) clearSourceCache(viewerId, pageId, cacheId);
-			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(clear ? { result: undefined } : {}) }));
+			setState((current) => current.identity === runtime.identity && current.binding === binding
+				? { ...current, status: clear || current.result === undefined ? failure.status : 'ok', error: failure.error, refreshing: false, ...(clear ? { result: undefined } : {}) }
+				: current);
 		};
 
 		(async () => {
@@ -294,7 +316,7 @@ export const useThingSource = ({
 				const response: any = cursorPages ? await loadCollectionPages(cursorPages, run, stale, inputs[cursorPages.cursorInput]) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
 					if (stale()) return;
 					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
-					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });
+					setState({ ...initial, status: 'ok', result: page.result, error: null, refreshing: false });
 				}) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
@@ -302,7 +324,7 @@ export const useThingSource = ({
 						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
 						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null, binding);
 					}
-					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
+				setState({ ...initial, status: 'ok', result: response.result ?? null, error: null, refreshing: false });
 				} else {
 					fail(response);
 				}
@@ -339,6 +361,8 @@ export const useThingSource = ({
 		() => ({
 			result: active && canRun ? state.result : undefined,
 			state: interactive ? state.status : 'inert',
+			refreshing: active && canRun && state.refreshing,
+			targetIdentity: sourceIdentity,
 			error: state.error,
 			last: runtime.last,
 			viewer: runtime.viewer,
@@ -347,7 +371,7 @@ export const useThingSource = ({
 			installAvailable: !!runtime.install,
 			hasSource: !!source
 		}),
-		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, runtime.install, source, interactive, active, canRun]
+		[state, sourceIdentity, runtime.last, runtime.viewer, runtime.query, runtime.installing, runtime.install, source, interactive, active, canRun]
 	);
 	const refetch = React.useCallback(() => setLocal((current) => current + 1), []);
 	return { scope, refetch };
@@ -380,6 +404,7 @@ export const useComponentArgValues = (
 export const LiveTemplate = ({
 	render,
 	scope,
+	argumentKey,
 	resolved: alreadyResolved = false,
 	interactive,
 	onUnowned,
@@ -391,6 +416,7 @@ export const LiveTemplate = ({
 	render: unknown;
 	resolved?: boolean;
 	scope: Record<string, unknown>;
+	argumentKey?: string;
 	interactive: boolean;
 	onUnowned?: TtActionUnownedHandler;
 	confirm?: TtActionConfirmHandler;
@@ -408,11 +434,12 @@ export const LiveTemplate = ({
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
 		Object.entries(scope).filter(
-			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page'].includes(key)
+			([key]) => !['result', 'state', 'refreshing', 'targetIdentity', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page'].includes(key)
 		)
 	);
-	// Explicit navigation starts a new component draft; source refreshes do not.
-	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope]);
+	// A query visit stays in this page and must not remount its inputs or
+	// selection. Page, viewer, component, and argument changes still retire drafts.
+	const draftKey = JSON.stringify([user?.id, runtime.pageId, scope.targetIdentity, alreadyResolved ? null : render, instanceIdentity ?? baseScope, argumentKey]);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
 	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
@@ -465,6 +492,7 @@ export const LiveTemplate = ({
 		}));
 	};
 	const onTtAction = useTtActionClicks({
+		identity,
 		executionHeld: held,
 		onUnowned,
 		confirm,
@@ -504,6 +532,7 @@ export const LiveTemplate = ({
 								interactive
 									? (event) => {
 											const field = event.target as HTMLInputElement;
+											if (!ownsAuthoredControl(event.currentTarget, field)) return;
 											if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
 											try {
 												const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');

@@ -253,6 +253,7 @@ function RemoteConnections({ scope, generation, active, devicePlatform, savedOnl
 				if (deferRootVerification) { check(); assertRemoteDeviceRoot(status!.roots, configuration, scope.deviceId); }
 				else await verifyRemoteRoot(configuration);
 			};
+			if (draft.configuration.uploadPolicy) throw Error('Open Thingtime on the paired iPhone to save its folder upload limits. Your draft is preserved.');
 			let prepared = draft;
 	            if (draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId) {
 	                if (!draft.configuration.localRootId) throw Error('Choose a device folder first.');
@@ -264,6 +265,10 @@ function RemoteConnections({ scope, generation, active, devicePlatform, savedOnl
 	                persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
 	            }
 	            const pending = { ...prepared, configuration: canonicalDraftConfiguration(prepared), pending: true, enrollment };
+			if (pending.configuration.uploadPolicy) {
+                // The paired iPhone must negotiate its independent upload controls locally.
+                throw Error('Open Thingtime on the paired iPhone to save its folder upload limits. Your draft is preserved.');
+            }
 			if (pending.configuration.photoAutomation) {
 				for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
 				check();

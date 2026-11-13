@@ -18,6 +18,7 @@ export interface WebpageBlockSource {
 	collection?: PageCollectionBinding;
 	// Scalar values, string tokens or a ttArg binding with an optional fallback.
 	inputs?: Record<string, SourceInputValue>;
+	retainOnInputChange?: string[];
 	// 'live' subscribes to a capability-negotiated same-origin stream.
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
@@ -35,6 +36,7 @@ export interface WebpageBlock {
 	// component
 	component?: string;
 	args?: Record<string, string | number | boolean>;
+	argBindings?: Record<string, string | number | boolean>;
 	// container
 	direction?: WebpageContainerDirection;
 	gap?: number;

@@ -69,7 +69,15 @@ when disabled, for unsupported request types/options, or after an explicit provi
 choice. Late responses and mismatched provider documents are ignored.
 
 Supported basic registration/assertion options are serialized with BufferSources
-as base64url. Creation supports `credProps: true`. Conditional mediation, other extension inputs (including PRF/largeBlob),
+as base64url. Creation supports `credProps: true`. Adapter 0.5.1 supports assertion `appid`
+only when empty/default or a same-site, credential-free HTTPS URL (using the private/public suffix list) without a
+fragment. It uses WebAuthn's documented same-site browser relaxation of FIDO authorization and preserves the
+normal RP-bound credential and RP hash; `getClientExtensionResults()` and JSON
+return `{appid:false}`. The hosted provider requires both modern and active
+same-origin `api.passwords` 1.9.1 before AppID vault operations. Other sites or
+legacy AppID-bound credentials require the native provider; no AppID URL is fetched.
+This is reusable protocol support, not an AWS-specific credential exception.
+Conditional mediation, other extension inputs (including PRF/largeBlob),
 hints, unsupported algorithms (no ES256 offer), non-none attestation, cross-platform
 authenticator attachment, unknown option fields and mixed credential requests
 delegate to native WebAuthn before opening the provider. Returned credentials
@@ -263,3 +271,5 @@ first-party account switcher. Switching also changes this browser's Thingtime we
 tabs. **Lock** clears the extension connection without signing your account out. **Unlock** reuses its live session and preserves the configured verification policy.
 No account cookies or session tokens are copied into the extension. See
 [the account bridge contract](../docs/browser-extension-accounts.md).
+
+The hook source is `page-hook-source.ts`; `npm --prefix remix run build:password-extension` bundles the shared PSL-aware validator into `page-hook.js` and packages the archive. Rebuild before running extension tests after source changes. No global validator or additional browser permission is installed.

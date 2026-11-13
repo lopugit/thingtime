@@ -23,11 +23,12 @@ const deferred = () => {
 	return { promise, resolve };
 };
 
-async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false, finishBackup = false) {
+async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false, finishBackup = false, replaceIdentity = false, failedAfterPut = false) {
 	const f = await foregroundFixture(),
 		controller = new AbortController(),
 		timer = setTimeout(() => controller.abort(Error('Isolated streaming batch test deadline')), 30000),
 		firstCommit = deferred(),
+		firstFailed = deferred(),
 		allPrepared = deferred();
 	const entries: SyncEntry[] = Array.from({ length: count }, (_, i) => ({
 		...structuredClone(seed),
@@ -44,14 +45,19 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 		ready = new Set<string>();
 	let sourceComplete = false,
 		first = true,
-		activePut = 0;
-	const counts = { native: 0, contexts: 0, inspections: 0, bulkCalls: 0, cloud: 0, observes: 0, puts: 0, maxPut: 0, confirmed: 0 };
+		activePut = 0,
+		oldOperationId: string | null = null,
+		newOperationId: string | null = null,
+		newSourceId: string | null = null,
+		oldReceiptLookups = 0;
+	const counts = { native: 0, contexts: 0, inspections: 0, scans: 0, bulkCalls: 0, cloud: 0, observes: 0, puts: 0, maxPut: 0, confirmed: 0 };
 	const native = async () => {
 		counts.native++;
 		await delay(5);
 	};
 	const content = (uploadId: string) => ({ uploadId, version: 'b'.repeat(64), size: 4, fingerprint: seed.fingerprint });
 	const commit = async (body: any) => {
+		if (replaceIdentity) newOperationId = body.operationId;
 		const old = files.get(body.id);
 		if (old) return { ok: true as const, file: old, replayed: true };
 		const file = {
@@ -124,6 +130,37 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 		await native();
 		if (firstBeforeCompletion) assert.equal(sourceComplete, false);
 		const probe = await api({ phase: 'prepare', ...input, checksums: [] });
+		if (replaceIdentity && first) {
+			first = false;
+			assert.equal(input.descriptor.members.length, 1);
+			const member = input.descriptor.members[0], source = member.write.operation.mutation;
+			assert.equal(source.kind, 'copy');
+			if (source.kind !== 'copy') throw Error('copy');
+			oldOperationId = member.write.operation.id;
+			if (failedAfterPut) {
+				const prepared = await api({ phase: 'prepare', ...input, checksums: [{ ordinal: 0, sha256: raw }] });
+				assert.equal(prepared.results[0].status, 'prepared');
+				counts.puts++; // The native PUT finished, then its final source check failed.
+				const upload = prepared.results[0].upload;
+				await api({ phase: 'verify', ...input, uploads: [{ ordinal: 0, uploadId: upload.id }] });
+			}
+			const current = local.get(source.path)!;
+			local.set(source.path, { ...current, id: 'replacement-inode', version: 'replacement-version' });
+			firstFailed.resolve();
+			return {
+				ok: true, version: 1, batchId: input.descriptor.batchId, digest: input.digest,
+				results: [{ ordinal: 0, status: 'failed', statusCode: 409, code: 'source-changed', retryable: false }],
+				payloads: [{ ordinal: 0, bytes: failedAfterPut ? 4 : 0 }]
+			};
+		}
+		if (replaceIdentity) {
+			assert.equal(input.descriptor.members[0].write.operation.mutation.kind, 'copy');
+			const mutation = input.descriptor.members[0].write.operation.mutation;
+			if (mutation.kind !== 'copy') throw Error('copy');
+			assert.equal(mutation.source.id, 'replacement-inode');
+			newOperationId = input.descriptor.members[0].write.operation.id;
+			assert.notEqual(newOperationId, oldOperationId);
+		}
 		if (first && !firstBeforeCompletion) {
 			first = false;
 			await wait(allPrepared.promise, signal);
@@ -169,24 +206,27 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 			return local.get(path) ?? null;
 		},
 		...(bulk ? { uploadBatch: nativeBatch } : {}),
-		source: async (entry) => ({
-			size: entry.size,
-			nativePartSourceChecks: true,
-			nativePartPayloadBytes: true,
-			check: native,
-			verify: native,
-			read: async () => {
-				throw Error('Native part path expected');
-			},
-			uploadPart: async () => {
-				await native();
-				await native();
-				counts.puts++;
-				await delay(2);
-				await native();
-				return { sha256: raw, payloadBytes: 4 };
-			}
-		}),
+		source: async (entry) => {
+			if (replaceIdentity) newSourceId = entry.id;
+			return {
+				size: entry.size,
+				nativePartSourceChecks: true,
+				nativePartPayloadBytes: true,
+				check: native,
+				verify: native,
+				read: async () => {
+					throw Error('Native part path expected');
+				},
+				uploadPart: async () => {
+					await native();
+					await native();
+					counts.puts++;
+					await delay(2);
+					await native();
+					return { sha256: raw, payloadBytes: 4 };
+				}
+			};
+		},
 		progress: (progress) => {
 			if (progress.total === count) allPrepared.resolve();
 		},
@@ -201,7 +241,7 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 					hasMore: false,
 					changes: [{ sequence: 1, revision: entries[0].version, entry: entries[0] }]
 				};
-				await wait(firstCommit.promise, signal);
+				await wait(replaceIdentity ? firstFailed.promise : firstCommit.promise, signal);
 				sourceComplete = true;
 				yield { id, generation: id, state: 'complete', revision: 1, nextSequence: 1, hasMore: false, changes: [] };
 			} else {
@@ -243,7 +283,10 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 							}
 						});
 					const id = target.searchParams.get('id')!;
-					if (target.searchParams.has('operationId')) return Response.json({ ok: true, receipt: files.has(id) ? { file: files.get(id) } : null });
+					if (target.searchParams.has('operationId')) {
+						if (replaceIdentity && id === oldOperationId) oldReceiptLookups++;
+						return Response.json({ ok: true, receipt: files.has(id) ? { file: files.get(id) } : null });
+					}
 					return files.has(id) ? Response.json({ ok: true, file: files.get(id) }) : Response.json({ ok: false }, { status: 404 });
 				}
 				if (target.pathname.endsWith('/uploads')) {
@@ -263,7 +306,7 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 	const started = performance.now();
 	try {
 		if (finishBackup) {
-            input.scanLocal = async () => [...local.values()];
+			input.scanLocal = async () => { counts.scans++; return [...local.values()]; };
             input.inventory = async () => ({ version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root',
                 nodes: [...files.values()].map(file => ({ kind: 'file', path: file.name, file })) });
             let completed: ForegroundSyncProgress | undefined;
@@ -279,7 +322,16 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 	}
 	assert.equal(files.size, count);
 	assert.equal(counts.confirmed, count);
-	assert.equal(counts.puts, count);
+	assert.equal(counts.puts, count + (failedAfterPut ? 1 : 0));
+	if (replaceIdentity) {
+		assert.ok(oldOperationId);
+		assert.ok(newOperationId);
+		assert.equal(oldReceiptLookups, 0, 'the original was affirmatively never dispatched, so no cloud receipt lookup is needed');
+		assert.equal(newSourceId, 'replacement-inode');
+		assert.ok(counts.scans >= 1, 'the current source must come from the sealed full-tree scan');
+		assert.equal(files.has(oldOperationId), false, 'the replaced source never publishes under its old operation');
+		assert.equal(files.has(newOperationId), true, 'the fresh sealed source publishes under a new operation');
+	}
 	return { ...counts, elapsedMs: performance.now() - started };
 }
 
@@ -323,4 +375,17 @@ test('controlled complete-file comparison removes per-file native and metadata a
 test('native upload batch completion survives its zero-work strict backup pass', async () => {
     const result = await run(1, true, false, false, true);
     assert.equal(result.bulkCalls, 1); assert.equal(result.confirmed, 1);
+});
+
+test('a replaced local file retires its original batch identity and publishes only after a fresh sealed scan', async () => {
+	const result = await run(1, true, true, false, true, true);
+	assert.equal(result.bulkCalls, 1, 'the stale batch is not regrouped; its fresh replacement may use the scalar path');
+	assert.equal(result.confirmed, 1);
+	assert.equal(result.puts, 1);
+});
+
+test('a changed source after native staging retains its draft but cannot publish the old file identity', async () => {
+	const result = await run(1, true, true, false, true, true, true);
+	assert.equal(result.confirmed, 1);
+	assert.equal(result.puts, 2, 'staging before the refusal and fresh publication are separate byte transfers');
 });

@@ -1,9 +1,17 @@
+import { googleServiceAccess } from './googleServiceActions';
 import { GOOGLE_SERVICES, NAMED_PROVIDER_PERMISSIONS } from './catalog';
 
 export const NAMED_CONNECTION_FEATURE = 'api.connections-named';
-export const NAMED_CONNECTION_VERSION = '1.0.0';
+export const NAMED_CONNECTION_VERSION = '1.1.0';
+export const NAMED_CONNECTION_REQUIREMENTS = {
+  'api.connections': '2.3.0',
+  'api.connections-named': NAMED_CONNECTION_VERSION,
+  'api.connections-oauth-begin': '2.2.0',
+  'api.connections-oauth-callback': '2.2.0'
+} as const;
 
 export const namedAccess = {
+  ...googleServiceAccess,
   'account.identity': { label: 'Saved account identity', scope: null },
   'google.profile': { label: 'Google profile name and photo', scope: 'profile' },
   'google.email': { label: 'Google account email address', scope: 'email' }
@@ -20,7 +28,8 @@ export type NamedConnectionInput = {
 
 export const namedOperationsFor = (provider: string): NamedOperation[] => {
   const service = GOOGLE_SERVICES.find(item => item.id === provider);
-  return ['account.identity', ...(service && 'namedOperations' in service ? service.namedOperations : [])];
+  return ['account.identity', ...(service && 'namedOperations' in service ? service.namedOperations : []),
+    ...Object.keys(googleServiceAccess).filter(id => googleServiceAccess[id as keyof typeof googleServiceAccess].provider === provider) as (keyof typeof googleServiceAccess)[]];
 };
 
 export const namedGoogleProvider = (provider: string) => GOOGLE_SERVICES.some(service => service.id === provider);

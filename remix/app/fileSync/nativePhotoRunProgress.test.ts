@@ -26,3 +26,29 @@ test('invalid additive Photos reason telemetry cannot discard a valid scoped run
   unavailableReasons: { 'cloud-download': 2, 'photo-read': 1 } }).photoRunProgress?.unavailableReasons, undefined);
  assert.throws(() => parseNativePhotoRunStatus(revision, { ...progress, configurationRevision: '2026-11-10T00:00:00Z' }));
 });
+
+
+test('closed failure operation telemetry identifies the refusal without retaining raw server text', () => {
+ for (const failureOperation of ['manifest', 'check-photo-run', 'reserve-photo-original', 'parts', 'complete', 'publish', 'local-grant', 'queue']) {
+  const activity = parseNativePhotoRunStatus(revision, { ...progress,
+   activity: { phase: 'waiting', reason: 'transfer-expired', failureOperation } }).photoRunProgress?.activity;
+  assert.equal(activity?.reason, 'transfer-expired'); assert.equal(activity?.failureOperation, failureOperation);
+ }
+ const unknown = parseNativePhotoRunStatus(revision, { ...progress,
+  activity: { phase: 'waiting', reason: 'private server error', failureOperation: 'raw private path' } }).photoRunProgress?.activity;
+ assert.equal(unknown?.reason, undefined); assert.equal(unknown?.failureOperation, undefined);
+});
+
+
+test('background termination is closed optional history with measured progress, never raw error text', () => {
+ const backgroundEnd = { cause: 'system-ended', at: revision, measuredUnits: 12345, lastProgressAt: revision };
+ const parsed = parseNativePhotoRunStatus(revision, { ...progress,
+  activity: { phase: 'waiting', backgroundEnd: { ...backgroundEnd, error: 'private path' } } }).photoRunProgress!;
+ assert.deepEqual(parsed.activity?.backgroundEnd, backgroundEnd);
+ for (const invalid of [{ ...backgroundEnd, cause: 'private raw failure' }, { ...backgroundEnd, at: 'invalid' },
+  { ...backgroundEnd, measuredUnits: -1 }]) {
+  const value = parseNativePhotoRunStatus(revision, { ...progress, activity: { phase: 'waiting', backgroundEnd: invalid } }).photoRunProgress!;
+  assert.equal(value.activity?.backgroundEnd, undefined);
+  assert.deepEqual(value.confirmed, progress.confirmed);
+ }
+});

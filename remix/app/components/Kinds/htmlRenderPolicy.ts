@@ -231,6 +231,9 @@ export const ALLOWED_PROPS = new Set([
 	'data-tt-menu-slot',
 	'data-tt-menu-trigger',
 	'data-tt-input-type',
+	// Inert names; only an explicit private-controls host supplies live values.
+	'data-tt-private-control',
+	'data-tt-private-text',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);

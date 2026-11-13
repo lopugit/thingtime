@@ -3,6 +3,14 @@ import Foundation
 /// The browser handoff can open controls only; it cannot select an account,
 /// destination, callback or start the camera. The selected native origin wins.
 enum LiDARLaunchRoute {
+    static func libraryURL(origin: URL) -> URL? {
+        guard var components = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return nil }
+        components.path = "/things"
+        components.queryItems = [URLQueryItem(name: "lidar", value: "1")]
+        components.fragment = nil
+        return components.url
+    }
+
     static func canConsume(pendingOrigin: URL?, selectedOrigin: URL?, currentURL: URL?, isLoading: Bool) -> Bool {
         guard !isLoading, let pendingOrigin, let selectedOrigin, let currentURL else { return false }
         return LopuVoiceContract.sameOrigin(pendingOrigin, selectedOrigin)

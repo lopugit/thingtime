@@ -3,6 +3,7 @@ import test from 'node:test';
 import { foregroundSyncContext, SyncConditionsWait } from './foregroundSyncContext';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import type { ForegroundSyncInput } from './foregroundSync';
+import { fingerprintSource } from './contentFingerprint';
 
 test('composite authorization retains every configuration/device/conditions boundary without legacy RPCs', async () => {
  const f = await foregroundFixture(), input: ForegroundSyncInput = f.input();
@@ -69,5 +70,31 @@ test('compound observations reject parent mismatch, incomplete reply and offline
  await assert.rejects(context.observeLocal!('Documents/child', 'Documents'), /observation changed/);
  input.observeLocal = async () => ({ conditions: { network: 'offline', charging: true }, entries: [null] });
  await assert.rejects(context.observeLocal!('Documents', ''), cause => cause instanceof SyncConditionsWait && cause.reason === 'wifi');
+ f.journal().close();
+});
+test('captured upload fingerprint is reused only after fresh exact native stamp and authority checks', async () => {
+ const f = await foregroundFixture(), input: ForegroundSyncInput = f.input(), controller = new AbortController();
+ const payload = new Uint8Array([1, 2, 3]);
+ const fingerprint = await fingerprintSource({ size: payload.length, check: () => {}, read: async () => payload });
+ const captured = { path: 'file.bin', id: 'inode', version: 'dev:inode:size:mtime:ctime', kind: 'file' as const, size: 3, sha256: null, fingerprint };
+ let stamp: Pick<typeof captured, 'path' | 'id' | 'version' | 'kind' | 'size'> | null = captured;
+ let authorized = 0, hashReads = 0, stampReads = 0;
+ input.authorizeDevice = async () => { authorized++; };
+ input.inspectLocal = async () => { hashReads++; return captured; };
+ input.inspectLocalStamp = async () => { stampReads++; return stamp; };
+ const context = foregroundSyncContext(saved, scope, input, controller.signal);
+ assert.deepEqual(await context.readLocalUploadSource(captured), captured);
+ assert.deepEqual({ authorized, hashReads }, { authorized: 1, hashReads: 0 });
+ stamp = { ...captured, version: 'changed' };
+ assert.equal(await context.readLocalUploadSource(captured), null);
+ stamp = null;
+ assert.equal(await context.readLocalUploadSource(captured), null);
+ assert.equal(hashReads, 0);
+ stamp = captured; f.change();
+ await assert.rejects(context.readLocalUploadSource(captured), /configuration|approval/);
+ assert.equal(authorized, 4, 'changed saved authority is rechecked');
+ assert.equal(stampReads, 3, 'changed saved authority refuses before native stamp IO');
+ controller.abort();
+ await assert.rejects(context.readLocalUploadSource(captured));
  f.journal().close();
 });

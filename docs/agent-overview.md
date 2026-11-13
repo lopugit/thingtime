@@ -41,6 +41,41 @@ selection arrays alongside the original scalar fields. Use `availableStatuses`
 and `projects` to populate filter choices from all authorized scanned records
 regardless of the current selection.
 
+Task cards using archive filtering and activity fields negotiate
+`api.agent-overview` **2.2.0**. `archive=active|archived|all` defaults to
+`active`; an invalid or repeated value is rejected. The filter uses the task
+Thing's optional boolean `crystal.archived`, which a private saved Action can
+toggle through the ordinary authorized Things update path. An archived task
+also removes its descendants from the active board without rewriting them.
+The archived view includes that task and its descendants, and `all` shows both.
+An exact `taskId` still returns the selected task and its relational detail,
+including `selectedChildren`, the authorized direct task children and tasks
+under an agent assigned to that selected task. This detail list is independent
+of the board archive filter and row pagination.
+Archive changes do not alter task status, visibility, ownership or content.
+The board's saved task Schema needs an optional `archived` boolean and its
+archive/restore Action must verify the exact task and its write permission.
+The owner-home Things library Archive action is a separate placement feature
+and cannot serve Character-authored work graphs.
+
+Task rows now include `archived`, `effectiveArchived`, the nearest authorized
+`archivedAncestorId` (or `null`), and a semantic `statusGroup`
+(`complete`, `blocked`, `waiting`, `todo`, `active`, or `other`),
+`openQuestionCount`, `openQuestions` and all `questions` with open items first.
+Each inline question includes only its ID, title, body, answer, status, task
+ID and source timestamps. `lastActivityAt` is the newest valid
+source creation/update timestamp among the authorized task and its directly
+related progress, question, todo and agent Things; it is `null` when none is
+known. A child task's own activity belongs to that child card. The row's
+`relatedRecordsComplete` and `coverage.relatedRecordsComplete`/
+`coverage.archiveTreeComplete` are false for a partial scan: a timestamp may
+then be only the latest seen, question counts are lower bounds, and an unseen
+archived ancestor may not yet be resolved. The adapter does not infer agent
+runtime or activity from status. The saved page owns colours,
+relative-time formatting and question presentation. Status classification
+uses the page's configured groups; waiting and todo retain their distinct
+semantic groups. Archive selection is part of cursor context.
+
 To author a saved default with an explicit clear value, bind the input with
 `{ "ttArg": "query.taskLevels", "fallback": "taskLevelsDefault" }` and set
 the page block argument `taskLevelsDefault` to `top-level`. An absent query key
@@ -48,6 +83,13 @@ uses the fallback. A cleared multi-select sends `[]` to the adapter.
 For typed source input references, negotiate `api.things` **1.60.0** on create,
 `api.things-update` **1.25.0** on update and `api.webpages-resolve` **1.17.0**
 on resolve.
+For optional saved source `retainOnInputChange`, negotiate `api.things`
+**1.65.0** on create, `api.things-update` **1.29.0** on update and
+`api.webpages-resolve` **1.20.0** on resolve. It lists unique existing source
+input names whose changes may keep the prior authorized result visible while
+the next read loads. Singular ID keys such as `taskId` are excluded; identity
+and access changes still clear protected results. Omit it for the default
+empty list.
 
 Use `taskLevels=top-level` for a page that opens on top-level tasks. A task
 with an authorized task or agent parent is a `subtasks` match. A task with no

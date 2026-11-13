@@ -207,3 +207,12 @@ test('Photos can omit only the stock download direction without changing general
  findBlock(customized, 'connection-glance-download-title')!.text = 'My downloaded files';
  assert.equal(findBlock(withStableSyncGlance(customized, true), 'connection-glance-download-title')?.text, 'My downloaded files');
 });
+
+
+test('Photos authority diagnostics show the closed failed operation independently of concurrent phase', () => {
+ const view = { progress: { stage: 'needs-review', confirmed: { photos: 0, videos: 0, other: 0, wifiBytes: 0, mobileBytes: 0, unknownBytes: 0 },
+  activity: { phase: 'waiting', reason: 'transfer-expired', failureOperation: 'reserve-photo-original' } } } as NativePhotoRunView;
+ const display = nativePhotoActivityDisplay(view)!;
+ assert.match(display.reason, /expired or was revoked/); assert.match(display.reason, /Reserving an original/);
+ assert.doesNotMatch(display.reason, /saved backup settings/);
+});

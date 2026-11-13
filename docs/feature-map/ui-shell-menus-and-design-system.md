@@ -1,5 +1,24 @@
 # UI shell, menus and design system
 
+## Shared persisted Thing actions
+
+`schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore
+verbs. The routed app entry supplies `PersistedThingMenuLoaderContext`; its lazy
+headless `PersistedThingMenuController` leaves one menu renderer mounted while
+permissions load. Local JSON/embed entries do not import the authenticated API
+graph or infer remote subjects. Controller loading failure has explicit Retry;
+same-identity focus/submenu state survives loading, while identity changes reset
+presentation. `PersistedThingContextMenu` resolves exact-root availability on open,
+negotiates `api.things-actions` 1.1.0, and fences reads/writes by owner, origin,
+data plane, subject and menu visit. Refused subjects have no Archive or retry;
+transient lookup failures offer Retry. Shared buttons and persisted/raw-tree
+adapters carry explicit saved-root IDs. A nested field says **Archive containing
+Thing**; an unsaved local value or remote inode cannot become a guessed target.
+`THING_ARCHIVE_CHANGED` refreshes same-scope library consumers; archiving a post
+keeps its published audience. See the Things library archive checklist and
+`things-library-archive-acceptance.mjs` (real API, Builder app cards, posts,
+messages, desktop/touch, stale-menu races and failure recovery).
+
 ## Editable LiDAR capture controls
 
 The Things root shows an editable LiDAR scan section on iOS. Its
@@ -18,6 +37,16 @@ in native storage. Run `lidarScanBridge.test.ts` and
 for the bridge, archive and hardware acceptance.
 
 ## Native mobile background presence
+
+`NativeSyncBootstrap` also owns device file-sync startup across ordinary app
+pages. App entry, native bridge readiness and foreground return wake the shared
+sync worker; visiting device files/sync observes the same startup state rather
+than creating another scheduler. The editable status and canonical Lopu
+notification follow scoped admission results. Effect replay and overlapping
+lifecycle signals must not duplicate runs or notifications. Explicit Pause,
+saved transfer conditions, server retry deadlines and identity changes remain
+authoritative. See the app-entry checks under **iOS Photos launch and retry** in
+`TESTING.md`.
 
 `MobileDevicePresenceBootstrap` owns the Activity manager preference and identity
 fence. `mobileDeviceBridge` negotiates iOS pairing bridge 1.1.0 before requesting
@@ -60,6 +89,15 @@ bounded settling, while the Builder blocks remain individually editable.
 `test:attachments` includes the IncomingShare viewport/bridge regressions.
 
 ## Editable map markers and connector settings
+
+Ordinary Component instances and expanded source blocks accept explicit scalar
+`argBindings` from their parent row. `templateBlocks.resolveBlockArguments`
+preserves literal/default argument behavior and source identity. The Component
+argument inspector edits each binding separately. Nested live surfaces own
+their Actions, field changes and Enter submission through
+`authoredControlOwnership`. Run `component-arguments.browser.mjs` for the
+desktop/mobile nested-row, draft, async, expansion and inspector regression.
+See [Builder browser Actions](../builder-browser-actions.md) for capability floors.
 
 Authored buttons can opt in to Ctrl/Cmd primary selection and use ordinary
 touch and keyboard selection controls. `webpageRuntime.tsx` keeps a transient
@@ -514,3 +552,30 @@ editable property and attribute rows, typed value choices and CSS source. Its
 lazy catalog is a projection of the existing standards pipeline. See
 [the inspector contract](../web-standards-builder.md#html-and-css-inspector)
 and the Builder element inspector checklist in `TESTING.md`.
+
+## Password workspace editing
+
+`PasswordWorkspaceControls` uses private settings documents for the toolbar,
+filters, loading/results controls, entry heading/actions and authenticator input.
+`PasswordPreviewList` retains its existing separately editable card template,
+metadata identity, icon lifecycle and focus return. `PasswordEntryEditor` exposes
+ordinary editable nested field and property templates; values and imported property
+names hydrate only into opted-in live controls through `TransientPrivateControls`.
+Generic Actions and Builder history never receive the decrypted draft.
+`PasswordPanelDocument` applies the same boundary to source history/raw originals
+and attachment upload, download, retry, and removal templates.
+`settingsDocumentBlocks` refuses saved values on marked private controls.
+
+`passwords/structuredFields.ts` changes only existing, typed own leaves. Unknown
+properties, arrays, source paths and attachment/archive links survive; unsafe
+numbers, duplicate object keys and unsupported structures retain raw JSON without
+lossy conversion. Explicit field ordering/labels/sections/types remain entry data.
+The current password API, verification policy, generator, passkey setup and file
+transport remain authoritative. Import/export content uses editable transfer blocks
+inside the existing accessible modal.
+
+Run `pnpm --dir remix test:passwords` and
+`pnpm --dir remix test:passwords:editor-ui`. The browser fixture owns its Chromium
+process and synthetic identity; it tests actual components and Builder persistence,
+not a real vault, device authenticator or provider. Keep live encrypted API/file
+and native-provider acceptance separate.
