@@ -103,7 +103,7 @@ export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldse
 	if (action === LOCAL_UI_ACTION) {
 		try {
 			const input = JSON.parse(submit.getAttribute('data-tt-action-inputs') || '{}');
-			if (input?.op !== 'search' && !(input?.op === 'query' && input.scope === 'page' && input.form === true)) return;
+			if (input?.op !== 'search' && !(input?.op === 'query' && input.form === true)) return;
 		} catch { return; }
 	}
 	event.preventDefault();
