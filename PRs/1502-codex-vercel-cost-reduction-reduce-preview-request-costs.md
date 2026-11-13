@@ -66,3 +66,20 @@ the bounded indexing attempt. A structural attempt then met host disk
 exhaustion. Source and verification evidence were preserved; only task-owned
 disposable output was removed. Documentation semantic coverage is not claimed
 as refreshed. Portable structural output is refreshed separately when possible.
+
+
+## Current-main integration, 13 November 2026
+
+Main advanced to `b530d760ad` through MCP result-card PR #1504. Both code
+implementations and semantic versions merged automatically; the two overlapping
+documentation insertions were retained. The combined boundary passed 190
+capability tests, the compiler and zero-error ratchet, plus full lint with no
+errors. No application behavior was changed to resolve this integration.
+
+The integration's structural graph refresh reached all 4,492 uncached code files
+but exceeded its three-minute bound during graph generation. Cached semantic
+records also reported four missing source-file fields. Known-valid portable
+snapshots remain preserved; changed Markdown semantic coverage is not claimed.
+A final bounded warm-cache pass determines the selected portable output; its
+observed result is retained in the release evidence rather than inferred from
+a passing source check.

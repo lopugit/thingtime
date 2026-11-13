@@ -170,7 +170,7 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
     assert.deepEqual(tool.securitySchemes, expectedSecuritySchemes);
     assert.deepEqual(tool._meta.securitySchemes, expectedSecuritySchemes);
     assert.deepEqual(tool.outputSchema, { type: 'object', additionalProperties: true });
-    assert.equal(tool._meta['openai/outputTemplate'], 'ui://thingtime/review.html');
+    assert.equal(tool._meta['openai/outputTemplate'], 'ui://thingtime/review-v1.1.1.html');
     assert.equal(CHATGPT_MCP_TOOL_FEATURES[tool.name as keyof typeof CHATGPT_MCP_TOOL_FEATURES] !== undefined, true);
   }
   assert.deepEqual(tools.map((tool: any) => tool.name), Object.keys(CHATGPT_MCP_TOOL_FEATURES));
@@ -399,10 +399,12 @@ test('MCP publishes prompts and static resources before account authorization', 
 
   const resources = await invoke('resources/list');
   assert.deepEqual(resources.resources.map((resource: any) => resource.uri), [
-    'ui://thingtime/review.html',
+    'ui://thingtime/review-v1.1.1.html',
     'thingtime://capability-contract'
   ]);
-  const ui = await invoke('resources/read', { uri: 'ui://thingtime/review.html' });
+  const ui = await invoke('resources/read', { uri: 'ui://thingtime/review-v1.1.1.html' });
+  const historicalUi = await invoke('resources/read', { uri: 'ui://thingtime/review.html' });
+  assert.equal(historicalUi.contents[0].text, ui.contents[0].text);
   assert.equal(ui.contents[0].mimeType, 'text/html;profile=mcp-app');
   assert.match(ui.contents[0].text, /Limitless, bounded/);
   assert.equal(ui.contents[0].text.includes('test-token-not-returned-to-the-client'), false);
