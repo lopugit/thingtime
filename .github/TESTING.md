@@ -535,3 +535,15 @@ remain inside one absolute budget across all provenance reads. Diagnostics must
 contain only fixed endpoint labels/status/classification and numeric rate fields;
 never reflect provider messages, response bodies, Location, request paths or tokens.
 A bare403 is not proof of quota or a reason to broaden the build token.
+
+### Passive preview publication stage timing
+
+Run `node --test .github/scripts/preview-publication-timing.test.mjs` and the
+publisher `--self-test`. Verify successful and failed operations retain their
+exact return/throw values, including non-Error rejections. Nested stage records
+must contain only an allowlisted stage, fixed status and finite elapsed
+milliseconds; arguments, URLs, provider output, messages and credentials must
+never enter timing records. A failed logger or clock must not change the action.
+During the next normally scheduled publication, inspect existing logs for paired
+`[preview-publication]` start/result records to locate slow stages. Do not trigger
+another deployment solely to collect timing, or infer a cause from a timeout value.

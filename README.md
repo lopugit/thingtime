@@ -875,3 +875,16 @@ permission403 fails immediately. Retry-After/reset waits must fit within that
 budget. Errors expose fixed endpoint classes and numeric rate metadata, with no
 raw provider body or credential output. A terminal quota failure requires fresh
 recovery evidence before another hosted attempt; permission is not broadened.
+
+### Preview publication diagnostics — 14 November 2026
+
+The canonical PR publisher emits passive `[preview-publication]` records around
+configuration, preview-master readiness, deployment preparation, CLI upload and
+uncertain-upload reconciliation, deployment readiness, alias/smoke checks, GitHub
+reporting and retention. Each record contains only a fixed stage, `started`,
+`succeeded` or `failed` status, and monotonic elapsed milliseconds. Nested spans
+overlap and must not be summed. Clock or logging failures do not alter publication.
+No arguments, URLs, provider responses, error messages or credentials are added
+to these timing records. Existing retries, deadlines, gates and stage order are
+unchanged; collect evidence from the next normally scheduled rollout rather than
+dispatching another deployment for diagnostics.
