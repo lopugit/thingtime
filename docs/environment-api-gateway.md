@@ -75,15 +75,20 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.1.0 and an optional `gateway` descriptor containing only environment, stable
+1.1.1 and an optional `gateway` descriptor containing only environment, stable
 origin and deployment identity. This metadata is private/no-store to prevent a
 CDN pinning the previous alias owner. Discovery itself neither authenticates an
 agent nor grants access to private Things.
 
 ## Requests, promotion and rollback
 
-Each worker resolves its configured alias with a credential-free, bounded,
-redirect-refusing manifest request. Only the matching deployment identity may
+Each worker resolves its configured alias with a bounded, redirect-refusing
+manifest request. If Vercel Standard Protection covers that alias, configure
+`VERCEL_AUTOMATION_BYPASS_SECRET` as a server-only platform credential on the
+calling deployment. It is sent only to the validated configured gateway origin,
+stripped before signed relay authentication and omitted from responses. Browser
+capability discovery on the same origin retains its own protection cookie;
+cross-origin scoped discovery sends no cookies. Only the matching deployment identity may
 open its MongoDB client. Ownership caches for at most five seconds; errors,
 missing capabilities, different environments and changed origins fail closed.
 There is no stale-on-error database fallback. Requests also negotiate the

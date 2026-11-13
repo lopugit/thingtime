@@ -295,7 +295,7 @@ test('active API capability source refuses an older proxy despite a newer fronte
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push(String(url));
     if (String(url).endsWith('/api/v1/capabilities')) {
-      assert.equal(init?.credentials, 'omit'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
+      assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
       return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': current },
         dataEnvironment: { authorityOrigin: 'https://must-not-be-followed.example' } });
     }
@@ -324,6 +324,21 @@ test('active API source keeps explicit origin, schema and response endpoint fenc
     responseUrl = url;
     await assert.rejects(createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0'), /changed origin or endpoint/);
   }
+});
+
+test('same-origin active discovery retains browser protection cookies while scoped discovery omits them', async t => {
+  const calls: string[] = [];
+  const mock = t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push(String(url));
+    assert.equal(init?.redirect, 'error');
+    assert.equal(init?.credentials, calls.length === 1 ? 'same-origin' : 'omit');
+    assert.equal(new Headers(init?.headers).has('x-vercel-protection-bypass'), false);
+    return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } });
+  });
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0');
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://selected.test');
+  assert.equal(calls.length, 2);
+  mock.mock.restore();
 });
 
 

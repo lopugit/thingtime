@@ -5936,6 +5936,13 @@ halves.
       unchanged index plans skip DDL across instances, changed plans coordinate,
       failed unique builds block constrained writes, and authenticated repair stays
       reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
+- [ ] With Standard Protection on a disposable environment alias, verify server
+      discovery and signed relay succeed only with the configured server bypass
+      credential. A forged caller bypass header must be replaced, stripped before
+      the application handler, and absent from responses. Same-origin browser
+      capability discovery must retain its protection cookie; selected-origin
+      discovery must omit cookies. Check refusal when the bypass is absent or
+      mismatched without changing database access or exposing secret bytes.
 - [ ] Record observed alias-to-environment/database mapping separately from
       proposed gateway activation and isolated tests. Confirm previews and custom
       develop use the development cluster, separate from production; verify

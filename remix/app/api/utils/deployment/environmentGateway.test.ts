@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
+import { createGatewayAuthority, gatewayDescriptor, gatewayProtectionHeaders, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
 import { mongoConnectionPolicy } from './mongoConnectionPolicy';
 
 const selected = { environment: 'preview', origin: 'https://preview.test', deploymentId: 'deployment-new', secret: 's'.repeat(32) };
@@ -87,4 +87,30 @@ test('Vercel uses the bundled default and cannot silently fall through missing o
   assert.deepEqual(getGatewaySettings(env), selected);
   assert.equal(gatewayDescriptor(env), null);
   assert.throws(() => getGatewaySettings({ ...env, THINGTIME_GATEWAY_SECRET: '' }));
+});
+
+test('gateway discovery uses only the server-side protection credential at the configured origin', async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  try {
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    assert.deepEqual(gatewayProtectionHeaders(selected), {});
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+    assert.throws(() => gatewayProtectionHeaders({ ...selected, origin: 'https://other.test/path' }));
+    let calls = 0;
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, selected.origin);
+      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.credentials, 'omit');
+      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), secret);
+      return Response.json(manifest());
+    } });
+    await authority.current();
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(manifest()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
 });

@@ -160,6 +160,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep the develop runtime compatible with Vercel Standard
+  Protection: send the server-only bypass credential to its validated gateway
+  alias, strip it at the relay boundary, and retain same-origin browser
+  protection cookies for capability discovery. Add scoped refusal and redaction
+  checks; live protected-alias acceptance remains a separate gate. **Codex (AI)**
+
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
 - 2026-11-13: Initialize the shared Thingtime MCP result card with the standard

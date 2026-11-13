@@ -1588,6 +1588,9 @@ return a configuration error; they do not silently forward to production. The
 installed desktop shell has its own explicit selected-API bridge. For one active
 database/API deployment per environment, see the
 [environment gateway configuration and rollout](docs/environment-api-gateway.md).
+When Vercel Standard Protection covers a generated deployment URL, configure
+`VERCEL_AUTOMATION_BYPASS_SECRET` as a server-only platform credential on each
+calling deployment; do not place its value in source or client settings.
 That runbook covers stable aliases, separate environment secrets, capability
 negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
 and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted

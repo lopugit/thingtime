@@ -42,7 +42,8 @@ const mongoImport = (await readFile(endpointBundle, 'utf8')).match(/modulePromis
 assert.ok(mongoImport, 'Locate the built driver factory before collecting command evidence.');
 const driverBundle = new URL(mongoImport[1], pathToFileURL(endpointBundle)).href;
 await writeFile(instrumentation, `import{appendFileSync}from'node:fs';
-const {default:{MongoClient}}=await import(${JSON.stringify(driverBundle)});
+const driverModule=await import(${JSON.stringify(driverBundle)});
+const {MongoClient}=typeof driverModule.t==='function'?driverModule.t():driverModule.default??driverModule;
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
 for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
@@ -73,7 +74,7 @@ async function indexTrace(key) {
 }
 async function ready(server, key) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.child.exitCode !== null) throw new Error('Built gateway exited before readiness.');
+    if (server.child.exitCode !== null) throw new Error(`Built gateway ${key} exited before readiness: ${server.log().slice(-1500)}`);
     try { if ((await fetch(origin(key) + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(500) })).ok) return; } catch {}
     await delay(150);
   }
@@ -112,7 +113,7 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.1');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',
