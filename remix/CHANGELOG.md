@@ -165,7 +165,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   visible degraded/retry state, and cancellable device polling/state retries.
   Preserve signed gateway admission, account isolation and committed-write
   reconciliation. Deployment-protection activation remains a separate live
-  rollout gate; no hosting migration. See the [cost-control checks](../TESTING.md#request-cost-controls-13-november-2026).
+  rollout gate; no hosting migration. See [PR 1502 validation](../PRs/1502-codex-vercel-cost-reduction-reduce-preview-request-costs.md)
+  and the [cost-control checks](../TESTING.md#request-cost-controls-13-november-2026).
   **Codex (AI)**
 
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
