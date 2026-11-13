@@ -1,5 +1,13 @@
 # Things and folders
 
+The default private Debug folder has protected root uniqueness and a
+`libraryHidden` marker: omitted from normal root/sidebar listings, available to
+exact owner Things/MCP reads. Its relational accounted `device-diagnostic`
+children have dedicated paired writers and ordinary owner deletion/export.
+Generic sharing/editing cannot widen their audience or alter the managed folder.
+See [private diagnostics](../private-device-diagnostics.md) and diagnostic,
+builtin projection and owner-library query regressions.
+
 Archive and Restore use the shared Thing action registry, `PersistedThingContextMenu`
 and exact-subject `/things/actions` availability/mutation contract. The canonical
 server predicate owns authorization; a page, content kind or stale parent projection

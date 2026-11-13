@@ -305,8 +305,9 @@ export const router = createBrowserRouter([
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
       { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
-      // paths still reach the ThingtimeUrl tree viewer via the catch-all
+      // paths reach the ThingtimeUrl tree viewer, except the private debug view
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },
+      { path: 'things/debug', lazy: lazyRoute(() => import('./routes/things.debug')) },
       { path: 'agent-browsers/:taskId?', lazy: lazyRoute(() => import('./routes/agent-browsers')) },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }

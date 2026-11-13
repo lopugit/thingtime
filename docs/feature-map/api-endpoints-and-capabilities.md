@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+Private diagnostics use `api.devices-diagnostics` and
+`api.devices-node-diagnostics` 1.0.0: home-only, private owner management and
+narrow paired safe-event append. The service owns live-session/pairing fences,
+default provisioning, immutable IDs, accounting and watermarked clear. Both
+manifests derive registered routes. `api.auth-me` 1.3 adds non-failing provisioning;
+Things 1.65/Things-update 1.29 retain private managed-folder boundaries. See
+[the contract](../private-device-diagnostics.md); run diagnostic, schema, owner
+query, capability suites and the built API diagnostics fixture.
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;

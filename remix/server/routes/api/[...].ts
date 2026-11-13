@@ -199,6 +199,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/observations': () => import('../../../app/routes/api/v1/devices/observations/_observations'),
 	'v1/devices/observation-settings': () => import('../../../app/routes/api/v1/devices/observation-settings/_observation-settings'),
 	'v1/devices/node/observations': () => import('../../../app/routes/api/v1/devices/node/observations/_observations'),
+    'v1/devices/diagnostics': () => import('../../../app/routes/api/v1/devices/diagnostics/_diagnostics'),
+    'v1/devices/node/diagnostics': () => import('../../../app/routes/api/v1/devices/node/diagnostics/_diagnostics'),
 	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),

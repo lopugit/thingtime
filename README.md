@@ -2,6 +2,14 @@
 
 https://thingtime.com
 
+### Private device diagnostics
+
+The private hidden Debug folder and safe paired-device events require no new
+provider secret or environment variable. Use the normal home database, storage
+accounting migrations and device pairing; negotiate both diagnostics 1.0 features
+on the exact origin. Custom database contexts are explicitly unavailable.
+See [the contract and isolated fixture verification](docs/private-device-diagnostics.md).
+
 ### Private device location history and locate actions
 
 Paired devices can opt into private location observations, retained with

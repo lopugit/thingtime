@@ -1,4 +1,5 @@
 import { eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
+import { isDiagnosticContent, isManagedDebugFolder } from '../devices/deviceDiagnosticIdentity';
 import { contentExecutionHeld, contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
 import { isCivilTime } from '../../../schemas/civilDates';
 import { isPrivateActivationPage, parseWebpageActivation, type WebpageActivation } from '../../../schemas/webpageActivation';
@@ -1266,6 +1267,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
   if (
+    trimmed.startsWith('device-debug-') || trimmed.startsWith('device-diagnostic-') ||
     trimmed.startsWith('mail_') ||
     trimmed.startsWith('timeline-') ||
     trimmed.startsWith('subspace-space-') ||
@@ -3027,6 +3029,14 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
+  // These exact private content identities do not override any protected-kind,
+  // moderation or token gate above. A list marker alone never grants a read.
+  const diagnosticKinds = thingtimeOf(doc);
+  if (isDiagnosticContent(doc)) {
+    const exact = diagnosticKinds.length === 1 && (diagnosticKinds[0] === 'device-diagnostic' || isManagedDebugFolder(doc));
+    return exact && !patVisibilityBlocksAcl(viewer, [ACL_OWNER]) && viewer?.id === doc.ownerId && doc.appId == null &&
+      (doc as any).sandbox == null && (doc as any).sandboxSpace == null;
+  }
   // Canonical URLs are the unlisted read capability. The stored audience is
   // still checked live; removing tt:hidden immediately revokes anonymous access.
   if (viewer?.linkThingIds?.has(doc.shareId) && aclOf(doc).includes(ACL_HIDDEN)) return true;
@@ -3102,6 +3112,9 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+  // A malformed inherit ACL cannot borrow its parent's audience for an
+  // independently private diagnostic. canView retains all normal deny gates.
+  if (isDiagnosticContent(doc)) return canView(doc, viewer);
   if (thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc)) return false;
   if (isBackupControlThing(doc) || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
@@ -5354,12 +5367,16 @@ export const deleteThing = async (
 	const deleteFilter = {
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
+		$and: [{ $or: [
+      { thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] } },
+      { thingtime: ['device-diagnostic'], acl: ['tt:user'], appId: null, sandbox: null, sandboxSpace: null }
+    ] }],
     ...(app ? { appId: app.appId } : {}),
     ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
 	};
 
 	const initial = (await things.findOne(deleteFilter as any)) as any as ThingDoc | null;
+  if ((initial as any)?.libraryHidden === true) return fail(403, 'This default folder is managed through its own settings. Clear its contents instead.');
 	if (!initial) {
     if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
       return patSandboxFail();
@@ -5508,6 +5525,7 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  if ((doc as any).libraryHidden === true) return fail(doc.ownerId === viewer.id ? 403 : 404, 'This private default folder is managed through its own settings');
   const storageCloudWrite = options.storageCloudWrite;
   const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
   if (storageCloudWrite && (app || viewer.pat || isCustomMongoEndpointActive() ||

@@ -202,6 +202,20 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		steps: ['Negotiate the selected origin capability.', 'Verify the exact account/device.', 'Access only the authorized observation scope.'],
 		requestExamples: [], responseExamples: []
 	}),
+    endpoint({
+        id: 'devices-diagnostics', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Private device diagnostics', endpoint: '/api/v1/devices/diagnostics', summary: 'Read and manage safe private events in the hidden Debug folder.',
+        detail: 'Explicit home data plane only; custom context409 DATA_PLANE_CHANGED. Full owner GET is read-only and returns {ok,folder:{id,name,hidden:true}|null,settings:{enabled},events,nextCursor,throughSequence}. deviceId,level,category filters apply before stable receivedAt/id cursor paging; limit1..100 is a processing page, not a history limit. POST requires same-origin and exact X-Thingtime-Expected-Actor. action ensure lazily provisions the canonical private folder; settings with enabled boolean defaults true and preserves history; clear requires immutable requestId(UUID) and throughSequence from the owner read. It deletes one accounted batch at or below that fixed server watermark and returns requestId,throughSequence,deleted,hasMore. Retry exactly the same pair after uncertainty; newer arrivals survive. Continue only while hasMore. Ordinary home Things/MCP owner reads, export and event deletion retain ACLs and quota accounting. The managed default folder cannot be shared, moved, edited or deleted through generic CRUD; clear its contents instead. No raw log text, stacks, URLs, filenames, credentials or photo contents. Admin error logs remain independent. Disabled collection never affects sync.',
+        auth: { mode: 'session-or-bearer', description: 'Full owning account only.' }, methods: ['GET', 'POST'],
+        steps: ['Negotiate the selected origin capability.', 'Select home and verify the exact owner.', 'Access only private diagnostics.'], requestExamples: [], responseExamples: []
+    }),
+    endpoint({
+        id: 'devices-node-diagnostics', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Publish safe paired-device diagnostics', endpoint: '/api/v1/devices/node/diagnostics', summary: 'Append registered structured events with immutable event IDs.',
+        detail: 'Paired bearer fixes owner/device and rechecks live credential and pairing in the same home transaction as settings, quota admission and append. Home-only; custom context409 DATA_PLANE_CHANGED. POST action status returns {ok,enabled,folderId}; action append with events returns {ok,enabled,folderId,acknowledgedEventIds}. Max32 events and64KiB are per-request processing/transport bounds; drain further batches without truncation. Disabled returns enabled:false and no acknowledgements; clients stop collection and clear their opted-out spool. Same UUID/payload replays without another charge, conflicting payload409. Clients retain immutable disk events until exact acknowledgement and honor429 Retry-After/5xx backoff. The shared deviceDiagnostics contract allowlists categories, levels, codes, phases, reasons, operations, retry sources, counters, numeric runtime versions, background outcomes and system-error domain/code. No free text or unexpected fields. Optional configurationId must belong to this owner/device; runKey is a64hex non-authorizing hash. No generic native Things write grant or history read.',
+        auth: { mode: 'bearer', description: 'Live paired device only.' }, methods: ['POST'],
+        steps: ['Negotiate the selected origin capability.', 'Read persisted collection status.', 'Append safe immutable events and retire exact acknowledgements.'], requestExamples: [], responseExamples: []
+    }),
 	endpoint({
 		id: 'devices-node-observations', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
 		title: 'Publish registered device observations', endpoint: '/api/v1/devices/node/observations',
@@ -3932,14 +3946,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-me',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'auth',
     title: 'Current user',
     endpoint: '/api/v1/auth/me',
     summary: 'Returns the authenticated public user or null.',
     detail:
-      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
+      'Version1.3 lazily provisions the private hidden Debug default folder for full owners in the home data plane. Provisioning failures never fail authentication; diagnostics reports its own availability. An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
     auth: {
       mode: 'optional',
       description: 'Cookie or Authorization: Bearer token optional. Anonymous callers receive user: null.'
@@ -9742,8 +9756,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.64.0',
-    contractVersion: '1.64.0',
+    featureVersion: '1.65.0',
+    contractVersion: '1.65.0',
 
 
     group: 'things',
@@ -11870,8 +11884,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.28.0',
-    contractVersion: '1.28.0',
+    featureVersion: '1.29.0',
+    contractVersion: '1.29.0',
 
     group: 'things',
     title: 'Update thing',

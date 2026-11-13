@@ -160,6 +160,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add the private, normally hidden `/things/debug` folder and editable
+  device-event view, with safe native diagnostics, offline delivery, capture
+  controls and snapshot-based history clearing. Restore discarded Photos
+  metadata from acknowledged queues without re-uploading backed-up originals.
+  See [private diagnostics](../docs/private-device-diagnostics.md). **Codex (AI)**
+
 - 2026-11-12: Reuse prepared Photos originals across concurrent uploads to avoid repeated full-original export and hashing between parts; retain source validation and large-file support. See [PR #1491](../PRs/1491-codex-device-sync-app-start-start-saved-device-sync-across-app-routes.md).
 
 - 2026-11-12: Start eligible device file-sync configs from the shared app
