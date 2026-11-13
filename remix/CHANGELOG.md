@@ -160,6 +160,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-12: Admit canonical Webpage GET/POST resolution on protected SQLite
   homes with runtime-scoped capability 1.20.0. Preserve audience, owner/plane
   and inert-action boundaries. Add atomic composed Thing writes and guarded

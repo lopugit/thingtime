@@ -312,7 +312,7 @@ test('active API capability source refuses an older proxy despite a newer fronte
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push(String(url));
     if (String(url).endsWith('/api/v1/capabilities')) {
-      assert.equal(init?.credentials, 'omit'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
+      assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
       return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': current },
         dataEnvironment: { authorityOrigin: 'https://must-not-be-followed.example' } });
     }
@@ -368,4 +368,31 @@ test('Archive read gate rejects either older variant behind a 1.65 frontend and 
   activeVersion = '1.65.0';
   await query();
   assert.equal(queries, 1);
+});
+
+test('same-origin active discovery keeps protection cookies while scoped discovery omits them', async t => {
+  const calls: string[] = [];
+  const mock = t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push(String(url));
+    assert.equal(init?.redirect, 'error');
+    assert.equal(init?.credentials, calls.length === 1 ? 'same-origin' : 'omit');
+    assert.equal(new Headers(init?.headers).has('x-vercel-protection-bypass'), false);
+    return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } });
+  });
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0');
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://selected.test');
+  assert.equal(calls.length, 2);
+  const aborted = new AbortController(); aborted.abort();
+  let customCalls = 0;
+  const transport = { fetch: (async () => { customCalls++; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
+    currentOrigin: () => 'https://thingtime.test', signal: aborted.signal };
+  await assert.rejects(createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://thingtime.test', transport));
+  assert.equal(customCalls, 0, 'aborted scoped transport cannot perform discovery');
+  mock.mock.restore();
+  let scopedCredentials: RequestCredentials | undefined;
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://thingtime.test', {
+    fetch: (async (_url, init) => { scopedCredentials = init?.credentials; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
+    currentOrigin: () => 'https://thingtime.test'
+  });
+  assert.equal(scopedCredentials, 'omit');
 });
