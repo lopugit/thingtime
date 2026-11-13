@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Disposable real API acceptance. All application/backend network is OS fenced.
+// Disposable real API acceptance. OS fenced by default; task-owned runs can
+// opt into normal networking with SINGLE_CLICK_NORMAL_NETWORK=1.
 // Only replica-set initialization uses the Mongo driver; product data uses APIs.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -35,7 +36,8 @@ await writeFile(policy, `(version 1)(allow default)(deny network*)
 (allow network-outbound ${[...Object.values(ports),trap.address().port].map(p => `(remote ip "localhost:${p}")`).join(' ')})`);
 function start(executable,args,extra={}) {
   const child = spawn(normalNetwork ? executable : '/usr/bin/sandbox-exec',normalNetwork ? args : ['-f',policy,executable,...args],
-    {cwd,detached:true,env:{...env,SINGLE_CLICK_NORMAL_NETWORK:process.env.SINGLE_CLICK_NORMAL_NETWORK,...extra},stdio:['ignore','pipe','pipe']});
+    {cwd,detached:true,env:{...env,SINGLE_CLICK_NORMAL_NETWORK:process.env.SINGLE_CLICK_NORMAL_NETWORK,
+      SINGLE_CLICK_TREE_ONLY:process.env.SINGLE_CLICK_TREE_ONLY,...extra},stdio:['ignore','pipe','pipe']});
   let log=''; child.stdout.on('data',d=>log+=d); child.stderr.on('data',d=>log+=d); children.push(child);
   return {child,log:()=>log};
 }
@@ -179,7 +181,11 @@ async function browserAcceptance() {
     assert(geometry.gap<=8,`Caret-to-name gap: ${JSON.stringify(geometry)}`);
     assert(geometry.caretWidth>=24&&geometry.caretHeight>=24,'Caret remains reachable');
     assert.equal(geometry.titleLabel,longName,`Full title accessible label: ${JSON.stringify(geometry)}`);
-    await longButton.hover();await longTooltip.waitFor();
+    await longButton.hover();await longTooltip.waitFor();await page.waitForTimeout(250);
+    const tooltipStyle=await longTooltip.evaluate(node=>{const style=getComputedStyle(node),content=[node,...node.querySelectorAll('*')].map(element=>getComputedStyle(element)).find(s=>s.backgroundColor!=='rgba(0, 0, 0, 0)')||style;return {background:content.backgroundColor,color:content.color,opacity:style.opacity,zIndex:style.zIndex,positionerZIndex:getComputedStyle(node.parentElement).zIndex}});
+    assert.notEqual(tooltipStyle.background,'rgba(0, 0, 0, 0)','Tooltip has an opaque readable surface');
+    assert(Number(tooltipStyle.positionerZIndex)>10271,`Tooltip positioner must clear Move dialog: ${JSON.stringify(tooltipStyle)}`);
+    await page.screenshot({path:join(out,'folder-tree-desktop-tooltip.png')});
     await longButton.focus();await page.keyboard.press('Escape');await longTooltip.waitFor({state:'hidden'});
     await page.keyboard.press('Tab');await longButton.focus();await longTooltip.waitFor();
     await page.evaluate(()=>window.dispatchEvent(new Event('scroll')));await longTooltip.waitFor({state:'hidden'});
@@ -205,10 +211,18 @@ async function browserAcceptance() {
       const picker=dialog.locator(`[data-tree-thing-id="${fixture.longFolder.id}"]`);
       const pickerButton=picker.getByRole('button',{name:longName,exact:true});
       const pickerBounds=await picker.boundingBox();assert(pickerBounds.height<=36,'Mobile picker row stays compact');
-      await pickerButton.dispatchEvent('touchstart');await page.waitForTimeout(550);await longTooltip.waitFor();
+      const pickerButtonBounds=await pickerButton.boundingBox();
+      const mobileX=pickerButtonBounds.x+Math.min(24,pickerButtonBounds.width/2),mobileY=pickerButtonBounds.y+pickerButtonBounds.height/2;
+      await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:mobileX,y:mobileY,id:2}]});
+      await page.waitForTimeout(550);await longTooltip.waitFor();await page.waitForTimeout(250);
       assert.equal(await longTooltip.innerText(),longName,'Touch hold reveals the complete stored name');
-      await pickerButton.dispatchEvent('touchend');await pickerButton.dispatchEvent('click');
+      const mobileTooltipGeometry=await longTooltip.evaluate(node=>{const rect=node.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:innerWidth,height:innerHeight,positionerZIndex:getComputedStyle(node.parentElement).zIndex}});
+      assert(mobileTooltipGeometry.left>=0&&mobileTooltipGeometry.right<=mobileTooltipGeometry.width+1&&Number(mobileTooltipGeometry.positionerZIndex)>10271,
+        `Mobile tooltip must be visible above the dialog: ${JSON.stringify(mobileTooltipGeometry)}`);
+      await page.screenshot({path:join(out,'folder-tree-mobile-tooltip.png')});
+      await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
       assert.equal(await dialog.getByRole('button',{name:'Move here'}).isDisabled(),true,'Hold does not pick a destination');
+      await pickerButton.click();assert.equal(await dialog.getByRole('button',{name:'Move here'}).isEnabled(),true,'Ordinary picker click still selects destination');
       await dialog.locator('.chakra-modal__body').evaluate(body=>{body.scrollTop=body.scrollHeight});
       await page.screenshot({path:join(out,'folder-tree-mobile-bottom.png')});
       await dialog.locator('.chakra-modal__body').evaluate(body=>{body.scrollTop=0});
@@ -216,8 +230,10 @@ async function browserAcceptance() {
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Mobile picker has no horizontal overflow');
       await page.keyboard.press('Escape');
       checks.push('narrow Move picker full-name hold, no accidental selection, compact rows, scrolling, and no overflow');
-      await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry},null,2));
-      console.log(JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry}));
+      assert.equal(await page.locator('vite-error-overlay').count(),0,'No framework error overlay');
+      assert.deepEqual(errors,[],'No uncaught browser errors');
+      await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry,tooltipStyle,mobileTooltipGeometry},null,2));
+      console.log(JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry,tooltipStyle,mobileTooltipGeometry}));
       return;
     }
     for(const view of ['grid','list','columns']) {

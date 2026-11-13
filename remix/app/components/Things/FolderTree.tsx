@@ -97,6 +97,7 @@ const TreeNode = ({
     clearHoldTimer();
     clearHideTimer();
     held.current = false;
+    setShowFullName(false);
     holdTimer.current = setTimeout(() => {
       held.current = true;
       setShowFullName(true);
@@ -169,8 +170,11 @@ const TreeNode = ({
             <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />
           )}
         </Box>
-        <Tooltip isOpen={showFullName} label={fullName} placement="bottom-start" hasArrow maxWidth="min(340px, calc(100vw - 32px))"
-          onClose={() => setShowFullName(false)} sx={{ overflowWrap: 'anywhere', whiteSpace: 'normal' }}>
+        <Tooltip isOpen={showFullName} label={
+          <span style={{ backgroundColor: '#20212b', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            color: '#fff', display: 'block', maxWidth: 'min(340px, calc(100vw - 32px))', overflowWrap: 'anywhere',
+            padding: '4px 8px', whiteSpace: 'normal' }}>{fullName}</span>
+        } placement="bottom-start" variant="folderTree" onClose={() => setShowFullName(false)}>
           <Flex as="button" type="button" alignItems="center" gap={1} flex="1" minWidth={0} textAlign="left"
             aria-expanded={open} aria-disabled={disabled} aria-label={fullName}
             onMouseEnter={() => { if (Date.now() >= touchUntil.current && matchMedia('(hover: hover) and (pointer: fine)').matches) setShowFullName(true); }}
