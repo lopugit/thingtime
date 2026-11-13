@@ -59,6 +59,7 @@ import {
   THINGTIME_CAPABILITY_CONTRACT,
   THINGTIME_CAPABILITY_CONTRACT_URI,
   THINGTIME_MCP_UI_RESOURCE_URI,
+  THINGTIME_MCP_UI_LEGACY_RESOURCE_URI,
   THINGTIME_MUTATION_RECEIPT_PURPOSE,
   buildLimitlessMutationPreview,
   compileThingtimeCapability,
@@ -2430,7 +2431,7 @@ const thingtimeResourceTemplates = [
 ];
 
 const staticResourceRead = (uri: string): { contents: unknown[] } | null => {
-  if (uri === THINGTIME_MCP_UI_RESOURCE_URI) {
+  if (uri === THINGTIME_MCP_UI_RESOURCE_URI || uri === THINGTIME_MCP_UI_LEGACY_RESOURCE_URI) {
     return {
       contents: [{
         uri,

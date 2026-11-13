@@ -26,7 +26,7 @@ import {
 
 const MCP_PATH = '/api/v1/integrations/chatgpt/mcp';
 const MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
-const REVIEW_RESOURCE_URI = 'ui://thingtime/review.html';
+const REVIEW_RESOURCE_URI = 'ui://thingtime/review-v1.1.1.html';
 
 type RpcResult = Record<string, unknown>;
 
@@ -148,6 +148,26 @@ export default function McpDemoPage() {
 
     void discover();
     return () => controller.abort();
+  }, []);
+
+  // The demo hosts the same MCP App bridge but never forwards tool execution.
+  React.useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      const frame = reviewRef.current?.contentWindow;
+      const message = event.data;
+      if (!frame || event.source !== frame || message?.jsonrpc !== '2.0' || typeof message.id !== 'string') return;
+      if (message.method === 'ui/initialize') {
+        frame.postMessage({ jsonrpc: '2.0', id: message.id, result: {
+          protocolVersion: '2026-01-26', hostInfo: { name: 'Thingtime MCP Lab', version: '1.0.0' }, hostCapabilities: {}
+        } }, '*');
+      } else if (message.method === 'tools/call') {
+        frame.postMessage({ jsonrpc: '2.0', id: message.id, error: {
+          code: -32601, message: 'The read-only demo cannot execute tools. Continue in chat.'
+        } }, '*');
+      }
+    };
+    window.addEventListener('message', receive);
+    return () => window.removeEventListener('message', receive);
   }, []);
 
   const sendReviewPayload = React.useCallback(() => {
