@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+`api.things-pins` 1.0.0 registers the private session-only GET/POST
+`/api/v1/things/pins` contract. Pins use owner/origin/data-plane/parent-path
+identity, bounded cursor reads and revision-fenced writes. Generic Things
+reads/writes exclude its protected relational kinds. The shared browser client
+negotiates the feature before pin work. See [parent-path pins](../thing-browser-pins.md)
+and run `test:things` plus the disposable real API/browser pin acceptance.
+
 `api.chatgpt-mcp` 2.2.1 and `chatgpt.ui` 1.1.1 fix the shared result card's
 MCP Apps bridge. `pluginLimitlessCore.ts` initializes the parent host before
 standard `tools/call`, bounds and correlates requests, and retains displayed
