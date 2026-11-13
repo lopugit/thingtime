@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { CONTENT_CREATION_REQUIREMENTS } from '../../../backups/contentCreation';
 import { thingtimeCapabilityManifest, capabilitySatisfies } from '../capabilities/thingtimeCapabilities';
 import { createHash, randomUUID } from 'node:crypto';
@@ -281,7 +282,7 @@ export async function assertOrdinaryRestoreDestination(request: Request, destina
  await withHomeMongoTransaction(async session => {
   await fenceAccountSession(request, destination.scope.ownerId, session);
   const root = await (await getHomeThingsCollection()).findOne({ shareId: destination.rootId, ownerId: destination.scope.ownerId, ...folderThingMatch() }, { session });
-  if (!root || root.appId != null || root.sandbox != null || root.sandboxSpace != null || root.crystal?.trashed || !Array.isArray(root.acl) || root.acl.length !== 1 || root.acl[0] !== 'tt:user' || root.timelineHeadId !== destination.rootRevision)
+  if (!root || root.appId != null || root.sandbox != null || root.sandboxSpace != null || root.crystal?.trashed || hasRelationalAclEntries(root) || !Array.isArray(root.acl) || rootAcl(root).length !== 1 || rootAcl(root)[0] !== 'tt:user' || root.timelineHeadId !== destination.rootRevision)
    conflict('The reviewed destination revision or ownership changed');
  });
 }
@@ -418,7 +419,7 @@ export async function openReviewedOrdinaryRestoreWriter(request: Request, input:
 				const doc = await things.findOne({ shareId: ordinaryRestoreTargetId(review, sourceId), ownerId }, { session });
 				if (!doc || doc.appId != null || doc.sandbox != null || doc.sandboxSpace != null) conflict('Restored content was removed or changed ownership before completion');
 				return { sourceId, input: { shareId: doc.shareId, thingtime: doc.thingtime, crystal: doc.crystal,
-					extended: doc.extended ?? null, tags: doc.tags ?? [], acl: doc.acl, folderId: doc.folderId ?? null, geo: doc.geo ?? null } } as OrdinaryRestoreCreation;
+					extended: doc.extended ?? null, tags: doc.tags ?? [], acl: rootAcl(doc), folderId: doc.folderId ?? null, geo: doc.geo ?? null } } as OrdinaryRestoreCreation;
 			});
 		},
 		async complete(epoch: number, chain: string) {

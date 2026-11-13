@@ -75,7 +75,6 @@ const SidebarCard = ({ title, children }: { title: string; children: React.React
 // member row the API answers, reverts on failure. Hidden for non-members and
 // when the subspace offers nothing to pick (no templates, no custom text) —
 // unless the viewer already wears one, so they can still take it off.
-const MAX_CUSTOM_FLAIR_CHARS = 40;
 const UserFlairCard = ({ subspace, onViewerFlair }: { subspace: PublicSubspace; onViewerFlair: (flair: PublicAuthorFlair | null) => void }) => {
 	const api = useApi();
 	const lopu = useLopu();
@@ -163,7 +162,6 @@ const UserFlairCard = ({ subspace, onViewerFlair }: { subspace: PublicSubspace; 
 						borderRadius="999px"
 						placeholder="Your own words…"
 						value={custom}
-						maxLength={MAX_CUSTOM_FLAIR_CHARS}
 						onChange={(event) => setCustom(event.target.value)}
 						onKeyDown={(event) => {
 							if (event.key === 'Enter') saveCustom();

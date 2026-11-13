@@ -73,6 +73,20 @@ export const insertAccountedThing = async (things: any, doc: any, options: Accou
 	});
 };
 
+/** Bulk insertion shares the single-item stamps, plane admission and grouped
+ * ledger transaction. The caller controls processing batches, not totals. */
+export const insertAccountedThings = async (things: any, docs: any[], options: AccountedThingMutationOptions = {}): Promise<any> => {
+  if (!docs.length) return { insertedCount: 0 };
+  const plane = options.accountedPlane ?? 'active';
+  for (const doc of docs) if (billableOnPlane(doc, plane)) Object.assign(doc, stampFor(doc));
+  return runMutation(options, async session => {
+    const deltas = new Map<string, number>();
+    for (const doc of docs) if (billableOnPlane(doc, plane)) addDelta(deltas, doc.ownerId, Number(doc.sizeBytes));
+    await applyDeltas(deltas, session);
+    return things.insertMany(docs, { ...optionsWithoutAccounting(options), session });
+  });
+};
+
 const updateAccounted = async (multi: boolean, things: any, filter: any, update: any, options: AccountedThingMutationOptions = {}): Promise<any> => {
 	const plane = options.accountedPlane ?? 'active';
 	if (!accountPlaneApplies(plane)) {

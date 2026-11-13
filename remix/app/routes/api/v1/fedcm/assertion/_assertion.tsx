@@ -61,7 +61,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (clientId.startsWith('ttapp_')) {
 		const app = await findAppByClientId(clientId);
 		if (!app || appIsRevoked(app)) return fedcmError(401, 'unauthorized');
-		if (!appAllowsOrigin(app, rpOrigin)) return fedcmError(403, 'access_denied');
+		if (!(await appAllowsOrigin(app, rpOrigin))) return fedcmError(403, 'access_denied');
 		const grant = await issueAppToken(account.userId, clientId, rpOrigin, ['profile']);
 		return json({ token: grant.token });
 	}

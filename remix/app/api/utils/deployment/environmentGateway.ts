@@ -12,6 +12,7 @@ export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
 export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass';
 /** Platform protection is separate from signed gateway authentication. Deliver
  * its server-only secret solely to the configured, validated gateway origin. */
+
 export const gatewayProtectionHeaders = (settings: GatewaySettings): Record<string, string> => {
   if (gatewayOrigin(settings.origin) !== settings.origin) throw new GatewayUnavailable();
   const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
@@ -116,6 +117,7 @@ export const createGatewayAuthority = (options: {
             redirect: 'error', cache: 'no-store', credentials: 'omit',
             headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected), ...(previous?.etag ? { 'If-None-Match': previous.etag } : {}) },
             signal: AbortSignal.timeout(5_000)
+
           });
           if (response.url && response.url !== new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin).href) throw new GatewayUnavailable();
           const manifest = response.status === 304 && previous?.etag ? previous.value : await readManifest(response);

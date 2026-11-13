@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { canView, profilePostsAudienceQuery, patVisibilityBlocksAcl, patVisibilityMatchClause, patVisibilityOf, viewerOf } from './things.ts';
+import { aclMarkerClause, aclWithoutMarkersClause, legacyAclFence } from './relationalAcl.ts';
 
 // The token visibility fence (Settings → Token minter: public-only /
 // private-only personal access tokens) is decided by ONE expression,
@@ -94,25 +95,43 @@ test('an unresolved tt:inherit acl fails CLOSED for both fences', () => {
 test('the DB fence clause is null for unrestricted viewers and pinned for the two fences', () => {
   assert.equal(patVisibilityMatchClause(viewerOf(user)), null);
   assert.equal(patVisibilityMatchClause(fenced('all')), null);
-  assert.deepEqual(patVisibilityMatchClause(fenced('public')), {
-    $or: [{ $or: [{ acl: 'tt:all' }, { visibility: 'public' }] }, { acl: 'tt:inherit' }]
-  });
-  assert.deepEqual(patVisibilityMatchClause(fenced('private')), {
-    $nor: [{ $or: [{ acl: 'tt:all' }, { visibility: 'public' }] }]
-  });
+  assert.ok(patVisibilityMatchClause(fenced('public'))?.$or);
+  assert.ok(patVisibilityMatchClause(fenced('private'))?.$nor);
 });
 
 // Minimal evaluator for the two clause shapes above — enough to check the
 // coarse/exact contract without a Mongo round trip. It understands only $or,
 // $nor and equality on `acl` (a multikey array: equality means "contains") and
 // `visibility` (a scalar).
-const matches = (clause: any, doc: { acl?: readonly string[]; visibility?: string }): boolean => {
-  if (Array.isArray(clause.$or)) return clause.$or.some((entry: any) => matches(entry, doc));
-  if (Array.isArray(clause.$nor)) return !clause.$nor.some((entry: any) => matches(entry, doc));
-  if (typeof clause.acl === 'string') return (doc.acl || []).includes(clause.acl);
-  if (typeof clause.visibility === 'string') return doc.visibility === clause.visibility;
-  throw new Error(`unsupported clause: ${JSON.stringify(clause)}`);
-};
+const matches = (clause: any, doc: Record<string, any>): boolean => Object.entries(clause).every(([key, expected]: any) => {
+  if (key === '$or') return expected.some((entry: any) => matches(entry, doc));
+  if (key === '$nor') return !expected.some((entry: any) => matches(entry, doc));
+  const actual = doc[key];
+  if (expected && typeof expected === 'object') return Object.entries(expected).every(([operator, value]: any) => {
+    if (operator === '$exists') return (actual !== undefined) === value;
+    if (operator === '$in') return Array.isArray(actual) ? actual.some(entry => value.includes(entry)) : value.includes(actual);
+    if (operator === '$nin') return Array.isArray(actual) ? actual.every(entry => !value.includes(entry)) : !value.includes(actual);
+    throw new Error(`unsupported operator: ${operator}`);
+  });
+  return Array.isArray(actual) ? actual.includes(expected) : actual === expected;
+});
+
+test('relational baseline signs preserve private PAT candidates and exact owner visibility', () => {
+  for (const baseline of [['tt:user', '-tt:all'], ['tt:user', '-tt:all', 'tt:userFriends'], ['tt:user', 'tt:all']]) {
+    const isPublic = baseline.includes('tt:all');
+    const doc = { shareId: 'relational-post', ownerId: user.id, thingtime: ['data'],
+      acl: legacyAclFence(baseline), aclBaseline: baseline, aclBaselineVersion: 1, aclGeneration: 'g' } as any;
+    assert.equal(matches(aclMarkerClause('tt:all'), doc), isPublic);
+    assert.equal(matches(aclWithoutMarkersClause('tt:all'), doc), !isPublic);
+    assert.equal(matches(aclMarkerClause('-tt:all'), doc), baseline.includes('-tt:all'));
+    for (const mode of ['public', 'private'] as const) {
+      const expected = mode === 'public' ? isPublic : !isPublic;
+      assert.equal(matches(patVisibilityMatchClause(fenced(mode)), doc), expected, `${mode} / ${baseline}`);
+      assert.equal(canView(doc, fenced(mode)), expected, `exact owner ${mode} / ${baseline}`);
+      assert.equal(canView({ ...doc, acl: ['tt:all'] }, fenced(mode)), false, 'inline drift still fails closed');
+    }
+  }
+});
 
 test('the coarse DB clause is a superset of what the exact check admits', () => {
   // listThings / listUserPosts / getFeed / searchThings conjoin the clause and

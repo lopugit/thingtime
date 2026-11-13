@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { COUNT_LIMIT, COUNT_MAX_TIME_MS, fetchCappedTotal } from './cappedTotal.ts';
+import { COUNT_LIMIT, COUNT_MAX_TIME_MS, fetchCappedTotal, fetchCappedAggregateTotal } from './cappedTotal.ts';
 
 // A mongo-faithful countDocuments stub: countDocuments({ limit }) never returns
 // more than `limit`, so `matches` beyond the requested limit are truncated —
@@ -65,4 +65,23 @@ test('probes with COUNT_LIMIT + 1 and the shared maxTime deadline', async () => 
   assert.equal(collection.calls.length, 1);
   assert.deepEqual(collection.calls[0].options, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
   assert.deepEqual(collection.calls[0].filter, { thingtime: 'schema' });
+});
+
+// Relational audience joins must run before the same bounded count and keep
+// later pages/count failures non-blocking.
+
+test('aggregate totals preserve joined ACL stages and bounded count semantics', async () => {
+  const stages = [{ $match: { thingtime: 'post' } }, { $lookup: { as: '_aclCandidate' } }];
+  let calls = 0;
+  const collection = { aggregate(pipeline: any[], options: any) {
+    calls++;
+    assert.deepEqual(pipeline.slice(0, 2), stages);
+    assert.deepEqual(pipeline.slice(2), [{ $limit: COUNT_LIMIT + 1 }, { $count: 'total' }]);
+    assert.equal(options.maxTimeMS, COUNT_MAX_TIME_MS);
+    return { toArray: async () => [{ total: COUNT_LIMIT + 1 }] };
+  } };
+  assert.deepEqual(await fetchCappedAggregateTotal(collection, stages, null), { total: COUNT_LIMIT, totalCapped: true });
+  assert.deepEqual(await fetchCappedAggregateTotal(collection, stages, 'cursor'), { total: null, totalCapped: false });
+  assert.equal(calls, 1);
+  assert.deepEqual(await fetchCappedAggregateTotal({ aggregate() { throw new Error('timeout'); } }, stages, null), { total: null, totalCapped: false });
 });

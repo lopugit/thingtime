@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 // Real HTTP and MCP acceptance with a fresh disposable replica set. The only
-// direct database commands initialize that set; application fixtures use APIs.
+// direct database commands initialize that set and inspect operation metadata
+// during cold registration. Mixed-version checks read physical fence metadata;
+// application fixtures and mutations use APIs.
 // Saved workspace definitions must be externally authored synthetic fixtures.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,6 +17,15 @@ import { fileURLToPath } from 'node:url';
 import { MongoClient } from 'mongodb';
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
+const configScale = process.argv.includes('--config-scale');
+const tokenReactionScale = process.argv.includes('--token-reaction-scale');
+const algorithmScale = process.argv.includes('--algorithm-scale');
+const collectionsUiOnly = process.argv.includes('--collections-ui-only');
+const collectionsScale = process.argv.includes('--relational-collections') || collectionsUiOnly;
+const aclScale = process.argv.includes('--acl-scale');
+const aclBoundaries = aclScale || process.argv.includes('--acl-boundaries');
+const mixedLegacyAcl = process.argv.includes('--mixed-legacy-acl');
+const preFloorAcl = process.argv.includes('--prefloor-legacy-acl');
 const reconnectOnly = process.argv.includes('--scoped-reconnect');
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
 assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
@@ -21,10 +33,25 @@ assert(!fixturePath || !resolve(fixturePath).startsWith(resolve(cwd, '..') + '/'
 const authored = fixturePath ? JSON.parse(await readFile(fixturePath, 'utf8')) : null;
 const roles = ['project', 'task', 'agent', 'todo', 'progress', 'question'];
 assert(reconnectOnly || roles.every(role => authored.schemas?.[role]) && authored.pages?.overview && authored.pages?.taskDetail && authored.actions, 'External fixture must include all private workspace references');
-const dir = await mkdtemp(join(tmpdir(), 'tt-agent-reporting-'));
+// Keep latency-sensitive replica files on a local filesystem when builds and
+// evidence use external scratch (for example an ExFAT archive volume).
+const dir = await mkdtemp(join(process.env.AGENT_REPORTING_RUNTIME_TMPDIR || tmpdir(), 'tt-agent-reporting-'));
 const evidenceDir = process.env.AGENT_REPORTING_EVIDENCE_DIR || join(tmpdir(), 'thingtime-agent-reporting-evidence');
 const checks = [];
+const sectionFailures = [];
+async function runSection(name, work) {
+  console.log(JSON.stringify({ event: 'section-start', name }));
+  try {
+    await work(); console.log(JSON.stringify({ event: 'section-passed', name }));
+  } catch (error) {
+    const failure = { name, failure: String(error.message).split('\n')[0].slice(0, 220),
+      frames: String(error.stack).split('\n').filter(line => line.includes('.mjs:')).slice(0, 4) };
+    sectionFailures.push(failure); console.log(JSON.stringify({ event: 'section-failed', ...failure }));
+  }
+}
 const children = [];
+const registrationDiagnostics = [];
+const childDiagnostics = { mongo: { errorLines: 0, selectionTimeouts: 0 }, nitro: { errorLines: 0, selectionTimeouts: 0 } };
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const port = async () => {
   const server = createServer(); await new Promise((r, j) => { server.once('error', j); server.listen(0, '127.0.0.1', r); });
@@ -35,10 +62,21 @@ const origin = `http://127.0.0.1:${ports.api}`;
 const env = { PATH: process.env.PATH || '/usr/bin:/bin', HOME: dir, TMPDIR: dir, NODE_ENV: 'development',
   HOST: '127.0.0.1', PORT: String(ports.api), MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.db}/thingtime?replicaSet=agentreporting`,
   JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_CHATGPT_CREDENTIAL_KEY: randomBytes(32).toString('base64'),
-  THINGTIME_CHATGPT_ALLOWED_ENDPOINTS: origin, THINGTIME_DATA_ENV: 'development' };
+  THINGTIME_CHATGPT_ALLOWED_ENDPOINTS: origin, THINGTIME_DATA_ENV: 'development', THINGTIME_USER_VAULT_KEY: randomBytes(32).toString('base64url') };
 // No inherited application configuration, credentials, profile or network rules.
-function start(command, args) {
-  const child = spawn(command, args, { cwd, env, detached: true, stdio: 'ignore' });
+function start(command, args, overrides = {}) {
+  const child = spawn(command, args, { cwd: command === process.execPath ? dir : cwd, env: { ...env, ...overrides }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const counters = command === process.execPath ? childDiagnostics.nitro : childDiagnostics.mongo;
+  const observe = chunk => {
+    // Whitelisted counters only: never retain or emit raw server messages,
+    // command bodies, headers, connection URLs or synthetic secret values.
+    const lines = chunk.toString('utf8').split('\n');
+    for (const line of lines) {
+      if (/error|exception|\"s\":\"E\"/i.test(line)) counters.errorLines++;
+      if (/MongoServerSelectionError|server selection timed out/i.test(line)) counters.selectionTimeouts++;
+    }
+  };
+  child.stdout.on('data', observe); child.stderr.on('data', observe);
   children.push(child); return child;
 }
 async function waitFor(fn, label, timeout = 30000) {
@@ -46,11 +84,11 @@ async function waitFor(fn, label, timeout = 30000) {
   while (Date.now() < deadline) { if (await fn()) return; await delay(200); }
   throw Error(`Timed out: ${label}`);
 }
-async function request(path, { body, cookie, token, form, requestOrigin = origin, method = body === undefined && !form ? 'GET' : 'POST', status = 200 } = {}) {
-  const response = await fetch(origin + path, { method, redirect: 'manual', headers: { Origin: requestOrigin,
+async function request(path, { body, cookie, token, form, requestOrigin = origin, targetOrigin = origin, method = body === undefined && !form ? 'GET' : 'POST', status = 200, timeout = 45000 } = {}) {
+  const response = await fetch(targetOrigin + path, { method, redirect: 'manual', headers: { Origin: requestOrigin,
     'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json',
     ...(cookie ? { Cookie: cookie } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    ...(form ? { body: form.toString() } : body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(45000) });
+    ...(form ? { body: form.toString() } : body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) }).catch(error => { throw new Error(`${method} ${path.split('?')[0]} failed (${error.name || 'request error'})`); });
   const text = await response.text(); let data; try { data = JSON.parse(text); } catch { data = null; }
   // Never place raw response bodies into errors: OAuth/token responses carry secrets.
   if (status !== null) assert.equal(response.status, status, `${method} ${path.split('?')[0]} returned ${response.status}, expected ${status} (${data?.error ? String(data.error).slice(0, 160) : 'non-JSON or no error'})`);
@@ -143,13 +181,30 @@ async function browserScopedConsent(cookie, attempt, username) {
 }
 let rpcId = 0;
 async function mcp(token, name, args) {
+  const started = Date.now();
   const { data } = await request('/api/v1/integrations/chatgpt/mcp', { token, body: { jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } } });
   assert(data?.result, 'MCP must return a JSON-RPC tool result');
   const result = data.result;
   const value = result.structuredContent || (() => { try { return JSON.parse(result.content?.find(c => c.type === 'text')?.text || '{}'); } catch { return {}; } })();
+  if (value.status >= 500) console.log(JSON.stringify({ event: 'mcp-upstream-failure', name, status: value.status, elapsedMs: Date.now() - started }));
+  else if (name === 'prepare_thingtime_agent_task' && Date.now() - started >= 5000)
+    console.log(JSON.stringify({ event: 'slow-workspace-prepare', externalTaskId: args.externalTaskId, elapsedMs: Date.now() - started, status: value.status || 200 }));
   return { error: result.isError || !!value.error, value, challenge: result._meta?.['mcp/www_authenticate']?.[0] };
 }
-async function tool(token, name, args) { const result = await mcp(token, name, args); assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`); return result.value.result || result.value; }
+async function tool(token, name, args) {
+  const result = await mcp(token, name, args);
+  if (result.error && result.value.status >= 500 && ['report_thingtime_agent_task', 'coordinate_thingtime_agent_task'].includes(name)) {
+    // An uncertain write is inspected once, never resubmitted. Keep output to
+    // receipt metadata; no private record fields or returned credentials.
+    const inspected = await mcp(token, 'get_thingtime_agent_task', { accountId: args.accountId, externalTaskId: args.externalTaskId }).catch(() => null);
+    const state = inspected?.value?.result || inspected?.value;
+    console.log(JSON.stringify({ event: 'uncertain-report-receipt', requestId: args.requestId,
+      readStatus: inspected ? inspected.error ? state?.status || 'refused' : 'ok' : 'unavailable',
+      activeOperation: state?.activeOperation ? { requestId: state.activeOperation.requestId, status: state.activeOperation.status } : null }));
+  }
+  assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`);
+  return result.value.result || result.value;
+}
 async function verifyCoordination(bridge, identity, subspaceId, owner, stranger) {
   const args = { ...identity, requestId: randomUUID(), title: 'Synthetic task coordination', text: 'Private acceptance started', renderComponent: { render: { tag: 'p', children: ['{text}'] } } };
   const coordinated = await tool(bridge, 'coordinate_thingtime_agent_task', args);
@@ -256,7 +311,111 @@ async function scopedReconnect(owner, stranger, plain) {
   checks.push('real native-style scope challenge, explicit consent, cancel and wrong browser/origin refusal, PKCE/replay fencing, single PAT, rotation, least privilege and unchanged old grant');
   return { bridge: rotated.access_token, refresh: rotated.refresh_token, patId: minted[0], accountId: linked.defaultAccountId, refreshGrant: refresh };
 }
+async function verifyAlgorithmScale(owner, stranger) {
+  const created = [];
+  for (let n = 0; n < 51; n++) {
+    const name = `Synthetic interest profile ${n} ` + 'full name '.repeat(9);
+    const description = 'Synthetic description '.repeat(20);
+    const result = (await request('/api/v1/algorithms', { cookie: owner.cookie, body: { name, description } })).data;
+    assert(result.algorithm?.id); assert.equal(result.algorithm.name, name.trim()); assert.equal(result.algorithm.description, description.trim());
+    created.push(result.algorithm.id);
+  }
+  const listed = (await request('/api/v1/algorithms', { cookie: owner.cookie })).data.algorithms;
+  assert(created.every(id => listed.some(entry => entry.id === id)));
+  assert.equal((await request('/api/v1/algorithms', { cookie: stranger.cookie })).data.algorithms.length, 0);
+  const weights = { types: { text: 1 }, tags: Object.fromEntries(Array.from({ length: 10001 }, (_, n) => [`interest-${n}`, 1])), authors: {} };
+  const manifest = { format: 'thingtime.transfer', version: 1, roots: ['synthetic-profile'], files: [], things: [{ id: 'synthetic-profile', thingtime: ['feed-algorithm'],
+    crystal: { name: 'Imported complete synthetic profile', emoji: '🧠', weights, eventCount: 0, lastTrainedAt: null } }] };
+  const imported = (await request('/api/v1/things/import', { cookie: owner.cookie, body: { manifest } })).data;
+  assert(imported.ok); const id = imported.roots[0]; assert(id);
+  const exported = (await request('/api/v1/things/export', { cookie: owner.cookie, body: { ids: [id] } })).data;
+  const profile = exported.plan.things.find(thing => thing.id === id);
+  assert.deepEqual(profile.crystal.weights, weights);
+  const foreign = await request('/api/v1/things/export', { cookie: stranger.cookie, body: { ids: [id] }, status: null });
+  assert(foreign.response.status >= 400 && foreign.data?.ok === false);
+  await request('/api/v1/algorithms/update', { cookie: owner.cookie, body: { id, name: 'Preserved learned profile after metadata edit', shared: true } });
+  const copied = (await request('/api/v1/algorithms', { cookie: stranger.cookie, body: { name: 'Authorized synthetic branch', branchFrom: id } })).data.algorithm;
+  assert(copied?.id);
+  const branch = (await request('/api/v1/things/export', { cookie: stranger.cookie, body: { ids: [copied.id] } })).data.plan.things.find(thing => thing.id === copied.id);
+  assert.deepEqual(branch.crystal.weights, weights);
+  checks.push('51 algorithms and10001 imported relational weights roundtrip through owner export, metadata edits and explicitly consented branching; foreign export refuses');
+  const post = (await request('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Synthetic algorithm training fixture' }, acl: ['tt:user'] } })).data;
+  const postId = post.post?.id || post.thing?.id || post.id; assert(postId);
+  const trained = (await request('/api/v1/algorithms/track', { cookie: owner.cookie, body: { algorithmId: id, events: Array.from({ length: 101 }, () => ({ thingId: postId, signal: 'view' })) } })).data;
+  assert.equal(trained.applied, 101); assert.equal(trained.eventCount, 101);
+  const after = (await request('/api/v1/things/export', { cookie: owner.cookie, body: { ids: [id] } })).data.plan.things.find(thing => thing.id === id);
+  assert.equal(Object.keys(after.crystal.weights.tags).length, 10001);
+  await request('/api/v1/algorithms/delete', { cookie: owner.cookie, body: { id } });
+  assert(!(await request('/api/v1/algorithms', { cookie: owner.cookie })).data.algorithms.some(entry => entry.id === id));
+  checks.push('51 algorithms and10001 relational learned weights survive real HTTP creation, import/export, metadata edits, consented branching and deletion;101 events apply without truncation and foreign export refuses');
+}
+
+async function verifyAccountConfigurationScale(owner, stranger) {
+  const endpointIds = [];
+  for (let n = 0; n < 21; n++) {
+    const url = `mongodb://127.0.0.1:${ports.db}/config_fixture_${n}?replicaSet=agentreporting`;
+    const name = `Synthetic endpoint ${n} ` + 'descriptive '.repeat(9);
+    const saved = await request('/api/v1/mongodb/endpoints', { cookie: owner.cookie, body: { name, url } });
+    assert(saved.data.endpoint?.id); assert.equal(saved.data.endpoint.name, name.trim());
+    assert(!Object.hasOwn(saved.data.endpoint, 'url')); assert(!saved.text.includes(url));
+    endpointIds.push(saved.data.endpoint.id);
+  }
+  const endpoints = (await request('/api/v1/mongodb/endpoints', { cookie: owner.cookie })).data;
+  assert.equal(endpoints.endpoints.length, 21); assert(endpoints.endpoints.every(entry => !Object.hasOwn(entry, 'url')));
+  const strangerEndpoints = (await request('/api/v1/mongodb/endpoints', { cookie: stranger.cookie })).data;
+  assert.equal(strangerEndpoints.endpoints.length, 0);
+  const selected = await request('/api/v1/mongodb/endpoint', { cookie: owner.cookie, body: { savedId: endpointIds[20] } });
+  assert.equal(selected.data.endpoint.savedId, endpointIds[20]);
+  await request('/api/v1/mongodb/endpoints', { cookie: owner.cookie, method: 'DELETE', body: { id: endpointIds[0] } });
+  assert.equal((await request('/api/v1/mongodb/endpoints', { cookie: owner.cookie })).data.endpoints.length, 20);
+  checks.push('21 saved Mongo endpoints survive real HTTP save/list/selected activation/deletion, long names stay exact, other accounts and raw URLs remain private');
+
+  // This is an independent local synthetic remote HTTP contract, with generated
+  // memory-only bearer values. It does not claim real provider acceptance.
+  const remote = createHttpServer((req, res) => {
+    const token = req.headers.authorization || '';
+    const identity = createHash('sha256').update(token).digest('hex').slice(0, 24);
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/v1/auth/me') res.end(JSON.stringify({ ok: true, user: { id: identity, username: `synthetic${identity}`, displayName: 'Synthetic remote' } }));
+    else if (req.url === '/api/v1/logout') res.end(JSON.stringify({ ok: true }));
+    else { res.statusCode = 404; res.end(JSON.stringify({ ok: false })); }
+  });
+  await new Promise((resolve, reject) => { remote.once('error', reject); remote.listen(0, '127.0.0.1', resolve); });
+  let waited = false;
+  try {
+    const baseUrl = `http://127.0.0.1:${remote.address().port}`;
+    const links = [];
+    for (let n = 0; n < 11; n++) {
+      const token = randomBytes(32).toString('base64url');
+      const body = { baseUrl, name: `Synthetic remote ${n}`, token, syncMode: 'off' };
+      let response = await request('/api/v1/deployment-links', { cookie: owner.cookie, body, status: null });
+      if (response.response.status === 429 && !waited) {
+        const seconds = Number(response.response.headers.get('Retry-After'));
+        assert(Number.isFinite(seconds) && seconds > 0 && seconds <= 305);
+        waited = true;
+        console.log(JSON.stringify({ event: 'waiting-for-deployment-rate-window', seconds }));
+        await delay(seconds * 1000 + 500);
+        response = await request('/api/v1/deployment-links', { cookie: owner.cookie, body, status: null });
+      }
+      assert.equal(response.response.status, 201, 'Synthetic deployment link creation');
+      assert(!Object.hasOwn(response.data.link, 'token')); assert(!response.text.includes(token));
+      links.push(response.data.link);
+    }
+    assert.equal((await request('/api/v1/deployment-links', { cookie: owner.cookie })).data.links.length, 11);
+    assert.equal((await request('/api/v1/deployment-links', { cookie: stranger.cookie })).data.links.length, 0);
+    const pathRules = Array.from({ length: 70 }, (_, n) => ({ path: `things/synthetic-kind-${n}`, mode: 'push' }));
+    const patched = (await request('/api/v1/deployment-links', { cookie: owner.cookie, method: 'PATCH', body: { id: links[0].id, pathRules } })).data;
+    assert.equal(patched.link.pathRules.length, 70);
+    const reloaded = (await request('/api/v1/deployment-links', { cookie: owner.cookie })).data.links.find(link => link.id === links[0].id);
+    assert.deepEqual(reloaded.pathRules, pathRules); assert(!Object.hasOwn(reloaded, 'token'));
+    await request('/api/v1/deployment-links', { cookie: owner.cookie, method: 'PATCH', body: { id: links[0].id, pathRules: [] } });
+    assert.equal((await request('/api/v1/deployment-links', { cookie: owner.cookie })).data.links.find(link => link.id === links[0].id).pathRules.length, 0);
+    checks.push('11 deployment links and70 relational rules roundtrip through real HTTP with an independent synthetic remote; deletion stays empty, tokens never project, rate controls remain enabled');
+  } finally { await new Promise(resolve => remote.close(resolve)); }
+}
+
 let client;
+let diagnosticClient;
 try {
   await access(join(cwd, '.output/server/index.mjs')); await mkdir(join(dir, 'db')); await mkdir(evidenceDir, { recursive: true });
   start(process.env.MONGOD_PATH || '/opt/homebrew/bin/mongod', ['--dbpath', join(dir, 'db'), '--port', String(ports.db), '--bind_ip', '127.0.0.1', '--replSet', 'agentreporting', '--nounixsocket']);
@@ -265,10 +424,11 @@ try {
   await client.db('admin').command({ replSetInitiate: { _id: 'agentreporting', members: [{ _id: 0, host: `127.0.0.1:${ports.db}` }] } });
   await waitFor(async () => (await client.db('admin').command({ hello: 1 })).isWritablePrimary, 'replica primary');
   await client.close(); client = null;
-  const server = start(process.execPath, ['.output/server/index.mjs']);
+  const server = start(process.execPath, [join(cwd, '.output/server/index.mjs')]);
   await waitFor(async () => { assert(server.exitCode === null, 'Disposable Nitro server exited'); try { return (await fetch(origin + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(800) })).ok; } catch { return false; } }, 'built Nitro HTTP server');
   const manifest = (await request('/.well-known/thingtime-capabilities.json')).data;
-  for (const [feature, minimum] of Object.entries({ 'api.agent-reporting': '1.1.0', 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0', 'api.chatgpt-mcp': '2.2.0', 'api.chatgpt-oauth-authorize': '1.3.0', 'api.chatgpt-oauth-token': '1.1.0' })) {
+  assert.equal(manifest.origin, origin);
+  for (const [feature, minimum] of Object.entries({ 'api.agent-reporting': '1.2.0', ...(aclScale ? { 'api.things-acl': '1.0.0' } : {}), ...(configScale ? { 'api.mongodb-endpoint': '1.2.0', 'api.mongodb-endpoints': '1.1.0', 'api.deployment-links': '1.1.0' } : {}), 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0', 'api.chatgpt-mcp': '2.2.0', 'api.chatgpt-oauth-authorize': '1.3.0', 'api.chatgpt-oauth-token': '1.1.0' })) {
     const version = manifest.features?.[feature]?.version;
     const [major, minor, patch] = (version || '').split('.').map(Number);
     const [expectedMajor, minMinor, minPatch] = minimum.split('.').map(Number);
@@ -277,11 +437,57 @@ try {
   const pluginManifest = (await request('/.well-known/thingtime-chatgpt-capabilities.json')).data;
   assert.equal(pluginManifest.origin, origin); assert.equal(pluginManifest.features['chatgpt.oauth'], '1.12.0');
   checks.push('built Nitro origin advertises reporting, overview and Character contracts');
-  const register = async prefix => request('/api/v1/auth/register', { body: { username: prefix + randomBytes(6).toString('hex'), email: `${prefix}${randomUUID()}@example.invalid`, password: randomBytes(32).toString('hex') } });
-  const owner = await register('reportowner'); const stranger = await register('reportstranger');
+  const register = async prefix => request('/api/v1/auth/register', { body: { username: prefix + randomBytes(6).toString('hex'), email: `${prefix}${randomUUID()}@example.invalid`, password: randomBytes(32).toString('hex') }, timeout: 120000 });
+  console.log(JSON.stringify({ event: 'registration-start', freshReplica: true }));
+  diagnosticClient = new MongoClient(`mongodb://127.0.0.1:${ports.db}/?directConnection=true`, { serverSelectionTimeoutMS: 1000 });
+  await diagnosticClient.connect();
+  let diagnosticsActive = true;
+  const diagnose = (async () => {
+    while (diagnosticsActive) {
+      // Never retain command arguments, namespace, document contents or values.
+      const operations = await diagnosticClient.db('admin').command({ currentOp: 1, active: true }).catch(() => null);
+      const summary = {};
+      for (const op of operations?.inprog || []) {
+        if (op.appName !== 'thingtime-api') continue;
+        const command = ['createIndexes', 'listIndexes', 'find', 'aggregate', 'insert', 'update', 'commitTransaction', 'hello'].find(name => Object.hasOwn(op.command || {}, name)) || 'other';
+        const entry = summary[command] ||= { count: 0, maxSeconds: 0, waitingForLock: 0 };
+        entry.count++; entry.maxSeconds = Math.max(entry.maxSeconds, Number(op.secs_running) || 0);
+        if (op.waitingForLock) entry.waitingForLock++;
+      }
+      const sample = { elapsedSeconds: registrationDiagnostics.length * 10, operations: summary };
+      registrationDiagnostics.push(sample); console.log(JSON.stringify({ event: 'registration-operations', ...sample }));
+      for (let n = 0; n < 10 && diagnosticsActive; n++) await delay(1000);
+    }
+  })();
+  let owner, stranger;
+  try { owner = await register('reportowner'); stranger = await register('reportstranger'); }
+  finally { diagnosticsActive = false; await diagnose; await diagnosticClient.close(); diagnosticClient = null; }
+  console.log(JSON.stringify({ event: 'registration-complete' }));
+  const selectedOrigin = (await request('/api/v1/mongodb/endpoint', { cookie: owner.cookie })).data;
+  assert.equal(selectedOrigin.defaultHost, `127.0.0.1:${ports.db}`);
+  assert.equal(selectedOrigin.endpoint.custom, false);
+  checks.push('standalone server runs from a fresh synthetic cwd with explicit disposable home Mongo host, no active data override and generated-only environment credentials');
+  if (preFloorAcl) await runSection('pre-floor-relational-ACL-upgrade', async () => {
+    const { runPreFloorAclAcceptance } = await import('./relational-acl-prefloor-acceptance.mjs');
+    await runPreFloorAclAcceptance({ request, owner, stranger, checks, evidenceDir, env, start, port, waitFor, MongoClient });
+  });
+  if (mixedLegacyAcl) await runSection('mixed-legacy-ACL-write-fence', async () => {
+    const { runMixedLegacyAclAcceptance } = await import('./relational-acl-legacy-acceptance.mjs');
+    await runMixedLegacyAclAcceptance({ request, owner, stranger, checks, evidenceDir, dir, env, start, port, waitFor, MongoClient });
+  });
   const create = async (kind, crystal) => { const data = (await request('/api/v1/things', { cookie: owner.cookie, body: { thingtime: [kind], acl: ['tt:user'], crystal } })).data; assert(data.thing?.id || data.id, `Saved ${kind} returned an ID`); return data.thing?.id || data.id; };
   const plain = await oauth(owner.cookie, ['things']);
   const upgraded = await scopedReconnect(owner, stranger, plain);
+  if (configScale) await runSection('account-configuration', () => verifyAccountConfigurationScale(owner, stranger));
+  if (algorithmScale) await runSection('algorithm-profiles', () => verifyAlgorithmScale(owner, stranger));
+  if (collectionsScale) await runSection('relational-collections', async () => {
+    const { runRelationalCollectionsAcceptance } = await import('./relational-collections-acceptance.mjs');
+    await runRelationalCollectionsAcceptance({ request, owner, stranger, origin, ports, checks, evidenceDir, targetedUi: collectionsUiOnly, skipOwnershipScale: process.argv.includes('--skip-ownership-scale') });
+  });
+  if (tokenReactionScale) await runSection('token-grants-and-reactions', async () => {
+    const { runTokenReactionAcceptance } = await import('./relational-token-reaction-acceptance.mjs');
+    await runTokenReactionAcceptance({ request, owner, stranger, checks, origin, evidenceDir });
+  });
   if (reconnectOnly) {
     const syntheticWorkspace = { pages: {}, schemas: {}, actions: {} };
     for (const role of ['overview', 'taskDetail']) syntheticWorkspace.pages[role] = await create('webpage', { name: `OAuth test ${role}`, blocks: [{ id: 'label', type: 'text', text: 'Synthetic OAuth acceptance' }] });
@@ -294,6 +500,170 @@ try {
     const identity = { externalTaskId: 'scoped-oauth-acceptance', accountId: upgraded.accountId };
     const prepared = await tool(upgraded.bridge, 'prepare_thingtime_agent_task', { ...identity, displayName: 'Synthetic OAuth reporter', workspace: syntheticWorkspace });
     assert(prepared.binding?.characterId && prepared.binding.characterId !== owner.data.user.id);
+    if (aclBoundaries) await runSection('relational-ACL-boundaries', async () => {
+      const createAudience = async acl => {
+        const result = await request('/api/v1/things', { cookie: owner.cookie,
+          body: { thingtime: ['data'], acl, crystal: { name: 'Synthetic ACL boundary' } } });
+        assert(result.data.thing?.id); return result.data.thing;
+      };
+      const publicThing = await createAudience(['tt:all']);
+      const allowedPublicReader = await register('allowedreader');
+      const excluded = `-tt:user/${stranger.data.user.username}`;
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: publicThing.id, operation: 'add', entries: [excluded] } });
+      const readAudience = (id, options = {}) => request('/api/v1/things?id=' + encodeURIComponent(id), options);
+      await readAudience(publicThing.id);
+      await readAudience(publicThing.id, { cookie: allowedPublicReader.cookie });
+      await readAudience(publicThing.id, { cookie: stranger.cookie, status: 404 });
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: publicThing.id, crystal: { name: 'Edited public relational audience' } } });
+      const publicRead = (await readAudience(publicThing.id, { cookie: owner.cookie })).data.thing;
+      assert(publicRead.acl.includes('tt:all') && publicRead.acl.includes(excluded));
+      await readAudience(publicThing.id); await readAudience(publicThing.id, { cookie: stranger.cookie, status: 404 });
+      await readAudience(publicThing.id, { cookie: allowedPublicReader.cookie });
+      const privateExcluded = await createAudience(['tt:user', '-tt:all']);
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: privateExcluded.id, operation: 'add', entries: ['tt:user/synthetic-private-reader'] } });
+      const mintVisibilityToken = async visibility => (await request('/api/v1/tokens', {
+        cookie: owner.cookie, status: 201, body: { name: `Synthetic ${visibility} ACL query`,
+          scopes: ['things.read'], visibility, onlyCreatedThings: false, allowGet: true }
+      })).data.token;
+      const privateToken = await mintVisibilityToken('private');
+      const publicToken = await mintVisibilityToken('public');
+      assert(privateToken && publicToken, 'Disposable visibility tokens were issued');
+      await readAudience(privateExcluded.id, { token: privateToken });
+      const privateList = (await request('/api/v1/things?thingtime=data&limit=50', { token: privateToken })).data.things;
+      assert(privateList.some(thing => thing.id === privateExcluded.id), 'Negative public marker remains discoverable with a private-only token');
+      assert(!privateList.some(thing => thing.id === publicThing.id), 'Private-only token excludes a positive public audience');
+      const publicList = (await request('/api/v1/things?thingtime=data&limit=50', { token: publicToken })).data.things;
+      assert(publicList.some(thing => thing.id === publicThing.id), 'Public-only token retains a positive public audience');
+      assert(!publicList.some(thing => thing.id === privateExcluded.id), 'Public-only token excludes the negative-only public marker');
+      checks.push('built HTTP visibility-filtered tokens distinguish signed relational baseline markers in exact reads and database listings');
+      const hidden = await createAudience(['tt:hidden']); assert(hidden.linkKey);
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: hidden.id, operation: 'add', entries: ['tt:user/synthetic-hidden-reader'] } });
+      // Canonical exact IDs are the current unlisted capability; hidden roots
+      // stay out of ordinary discovery, while legacy keyed URLs still work.
+      await readAudience(hidden.id);
+      await request('/api/v1/things?thingtime=data&limit=50', { status: 401 });
+      const ordinaryList = (await request('/api/v1/things?thingtime=data&limit=50', { cookie: allowedPublicReader.cookie })).data;
+      assert(!ordinaryList.things.some(thing => thing.id === hidden.id), 'Unlisted root stays out of ordinary discovery');
+      const hiddenPath = '/api/v1/things?' + new URLSearchParams({ id: hidden.id, key: hidden.linkKey });
+      await request(hiddenPath);
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: hidden.id, crystal: { name: 'Edited hidden relational audience' } } });
+      await request(hiddenPath); await readAudience(hidden.id);
+      const hiddenRead = (await readAudience(hidden.id, { cookie: owner.cookie })).data.thing;
+      assert(hiddenRead.acl.includes('tt:hidden') && hiddenRead.acl.includes('tt:user/synthetic-hidden-reader'));
+      assert(hiddenRead.linkKey === hidden.linkKey, 'Hidden link identity survives the generic edit');
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: hidden.id, acl: ['tt:user'], expectedAclRevision: hiddenRead.aclRevision } });
+      await readAudience(hidden.id, { status: 404 }); await request(hiddenPath, { status: 404 });
+      const custom = await createAudience(['tt:user']);
+      const writer = `tt:user/${stranger.data.user.username}/write`;
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: custom.id, operation: 'add', entries: ['tt:custom', writer] } });
+      await readAudience(custom.id, { cookie: stranger.cookie });
+      await request('/api/v1/things/update', { cookie: stranger.cookie,
+        body: { id: custom.id, crystal: { name: 'Authorized custom capability edit' } } });
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: custom.id, operation: 'remove', entries: [writer] } });
+      await request('/api/v1/things/update', { cookie: stranger.cookie, status: 404,
+        body: { id: custom.id, crystal: { name: 'Revoked capability must refuse' } } });
+      checks.push('built HTTP relational ACL preserves anonymous/allowed-user public access, explicit exclusion, hidden-link proof, direct custom write/revoke and ordinary crystal edits without dropping audience or rotating link identity');
+    });
+    if (aclScale) await runSection('large-workspace-ACL', async () => {
+      // Exercise the real saved-workspace path beyond the former 64-entry cap.
+      // Distinct batches concurrently grant the same references; each task must
+      // still read its exact refs after all later grants have committed.
+      const preparedTasks = [];
+      let conflictRetries = 0;
+      const prepareWorkspaceTask = async (args) => {
+        let result = await mcp(upgraded.bridge, 'prepare_thingtime_agent_task', args);
+        if (result.error && result.value.status === 409 && result.value.error === 'Reporting reference access changed while it was being read; retry the same task request') {
+          conflictRetries++;
+          console.log(JSON.stringify({ event: 'workspace-prepare-conflict-retry', externalTaskId: args.externalTaskId, attempt: 1 }));
+          await delay(250);
+          result = await mcp(upgraded.bridge, 'prepare_thingtime_agent_task', args);
+        }
+        assert(!result.error, `prepare_thingtime_agent_task refused status=${result.value.status || 'unknown'} (${String(result.value.error || 'tool error').slice(0, 180)})`);
+        return result.value.result || result.value;
+      };
+      for (let n = 0; n < 2; n++) {
+        preparedTasks.push(await prepareWorkspaceTask({ accountId: upgraded.accountId,
+          externalTaskId: `shared-workspace-scale-${n}`, displayName: `Synthetic workspace reporter ${n}`, workspace: syntheticWorkspace }));
+        console.log(JSON.stringify({ event: 'workspace-prepare-sequential', taskIndex: n, passed: true }));
+      }
+      for (let offset = 2; offset < 70; offset += 5) {
+        const batch = await Promise.all(Array.from({ length: Math.min(5, 70 - offset) }, (_, n) => {
+          const externalTaskId = `shared-workspace-scale-${offset + n}`;
+          return prepareWorkspaceTask({ accountId: upgraded.accountId, externalTaskId,
+            displayName: `Synthetic workspace reporter ${offset + n}`, workspace: syntheticWorkspace }).catch(error => {
+              throw new Error(`Workspace taskIndex=${offset + n} concurrentBatch=${offset}: ${String(error.message).split('\n')[0]}`);
+            });
+        }));
+        preparedTasks.push(...batch);
+      }
+      console.log(JSON.stringify({ event: 'workspace-prepare-complete', tasks: preparedTasks.length, conflictRetries }));
+      assert.equal(new Set(preparedTasks.map(task => task.binding.characterId)).size, 70);
+      for (const task of preparedTasks) {
+        const exact = await tool(upgraded.bridge, 'get_thingtime_agent_task', { accountId: upgraded.accountId,
+          externalTaskId: task.binding.externalTaskId });
+        assert.equal(exact.binding.id, task.binding.id); assert.equal(exact.binding.characterId, task.binding.characterId);
+      }
+      const last = preparedTasks.at(-1);
+      const strangerRead = await request('/api/v1/agents/reporting', { cookie: stranger.cookie, status: null,
+        body: { origin, operation: 'get', externalTaskId: last.binding.externalTaskId } });
+      assert.equal(strangerRead.response.status, 404);
+      const changed = await mcp(upgraded.bridge, 'prepare_thingtime_agent_task', { accountId: upgraded.accountId,
+        externalTaskId: last.binding.externalTaskId, displayName: 'Changed immutable workspace',
+        workspace: { ...syntheticWorkspace, pages: { ...syntheticWorkspace.pages, overview: syntheticWorkspace.pages.taskDetail } } });
+      assert(changed.error);
+      const ownerRead = (await request('/api/v1/things?id=' + encodeURIComponent(syntheticWorkspace.pages.overview), { cookie: owner.cookie })).data;
+      assert(ownerRead.thing); assert(!ownerRead.thing.acl.includes('tt:all'));
+      const outsider = await request('/api/v1/things?id=' + encodeURIComponent(syntheticWorkspace.pages.overview), { cookie: stranger.cookie, status: null });
+      assert.equal(outsider.response.status, 404);
+      const aclPath = '/api/v1/things/acl';
+      const aclId = syntheticWorkspace.pages.overview;
+      const loadAcl = async () => {
+        const entries = []; const cursors = new Set(); let cursor; let revision;
+        do {
+          const page = (await request(aclPath + '?' + new URLSearchParams({ id: aclId, limit: '17', ...(cursor ? { cursor } : {}) }), { cookie: owner.cookie })).data;
+          assert.deepEqual(Object.keys(page).sort(), ['entries', 'nextCursor', 'ok', 'revision']);
+          assert.equal(page.ok, true); assert(Array.isArray(page.entries));
+          if (revision !== undefined) assert.equal(page.revision, revision);
+          revision = page.revision; entries.push(...page.entries); cursor = page.nextCursor;
+          if (cursor) { assert(!cursors.has(cursor), 'ACL pagination must advance'); cursors.add(cursor); }
+        } while (cursor);
+        assert.equal(new Set(entries).size, entries.length);
+        return { entries, revision };
+      };
+      const beforeAcl = await loadAcl(); assert(beforeAcl.entries.length > 64);
+      const extra = Array.from({ length: 25 }, (_, n) => `tt:user/synthetic-reader-${n}`);
+      await Promise.all(extra.map(entry => request(aclPath, { cookie: owner.cookie, body: { id: aclId, operation: 'add', entries: [entry] } })));
+      const afterAcl = await loadAcl(); assert(extra.every(entry => afterAcl.entries.includes(entry)));
+      const stale = await request(aclPath, { cookie: owner.cookie, status: 409,
+        body: { id: aclId, operation: 'add', entries: ['tt:user/stale-reader'], expectedAclRevision: beforeAcl.revision } });
+      assert.equal(stale.data.ok, false);
+      const reader = `tt:user/${stranger.data.user.username}`;
+      const modify = (operation, entries) => request(aclPath, { cookie: owner.cookie, body: { id: aclId, operation, entries } });
+      await modify('add', [reader]);
+      assert.equal((await request('/api/v1/things?id=' + encodeURIComponent(aclId), { cookie: stranger.cookie })).response.status, 200);
+      await modify('add', ['-' + reader]);
+      await request('/api/v1/things?id=' + encodeURIComponent(aclId), { cookie: stranger.cookie, status: 404 });
+      await modify('remove', ['-' + reader]);
+      await request('/api/v1/things?id=' + encodeURIComponent(aclId), { cookie: stranger.cookie });
+      await modify('remove', [reader]);
+      await request('/api/v1/things?id=' + encodeURIComponent(aclId), { cookie: stranger.cookie, status: 404 });
+      await request(aclPath, { cookie: stranger.cookie, status: 404, body: { id: aclId, operation: 'add', entries: [reader] } });
+      const finalAcl = await loadAcl();
+      const finalOwner = (await request('/api/v1/things?id=' + encodeURIComponent(aclId), { cookie: owner.cookie })).data.thing;
+      assert.equal(finalOwner.acl.length, finalAcl.entries.length); assert.equal(finalOwner.aclRevision, finalAcl.revision);
+      assert(finalOwner.aclEntryCount >= 95);
+      assert(!finalAcl.entries.includes(reader)); assert(!finalAcl.entries.includes('-' + reader)); assert(!finalAcl.entries.includes('tt:user/stale-reader'));
+      checks.push('paged ACL reads preserve more than64 grants;25 concurrent adds, stale revisions, explicit exclusions/removal and owner-only mutations work through real HTTP');
+      checks.push('70 distinct task Characters concurrently share one private saved workspace, all exact bindings remain readable, immutable identities and outsider refusal hold');
+    });
     const created = await tool(upgraded.bridge, 'report_thingtime_agent_task', { ...identity, requestId: randomUUID(), actionName: 'createTask', inputs: { title: 'Created after scoped OAuth' } });
     const id = created.binding.records.taskId; assert(id);
     const read = await tool(upgraded.bridge, 'get_thingtime_agent_task', { ...identity, recordIds: [id] });
@@ -408,14 +778,16 @@ try {
   assert((await mcp(grant.bridge, 'get_thingtime_agent_task', { externalTaskId: args.externalTaskId })).error, 'Revoked upstream grant refuses bridge reads');
   checks.push('upstream token revocation stops private reporting through the real bridge');
   }
+  if (sectionFailures.length) throw new Error(`${sectionFailures.length} independent acceptance section(s) failed: ${sectionFailures.map(failure => failure.name).join(', ')}`);
   await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: true, checks, fixtureSha256: fixturePath ? createHash('sha256').update(await readFile(fixturePath)).digest('hex') : null, source: 'real isolated HTTP + OAuth PKCE + MCP built Nitro', completedAt: new Date().toISOString(), isolation: 'fresh replica set; throwaway accounts and memory-only generated credentials; normal networking; no inherited app env', ports }, null, 2));
   console.log(JSON.stringify({ passed: true, checks, evidence: join(evidenceDir, 'agent-reporting-acceptance.json') }));
 } catch (error) {
   await mkdir(evidenceDir, { recursive: true });
-  await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: false, checks, failure: String(error.message).split('\n')[0].slice(0, 250), at: new Date().toISOString() }, null, 2));
+  await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: false, checks, sectionFailures, childDiagnostics, registrationDiagnostics, serverCwd: 'synthetic task directory', failure: String(error.message).split('\n')[0].slice(0, 250), at: new Date().toISOString() }, null, 2));
   console.error(String(error.message).split('\n')[0].slice(0, 250)); console.error(String(error.stack).split('\n').filter(line => line.includes('agent-reporting-acceptance.mjs:')).join('\n')); process.exitCode = 1;
 } finally {
   if (client) await client.close().catch(() => {});
+  if (diagnosticClient) await diagnosticClient.close().catch(() => {});
   for (const child of children.reverse()) {
     if (child.exitCode !== null || child.signalCode !== null) continue;
     const exited = once(child, 'exit'); try { process.kill(-child.pid, 'SIGTERM'); } catch {}
@@ -423,4 +795,9 @@ try {
     await exited; clearTimeout(timer);
   }
   await rm(dir, { recursive: true, force: true });
+  await mkdir(evidenceDir, { recursive: true });
+  await writeFile(join(evidenceDir, 'acceptance-cleanup.json'), JSON.stringify({
+    completedAt: new Date().toISOString(), temporaryReplicaRemoved: true,
+    children: children.map(child => ({ pid: child.pid, exited: child.exitCode !== null || child.signalCode !== null, exitCode: child.exitCode, signal: child.signalCode }))
+  }, null, 2));
 }

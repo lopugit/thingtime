@@ -257,6 +257,42 @@ test('shell metadata holds owner admission, while follower shells use a database
   } finally { finishMetadata(); removeDrain(); }
 }));
 
+test('gateway relay replaces spoofed bypass headers and never reflects the secret', async t => fixture(async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings,
+      fetch: async () => Response.json(aliasManifest()) }).current();
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, settings.origin);
+      const incoming = new Request(url, init);
+      assert.equal(incoming.headers.get('x-vercel-protection-bypass'), secret);
+      assert.equal(incoming.headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(incoming, settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return Response.json({ ok: true }, { headers: {
+        'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true'
+      } });
+    });
+    const response = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(response.status, 200);
+    assert.equal(calls, 1);
+    assert.equal(response.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(response.headers.has('x-vercel-set-bypass-cookie'), false);
+    assert.equal((await response.text()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
+}));
+
 test('platform protection bypass is server-selected, stripped on restore/response and never followed to a redirect', async t => fixture(async () => {
   const previous = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET = 'synthetic-platform-bypass';
@@ -292,5 +328,6 @@ test('platform protection bypass is server-selected, stripped on restore/respons
   } finally {
     if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
     else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+
   }
 }));

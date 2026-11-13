@@ -1,3 +1,61 @@
+## Relational access and growing authorization collections
+
+- Prepare more than 64 task Characters against the same private workspace,
+  including overlapping preparation requests. Read all bindings back; no
+  earlier grant may disappear and no replacement Character may be created.
+- Interrupt preparation and resume the same task/workspace. Remove a completed
+  grant and verify resume refuses to restore it. Distinguish incomplete setup
+  from deliberately revoked access.
+- Race concurrent task preparation with a reference read while another grant
+  updates the ACL revision. A transient snapshot conflict must retry the read
+  against the same task; stable denial must stay denied.
+- Create a large custom ACL with grants, exclusions and read/comment/write
+  capabilities. Check direct reads, search/feed pagination and attachments as
+  owner, each permitted viewer, an excluded viewer, stranger and anonymous.
+  Concurrently replace/revoke while reading; stale generations must fail closed.
+- Page ACL entries while changing the ACL in another session; stale cursors
+  and expected revisions must conflict. Confirm ordinary content edits preserve
+  every grant and old clients still receive complete ACL arrays.
+- Round-trip large ACLs through Timeline, version restoration, copies and
+  backups. Protected authorization rows cannot be forged or independently
+  restored through generic Things CRUD.
+- Read a migrated public/custom Thing through an older runtime: nonowners must
+  be denied by its legacy audience fence, while the new runtime evaluates the
+  original grants and exclusions. Confirm old ordinary content edits retain
+  the fence; old explicit ACL replacements and stale sandbox writes must be
+  rejected by the database without changing any grant.
+- Hold an old runtime's write after its read, migrate through the new runtime,
+  then release it. Cover same-millisecond writes, a lagging clock and old
+  full-document conversion. Migration must strictly advance the timestamp;
+  no writer may restore the captured version or remove the relational fence.
+- Start with no installed validator, then exercise a saved Action that creates
+  a relational audience. Verify strict/error collection validation, preservation
+  of any existing validator and idempotent readiness. Denied `collMod` or failed
+  readback must refuse migration before content changes. An outer transaction
+  must preflight protection, never issue DDL inside that transaction.
+- Verify the timestamp floor cannot be authored through generic writes or
+  restored through backups, copies or Timeline. It must not appear in public
+  content; a same-name field inside the user's crystal remains ordinary data.
+- Create a relational root with the earlier pre-floor preview runtime. After
+  protection is installed, its content edits and dedicated touches must remain
+  usable; current ordinary edits add the floor atomically without losing grants
+  or changing logical-byte accounting. Absent legacy floors are accepted, but
+  null/invalid floors and raw ACL overwrites remain refused before and after
+  the upgrade.
+- Exceed former group/member, social and subspace-membership ceilings. Confirm
+  late memberships and bans participate in authorization and no list is silently
+  truncated. Preserve duplicate prevention and friend-request approval.
+- Exceed former owned-subspace and custom flair counts through create, transfer,
+  moderator editing and member selection. Reload the complete collections and
+  preserve authorization, ownership and storage accounting.
+- Issue an app session with more than 100 explicitly selected Things. Page the
+  consent picker and granted list, revoke/delete resources and revoke/expire
+  the session. Exact-resource reads and stranger sessions must remain fenced.
+
+Automated entry points and isolated HTTP acceptance are documented in
+[relational access](docs/relational-access.md). Production acceptance uses the
+same previously failed reporting task identity after the compatible deployment.
+
 ## Unified folder sync configs and deduplication
 
 - [ ] Retain an attention version-1 Two-way setup with pending folder validation and no executed work; save only its direction as deletion-disabled Backup. On natural reload with idle and occupied native lanes, confirm fresh private approval, the same job ID/cadence, and atomic non-executable history of the full old job. No Retry or cloud save may be replayed. Refuse changed destination/source/owner, stale revision, Pause and any current/archived/orphaned run, capture, review, receipt or activity. Race Pause/revision changes and force an IDB history constraint failure; both admission and history must abort together. Run `folderSetupRecovery.test.ts`, `syncEnrollmentRecoveryBusy.test.ts` and `syncJobJournal.test.ts`; verify the retained installed configuration separately.
@@ -4161,7 +4219,7 @@ email whose link points at the attacker.
 - [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
       with emoji/label/color/mods-only, ids minted on save, ≤50; switches
       "Members pick their own flair" (default on) and "Members may type their
-      own text" (default off; ≤40 chars)); any moderator may save it. On
+      own text" (default off; no product text-length cap)); any moderator may save it. On
       `/s/<slug>` an active member sees the sidebar **Your flair** card:
       template pills (mod-only ones 🎩 only for mods; the active one shows ✓
       and clicking it again takes it off), a custom-text input when allowed,
@@ -4178,7 +4236,12 @@ email whose link points at the attacker.
       `member.ban` / `member.role` mod-log detail reads
       `userFlairCleared: true`). Renaming a template updates every wearer's
       chip — on the post page AND on a comment's own `/post/<commentId>`
-      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      drill-down; deleting one keeps their snapshot.
+      A custom flair longer than 700 characters saves and reloads in both the
+      member and moderator controls. On desktop and mobile, Feed, comments and
+      sidebar chips retain their full accessible text while showing one line
+      with an ellipsis; the page's pre-wrap descendants must not override the
+      chip's nowrap rule or make it taller than one line. Mod page → Members →
       **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
       ones / Custom text… + emoji / No flair; a worn template the mods
       deleted since opens as editable custom text with a "removed" hint;
@@ -4189,7 +4252,7 @@ email whose link points at the attacker.
       someone ELSE writes a `member.userFlair` mod-log entry. API walls:
       anonymous 401, a non-member setting their own 403, someone else's
       without a mod hat 403, unknown template 400, mod-only template as a
-      member 403, custom text while it is off 403 / over 40 chars 400,
+      member 403, custom text while it is off 403,
       self-assign off → a member's pick 403 but clearing still 200, a mod
       dressing a non-member 404 / a banned user 400. The fresh comment
       `POST /api/v1/things/comment` answers with already carries
@@ -7944,6 +8007,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       silently changed. Selecting folders reveals the "Also apply to
       everything inside" checkbox (off by default) — applying with it on
       updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Relational ACL candidate lists: an owned Thing with a signed-negative
+      logical `-tt:all` marker remains discoverable to its authorized owner
+      through a private-visibility PAT and eligible circle query. Anonymous
+      and public-visibility PAT reads remain denied; the negative marker must
+      never become a positive public grant. Verify exact reads and lists after
+      a grant revision changes, including the legacy-reader fence.
 - [ ] Right-click context menus (the design-system Thing Context Menu):
       right-clicking a thing selects it (Finder semantics) and opens
       Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
@@ -16444,6 +16513,18 @@ never print the file-download JSON, encryption metadata or signed URL.
 - Run native outbox/discovery tests, parser/manifests and built HTTP transfer
   fixture. Simulator/build evidence does not establish physical background work.
 
+
+### Relational collection scale acceptance — 2026-11-12
+
+Save more than 100 selected app Things,
+20 database endpoints, 10 deployment links and 50 path rules through the real
+API with isolated identities. Check secret redaction, duplicate refusal,
+authoritative empty migration, unavailable vault key, revocation and rollback.
+Create subspace definitions above the old limits, edit individual fields,
+reload all four families and verify byte accounting/ownership/deletion. Pin
+more than five posts and exhaust feed cursors without duplicates or omissions.
+Inspect consent paging and subspace moderator forms at desktop/mobile widths,
+including loading/retry, selection preservation and bottom-of-page controls.
 
 ### Compact devices and explicit scan library saves — 2026-11-12
 

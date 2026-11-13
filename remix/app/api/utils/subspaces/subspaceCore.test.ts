@@ -65,14 +65,14 @@ test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
 	}
 });
 
-test('sanitizeRules bounds count and shape, accepting plain strings', () => {
+test('sanitizeRules validates shape without limiting the ordered collection', () => {
 	assert.deepEqual(sanitizeRules(undefined), []);
 	assert.deepEqual(sanitizeRules(['Be kind', { title: 'No spam', text: '  Really.  ' }]), [
 		{ title: 'Be kind', text: null },
 		{ title: 'No spam', text: 'Really.' }
 	]);
 	assert.equal((sanitizeRules([{ text: 'no title' }]) as any).ok, false);
-	assert.equal((sanitizeRules(new Array(16).fill('r')) as any).ok, false);
+	assert.equal((sanitizeRules(new Array(151).fill('r')) as any[]).length,151);
 	assert.equal((sanitizeRules('nope') as any).ok, false);
 });
 
@@ -85,7 +85,7 @@ test('sanitizeFlairs mints slug ids, dedupes, and validates colors', () => {
 		{ id: 'mods', label: 'Announcement', emoji: null, color: null, modOnly: true }
 	]);
 	assert.equal((sanitizeFlairs([{ label: 'A' }, { id: 'a', label: 'B' }]) as any).ok, false, 'duplicate ids rejected');
-	assert.equal((sanitizeFlairs(new Array(51).fill({ label: 'x' })) as any).ok, false);
+	assert.equal((sanitizeFlairs(Array.from({length:151},(_,i)=>({id:`flair-${i}`,label:`Flair ${i}`}))) as any[]).length,151);
 	assert.equal(slugifyFlairId('  Hello, World!  '), 'hello-world');
 });
 
@@ -309,12 +309,14 @@ test('resolveUserFlair: a member picks a template while self-assign is on, never
 	assert.equal(failed(resolveUserFlair({ flairId: 'prism' }, settings({ userFlairSelfAssign: false }), member))?.status, 403, 'self-assign off');
 });
 
-test('resolveUserFlair: custom text needs allowCustomUserFlair (members), is bounded, keeps icon/color rules', () => {
+test('resolveUserFlair: custom text needs allowCustomUserFlair (members), preserves long text and icon/color rules', () => {
 	assert.equal(failed(resolveUserFlair({ text: 'Rainbow hunter' }, settings(), member))?.status, 403);
 	assert.deepEqual(resolveUserFlair({ text: '  Rainbow   hunter ', emoji: '🌈', color: 'hotpink' }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'Rainbow hunter', emoji: '🌈', color: 'hotpink' });
 	assert.deepEqual(resolveUserFlair({ text: 'x', emoji: '<img>', color: 'javascript:alert(1)' }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'x', emoji: null, color: null });
-	assert.equal(failed(resolveUserFlair({ text: 'x'.repeat(41) }, settings({ allowCustomUserFlair: true }), member))?.status, 400, 'over 40 chars');
-	assert.deepEqual(resolveUserFlair({ text: 'x'.repeat(40) }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'x'.repeat(40), emoji: null, color: null });
+	const longText = 'x'.repeat(4096);
+	const resolved = resolveUserFlair({ text: longText }, settings({ allowCustomUserFlair: true }), member);
+	assert.deepEqual(resolved, { id: null, text: longText, emoji: null, color: null });
+	assert.deepEqual(userFlairOfCrystal({ userFlair: resolved }), resolved, 'read projection retains the complete custom flair');
 	// a template id wins over stray text
 	assert.deepEqual(resolveUserFlair({ flairId: 'prism', text: 'ignored' }, settings(), member), { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' });
 });
@@ -359,7 +361,7 @@ test('userFlairSurvivesDemotion: a mod-only template comes off with the hat; ord
 // ---------------------------------------------------------------------------
 // Removal reasons (round 2, S4)
 
-test('sanitizeRemovalReasons mints ids from titles, bounds count / title / message, dedupes', () => {
+test('sanitizeRemovalReasons preserves complete text and validates stable unique ids', () => {
 	assert.deepEqual(sanitizeRemovalReasons(undefined), []);
 	assert.deepEqual(sanitizeRemovalReasons(null), []);
 	assert.deepEqual(sanitizeRemovalReasons([{ title: 'No Spam!', message: '  Posts that   only advertise are removed. ' }, 'Off topic', { id: 'R1', title: 'Rule 1' }]), [
@@ -367,9 +369,9 @@ test('sanitizeRemovalReasons mints ids from titles, bounds count / title / messa
 		{ id: 'off-topic', title: 'Off topic', message: '' },
 		{ id: 'r1', title: 'Rule 1', message: '' }
 	]);
-	// the title is bounded (sliced) like a rule title; the message is refused over its cap
-	assert.equal((sanitizeRemovalReasons([{ title: 'x'.repeat(81) }]) as any)[0].title.length, 80);
-	assert.equal((sanitizeRemovalReasons([{ title: 'ok', message: 'm'.repeat(501) }]) as any).ok, false);
+	// Complete definition text survives validation, independently of display excerpts.
+	assert.equal((sanitizeRemovalReasons([{ title: 'x'.repeat(810) }]) as any)[0].title.length, 810);
+	assert.equal((sanitizeRemovalReasons([{ title: 'ok', message: 'm'.repeat(5010) }]) as any)[0].message.length,5010);
 	assert.equal((sanitizeRemovalReasons([{ title: 'ok', message: 'm'.repeat(500) }]) as any)[0].message.length, 500);
 	for (const bad of ['nope', [{ message: 'no title' }], [{ title: '   ' }], [42], new Array(21).fill('r'), [{ id: 'a', title: 'A' }, { id: 'a', title: 'B' }], [{ id: 'Not Valid', title: 'x' }]]) {
 		const result = sanitizeRemovalReasons(bad) as any;
@@ -446,7 +448,7 @@ test('resolveRemovalReason: ruleIndex cites a rule server-side — "Rule N: titl
 	}
 	// the composed text is bounded by the post-removal cap, never the 300 free-text one
 	const long = resolveRemovalReason({ ruleIndex: 0, reason: 'n'.repeat(300) }, [], [{ title: 't'.repeat(100), text: 'x'.repeat(500) }]) as any;
-	assert.equal(long.reason.length, 900);
+	assert.equal(long.reason.length, 'Rule 1: '.length + 100 + 3 + 500 + 3 + 300);
 	assert.ok(long.reason.startsWith('Rule 1: tttt'));
 	// the omitted list reads as no rules
 	assert.equal((resolveRemovalReason({ ruleIndex: 0 }, []) as any).status, 400);

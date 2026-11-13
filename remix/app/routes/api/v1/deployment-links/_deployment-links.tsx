@@ -1,12 +1,12 @@
-import { json } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody } from '~/api/http';
+import { accountConfigurationVaultReady } from '~/api/utils/auth/accountConfiguration';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
   addUserDeploymentLink,
   getUserDeploymentLinks,
   removeUserDeploymentLink,
-  updateUserDeploymentLink,
-  MAX_DEPLOYMENT_PATH_RULES
+  updateUserDeploymentLink
 } from '~/api/utils/auth/users';
 import type { DeploymentLinkPathRule, DeploymentSyncMode, SavedDeploymentLink } from '~/api/utils/auth/users';
 import {
@@ -19,7 +19,6 @@ import {
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { isFail } from '~/api/utils/things/things';
 
-const MAX_BODY_BYTES = 64 * 1024;
 const SYNC_MODES: DeploymentSyncMode[] = ['push', 'pull', 'two-way', 'off'];
 // data paths: 'profile', 'things', or 'things/<kind>' (kind ids are lowercase
 // slugs — same alphabet the schema registry uses)
@@ -53,12 +52,9 @@ const tokenExpiryIso = (token: string): string | null => {
   }
 };
 
-const sanitizePathRules = (value: unknown): DeploymentLinkPathRule[] | { error: string } => {
+export const sanitizePathRules = (value: unknown): DeploymentLinkPathRule[] | { error: string } => {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) return { error: 'pathRules must be a list' };
-  if (value.length > MAX_DEPLOYMENT_PATH_RULES) {
-    return { error: `At most ${MAX_DEPLOYMENT_PATH_RULES} path rules per link` };
-  }
   const rules: DeploymentLinkPathRule[] = [];
   const seen = new Set<string>();
   for (const entry of value) {
@@ -94,10 +90,7 @@ export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json({ ok: false, error: 'Payload too large' }, { status: 413 });
-  }
+  if (!accountConfigurationVaultReady()) return json({ ok: false, error: 'Secure Vault is unavailable for saved account configuration.' }, { status: 503 });
 
   const method = request.method.toUpperCase();
 
@@ -116,7 +109,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'You’re doing that too fast — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 
   if (method === 'POST') {
     const baseUrl = normalizeDeploymentBaseUrl(body?.baseUrl);

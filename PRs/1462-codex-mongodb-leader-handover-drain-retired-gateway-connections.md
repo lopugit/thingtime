@@ -64,6 +64,29 @@ merge. The November 13 API-capability suite passed, and full lint passed with ze
 run/deployment links belong in the PR's current validation record rather than
 being inferred from this historical note.
 
+## November 13 relational ACL integration
+
+The subsequent main integration at `17355e4ce7a6c4ca68f85bfd8084b0725d8c8671`
+imports the relational ACL release, including its MongoDB write-fence provisioning
+and monotonic timestamp adapters. Preserve those upstream contracts and all
+unrelated capability versions. The gateway remains `1.2.2`, retaining independent
+shared-initializer leases, origin-fenced platform protection and conditional
+GET/HEAD/OPTIONS discovery. Both protection and drain regression sets are kept.
+
+The integrated tree passes 29 gateway tests, the collections/lifecycle scripts,
+and 203 capability tests. Because MongoDB runtime code changes in this integration,
+the earlier built acceptance is historical. Fresh client/template/node-server
+builds and real-Mongo acceptance passed on the frozen integrated tree at
+16:32 UTC: authenticated API registration/read/write, CSRF refusal, dedicated
+database/metadata, promotion and rollback. The observed follower dial count was
+zero; each owner/successor client closed once; unchanged cold index DDL was zero
+and peak concurrent DDL was two. Final exact-head CI and preview remain gates.
+
+Independent review found no blocking ACL lease/drain issue. A first fence caller's
+opt-in request budget may affect another fence waiter during bootstrap; no current
+budgeted grant-writing route was established. This conditional availability
+concern is retained without claiming a reproduced failure or an authority bypass.
+
 ## Measurement limits
 
 One gateway deployment can contain multiple warm processes and connection pools.

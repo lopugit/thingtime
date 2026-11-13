@@ -18,6 +18,13 @@ checklist](../../TESTING.md#things-library-archive).
 
 ## Thing storage choices
 
+Relational ACL migration installs the shared collection validator through
+`mongodb/collections.ts` before entering a content transaction.
+`mongodb/aclWriteFence.ts` enforces the legacy audience and timestamp floor;
+`mongodb/thingMutationTimestamp.ts` keeps operator writes' root `updatedAt`
+monotonic on both home and selected data planes. This does not change user
+crystal dates. Run `test:acl:relational`; see [rollout prerequisites](../relational-access.md#verification-and-rollout).
+
 `ThingStoragePanel` and the shared Thing context menu expose individually editable
 storage controls. `thingStoragePolicy.ts` in the Things utility layer owns private,
 revision-fenced owner and device preferences; `storage/thingReplicaStore.ts` and

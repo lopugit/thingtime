@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
+import { gatewayProtectionHeaders, createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
 import { mongoConnectionPolicy } from './mongoConnectionPolicy';
 
 const selected = { environment: 'preview', origin: 'https://preview.test', deploymentId: 'deployment-new', secret: 's'.repeat(32) };
@@ -142,6 +142,32 @@ test('expired asynchronous scopes cannot borrow an old owner admission', async (
   await assert.rejects(late, /not owner/);
 });
 
+test('gateway discovery uses the server-only protection credential at the validated origin', async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  try {
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    assert.deepEqual(gatewayProtectionHeaders(selected), {});
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+    assert.throws(() => gatewayProtectionHeaders({ ...selected, origin: 'https://other.test/path' }));
+    let calls = 0;
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, selected.origin);
+      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.credentials, 'omit');
+      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), secret);
+      return Response.json(manifest());
+    } });
+    await authority.current();
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(manifest()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
+});
+
 test('ownership revalidates at the same five-second bound without retransmitting unchanged manifests', async () => {
   let time = 1, calls = 0;
   const authority = createGatewayAuthority({ settings: () => selected, now: () => time, fetch: async (_url, init) => {
@@ -215,5 +241,6 @@ test('server-only Vercel protection bypass is limited to the configured discover
   } finally {
     if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
     else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+
   }
 });

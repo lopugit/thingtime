@@ -1,3 +1,4 @@
+import { readAppAllowlist } from '../apps/appAllowlist';
 import { findAppsByClientIds } from '../apps/apps';
 import { appStorageCounterCrystalIsReady, appStorageCounterEnvelopeIsTrusted } from '../apps/namespace';
 import { escapeRegex, findUsersByIds, searchUsersForAdminOverviewPage, toPublicUser, type AdminUserRow } from '../auth/users';
@@ -278,7 +279,7 @@ export const listAdminAppsOverview = async (query: string, limit = 100, cursor?:
   );
 
   return {
-    apps: docs.map((doc: any) => {
+    apps: await Promise.all(docs.map(async (doc: any) => {
       const clientId = String(doc.crystal?.clientId ?? '');
       const ownerId = String(doc.ownerId ?? '');
 			const subscription = subs.get(clientId)!;
@@ -286,7 +287,7 @@ export const listAdminAppsOverview = async (query: string, limit = 100, cursor?:
       return {
         clientId,
         name: String(doc.crystal?.name ?? ''),
-        origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
+        origins: (await readAppAllowlist(things, doc)).origins,
         createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
         revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt.toISOString() : null,
         owner: { id: ownerId, username: people.get(ownerId) ?? null },
@@ -296,7 +297,7 @@ export const listAdminAppsOverview = async (query: string, limit = 100, cursor?:
 				usedBytes: storage?.status === 'ready' ? storage.usedBytes : null,
 				subscription
       };
-    }),
+    })),
     limit: capped,
     totalCapped,
     nextCursor
