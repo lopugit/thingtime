@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { isProtectedThingtime, MAX_SCHEMA_FIELDS, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
+import { isProtectedThingtime, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
 
 // The congruence alarm for builtin-schema seeding (seed-builtin-schemas in
 // api/utils/migrations/migrations.ts): every builtin schema must
@@ -38,7 +38,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "lopu-recording-job": [],
   "lopu-recording-reminder": [],
   "lopu-reminder": [],
-  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentFileSyncOrigin", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "aclRevision", "aclGeneration", "aclEntryCount", "aclLegacyRevision", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentFileSyncOrigin", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
   "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
   "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
   "comment": ["text"],
@@ -313,12 +313,12 @@ test('MongoDB snapshot schema projects its opaque source without granting generi
   assert.equal(validateThingtimeCrystal([schema.id], schema.example).ok, false, 'the dedicated runtime writer owns snapshot data');
 });
 
-test('schema extension headroom retains a total field-node limit', () => {
-  const fields = Array.from({ length: MAX_SCHEMA_FIELDS - 1 }, (_, index) => ({ name: `field${index}`, type: 'string' }));
+test('schema extensions retain arbitrary field counts within the supported depth', () => {
+  const fields = Array.from({ length: 161 }, (_, index) => ({ name: `field${index}`, type: 'string' }));
   const crystal = { name: 'Bounded', fields: [{ name: 'nested', type: 'object', children: fields }] };
   assert.equal(validateThingtimeCrystal(['schema'], crystal).ok, true);
   fields.push({ name: 'tooMany', type: 'string' });
-  assert.equal(validateThingtimeCrystal(['schema'], crystal).ok, false);
+  assert.equal(validateThingtimeCrystal(['schema'], crystal).ok, true);
 });
 
 test("post.listing carries sanitizePostCrystal's real shape, not an opaque object", () => {

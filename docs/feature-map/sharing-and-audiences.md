@@ -8,6 +8,14 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
 
 ## Where the code lives
 
+Growing ACL subject entries are protected relational `acl-entry` Things.
+`things/relationalAcl.ts` owns selective authorization lookups, list candidate
+joins and transactional generations; the finite root audience remains in
+`acl`. Legacy API projections still return complete ACL arrays. The
+owner-only `/api/v1/things/acl` route pages and atomically adds/removes grants
+under `api.things-acl` 1.0.0. See [relational access](../relational-access.md)
+for migration, concurrency, reporting recovery and verification.
+
 | Concern | Path |
 | --- | --- |
 | ACL evaluation (`canView`, `canViewInherited`, `aclAllows`, inherit chains) | `app/api/utils/things/things.ts` |

@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { updateApp } from '~/api/utils/apps/apps';
@@ -18,7 +18,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Too many app changes — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const body = await readJsonBody(request, 16 * 1024);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
   const result = await updateApp(user.id, body?.clientId, {
     name: body?.name,
     origins: body?.origins,

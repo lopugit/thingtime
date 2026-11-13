@@ -120,7 +120,7 @@ export const MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX = 'mongodb-connection-snapsho
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control', MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['session-resource-grant', 'migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control', MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -223,10 +223,8 @@ export const ACL_EXT_SOURCED = 'tt:extsourced';
 export const ACL_EXTACCT_PREFIX = 'tt:extacct/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-// raised from 16 for custom audiences (a hand-picked user list + groups);
-// still a hard bound so acl stays a bounded field, never an unbounded list
-const MAX_ACL_ENTRIES = 64;
-const MAX_ACL_ENTRY_CHARS = 64;
+// Audiences have no product cardinality or identifier-length ceiling. The
+// server persists variable membership in protected relational ACL entries.
 
 // legacy visibility names map onto acls (accepted as input everywhere an acl
 // is, and derived back for the wire so old clients keep working)
@@ -260,11 +258,12 @@ export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
 export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: number; error: string } => {
   if (!Array.isArray(value)) return { ok: false, status: 400, error: 'acl must be a list of tt: permission entries' };
   const entries: string[] = [];
+  const seen = new Set<string>();
   for (const raw of value) {
     if (typeof raw !== 'string') return { ok: false, status: 400, error: 'acl entries must be strings' };
     const entry = raw.trim();
     if (!entry) continue;
-    if (entry.length > MAX_ACL_ENTRY_CHARS || !ACL_ENTRY_PATTERN.test(entry)) {
+    if (!ACL_ENTRY_PATTERN.test(entry)) {
       return {
         ok: false,
         status: 400,
@@ -301,8 +300,7 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
         normalized = `${entry.startsWith('-') ? '-' : ''}${prefix}${subject.toLowerCase()}${positive.slice(prefix.length + subject.length)}`;
       }
     }
-    if (!entries.includes(normalized)) entries.push(normalized);
-    if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
+    if (!seen.has(normalized)) { seen.add(normalized); entries.push(normalized); }
   }
   if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };
   return entries;
@@ -469,7 +467,6 @@ export const MAX_COMMENT_CHARS = 1000;
 // Embeddable "Login with Thingtime" apps (see api/utils/apps): registered by a
 // developer user, identified by clientId, locked to an origin allowlist.
 export const MAX_APP_NAME_CHARS = 80;
-export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
 export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
@@ -541,10 +538,6 @@ export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
 export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
 export const MAX_SUBSPACE_ACCENT_CHARS = 32;
 export const MAX_SUBSPACE_ICON_CHARS = 16;
-// custom user-flair text (allowCustomUserFlair) — shorter than a template label
-export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
-export const MAX_SUBSPACES_PER_USER = 25;
-export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
 export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
 // Removal reasons (round 2, S4): a per-subspace list of canned reasons a
 // moderator picks when removing a post — { id, title, message }; the title +
@@ -735,10 +728,20 @@ const rootThingSchema: ThingtimeSchema = {
       name: 'acl',
       type: 'string[]',
       required: true,
-      max: 16,
       description:
-        'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.'
+        'Logical permission entries with no audience-count limit. API projections retain the complete list; stored roots keep a finite baseline and protected acl-entry relations carry subjects. Most specific matching entry decides; owners always view.'
     },
+    { name: 'aclRevision', type: 'id', required: false, system: true, description: 'Current audience mutation revision. Owner ACL cursors and optional write preconditions bind this revision; every audience change rotates it.' },
+    { name: 'tokenAcl', type: 'string[]', required: false, description: 'Owner-only tt:token/<id> mutation grants for already-authenticated sandbox PATs. Stored as private token-family acl-entry relations; never an audience grant or exportable content.' },
+    { name: 'tokenAclGeneration', type: 'id', required: false, system: true, description: 'Private authoritative token-grant generation. An empty relational generation never falls back to legacy grants.' },
+    { name: 'tokenAclRevision', type: 'id', required: false, system: true, description: 'Owner-only token-grant mutation revision; token-family cursor and write preconditions bind this revision.' },
+    { name: 'tokenAclEntryCount', type: 'number', required: false, system: true, description: 'Number of active private token grants in the selected generation. Missing is unavailable, never zero.' },
+    { name: 'tokenGrantFence', type: 'id', required: false, system: true, description: 'Private transaction touch that serializes sandbox mutations against grant revocation.' },
+    { name: 'aclBaseline', type: 'string[]', required: false, system: true, description: 'Private finite logical audience vocabulary. Relational roots persist only negative discovery hints and owner authority in acl so legacy readers fail closed.' },
+    { name: 'aclBaselineVersion', type: 'number', required: false, system: true, description: 'Private version binding the finite audience baseline to its deterministic legacy-reader deny fence. Generic clients cannot write this field.' },
+    { name: 'aclGeneration', type: 'id', required: false, system: true, description: 'Private server-owned generation selecting protected relational ACL rows. Never accepted from generic input.' },
+    { name: 'aclEntryCount', type: 'number', required: false, system: true, description: 'Number of active subject relations in the current ACL generation; unknown when absent, never inferred as zero.' },
+    { name: 'aclLegacyRevision', type: 'boolean', required: false, system: true, description: 'Private lazy-migration receipt used to reconcile an unchanged legacy grant intent. Explicit audience replacement clears it.' },
     {
       name: 'targetId',
       type: 'id',
@@ -1297,9 +1300,8 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-// Accommodates the complete root Thing shape plus user extensions while
-// keeping schema trees bounded (nested children/items count toward this cap).
-export const MAX_SCHEMA_FIELDS = 80;
+// Field cardinality is unrestricted; schema depth and identifier grammar
+// remain explicit so authored fields stay portable and safely addressable.
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
@@ -1369,9 +1371,8 @@ const schemaThingSchema: ThingtimeSchema = {
       name: 'fields',
       type: 'record',
       required: true,
-      max: MAX_SCHEMA_FIELDS,
       description:
-        `Field definition tree, max ${MAX_SCHEMA_FIELDS} nodes, ${MAX_SCHEMA_FIELD_DEPTH} levels: ` +
+        `Ordered field definition tree, ${MAX_SCHEMA_FIELD_DEPTH} levels: ` +
         `{ name, type (${SCHEMA_FIELD_TYPES.join('/')}), description?, required?, values? (enum), ` +
         'min?/max?/unit? (number), maxLength? (string), minItems?/maxItems? (arrays), ' +
         'children? (object), items? (array) }.'
@@ -1436,12 +1437,10 @@ export const COMPONENT_LIBRARIES = [
 	'thingtime',
 	'custom'
 ] as const;
-export const MAX_COMPONENT_ARGS = 16;
 export const MAX_COMPONENT_ARG_NAME_CHARS = 40;
 export const MAX_COMPONENT_ARG_LABEL_CHARS = 40;
 export const MAX_COMPONENT_ARG_DESCRIPTION_CHARS = 200;
 export const MAX_COMPONENT_ARG_DEFAULT_CHARS = 400;
-export const MAX_COMPONENT_SAVED_ARGS = 24;
 export const MAX_COMPONENT_SAVED_ARG_CHARS = 2000;
 export const MAX_COMPONENT_CATEGORY_CHARS = 40;
 export const MAX_COMPONENT_KEY_CHARS = 80;
@@ -1516,9 +1515,8 @@ const componentSchema: ThingtimeSchema = {
 			name: 'args',
 			type: 'record',
 			required: false,
-			max: MAX_COMPONENT_ARGS,
 			description:
-				`Arg descriptor list, max ${MAX_COMPONENT_ARGS}: { name, type (${COMPONENT_ARG_TYPES.join('/')}), ` +
+				`Ordered arg descriptor list: { name, type (${COMPONENT_ARG_TYPES.join('/')}), ` +
 				'label?, description?, default, values? (enum), min?/max? (number), maxLength? (string) }. ' +
 				'The /components tester renders one input per descriptor.'
 		},
@@ -1526,7 +1524,6 @@ const componentSchema: ThingtimeSchema = {
 			name: 'savedArgs',
 			type: 'record',
 			required: false,
-			max: MAX_COMPONENT_SAVED_ARGS,
 			description: 'Scalar arg-value snapshot a saved version renders with (keys mirror arg names).'
 		},
 		{
@@ -1984,32 +1981,32 @@ const subspaceSchema: ThingtimeSchema = {
       name: 'rules',
       type: 'record',
       required: false,
-      description: `Ordered community rules — a list of { title (≤${MAX_SUBSPACE_RULE_TITLE_CHARS}), text (≤${MAX_SUBSPACE_RULE_TEXT_CHARS}) }, max ${MAX_SUBSPACE_RULES}.`
+      description: 'Ordered community rules with complete title and text, stored as relational definition Things.'
     },
     {
       name: 'flairs',
       type: 'record',
       required: false,
-      description: `Post flairs authors (or mods, when modOnly) can tag posts with — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label (≤${MAX_SUBSPACE_FLAIR_LABEL_CHARS}), emoji, color, modOnly }, max ${MAX_SUBSPACE_FLAIRS}.`
+      description: `Post flair definitions: { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label, emoji, color, modOnly }. Ordered relational Things preserve every definition and complete label.`
     },
     {
       name: 'userFlairs',
       type: 'record',
       required: false,
-      description: `User-flair templates members wear beside their name — the same shape as post flairs ({ id, label, emoji, color, modOnly }), max ${MAX_SUBSPACE_FLAIRS}; modOnly templates are assigned by moderators only.`
+      description: 'User-flair templates: { id, label, emoji, color, modOnly }, stored as ordered relational definitions; moderators assign modOnly templates.'
     },
     {
       name: 'removalReasons',
       type: 'record',
       required: false,
-      description: `Canned removal reasons moderators pick when removing a post — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), title (≤${MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS}), message (≤${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS}) }, max ${MAX_SUBSPACE_REMOVAL_REASONS}; title + message become the post’s stored reason and the author’s notification.`
+      description: `Removal-reason definitions: { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), title, message }, stored relationally without truncating their ordered content. Title and message become the post’s stored reason and author notification.`
     },
     { name: 'userFlairSelfAssign', type: 'boolean', required: false, description: 'Members may pick their own user flair (default true; moderators always can, for anyone).' },
     {
       name: 'allowCustomUserFlair',
       type: 'boolean',
       required: false,
-      description: `Members may type a custom user-flair text (≤${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} chars) instead of picking a template (default false; moderators always may).`
+      description: `Members may type custom user-flair text instead of picking a template (default false; moderators always may).`
     },
     {
       name: 'branding',
@@ -2079,7 +2076,7 @@ const subspaceMemberSchema: ThingtimeSchema = {
       description: 'The flair worn beside the member’s name in this subspace (null = none).',
       children: [
         { name: 'id', type: 'string', required: false, max: MAX_SUBSPACE_FLAIR_ID_CHARS, description: 'Template id (null for custom text).' },
-        { name: 'text', type: 'string', required: true, max: MAX_SUBSPACE_FLAIR_LABEL_CHARS, description: 'The text shown (a template’s label snapshot, or the custom text ≤40).' },
+        { name: 'text', type: 'string', required: true, description: 'The full text shown: a template’s label snapshot or custom text.' },
         { name: 'emoji', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Optional emoji.' },
         { name: 'color', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'Optional CSS color (hex or named).' }
       ]
@@ -3330,10 +3327,9 @@ const appSchema: ThingtimeSchema = {
       name: 'origins',
       type: 'string[]',
       required: true,
-      max: MAX_APP_ORIGINS,
-      description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
+      description: `Allowed web origins (https, or http for localhost dev), stored as protected relational entries without a total count ceiling. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
     },
-    { name: 'nativeRedirectUris', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
+    { name: 'nativeRedirectUris', type: 'string[]', required: false, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
     { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
     { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
     { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
@@ -4304,7 +4300,7 @@ export const PROTECTED_THINGTIME = [
   // Moderator-managed references; only the subspace embeds endpoint writes them.
   'subspace-embed',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
-  'post-discovery',
+  'post-discovery', 'app-allowlist-entry', 'feed-algorithm-weight', 'acl-entry', 'session-resource-grant', 'account-config-entry', 'subspace-definition',
   ...CHAT_ARCHIVE_THINGTIME,
 
   'account-invite',
@@ -5305,10 +5301,10 @@ export const projectBuiltinSchemaCrystal = (schema: ThingtimeSchema): Record<str
 });
 
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
-const sanitizeCountConstraint = (raw: unknown, label: string, ceiling: number): { ok: true; value: number | null } | Fail => {
+const sanitizeCountConstraint = (raw: unknown, label: string, ceiling = Number.MAX_SAFE_INTEGER): { ok: true; value: number | null } | Fail => {
   if (raw === undefined || raw === null) return { ok: true, value: null };
   const num = Number(raw);
-  if (!Number.isInteger(num) || num < 0) return fail(400, `${label} must be a whole number ≥ 0`);
+  if (!Number.isSafeInteger(num) || num < 0) return fail(400, `${label} must be an exact safe whole number ≥ 0`);
   if (num > ceiling) return fail(400, `${label} caps at ${ceiling}`);
   return { ok: true, value: num };
 };
@@ -5328,9 +5324,6 @@ const sanitizeSchemaField = (
     return fail(400, `Each schema field must be an object (${path || 'fields'})`);
   }
   counter.nodes += 1;
-  if (counter.nodes > MAX_SCHEMA_FIELDS) {
-    return fail(400, `A schema can define at most ${MAX_SCHEMA_FIELDS} fields (nested ones count)`);
-  }
   if (depth > MAX_SCHEMA_FIELD_DEPTH) {
     return fail(400, `Schema fields nest at most ${MAX_SCHEMA_FIELD_DEPTH} levels (${path})`);
   }
@@ -5402,9 +5395,9 @@ const sanitizeSchemaField = (
   }
 
   if (type === 'string[]' || type === 'array') {
-    const minItems = sanitizeCountConstraint(def.minItems, `Field ${label} minItems`, MAX_DATA_ARRAY_ITEMS);
+    const minItems = sanitizeCountConstraint(def.minItems, `Field ${label} minItems`);
     if (isFail(minItems)) return minItems;
-    const maxItems = sanitizeCountConstraint(def.maxItems, `Field ${label} maxItems`, MAX_DATA_ARRAY_ITEMS);
+    const maxItems = sanitizeCountConstraint(def.maxItems, `Field ${label} maxItems`);
     if (isFail(maxItems)) return maxItems;
     if (minItems.value !== null) field.minItems = minItems.value;
     if (maxItems.value !== null) field.maxItems = maxItems.value;
@@ -5570,7 +5563,6 @@ const sanitizeComponentArgScalar = (value: unknown, cap: number): string | numbe
 
 const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string, unknown>[] } | Fail => {
 	if (!Array.isArray(input)) return fail(400, 'Component args must be a list of arg descriptors');
-	if (input.length > MAX_COMPONENT_ARGS) return fail(400, `Components can declare at most ${MAX_COMPONENT_ARGS} args`);
 	const args: Record<string, unknown>[] = [];
 	const seen = new Set<string>();
 	for (const entry of input) {
@@ -5750,7 +5742,6 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 		}
 		const savedArgs: Record<string, unknown> = {};
 		const entries = Object.entries(input.savedArgs as Record<string, unknown>);
-		if (entries.length > MAX_COMPONENT_SAVED_ARGS) return fail(400, `savedArgs can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
 		for (const [key, value] of entries) {
 			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
 				return fail(400, `savedArgs key "${key.slice(0, 40)}" is not a valid arg name`);
@@ -5870,9 +5861,6 @@ const sanitizeWebpageBlock = (
 			}
 			const args: Record<string, unknown> = {};
 			const entries = Object.entries(raw[field] as Record<string, unknown>);
-			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
-				return fail(400, `Block ${id} ${field} can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
-			}
 			for (const [key, value] of entries) {
 				if (field === 'argBindings' && ['__proto__', 'constructor', 'prototype'].includes(key)) {
 					return fail(400, `Block ${id} argument binding key is reserved`);

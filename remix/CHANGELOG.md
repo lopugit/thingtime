@@ -160,6 +160,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Move selected app grants, registered origins/callbacks, encrypted
+  endpoint/deployment settings, subspace definitions and learned algorithm
+  weights into protected child Things. Remove associated total count caps and
+  silent truncation; preserve transactional accounting, authorization, existing
+  vault configuration and legacy read/migration contracts. Store audience and
+  token grants as relational Things with paged management and resumable private
+  reporting. Remove count ceilings for relational groups, social edges,
+  memberships, reactions, and authored schemas/Components. See
+  [relational access](../docs/relational-access.md).
+  **Codex (AI)**
+
 - 2026-11-12: Keep measured Photos background progress monotonic across concurrent
   originals and real iCloud preparation, refresh stale active status on native
   foreground reentry, retain historical indexing/discovery feedback, and show a

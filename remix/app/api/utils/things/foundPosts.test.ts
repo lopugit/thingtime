@@ -187,3 +187,14 @@ test('plain permalink discoveries persist for the same browser identity without 
   await store.rememberFoundPost(withThingLink(null, post.shareId), post);
   assert.equal(writes(), 1, 'no remembered collection without a saved identity');
 });
+
+test('remembered hidden discovery uses validated relational baseline and current link generation', async () => {
+ const relational = { ...post, acl: ['tt:user', '-tt:hidden'], aclGeneration: 'g', aclBaseline: ['tt:hidden'], aclBaselineVersion: 1, aclRevision: 'r' };
+ assert.equal(foundPostGrantMatches(relational, foundPostDigest(post.linkKey)), true);
+ assert.equal(foundPostGrantMatches({ ...relational, aclBaselineVersion: 2 }, foundPostDigest(post.linkKey)), false);
+ assert.equal(foundPostGrantMatches({ ...relational, linkKey: 'rotated' }, foundPostDigest(post.linkKey)), false);
+ const { rows, store } = storage();
+ await store.rememberFoundPost(account, relational);
+ rows.push(relational);
+ assert.equal((await store.loadFoundPostsForAuthor('reader', 'author')).has(post.shareId), true);
+});

@@ -7203,3 +7203,17 @@ tab after the normal extension update. Forks use their own trusted HTTPS origin;
 no extra environment variables, provider secrets or AppID fetch service is needed.
 Only empty/default and exact-origin HTTPS AppIDs are handled locally; other cases
 remain native. See [Password manager](docs/password-manager.md).
+
+### Relational access and saved configuration
+
+Growing ACLs, app selected-resource grants, subspace definitions and saved
+endpoint/deployment settings use separate protected Things. See
+[relational access](docs/relational-access.md) for compatibility and rollout.
+New forks use a replica set for transactional migration and configure the
+existing `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>` in their
+runtime secret store (the existing admin vault key remains the documented
+fallback). Reuse that key across upgrades. Endpoint URLs, remote tokens and
+path rules are owner-bound encrypted records; no new provider key is needed.
+Without the vault key, existing unmigrated settings remain readable, but
+saving or deleting settings returns an unavailable error before external
+credential operations. No secret belongs in repository configuration.

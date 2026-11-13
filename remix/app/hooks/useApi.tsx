@@ -1,3 +1,5 @@
+import { requireAuthoredCollectionCapability, usesExpandedAuthoredCollections } from '~/utils/authoredCollectionCapabilities';
+import { requireAccountCollectionCapability, requireSubspaceCollectionCapability } from '~/utils/relationalCollectionsCapabilities';
 import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
 import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
 import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
@@ -833,9 +835,13 @@ export function useApi() {
       // session data-endpoint override (thin-frontend mode): which MongoDB the
       // data plane uses for this browser session
       endpoint: {
-        get: useCallback(async () => getJson('/api/v1/mongodb/endpoint'), []),
+        get: useCallback(async () => {
+          await requireAccountCollectionCapability('api.mongodb-endpoint');
+          return getJson('/api/v1/mongodb/endpoint');
+        }, []),
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoint');
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
             // Reset/selection is the recovery path for a stale data source.
             const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint', expectedDataPlane: null });
@@ -850,14 +856,20 @@ export function useApi() {
       },
       // the signed-in user's saved endpoints (persisted server-side)
       endpoints: {
-        list: useCallback(async () => getJson('/api/v1/mongodb/endpoints'), []),
+        list: useCallback(async () => {
+          await requireAccountCollectionCapability('api.mongodb-endpoints');
+          return getJson('/api/v1/mongodb/endpoints');
+        }, []),
         add: useCallback(
-          async (args?: { name?: string; url?: string }) =>
-            asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' }),
+          async (args?: { name?: string; url?: string }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoints');
+            return asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' });
+          },
           [asyncFetcher]
         ),
         remove: useCallback(
           async (args?: { id?: string }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoints');
             const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE', expectedDataPlane: null });
             ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
@@ -870,7 +882,10 @@ export function useApi() {
     },
     // cross-deployment account links (Settings → Linked deployments)
     deploymentLinks: {
-      list: useCallback(async () => getJson('/api/v1/deployment-links'), []),
+      list: useCallback(async () => {
+        await requireAccountCollectionCapability('api.deployment-links');
+        return getJson('/api/v1/deployment-links');
+      }, []),
       link: useCallback(
         async (args?: {
           baseUrl?: string;
@@ -880,21 +895,29 @@ export function useApi() {
           password?: string;
           challenge?: string;
           code?: string;
-        }) => asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' }),
+        }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' });
+        },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) =>
-          asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' }),
+        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' });
+        },
         [asyncFetcher]
       ),
       remove: useCallback(
-        async (args?: { id?: string }) =>
-          asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' }),
+        async (args?: { id?: string }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' });
+        },
         [asyncFetcher]
       ),
       sync: useCallback(
         async (args?: { id?: string; dryRun?: boolean }) => {
+          await requireAccountCollectionCapability('api.deployment-links-sync');
           const ret = asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links/sync' });
           // a pull may have rewritten local things — refresh like login does
           ret.then((result: any) => {
@@ -1066,9 +1089,10 @@ export function useApi() {
         []
       ),
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
-      create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
+      create: useCallback(async (body: Record<string, unknown>) => { await requireSubspaceCollectionCapability('create'); return asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }); }, [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
+          if (['rules','flairs','userFlairs','removalReasons'].some(field => body[field] !== undefined)) await requireSubspaceCollectionCapability('update');
           if (body.mediaPresentation !== undefined) await requireSubspaceImagePresentation();
           else if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
           return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
@@ -1098,7 +1122,10 @@ export function useApi() {
       // accept | deny (the Requests queue) | request-approval (self — an
       // active member of a restricted subspace asks for posting rights)
       mutateMember: useCallback(
-        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        async (body: Record<string, unknown>) => {
+          if (body.action === 'userFlair') await requireSubspaceCollectionCapability('members');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' });
+        },
         [asyncFetcher]
       ),
       requestApproval: useCallback(
@@ -1110,8 +1137,10 @@ export function useApi() {
       // id, or custom text + optional emoji/color; neither clears); mods may
       // name anyone
       setUserFlair: useCallback(
-        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) =>
-          asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
+        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) => {
+          await requireSubspaceCollectionCapability('members');
+          return asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' });
+        },
         [asyncFetcher]
       ),
       // remove: reason (free text) and/or reasonId (one of the subspace's
@@ -1147,15 +1176,19 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
-          getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
+        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) => {
+          await requireSubspaceCollectionCapability('feed');
+          return getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`);
+        },
         []
       ),
       // owner-only lifecycle: hand the subspace to an active member / delete
       // it (posts survive as plain posts) after retyping the slug
       transfer: useCallback(
-        async (body: { slug?: string; id?: string; userId?: string; username?: string }) =>
-          asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' }),
+        async (body: { slug?: string; id?: string; userId?: string; username?: string }) => {
+          await requireSubspaceCollectionCapability('transfer');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' });
+        },
         [asyncFetcher]
       ),
       delete: useCallback(
@@ -1175,6 +1208,20 @@ export function useApi() {
       }, [asyncFetcher])
     },
     things: {
+      acl: {
+        list: useCallback(async (args: { id: string; cursor?: string; limit?: number }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return getJson(`/api/v1/things/acl${toQuery(args)}`, options);
+        }, [getJson]),
+        add: useCallback(async (args: { id: string; entries: string[]; expectedAclRevision?: string | null }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return asyncFetcher.submit({ ...args, operation: 'add' }, { ...options, action: '/api/v1/things/acl', errorContext: 'add Thing access' });
+        }, [asyncFetcher]),
+        remove: useCallback(async (args: { id: string; entries: string[]; expectedAclRevision?: string | null }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return asyncFetcher.submit({ ...args, operation: 'remove' }, { ...options, action: '/api/v1/things/acl', errorContext: 'remove Thing access' });
+        }, [asyncFetcher])
+      },
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
           await requireSharedContentCapability('api.things-export');
@@ -1321,6 +1368,7 @@ export function useApi() {
                 planeRef.current !== expectedDataPlane || window.location.origin !== origin)
               throw new DOMException('Storage scope changed', 'AbortError');
           };
+          if (usesExpandedAuthoredCollections(args?.thingtime,args?.crystal)) await requireAuthoredCollectionCapability(options?.expectedApiOrigin);
           if (usesExpandedWebpageAuthoring(args?.crystal?.blocks)) {
             await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
             await requireThingtimeCapability('api.things-update', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
@@ -1353,6 +1401,7 @@ export function useApi() {
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things-update', PAGE_COLLECTION_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
+          if (args?.expectedAclRevision !== undefined) await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1390,6 +1439,7 @@ export function useApi() {
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(args?.expectedAclRevision !== undefined ? { expectedAclRevision: args.expectedAclRevision } : {}),
               ...(expectedStoragePolicyRevision !== undefined ? { expectedStoragePolicyRevision } : {}),
               ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
@@ -1478,6 +1528,7 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (usesExpandedAuthoredCollections(args?.thingtime,args?.crystal)) await requireAuthoredCollectionCapability(options?.expectedApiOrigin);
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
@@ -1758,7 +1809,10 @@ export function useApi() {
         await requireThingtimeCapability('api.algorithms-search', '1.0.0');
         return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
       }, []),
-      list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      list: useCallback(async () => {
+        await requireAccountCollectionCapability('api.algorithms');
+        return getJson('/api/v1/algorithms');
+      }, []),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
         async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
@@ -1767,20 +1821,21 @@ export function useApi() {
       create: useCallback(
         async (args) => {
           const { name, emoji, branchFrom, events, description } = args;
-          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
+          await requireAccountCollectionCapability('api.algorithms');
           return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
         },
         [asyncFetcher]
       ),
       update: useCallback(
         async (args) => {
-          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
+          await requireAccountCollectionCapability('api.algorithms-update');
           return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
         },
         [asyncFetcher]
       ),
       remove: useCallback(
         async (args) => {
+          await requireAccountCollectionCapability('api.algorithms-delete');
           const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/algorithms/delete' });
           // deleting the active algorithm clears the server-side pointer —
           // refresh so the feed doesn't keep requesting a dead algorithm
@@ -1799,7 +1854,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       track: useCallback(
-        async (args) => asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' }),
+        async (args) => {
+          await requireAccountCollectionCapability('api.algorithms-track');
+          return asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' });
+        },
         [asyncFetcher]
       )
     },

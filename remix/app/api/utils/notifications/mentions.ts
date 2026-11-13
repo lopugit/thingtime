@@ -49,7 +49,7 @@ export type EmitMentionInput = {
 	excludeIds?: readonly string[];
 	// per-recipient visibility gate (see module header) — only recipients this
 	// returns true for are notified
-	canRecipientView: (recipient: { id: string; username: string }) => boolean;
+	canRecipientView: (recipient: { id: string; username: string }) => boolean | Promise<boolean>;
 };
 
 // Returns the recipient ids actually notified so the caller can also exclude
@@ -68,7 +68,7 @@ export const emitMentionNotifications = async (input: EmitMentionInput): Promise
 			const recipientId = user?._id ? String(user._id) : '';
 			const username = typeof user?.username === 'string' ? user.username : '';
 			if (!recipientId || exclude.has(recipientId) || notified.has(recipientId)) continue;
-			if (!input.canRecipientView({ id: recipientId, username })) continue;
+			if (!(await input.canRecipientView({ id: recipientId, username }))) continue;
 			notified.add(recipientId);
 			// sequential emit: bounded at MENTION_CAP and each call is one indexed
 			// pref read + insert; emitNotification never throws

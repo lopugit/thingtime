@@ -8,8 +8,10 @@ test('app author projection keeps avatar presentation within the avatar grant', 
   const author: FeedAuthor = { id: 'owner', username: 'owner', displayName: 'Owner', avatarUrl: 'https://example.test/avatar.png', avatarPresentation: presentation };
   const doc = { ownerId: 'owner' } as ThingDoc;
   for (const granted of [false, true]) {
-    const items = [{ author: { ...author } as FeedAuthor | null }];
+    const items = [{ author: { ...author } as FeedAuthor | null, tokenAcl: ['tt:token/private'], tokenAclRevision: 'private-revision' }];
     await appShapeProjections({ appId: 'app', ownerId: 'owner', username: 'owner', scopes: granted ? ['profile.avatar'] : [] } as any, [doc], items);
+    assert.equal(items[0].tokenAcl, undefined);
+    assert.equal(items[0].tokenAclRevision, undefined);
     assert.equal(items[0].author?.avatarUrl, granted ? author.avatarUrl : null);
     assert.deepEqual(items[0].author?.avatarPresentation, granted ? presentation : undefined);
   }
@@ -18,6 +20,18 @@ test('app author projection keeps avatar presentation within the avatar grant', 
 test('related child projection preserves rich comment media layouts', () => {
   assert.equal(RELATED_CHILD_PROJECTION['crystal.mediaLayout'], 1);
   assert.equal(RELATED_CHILD_PROJECTION['crystal.richText'], 1);
+});
+
+test('an unavailable audience proof does not revoke exact owner authority or bypass other guards', () => {
+  const doc = { shareId: 'changing-audience', ownerId: 'owner', thingtime: ['post'],
+    acl: ['tt:user', '-tt:user', '-tt:custom'], aclBaseline: ['tt:user', 'tt:custom'], aclBaselineVersion: 1,
+    aclGeneration: 'generation', aclRevision: 'concurrent-change' } as ThingDoc;
+  assert.equal(canView(doc, { id: 'owner' }), true, 'owner authority survives an unprepared or invalidated audience proof');
+  assert.equal(canView(doc, { id: 'other', username: 'other' }), false);
+  assert.equal(canView(doc, null), false);
+  assert.equal(canView({ ...doc, moderation: { status: 'blocked' } } as ThingDoc, { id: 'owner' }), false);
+  assert.equal(canView({ ...doc, thingtime: ['acl-entry'] }, { id: 'owner' }), false);
+  assert.equal(canView(doc, { id: 'owner', pat: { tokenId: 'restricted', onlyCreatedThings: false, visibility: 'public' } }), false);
 });
 
 test('related projections keep a pending comment visible to its owner', () => {

@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { createHash } from 'node:crypto';
 import { capabilitySatisfies, thingtimeCapabilityManifest } from '../capabilities/thingtimeCapabilities';
 import { validSyncPath } from '../../../fileSync/reconcile';
@@ -100,7 +101,7 @@ export async function openReviewedAccountFileRestoreWriter(request: Request, inp
   await fenceAccountSession(request, owner, session);
   const doc = await things.findOne({ shareId: destination.rootId }, { session });
   if (!doc || doc.ownerId !== owner || !isFolderThing(doc) || doc.appId != null || doc.sandbox != null || doc.sandboxSpace != null || doc.crystal?.trashed ||
-   !Array.isArray(doc.acl) || doc.acl.length !== 1 || doc.acl[0] !== 'tt:user') fail('Choose the reviewed owned private destination');
+   hasRelationalAclEntries(doc) || !Array.isArray(doc.acl) || rootAcl(doc).length !== 1 || rootAcl(doc)[0] !== 'tt:user') fail('Choose the reviewed owned private destination');
   if (!completed && doc.timelineHeadId !== destination.rootRevision) fail('The reviewed destination revision changed');
   return doc;
  };
@@ -136,7 +137,7 @@ export async function openReviewedAccountFileRestoreWriter(request: Request, inp
     if (wanted && !wanted.has(String(row.sourceId))) continue;
     const doc = await things.findOne({ shareId: row.targetId }, { session });
     if (!doc || doc.ownerId !== owner || !isFolderThing(doc) || doc.appId != null || doc.sandbox != null || doc.sandboxSpace != null || doc.crystal?.trashed ||
-     !Array.isArray(doc.acl) || doc.acl.length !== 1 || doc.acl[0] !== 'tt:user' || doc.timelineHeadId !== row.targetRevision || (doc.executionHold && (doc.executionHold.rootId !== destination.rootId || ![binding, row.priorBinding].includes(doc.executionHold.binding))) || doc.crystal?.name !== row.name || (doc.folderId ?? null) !== await folder(row.parentSourceId as string | null)) fail('A restored folder changed before publication');
+     hasRelationalAclEntries(doc) || !Array.isArray(doc.acl) || rootAcl(doc).length !== 1 || rootAcl(doc)[0] !== 'tt:user' || doc.timelineHeadId !== row.targetRevision || (doc.executionHold && (doc.executionHold.rootId !== destination.rootId || ![binding, row.priorBinding].includes(doc.executionHold.binding))) || doc.crystal?.name !== row.name || (doc.folderId ?? null) !== await folder(row.parentSourceId as string | null)) fail('A restored folder changed before publication');
     const created = (await readTimelineEntries(things, owner, [String(row.targetRevision)], session))[0]?.event;
     if (!created || created.thingId !== row.targetId || created.actorId !== owner || created.source !== 'api' || created.operationId !== row.priorOperationId) fail('The reviewed folder has no matching restore provenance');
     const priorHold = { version: 1 as const, operationId: String(row.priorOperationId), completionEventId: String(row.priorCompletionEventId), rootId: destination.rootId, binding: String(row.priorBinding) };
@@ -318,7 +319,7 @@ export async function executeAccountFileRestore(
   await fenceAccountSession(request, owner, session);
   const doc = await things.findOne({ shareId: destination.rootId }, { session });
   if (!doc || doc.ownerId !== owner || !isFolderThing(doc) || doc.appId != null || doc.sandbox != null || doc.sandboxSpace != null || doc.crystal?.trashed ||
-   !Array.isArray(doc.acl) || doc.acl.length !== 1 || doc.acl[0] !== 'tt:user') fail('Choose the reviewed owned private destination');
+   hasRelationalAclEntries(doc) || !Array.isArray(doc.acl) || rootAcl(doc).length !== 1 || rootAcl(doc)[0] !== 'tt:user') fail('Choose the reviewed owned private destination');
   if (!completed && doc.timelineHeadId !== destination.rootRevision) fail('The reviewed destination revision changed');
   return doc;
  };

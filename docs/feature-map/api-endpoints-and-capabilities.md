@@ -1,5 +1,17 @@
 # API endpoints and capabilities
 
+Relational access uses `api.things-acl` 1.0.0 at
+`/api/v1/things/acl` (owner GET pages; POST add/remove). `api.things` 1.65.0
+and `api.things-update` 1.29.0 add ACL revision metadata and optional
+replacement fencing while preserving complete legacy ACL projections.
+Search 1.8.0 and bulk 1.10.0 preserve relational access across list/copy paths.
+Private reporting 1.2.0 resumes incomplete preparation with atomic grants and
+the same Character; it never restores explicitly revoked access. Group
+contracts 1.1.0 remove total group/member ceilings. Follow/friend 1.1.0,
+subspaces 1.8.0 and join 1.5.0 remove relational membership admission ceilings.
+Run `test:acl:relational`, `test:agent-reporting`, `test:api-capabilities` and
+the built HTTP acceptance described in [relational access](../relational-access.md).
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;
@@ -1036,3 +1048,12 @@ Photos source discovery extends the existing sync-transfer-admissions route at
 1.8.0; both manifest generators consume its canonical docs entry. Scoped native
 writes, owner reads/discard and watermark pagination share that route; no generic
 Things permission is delegated. See [source index](../sync-source-index.md).
+
+
+The relational collection release updates app/OAuth/FedCM, algorithm transfer
+and training, saved database/deployment settings, community invites and
+subspace definitions/feed contracts. Use the current explicit feature versions
+in `apiDocs.ts`; client requirements stay limited to the operations they use.
+New local tests are grouped under `test:acl:relational`. Real five-family
+acceptance uses `agent-reporting-acceptance.mjs` with scale flags described in
+[relational access](../relational-access.md).
