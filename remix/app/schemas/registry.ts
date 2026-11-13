@@ -5652,6 +5652,15 @@ const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true
 		}
 		if (Object.keys(inputs).length) source.inputs = inputs;
 	}
+	if (rawSource.retainOnInputChange !== undefined) {
+		const retained = rawSource.retainOnInputChange;
+		if (!Array.isArray(retained) || retained.some(name => typeof name !== 'string' || !COMPONENT_ARG_NAME_PATTERN.test(name) ||
+			name.length > MAX_COMPONENT_ARG_NAME_CHARS || PROTOTYPE_POLLUTION_KEYS.has(name) || /(?:^id$|id$)/i.test(name) ||
+			!Object.prototype.hasOwnProperty.call(source.inputs || {}, name)) || new Set(retained).size !== retained.length) {
+			return fail(400, 'Component/page source.retainOnInputChange must list unique, non-ID source input names');
+		}
+		if (retained.length) source.retainOnInputChange = [...retained];
+	}
 	// refresh: 'load' (default — again after every control run), 'manual'
 	// (once, on load), or 'interval' (also every intervalMs — a clock, a
 	// live tally; bounded so a page can never poll the executor hard)
