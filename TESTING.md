@@ -14876,6 +14876,14 @@ separate from deterministic discovery/lease tests.
   controller reads require the exact repository/ref and a fresh timestamp,
   return only the policy and no revision/audit data. Wrong signatures, stale
   requests and DB failure must refuse cleanup. Check both manifest generators.
+- Run `node remix/scripts/workflow-caller-contract.mjs` after changing preview
+  dispatch inputs. Confirm selected retirement IDs default to empty, dry-run
+  remains boolean/false, and the listener only forwards to `github-actions`.
+  After controller rollout, dry-run a reviewed exact-ID batch with PR 0 and
+  inspect the private policy/decision artifact before any deletion. Ordinary
+  scheduled/PR events must preserve existing behavior. Confirm the obsolete
+  standalone product promotion workflow stays absent while the protected Lopu
+  manager retains its promotion component.
 - Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
   active current-head protection, opt-in inactive open-PR expiry, failed policy
   reads and stable/production/gateway/alias protection. Real Vercel deletion is
