@@ -15,7 +15,7 @@ reads, cancellation, social metadata work and detached saves retain the correct
 lease scope. Rollback waits for client close and cache eviction before reopening.
 
 Idle-enabled MongoDB clients also attach to Vercel's supported Fluid pool helper.
-The negotiated `api.environment-gateway` contract is `1.2.2`, retaining main's
+The negotiated `api.environment-gateway` contract is `1.2.3`, retaining main's
 conditional ETag, GET/HEAD/OPTIONS and origin-fenced platform protection support.
 Shared connect/index initialization has its own gateway lease while cancelled
 HTTP callers stop only their wait; demotion cannot evict its cache or permit
@@ -102,6 +102,23 @@ review accepted the preserved home-only migration, dry-run, validator and lease
 contracts. Integrated focused checks pass 122 collections/lifecycle tests, 203
 capability tests and five migration-fence tests; prior unchanged gateway tests
 remain valid. Final-head required CI and deployed acceptance remain gates.
+
+## Final capability version
+
+Main `0bb200b` already publishes `api.environment-gateway` `1.2.2` for the
+platform protection correction. Its runtime still lacks this PR's admission/drain
+and shared-initializer lease correction. Publish the latter as compatible patch
+`1.2.3`; preserve GET/HEAD/OPTIONS, conditional ETags and unrelated feature
+versions. Earlier `1.2.2` preview and acceptance observations above remain
+historical. This final version-only adjustment leaves gateway/MongoDB/request
+budget behavior unchanged from the freshly accepted `0bb200b` integration; the
+final built preview must independently advertise `1.2.3`.
+
+Canonical client/template/node-server builds and real-Mongo acceptance passed
+again at 17:44 UTC with the new `1.2.3` floor: all auth/read/write/CSRF, dedicated
+database/metadata, promotion and rollback assertions passed; follower dials zero,
+outgoing owner/successor client closures one each, unchanged cold DDL zero and
+peak DDL two. The version-only adjustment also passes all 203 capability tests.
 
 ## Measurement limits
 
