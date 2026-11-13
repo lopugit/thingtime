@@ -720,7 +720,7 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.65.0', '1.49.2'], ['api.things-update', '1.29.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.9.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.2.0', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.65.0', '1.49.2'], ['api.things-update', '1.29.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.9.0', '1.6.0'], ['api.actions-run', '1.46.0', '1.40.1'], ['api.chatgpt-mcp', '2.2.1', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
   assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);
@@ -886,4 +886,15 @@ test('Archive extended reads reject the deployed Component-only 1.62 contract', 
   const runtime = thingtimeCapabilityManifest('https://archive.test').features['api.things'].version;
   for (const version of [current, runtime]) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), true);
   for (const version of [undefined, '1.62.0', '1.62.99', '2.0.0']) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), false);
+});
+
+
+test('MCP Apps bridge repair publishes a compatible patch on both origin manifests', () => {
+  const feature = 'api.chatgpt-mcp';
+  assert.equal(createApiCapabilitiesManifest().features[feature], '2.2.1');
+  assert.equal(thingtimeCapabilityManifest('https://mcp.example').features[feature].version, '2.2.1');
+  assert.equal(capabilitySatisfies('2.2.1', '2.2.0'), true);
+  assert.equal(capabilitySatisfies('2.2.0', '2.2.1'), false);
+  assert.equal(capabilitySatisfies('3.0.0', '2.2.1'), false);
+  assert.equal(capabilitySatisfies(undefined, '2.2.1'), false);
 });
