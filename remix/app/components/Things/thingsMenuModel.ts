@@ -95,6 +95,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
 };
 
 export type ThingsBackgroundMenuArgs = {
+  libraryNavigation?: boolean;
   allowCreation?: boolean;
   clipboardCount: number;
   itemCount: number;
@@ -167,6 +168,7 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode, allowColu
 
 export const buildThingsBackgroundMenu = ({
   allowCreation = true,
+  libraryNavigation = false,
   clipboardCount,
   itemCount,
   sort,
@@ -191,6 +193,10 @@ export const buildThingsBackgroundMenu = ({
         }
       ]
     }] : []),
+    ...(libraryNavigation ? [{ id: 'library', label: 'Library', actions: [
+      { id: 'lidar-scans', label: 'LiDAR scans', icon: '📐', lucide: 'scan', href: '/things?lidar=1' },
+      { id: 'unfiled-files', label: 'Unfiled files', icon: '📁', lucide: 'folder', href: '/things?unfiled=attachments' }
+    ] }] : []),
     {
       id: 'arrange',
       label: 'Arrange',

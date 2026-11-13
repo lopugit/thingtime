@@ -1,10 +1,15 @@
 # Native iOS LiDAR scans
 
-The iOS drawer's **Scan — Open LiDAR Scanner** entry and an editable Thingtime
-UI action open the same native scanner. A compatible iPhone or iPad with LiDAR
+The iOS drawer's **LiDAR scans** entry opens `/things?lidar=1`, the dedicated
+scan library. Its editable scan action opens the native scanner. A compatible iPhone or iPad with LiDAR
 is required. Opening the controls does not start the camera: the person taps
-Start and grants the normal camera permission. Finish seals the local archive
-and automatically saves it as a private File Thing in the verified Home account.
+Start and grants the normal camera permission. Finish seals and preserves the local archive without automatically uploading.
+The library lists device scans, including unsaved and partial captures, using
+ordinary Thing browser cards. **Save to Thingtime** is available as a button
+and context-menu action, with **Device only** and **Cloud** choices. Device only
+records a durable local Thing without a server write; Cloud explicitly publishes
+the chosen scan as a private File Thing in the verified Home account. A cloud
+save retains its device original.
 
 The capture is an original-data archive, not only a rendered or simplified
 model. Apple exposes processed scene depth through ARKit; unpublished hardware
@@ -51,8 +56,9 @@ and committed frame records, then seals a separate copy-on-write APFS clone,
 `scan-recovered.tar`, for a valid interrupted capture. Corrupt headers and scans
 with no complete frames remain local and cannot be published as successful
 scans. If safe cloning is unavailable, recovery fails with the original intact.
-Pending status selects the newest usable capture; an explicit Retry stays bound
-to its selected scan ID. Previously published empty Files are not deleted.
+Legacy pending status selects the newest usable capture; the v1.1 scan inventory
+returns every retained scan in the verified owner/origin scope. An explicit save
+or Retry stays bound to its selected scan ID. Previously published empty Files are not deleted.
 
 The scanner currently publishes to the signed-in account's Home data plane.
 A selected external database is not silently used. A scanner button in Safari
@@ -64,13 +70,20 @@ There is no remote command that silently opens another device's camera.
 
 ## Native bridge
 
-Negotiate `window.thingtimeNativeBridge.lidarVersion` major 1 (minimum 1.0.0).
+Negotiate `window.thingtimeNativeBridge.lidarVersion` major 1. The dedicated
+library and explicit save choices require minimum 1.1.0; older hosts show an
+update requirement instead of invoking their automatic-upload capture flow.
 The general bridge's presence does not prove scanner or hardware support.
-`lidar-scan` accepts an explicit action (`status`, `start`, `retry`, `suspend`),
-a UUID `requestId`, `ownerId`, and exact `origin`; retry can identify `scanId`.
+`lidar-scan` accepts an explicit action (`status`, `start`, `retry`, `save`, `suspend`),
+a UUID `requestId`, `ownerId`, and exact `origin`; explicit saves identify
+`scanId` and `destination` (`device` or `cloud`). Status returns the scoped scan
+inventory with durable save status; JavaScript never receives archive paths
+or bytes. Existing legacy retry records keep their immutable upload identity.
 The main-frame bridge checks the loaded and selected origins before processing.
 `lidar-scan-result` returns the same request/owner/origin with `supported` and
-`state`: `idle`, `capturing`, `saving`, `saved`, `pending`, `cancelled`, or `error`.
+`state`: `idle`, `capturing`, `saving`, `saved`, `device-saved`, `pending`,
+`cancelled`, or `error`. `device-saved` confirms the local catalogue marker;
+only `saved` confirms a cloud File receipt.
 `capturing` means the scanner is open; recording still requires Start. Progress
 and terminal results retain request identity. A saved result includes `scanId`
 and `fileThingId`. Pending/error results carry a user-facing explanation.

@@ -284,9 +284,18 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 - [ ] Author the dashboard page, components, schema references and write
       Actions as saved Things in Thingtime. Confirm no account-specific Thing
       definitions or credentials are committed with the reusable adapter.
+- [ ] Run `node scripts/live-source-navigation.browser.mjs` from `remix/`
+      (set `TT_PLAYWRIGHT_MODULE` to an installed Playwright module when needed).
+      At desktop and mobile widths, verify same-page URL filters preserve the
+      input and focus, Enter applies the query, permitted refreshes retain
+      content, stale responses cannot win, and cached results survive reload.
+      Changing the selected target or viewer must clear the old result and
+      local draft before the replacement can render.
 - [ ] Use an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture to identify
       disposable local saved Things. Keep it outside Git and verify selected
-      origin, IDs and `api.agent-overview` 2.0.0 before the run.
+      origin, IDs and `api.agent-overview` 2.2.0 before the run. A saved source
+      using `retainOnInputChange` also requires Things 1.65.0, Things update
+      1.29.0 and Webpages resolve 1.20.0 at that origin.
 - [ ] Compare project/task/agent records and relational todo, question and
       progress Things with ordinary API readback under the same authorized
       viewer. Verify ACL, Character, app namespace and scoped-token boundaries.
@@ -296,10 +305,26 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 - [ ] Change classifications or another cursor-bound filter and confirm the
       old cursor is rejected. Confirm raw statuses, numeric depth and absent
       titles are left for saved-page presentation; no indent, label or fallback
-      title is expected from the API.
+      title is expected from the API. Check the semantic statusGroup on task,
+      project and agent rows and Kanban columns against the configured groups;
+      the saved page chooses colour and labels.
+- [ ] Compare a task card's `lastActivityAt` against the newest actual task,
+      directly linked progress, question, todo and agent source timestamp.
+      Verify malformed/missing dates stay null and child task updates belong
+      to the child card. Show every authorized question, open first, with
+      answered Q/answer available on the same card; verify the per-question
+      answered flag and open counts agree with status and answer text.
+- [ ] Archive a task with a saved Action and confirm active board views hide it
+      and its descendants through task and agent parents without changing
+      status, audience or child records. Switch to Archived and All, follow
+      an archived ancestor link, restore the owning task and verify the board
+      returns. Exact task detail and its `selectedChildren` must stay readable.
+      Reject invalid or repeated archive filters and stale cursors.
 - [ ] Confirm complete versus partial coverage and lower-bound partial counts.
       Include detached parents and cycles; preserve rows and identify unresolved
-      parents until their scan completes.
+      parents until their scan completes. When relatedRecordsComplete or
+      archiveTreeComplete is false, do not present latest-seen activity,
+      question counts or inherited archive state as final.
 - [ ] Leave measurements unknown and verify null/unavailable display, never
       fabricated zero or inferred runtime. Record only measured values and
       compare them against source Things.
@@ -3127,11 +3152,12 @@ email whose link points at the attacker.
       return exact 206 bytes for the signed version and Range; altered key,
       version, method, expiry, signature, or missing/changed Range must fail.
       Range-only URLs must never serve a whole object or a clamped range.
-- [ ] Download all (PR: download-all attachments): a post with two or more
-      stored attachments shows a `Download all · N files · size` pill under its
-      gallery/file rows (single-file posts and linked-only galleries show none).
-      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
-      first, then saves `<post opener>.zip`; unzip it and confirm every stored
+- [ ] Download all: at desktop and narrow mobile widths, posts and comments
+      with multiple stored attachments show no inline `Download all` pill or
+      bulk-download control in their media lightbox. Open the post/comment ⋯
+      context menu and choose **Files → Download all files (N files)**. This
+      fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1` first,
+      then saves `<post opener>.zip`; unzip it and confirm every stored
       file is present in gallery order with duplicate names suffixed ` (2)`,
       linked media listed in `links.txt`, and moderation-pending/blocked files
       absent for other viewers. The post ⋯ menu shows a **Files** section with
@@ -16060,7 +16086,7 @@ private readback while an unrelated Home fixture remains paused.
   a 512 MiB native indexer budget from missing readings. The iOS browser fixture
   deliberately supplies stale policy-like readings to verify they stay hidden.
 
-## iOS LiDAR capture and automatic Things save
+## iOS LiDAR capture and explicit Things save
 
 - Recover a valid sparse archive larger than 6 GB and compare frame counts and
   original bytes. Inject an invalid early header and interrupt before the first
@@ -16323,3 +16349,34 @@ never print the file-download JSON, encryption metadata or signed URL.
   verify index children and their accounted bytes cascade without orphaning.
 - Run native outbox/discovery tests, parser/manifests and built HTTP transfer
   fixture. Simulator/build evidence does not establish physical background work.
+
+
+### Compact devices and explicit scan library saves — 2026-11-12
+
+- At desktop/mobile widths, confirm Things breadcrumbs have no LiDAR panel,
+  Device setup or Unfiled files button. Reach LiDAR scans and Unfiled files from
+  the touch/keyboard and background menus; reach Show Folder from the device menu.
+- Fresh device details start with all sections collapsed. Expand every available
+  section and menu, scroll to the bottom, and check focus, wrapping and overflow.
+  Preserve deliberate remembered choices and account isolation.
+- Paired and unknown native status hide Device setup. Unpaired/pending/revoked
+  status shows setup below its device card (a compact This device entry when no
+  registered item exists); successful pairing hides it immediately.
+- Compare location rows with an independent authorized API read. Initially show
+  the newest ten; inline Show more immediately below the list appends ten more
+  without duplicates and disappears at the end. Test filters, refresh, failure,
+  retry, and identity/device changes during reads. Preserve all stored history.
+- In the dedicated LiDAR page, inspect device and unsaved/partial scan Things.
+  Exercise Save to Thingtime via both button and context menu. Device only must
+  survive restart with no cloud write; Cloud must save the exact chosen scan and
+  verify the File/attachment receipt. Preserve originals and prior explicit
+  upload intents; old hosts must show the update requirement.
+- Physical LiDAR iPhone/iPad acceptance covers capture, device-only restart,
+  cloud save, cancellation and account changes. Simulator/fixture checks do not
+  establish sensor capture or real upload. Edit a nested label/control in Builder,
+  save/reload and recheck its behavior independently.
+
+- Focused rendered regressions: `cd remix && node scripts/device-details.browser.mjs`
+  and `node scripts/lidar-scan.browser.mjs`. These use isolated Chromium with
+  synthetic HTTP/native data; keep their evidence separate from deployed data
+  and physical LiDAR acceptance.

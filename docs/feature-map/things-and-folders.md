@@ -1215,3 +1215,19 @@ provider/revision and staged-file checks across concurrent part reads; cache
 budgets never impose a file-size limit. `PhotoOriginalCacheTests` covers sibling
 lookahead reuse, invalidation, ownership cleanup and oversized originals, alongside
 the shared `PhotoLibraryTests` suite.
+
+### Device and scan library navigation — 2026-11-12
+
+`ThingsPage.tsx` routes `/things?lidar=1` to `LidarScanLibraryPage`, using the
+shared Thing browser cards and action slots. The Things context/settings menus
+link LiDAR scans and Unfiled files; New also links the scanner. Setup belongs
+beneath the device item and is shown only after native status confirms setup
+is needed. `MobileDeviceSetupEntry.tsx` subscribes to origin/owner/generation
+scoped pairing observations. Device Show Folder remains a context action.
+`deviceLocation.client.ts` requests ten newest observations per cursor; the
+saved `/devices/location` composition owns the inline Show more control and
+collapsed filters/locate controls. See `docs/native-lidar-scans.md` and the
+Device location / LiDAR sections of `TESTING.md` for acceptance requirements.
+
+Rendered regression entry points: `remix/scripts/device-details.browser.mjs`
+and `remix/scripts/lidar-scan.browser.mjs` (isolated synthetic fixtures).

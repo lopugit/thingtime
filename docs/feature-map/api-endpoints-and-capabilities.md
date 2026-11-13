@@ -5,7 +5,7 @@ Private diagnostics use `api.devices-diagnostics` and
 narrow paired safe-event append. The service owns live-session/pairing fences,
 default provisioning, immutable IDs, accounting and watermarked clear. Both
 manifests derive registered routes. `api.auth-me` 1.3 adds non-failing provisioning;
-Things 1.65/Things-update 1.29 retain private managed-folder boundaries. See
+Things 1.66/Things-update 1.30 retain private managed-folder boundaries. See
 [the contract](../private-device-diagnostics.md); run diagnostic, schema, owner
 query, capability suites and the built API diagnostics fixture.
 
@@ -53,6 +53,21 @@ to the authorized hierarchy before pagination. The response includes effective
 selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
 the new filters. See [the overview adapter](../agent-overview.md) and run
 `test:agent-overview` and `test:api-capabilities`.
+
+`api.agent-overview` 2.2.0 adds optional `archive` task filtering and
+allowlisted per-task `lastActivityAt`, `statusGroup` and `openQuestions` fields.
+Archive remains saved task data updated through authorized saved Actions; this
+read adapter does not mutate it or use owner-home library Archive. The cursor
+includes archive selection. See [the overview adapter](../agent-overview.md).
+
+Saved source `retainOnInputChange` is an additive Builder composition contract:
+`api.things` 1.65.0, `api.things-update` 1.29.0 and
+`api.webpages-resolve` 1.20.0 validate and preserve unique non-ID source
+input names. Runtime retention remains scoped to the same authorized page,
+source and identity. See [the overview adapter](../agent-overview.md).
+Run `node scripts/live-source-navigation.browser.mjs` from `remix/` for the
+synthetic desktop/mobile query, cache, focus and target-identity regression;
+the Agent overview checklist in `TESTING.md` covers saved-page acceptance.
 
 Owner Things archive uses additive `api.things` 1.59.0,
 `api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner

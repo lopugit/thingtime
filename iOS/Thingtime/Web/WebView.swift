@@ -137,10 +137,7 @@ struct WebView: UIViewRepresentable {
                   LiDARLaunchRoute.canConsume(pendingOrigin: pendingNativeScanOrigin,
                       selectedOrigin: root, currentURL: webView.url, isLoading: webView.isLoading) else { return }
             pendingNativeScanOrigin = nil
-            lidar.openFromNative(webView: webView, root: root,
-                currentRoot: { [weak self] in self?.loadedRootURL },
-                cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
-                reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            if let url = LiDARLaunchRoute.libraryURL(origin: root) { webView.load(URLRequest(url: url)) }
         }
         private var pendingVoiceStart = UUID()
         private var pendingRecordingSync = UUID()
