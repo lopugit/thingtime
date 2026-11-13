@@ -22,6 +22,7 @@ const algorithmScale = process.argv.includes('--algorithm-scale');
 const collectionsUiOnly = process.argv.includes('--collections-ui-only');
 const collectionsScale = process.argv.includes('--relational-collections') || collectionsUiOnly;
 const aclScale = process.argv.includes('--acl-scale');
+const aclBoundaries = aclScale || process.argv.includes('--acl-boundaries');
 const reconnectOnly = process.argv.includes('--scoped-reconnect');
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
 assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
@@ -177,13 +178,30 @@ async function browserScopedConsent(cookie, attempt, username) {
 }
 let rpcId = 0;
 async function mcp(token, name, args) {
+  const started = Date.now();
   const { data } = await request('/api/v1/integrations/chatgpt/mcp', { token, body: { jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } } });
   assert(data?.result, 'MCP must return a JSON-RPC tool result');
   const result = data.result;
   const value = result.structuredContent || (() => { try { return JSON.parse(result.content?.find(c => c.type === 'text')?.text || '{}'); } catch { return {}; } })();
+  if (value.status >= 500) console.log(JSON.stringify({ event: 'mcp-upstream-failure', name, status: value.status, elapsedMs: Date.now() - started }));
+  else if (name === 'prepare_thingtime_agent_task' && Date.now() - started >= 5000)
+    console.log(JSON.stringify({ event: 'slow-workspace-prepare', externalTaskId: args.externalTaskId, elapsedMs: Date.now() - started, status: value.status || 200 }));
   return { error: result.isError || !!value.error, value, challenge: result._meta?.['mcp/www_authenticate']?.[0] };
 }
-async function tool(token, name, args) { const result = await mcp(token, name, args); assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`); return result.value.result || result.value; }
+async function tool(token, name, args) {
+  const result = await mcp(token, name, args);
+  if (result.error && result.value.status >= 500 && ['report_thingtime_agent_task', 'coordinate_thingtime_agent_task'].includes(name)) {
+    // An uncertain write is inspected once, never resubmitted. Keep output to
+    // receipt metadata; no private record fields or returned credentials.
+    const inspected = await mcp(token, 'get_thingtime_agent_task', { accountId: args.accountId, externalTaskId: args.externalTaskId }).catch(() => null);
+    const state = inspected?.value?.result || inspected?.value;
+    console.log(JSON.stringify({ event: 'uncertain-report-receipt', requestId: args.requestId,
+      readStatus: inspected ? inspected.error ? state?.status || 'refused' : 'ok' : 'unavailable',
+      activeOperation: state?.activeOperation ? { requestId: state.activeOperation.requestId, status: state.activeOperation.status } : null }));
+  }
+  assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`);
+  return result.value.result || result.value;
+}
 async function verifyCoordination(bridge, identity, subspaceId, owner, stranger) {
   const args = { ...identity, requestId: randomUUID(), title: 'Synthetic task coordination', text: 'Private acceptance started', renderComponent: { render: { tag: 'p', children: ['{text}'] } } };
   const coordinated = await tool(bridge, 'coordinate_thingtime_agent_task', args);
@@ -453,7 +471,7 @@ try {
   if (algorithmScale) await runSection('algorithm-profiles', () => verifyAlgorithmScale(owner, stranger));
   if (collectionsScale) await runSection('relational-collections', async () => {
     const { runRelationalCollectionsAcceptance } = await import('./relational-collections-acceptance.mjs');
-    await runRelationalCollectionsAcceptance({ request, owner, stranger, origin, ports, checks, evidenceDir, targetedUi: collectionsUiOnly });
+    await runRelationalCollectionsAcceptance({ request, owner, stranger, origin, ports, checks, evidenceDir, targetedUi: collectionsUiOnly, skipOwnershipScale: process.argv.includes('--skip-ownership-scale') });
   });
   if (tokenReactionScale) await runSection('token-grants-and-reactions', async () => {
     const { runTokenReactionAcceptance } = await import('./relational-token-reaction-acceptance.mjs');
@@ -471,7 +489,7 @@ try {
     const identity = { externalTaskId: 'scoped-oauth-acceptance', accountId: upgraded.accountId };
     const prepared = await tool(upgraded.bridge, 'prepare_thingtime_agent_task', { ...identity, displayName: 'Synthetic OAuth reporter', workspace: syntheticWorkspace });
     assert(prepared.binding?.characterId && prepared.binding.characterId !== owner.data.user.id);
-    if (aclScale) await runSection('relational-ACL-boundaries', async () => {
+    if (aclBoundaries) await runSection('relational-ACL-boundaries', async () => {
       const createAudience = async acl => {
         const result = await request('/api/v1/things', { cookie: owner.cookie,
           body: { thingtime: ['data'], acl, crystal: { name: 'Synthetic ACL boundary' } } });
@@ -495,15 +513,23 @@ try {
       const hidden = await createAudience(['tt:hidden']); assert(hidden.linkKey);
       await request('/api/v1/things/acl', { cookie: owner.cookie,
         body: { id: hidden.id, operation: 'add', entries: ['tt:user/synthetic-hidden-reader'] } });
-      await readAudience(hidden.id, { status: 404 });
+      // Canonical exact IDs are the current unlisted capability; hidden roots
+      // stay out of ordinary discovery, while legacy keyed URLs still work.
+      await readAudience(hidden.id);
+      await request('/api/v1/things?thingtime=data&limit=50', { status: 401 });
+      const ordinaryList = (await request('/api/v1/things?thingtime=data&limit=50', { cookie: allowedPublicReader.cookie })).data;
+      assert(!ordinaryList.things.some(thing => thing.id === hidden.id), 'Unlisted root stays out of ordinary discovery');
       const hiddenPath = '/api/v1/things?' + new URLSearchParams({ id: hidden.id, key: hidden.linkKey });
       await request(hiddenPath);
       await request('/api/v1/things/update', { cookie: owner.cookie,
         body: { id: hidden.id, crystal: { name: 'Edited hidden relational audience' } } });
-      await request(hiddenPath); await readAudience(hidden.id, { status: 404 });
+      await request(hiddenPath); await readAudience(hidden.id);
       const hiddenRead = (await readAudience(hidden.id, { cookie: owner.cookie })).data.thing;
       assert(hiddenRead.acl.includes('tt:hidden') && hiddenRead.acl.includes('tt:user/synthetic-hidden-reader'));
       assert(hiddenRead.linkKey === hidden.linkKey, 'Hidden link identity survives the generic edit');
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: hidden.id, acl: ['tt:user'], expectedAclRevision: hiddenRead.aclRevision } });
+      await readAudience(hidden.id, { status: 404 }); await request(hiddenPath, { status: 404 });
       const custom = await createAudience(['tt:user']);
       const writer = `tt:user/${stranger.data.user.username}/write`;
       await request('/api/v1/things/acl', { cookie: owner.cookie,

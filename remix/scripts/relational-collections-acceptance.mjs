@@ -6,7 +6,7 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-export async function runRelationalCollectionsAcceptance({request,owner,stranger,origin,checks,evidenceDir:providedEvidence,targetedUi=false}) {
+export async function runRelationalCollectionsAcceptance({request,owner,stranger,origin,checks,evidenceDir:providedEvidence,targetedUi=false,skipOwnershipScale=false}) {
   assert(['127.0.0.1','localhost','[::1]'].includes(new URL(origin).hostname),'Use only the task-owned isolated loopback backend');
   const evidenceDir=providedEvidence||await mkdtemp(join(tmpdir(),'thingtime-relational-qa-'));
   const call=async(path,options={})=>{
@@ -39,7 +39,7 @@ export async function runRelationalCollectionsAcceptance({request,owner,stranger
   // the documented moderator update contract.
   await call('/api/v1/subspaces/update',{cookie:owner.cookie,body:{id:created.id,userFlairs:definitions.userFlairs,removalReasons:definitions.removalReasons,allowCustomUserFlair:true}});
   const read=async()=> (await call(`/api/v1/subspaces/get?id=${encodeURIComponent(created.id)}`,{cookie:owner.cookie})).data.subspace;
-  if(targetedUi){
+  if(targetedUi&&!skipOwnershipScale){
     const owned=[];
     for(let index=0;index<26;index++)owned.push((await call('/api/v1/subspaces',{cookie:owner.cookie,body:{slug:`scale_${suffix}_${index}`,name:`Ownership scale ${index}`,access:'public'},status:201})).data.subspace);
     const transferSource=(await call('/api/v1/subspaces',{cookie:stranger.cookie,body:{slug:`handover_${suffix}`,name:'Ownership handover',access:'public'},status:201})).data.subspace;
@@ -195,7 +195,26 @@ export async function runRelationalCollectionsAcceptance({request,owner,stranger
       assert.equal((await read()).viewer.userFlair.label,flairText,'Full custom flair survives independent readback');
       await page.reload();
       await page.getByTestId('user-flair-custom').waitFor({state:'visible'});
+      await page.waitForFunction(expected=>document.querySelector('[data-testid="user-flair-custom"]')?.value===expected,flairText);
       assert.equal(await page.getByTestId('user-flair-custom').inputValue(),flairText,'Custom flair survives reload');
+      const badgeStyles=await page.getByTestId('author-flair').evaluateAll((elements,expected)=>{
+        const properties=['whiteSpace','display','minWidth','maxWidth','overflow','textOverflow','overflowWrap','wordBreak','borderRadius','lineHeight','borderTopWidth','borderBottomWidth','alignItems'];
+        const styles=element=>{const computed=getComputedStyle(element);return Object.fromEntries(properties.map(name=>[name,computed[name]]));};
+        return elements.map(element=>{
+          const rules=[];
+          const scan=list=>{for(const rule of list){
+            if(rule.selectorText){try{if(element.matches(rule.selectorText)&&['white-space','display','min-width','max-width','overflow','text-overflow','overflow-wrap','word-break'].some(name=>rule.style.getPropertyValue(name)))rules.push({selector:rule.selectorText,declaration:rule.style.cssText});}catch{}}
+            else if(rule.cssRules&&(!rule.conditionText||matchMedia(rule.conditionText).matches))scan(rule.cssRules);
+          }};
+          for(const sheet of document.styleSheets){try{scan(sheet.cssRules);}catch{}}
+          const rect=element.getBoundingClientRect();
+          return {style:styles(element),width:rect.width,height:rect.height,fullText:element.textContent.includes(expected),parent:element.parentElement?styles(element.parentElement):null,rules:rules.slice(-12)};
+        });
+      },flairText);
+      console.log(JSON.stringify({event:'author-flair-style',viewport:name,badges:badgeStyles}));
+      assert(badgeStyles.length>0&&badgeStyles.every(badge=>badge.fullText&&badge.style.whiteSpace==='nowrap'&&
+        badge.height<=parseFloat(badge.style.lineHeight)+parseFloat(badge.style.borderTopWidth)+parseFloat(badge.style.borderBottomWidth)+2),
+        'Long author flair stays a compact single-line badge in the real PostCard and sidebar');
       await inspect('relational-subspace-feed-'+name);
     }
     await context.close();
