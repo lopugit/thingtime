@@ -804,6 +804,21 @@ branch runs its own control-plane contract CI. Updating the implementation no
 longer requires separately merging the same behavior into `develop` and `main`;
 the thin listeners on both branches call the same reviewed revision immediately.
 
+### Reviewed preview retirement
+
+The manual `develop-pr-preview.yml` listener accepts optional
+`retirement_deployment_ids` (a JSON array of exact deployment IDs) and
+`retirement_dry_run` (boolean). Explicit selection requires `pr_number: 0`.
+The protected controller support must be merged before forwarding these inputs;
+[controller PR #1499](https://github.com/lopugit/thingtime/pull/1499) supplies it.
+Empty selection and false keep existing scheduled and PR-event behavior.
+
+Run a selected batch with dry-run enabled first. Review its private decision
+artifact and current saved retention policy, recheck recent legitimate use, then
+execute only the reviewed exact IDs. The protected job retains its existing
+credentials and rechecks policy, project/PR ownership, grace, aliases and active
+roles. Adding listener inputs performs no cleanup or protection change.
+
 ### CodeQL coverage for every PR target and branch
 
 Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's

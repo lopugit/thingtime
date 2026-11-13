@@ -172,6 +172,14 @@ assert.match(
   'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
 );
 
+
+const retirementDispatch = developPreviewCaller.split('  workflow_dispatch:\n')[1]?.split('\n  repository_dispatch:')[0];
+assert.ok(retirementDispatch, 'reviewed retirement must remain an explicit manual dispatch');
+assert.match(retirementDispatch, /retirement_deployment_ids:\n        description: [^\n]+\n        required: false\n        default: ''\n        type: string/, 'deployment selection is an optional JSON string with an empty default');
+assert.match(retirementDispatch, /retirement_dry_run:\n        description: [^\n]+\n        required: false\n        default: false\n        type: boolean/, 'dry-run forwarding must preserve the reusable workflow boolean type');
+assert.match(developPreviewCaller, /^      retirement_deployment_ids: \$\{\{ inputs\.retirement_deployment_ids \|\| '' \}\}$/m);
+assert.match(developPreviewCaller, /^      retirement_dry_run: \$\{\{ inputs\.retirement_dry_run \|\| false \}\}$/m);
+
 for (const retiredPublicWorkflow of [
   'all-branch.yml',
   'rebase-pr-stacks.yml',

@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 import { safeErrorText } from '~/api/utils/errors/safeError';
-import { fetchRemoteJson, resolveStatusTarget } from '~/api/utils/health/statusTarget';
+import { ProtectedStatusTargetError, fetchRemoteJson, resolveStatusTarget } from '~/api/utils/health/statusTarget';
 import { getVercelDeploymentStatus, type VercelDeploymentStatus } from '~/api/utils/vercel/status';
 
 const unavailableVercelStatus = (error: unknown): VercelDeploymentStatus => {
@@ -8,7 +8,7 @@ const unavailableVercelStatus = (error: unknown): VercelDeploymentStatus => {
     configured: false,
     hasError: true,
     error: safeErrorText(error, 'health: remote vercel status', 'Remote status unavailable'),
-    label: 'Vercel: status unavailable',
+    label: error instanceof ProtectedStatusTargetError ? 'Vercel: authentication required' : 'Vercel: status unavailable',
     state: 'unknown'
   };
 };
