@@ -21,7 +21,7 @@ the prepared scoped diff onto that freshly fetched controller base.
 
 ## Verification and limits
 
-The deployment/authentication/retirement family passed 80 tests; the develop
+The deployment/authentication/retirement family passed 83 tests after integrating the concurrent gateway-lease admission update; the develop
 publisher passed 318 self-tests; the admin publisher and workflow control-plane
 contract passed. All other deterministic verify-step commands passed locally.
 Changed JavaScript syntax and workflow YAML checks passed. The first CI run
