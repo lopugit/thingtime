@@ -57,6 +57,7 @@ import { ATTACHMENT_ARCHIVE_REQUIREMENTS, attachmentArchiveUrl } from '~/compone
 import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { applyGroupMemberBatches } from './groupMemberBatches';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload, ThingtimeApiError } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
@@ -158,6 +159,33 @@ export function useApi() {
   const actionUser = useCurrentUser();
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
+
+  const groupMemberBatches = useCallback(async (
+    args: { id: string; addMemberIds?: string[]; removeMemberIds?: string[] },
+    scope?: { actor: string; plane: string | null; origin: string; guard: () => void }
+  ) => {
+    const actor = scope?.actor ?? actionActor.current, plane = scope?.plane ?? planeRef.current;
+    const origin = scope?.origin ?? window.location.origin;
+    const generation = rootIdentity.read().generation;
+    const guard = scope?.guard ?? (() => {
+      const identity = rootIdentity.read();
+      if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane || window.location.origin !== origin)
+        throw new DOMException('Account or API origin changed', 'AbortError');
+    });
+    if (!actor) throw new DOMException('Sign in before editing a group', 'AbortError');
+    guard();
+    await requireThingtimeCapability('api.groups', '1.2.0', origin);
+    guard();
+    const options = { action: '/api/v1/groups', method: 'PATCH', expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin };
+    return applyGroupMemberBatches(args, {
+      guard,
+      submit: (body) => asyncFetcher.submit(body, options),
+      read: async () => {
+        const groups = await getJson('/api/v1/groups', { expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin });
+        return groups?.groups?.find((entry: any) => entry.id === args.id);
+      }
+    });
+  }, [asyncFetcher, getJson]);
 
   const v1 = {
     backups: {
@@ -1816,6 +1844,33 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
+      updateMembers: groupMemberBatches,
+      createWithMembers: useCallback(async (args: { name: string; memberIds: string[] }) => {
+        const actor = actionActor.current, plane = planeRef.current, origin = window.location.origin;
+        const generation = rootIdentity.read().generation;
+        const guard = () => {
+          const identity = rootIdentity.read();
+          if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane || window.location.origin !== origin)
+            throw new DOMException('Account or API origin changed', 'AbortError');
+        };
+        if (!actor) throw new DOMException('Sign in before editing a group', 'AbortError');
+        guard();
+        await requireThingtimeCapability('api.groups', '1.2.0', origin);
+        guard();
+        const options = { action: '/api/v1/groups', expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin };
+        const created = await asyncFetcher.submit({ name: args.name }, options);
+        const groupId = created?.group?.id;
+        if (!groupId) throw new Error('Group creation outcome is uncertain. Check the original account before retrying.');
+        try {
+          guard();
+          const result = args.memberIds.length ? await groupMemberBatches({ id: groupId, addMemberIds: args.memberIds }, { actor, plane, origin, guard }) : null;
+          guard();
+          return { group: { ...created.group, memberCount: result?.membership?.memberCount ?? 0 } };
+        } catch (error) {
+          if (error instanceof Error && error.name !== 'AbortError') (error as any).groupId = groupId;
+          throw error;
+        }
+      }, [asyncFetcher, groupMemberBatches]),
       remove: useCallback(
         async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
         [asyncFetcher]
