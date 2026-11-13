@@ -16,7 +16,7 @@ const quota = (core = 1000, upload = 1000, reset = (start / 1000) + 300) => ({ r
   core: { remaining: core, reset }, code_scanning_upload: { remaining: upload, reset }
 } });
 
-async function execute(mode, responses, overrides = {}) {
+async function execute(mode, responses, overrides = {}, control = {}) {
   let time = start;
   const calls = [], waits = [], logs = [];
   const files = { '/temp/codeql-sarif/deadline': String(start + 65 * 60000) };
@@ -31,7 +31,7 @@ async function execute(mode, responses, overrides = {}) {
   const clock = class extends Date { static now() { return time; } };
   const keys = ['readFileSync', 'writeFileSync', 'readdirSync', 'lstatSync', 'createHash', 'execFileSync', 'join', 'sleep', 'process', 'Date', 'fetch', 'console'];
   const values = [path => files[path], (path, value) => { files[path] = value; }, () => ['upload.sarif'], () => ({ isFile: () => true }), createHash, () => sha, join,
-    async delay => { waits.push(delay); time += delay; }, { argv: ['', '', mode], env }, clock, fetch, { log: value => logs.push(value) }];
+    async delay => { waits.push(delay); if (control.cancelOnWait) throw Error('cancelled'); time += delay; }, { argv: ['', '', mode], env }, clock, fetch, { log: value => logs.push(value) }];
   if (mode === 'evidence') for (const sub of ['raw', 'processed']) files[`/temp/codeql-sarif/${sub}/upload.sarif`] = Buffer.from(JSON.stringify({ runs: [{ tool: { driver: { name: 'CodeQL' } } }] }));
   let error;
   try { await new AsyncFunction(...keys, program)(...values); } catch (caught) { error = caught; }
@@ -44,6 +44,50 @@ test('actual workflow program waits for actual core and upload reset, then dispa
   assert.deepEqual(result.waits, [305000]);
   assert.equal(result.calls.length, 2);
   assert.equal(result.calls[1].time - start, 305000);
+});
+
+test('exhausted core before Analyze waits in the same job, independent of the optional upload family', async () => {
+  // The failed hosted job had core 0 before fingerprinting and the upload
+  // family was unreported. A later positive core result permits one Analyze.
+  const reset = start / 1000 + 900;
+  const exhausted = { resources: { core: { limit: 5000, remaining: 0, reset } } };
+  const ready = { resources: { core: { limit: 5000, remaining: 4187, reset }, code_scanning_upload: { remaining: null } } };
+  const result = await execute('analysis', [response(exhausted), response(ready)]);
+  assert.ifError(result.error);
+  assert.deepEqual(result.waits, [905000]);
+  assert.equal(result.calls.length, 2);
+  assert.ok(result.calls.every(call => call.url.endsWith('/rate_limit')));
+  assert.match(result.logs, /Core capacity is available/u);
+  assert.equal(result.files['/temp/codeql-sarif/deadline'], String(start + 65 * 60000), 'admission cannot consume the later upload deadline');
+});
+
+test('core admission obeys response-header cooldown, fails closed at twenty minutes, and propagates cancellation', async () => {
+  const ready = { resources: { core: { remaining: 4187, reset: start / 1000 + 90 } } };
+  const header = await execute('analysis', [
+    response(ready, 200, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(start / 1000 + 90) }),
+    response(ready)
+  ]);
+  assert.ifError(header.error);
+  assert.deepEqual(header.waits, [95000]);
+  for (const headers of [
+    { 'x-ratelimit-remaining': '0' },
+    { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': 'invalid' },
+    { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(start / 1000 - 10) }
+  ]) {
+    const stale = await execute('analysis', [response(ready, 200, headers), response(ready)]);
+    assert.ifError(stale.error);
+    assert.deepEqual(stale.waits, [60000]);
+  }
+  for (const body of [{}, { resources: { core: { remaining: null, reset: start / 1000 + 90 } } },
+    { resources: { core: { remaining: 0, reset: start / 1000 + 3600 } } }]) {
+    const result = await execute('analysis', [response(body)]);
+    assert.match(result.error.message, /Core capacity admission deadline elapsed/u);
+    assert.equal(result.elapsed, 20 * 60000);
+    assert.ok(result.calls.length <= 22);
+  }
+  const cancelled = await execute('analysis', [response({ resources: { core: { remaining: 0, reset: start / 1000 + 900 } } })], {}, { cancelOnWait: true });
+  assert.match(cancelled.error.message, /cancelled/u);
+  assert.equal(cancelled.calls.length, 1);
 });
 
 test('quota unknown or malformed cannot authorize upload, and reset beyond budget fails', async () => {
@@ -159,6 +203,12 @@ test('workflow retains exact evidence before one official upload, then requires 
   assert.equal((workflow.match(/upload-database: false/gu) || []).length, 2);
   assert.equal((workflow.match(/uses: github\/codeql-action\/upload-sarif@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827/gu) || []).length, 1);
   assert.ok(workflow.indexOf('- name: Retain completed SARIF evidence') < workflow.indexOf('- name: Wait for live SARIF upload quota'));
+  assert.ok(workflow.indexOf('- name: Wait for core capacity before Analyze') < workflow.indexOf('- name: Analyze the triggering revision'));
+  assert.ok(workflow.indexOf('- name: Snapshot quota before Analyze') < workflow.indexOf('- name: Wait for core capacity before Analyze'));
+  const admission = workflow.split('- name: Wait for core capacity before Analyze')[1].split('\n      - name:')[0];
+  assert.match(admission, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
+  assert.match(admission, /codeql-upload-recovery\.mjs" analysis/u);
+  assert.doesNotMatch(admission, /continue-on-error|secrets\.|token:/u);
   assert.ok(workflow.indexOf('- name: Wait for live SARIF upload quota') < workflow.indexOf('- name: Upload retained SARIF once'));
   const upload = workflow.split('- name: Upload retained SARIF once')[1].split('\n      - name:')[0];
   assert.match(upload, /ref: \$\{\{ needs\.scope\.outputs\.analysis_ref \|\| github\.ref \}\}/u);

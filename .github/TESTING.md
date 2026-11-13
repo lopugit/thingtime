@@ -2,6 +2,14 @@
 
 ## Durable CodeQL SARIF upload (2026-11-14)
 
+- Before each official Analyze action, require a fresh same-job core quota read
+  with at least 100 remaining units. Reproduce run 43464295504's core-zero
+  snapshot before fingerprinting, a reset inside the 20-minute admission
+  window, missing/malformed core, an optional missing or malformed upload
+  family, authoritative zero-remaining headers, deadline expiry and cancelled
+  waiting. Admission failure must leave the required Analyze job red without
+  running either official Analyze action. Other jobs can still deplete the
+  shared capacity after admission; this is no reservation.
 - Run `node --test .github/scripts/codeql-upload-recovery.test.mjs` alongside
   the existing CodeQL polling and quota tests. Exercise core and upload reset,
   unknown counters, deadline exhaustion, Retry-After, transient GET failures,
