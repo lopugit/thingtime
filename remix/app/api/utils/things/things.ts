@@ -1,5 +1,5 @@
 import type { GrantFamily } from './relationalAcl';
-import { ACL_ENTRY_KIND, aclMarkerClause, aclWithoutMarkersClause, legacyAclFence, validRelationalAclRoot, aclEntryId, aclEntryPrefix, aclSubject, assertRelationalAclSnapshot, evaluatedAcl, hasRelationalAclEntries, grantFields, grantFamilyMatch, legacyTokenAcl, tokenGrantAllows, partitionAcl, prepareRelationalAcls, readAllThingAclEntries as readStoredAclEntries, relationalAclCandidateStages, replaceRelationalAcl, rootAcl } from './relationalAcl';
+import { ACL_ENTRY_KIND, aclMarkerClause, aclWithoutMarkersClause, legacyAclFence, nextAclUpdatedAt, validRelationalAclRoot, aclEntryId, aclEntryPrefix, aclSubject, assertRelationalAclSnapshot, evaluatedAcl, hasRelationalAclEntries, grantFields, grantFamilyMatch, legacyTokenAcl, tokenGrantAllows, partitionAcl, prepareRelationalAcls, readAllThingAclEntries as readStoredAclEntries, relationalAclCandidateStages, replaceRelationalAcl, rootAcl } from './relationalAcl';
 import { eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
 import { contentExecutionHeld, contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
 import { isCivilTime } from '../../../schemas/civilDates';
@@ -24,7 +24,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
-import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection, getThingsCollection, getUsersCollection, ensureThingAclWriteFence, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure, projectProfilePresentation } from '../auth/users';
@@ -225,6 +225,8 @@ export type ThingDoc = {
   aclRevision?: string;
   aclLegacyRevision?: boolean;
   aclGeneration?: string;
+  /** Lower timestamp bound enforced by the collection compatibility fence. */
+  aclWriteFenceAfter?: Date;
   aclBaseline?: string[];
   aclBaselineVersion?: number;
   aclEntryCount?: number;
@@ -1693,6 +1695,11 @@ export const createThing = async (
     (entry, index, all) => all.indexOf(entry) === index
   );
 
+  if (partitionAcl(acl, app?.appId).relational.length || tokenAclDoc.length) {
+    try { await ensureThingAclWriteFence(!!hooks.transaction); }
+    catch (error) { const rejected = storageMutationFail(error); if (rejected) return rejected; throw error; }
+  }
+
 	const sizeBytes = thingStorageSizeBytes({
         crystal: validated.crystal,
         extended: extended.value === undefined ? null : extended.value,
@@ -1779,7 +1786,7 @@ export const createThing = async (
 				if (hooks.afterInsert) await hooks.afterInsert(doc, session);
 				if (timelineCapture) await recordThingMutation(things, null, doc, timelineCapture, session);
 				if (target) {
-					const touched = await things.updateOne({ shareId: target.shareId, tokenAclRevision: target.tokenAclRevision || { $exists: false }, aclRevision: target.aclRevision || { $exists: false } } as any, { $set: { updatedAt: now } }, { session });
+					const touched = await things.updateOne({ shareId: target.shareId, tokenAclRevision: target.tokenAclRevision || { $exists: false }, aclRevision: target.aclRevision || { $exists: false } } as any, { $max: { updatedAt: now } }, { session });
 					if (touched.matchedCount === 0) {
 						throw new StorageMutationError(409, 'storage_conflict', 'The target changed while this thing was being created — try again');
 					}
@@ -1790,7 +1797,7 @@ export const createThing = async (
 		} else {
     await things.insertOne(doc as any);
 			if (target) {
-				await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
+				await things.updateOne({ shareId: target.shareId } as any, { $max: { updatedAt: now } });
 			}
 		}
   } catch (err: any) {
@@ -3053,7 +3060,8 @@ const mutateThingAclEntries = async (viewer: Viewer, id: string, input: readonly
         !(family === 'audience' && options.expectedAclGeneration === null && before.aclLegacyRevision === true))
       throw new StorageMutationError(409, 'storage_conflict', 'The audience changed after this grant was prepared');
     const timelineBefore = capture && before.ownerId !== 'system' ? { ...before, acl: await readStoredAclEntries(things, before, session), aclGeneration: undefined } : null;
-    const doc = { ...before, updatedAt: new Date() };
+    const updatedAt = nextAclUpdatedAt(before.updatedAt);
+    const doc = { ...before, updatedAt, aclWriteFenceAfter: updatedAt };
     if ((doc as any)[fields.generation] !== undefined && (typeof (doc as any)[fields.generation] !== 'string' || !(doc as any)[fields.generation])) throw new StorageMutationError(409, 'storage_conflict', 'Grant generation is unavailable. Refresh and retry.');
     if ((doc as any)[fields.generation] === undefined) {
       await replaceRelationalAcl(things, doc, family === 'token' ? legacyTokenAcl(before) : rootAcl(before), session, family);
@@ -3093,7 +3101,7 @@ const mutateThingAclEntries = async (viewer: Viewer, id: string, input: readonly
     (doc as any)[fields.revision] = randomUUID();
     // Touching the exact root serializes grants with replacements/deletion.
     const updated = await things.updateOne({ _id: before._id, updatedAt: before.updatedAt, tokenAclRevision: before.tokenAclRevision || { $exists: false } }, {
-      $set: { [fields.value]: (doc as any)[fields.value], [fields.generation]: revision, [fields.revision]: (doc as any)[fields.revision], [fields.count]: count, ...(family === 'audience' ? { aclLegacyRevision: doc.aclLegacyRevision === true, aclBaseline: doc.aclBaseline, aclBaselineVersion: doc.aclBaselineVersion } : {}), updatedAt: doc.updatedAt },
+      $set: { [fields.value]: (doc as any)[fields.value], [fields.generation]: revision, [fields.revision]: (doc as any)[fields.revision], [fields.count]: count, aclWriteFenceAfter: doc.aclWriteFenceAfter, ...(family === 'audience' ? { aclLegacyRevision: doc.aclLegacyRevision === true, aclBaseline: doc.aclBaseline, aclBaselineVersion: doc.aclBaselineVersion } : {}), updatedAt: doc.updatedAt },
       $unset: family === 'audience' ? { visibility: '' } : { createdByTokenId: '' }
     }, { session });
     if (!updated.matchedCount) throw new StorageMutationError(409, 'storage_conflict', 'The Thing changed while its audience was being updated');
@@ -3104,6 +3112,7 @@ const mutateThingAclEntries = async (viewer: Viewer, id: string, input: readonly
     result = doc;
   };
   try {
+    await ensureThingAclWriteFence(!!options.transaction);
     if (options.transaction) await write(options.transaction.session);
     else await withMongoTransaction(write);
   } catch (error) { const rejected = storageMutationFail(error); if (rejected) return rejected; throw error; }
@@ -4739,7 +4748,7 @@ export const toggleReaction = async (
       // on the user's behalf must not rewrite their recents
       if (!app) recentReactions = await pushUserRecentReaction(viewerId, token);
     }
-    await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: new Date() } });
+    await things.updateOne({ shareId: target.shareId } as any, { $max: { updatedAt: new Date() } });
   }
 
   if (app) {
@@ -5934,6 +5943,11 @@ export const updateThing = async (
   // by dropping its own entry, like chmod.
   const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
   if (isFail(nextTokenAcl)) return nextTokenAcl;
+  const replaceAcl = input.acl !== undefined || input.visibility !== undefined;
+  if (replaceAcl || nextTokenAcl !== undefined) {
+    try { await ensureThingAclWriteFence(); }
+    catch (error) { const rejected = storageMutationFail(error); if (rejected) return rejected; throw error; }
+  }
   const expectedTokenRevision = input.expectedTokenAclRevision !== undefined ? input.expectedTokenAclRevision : input.tokenAclRevision;
   if (expectedTokenRevision !== undefined && expectedTokenRevision !== (doc.tokenAclRevision || null)) return fail(409, 'The token grants changed. Refresh and retry.');
 
@@ -5975,8 +5989,8 @@ export const updateThing = async (
       if (charge.ok === false) return fail(charge.status, charge.error);
     }
 
-  const replaceAcl = input.acl !== undefined || input.visibility !== undefined;
-  const now = new Date();
+  const now = replaceAcl || nextTokenAcl !== undefined || doc.aclGeneration !== undefined || doc.tokenAclGeneration !== undefined
+    ? nextAclUpdatedAt(doc.updatedAt) : new Date();
   const set: Record<string, any> = {
     schemaVersion: THINGS_SCHEMA_VERSION,
     thingtime: validated.thingtime,
@@ -6056,13 +6070,13 @@ export const updateThing = async (
         if (nextTokenAcl !== undefined) {
           const tokenAudience = { ...doc, updatedAt: now };
           await replaceRelationalAcl(things, tokenAudience, nextTokenAcl, session, 'token');
-          set.tokenAcl = []; set.tokenAclGeneration = tokenAudience.tokenAclGeneration; set.tokenAclRevision = tokenAudience.tokenAclRevision; set.tokenAclEntryCount = tokenAudience.tokenAclEntryCount;
+          set.tokenAcl = []; set.tokenAclGeneration = tokenAudience.tokenAclGeneration; set.tokenAclRevision = tokenAudience.tokenAclRevision; set.tokenAclEntryCount = tokenAudience.tokenAclEntryCount; set.aclWriteFenceAfter = tokenAudience.aclWriteFenceAfter;
         }
         const timelineBefore = replaceAcl && timelineCapture ? { ...doc, acl: await readStoredAclEntries(things, doc, session), aclGeneration: undefined } : doc;
 				if (replaceAcl) {
           const audience = { ...doc, updatedAt: now };
           await replaceRelationalAcl(things, audience, acl, session);
-          set.acl = audience.acl; set.aclBaseline = audience.aclBaseline; set.aclBaselineVersion = audience.aclBaselineVersion; set.aclGeneration = audience.aclGeneration; set.aclRevision = audience.aclRevision; set.aclEntryCount = audience.aclEntryCount; set.aclLegacyRevision = false;
+          set.acl = audience.acl; set.aclBaseline = audience.aclBaseline; set.aclBaselineVersion = audience.aclBaselineVersion; set.aclGeneration = audience.aclGeneration; set.aclRevision = audience.aclRevision; set.aclEntryCount = audience.aclEntryCount; set.aclLegacyRevision = false; set.aclWriteFenceAfter = audience.aclWriteFenceAfter;
         }
 				writeResult = await things.updateOne(
 					{

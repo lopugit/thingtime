@@ -22,7 +22,20 @@
 - Read a migrated public/custom Thing through an older runtime: nonowners must
   be denied by its legacy audience fence, while the new runtime evaluates the
   original grants and exclusions. Confirm old ordinary content edits retain
-  the fence; an old explicit ACL replacement makes new reads fail closed.
+  the fence; old explicit ACL replacements and stale sandbox writes must be
+  rejected by the database without changing any grant.
+- Hold an old runtime's write after its read, migrate through the new runtime,
+  then release it. Cover same-millisecond writes, a lagging clock and old
+  full-document conversion. Migration must strictly advance the timestamp;
+  no writer may restore the captured version or remove the relational fence.
+- Start with no installed validator, then exercise a saved Action that creates
+  a relational audience. Verify strict/error collection validation, preservation
+  of any existing validator and idempotent readiness. Denied `collMod` or failed
+  readback must refuse migration before content changes. An outer transaction
+  must preflight protection, never issue DDL inside that transaction.
+- Verify the timestamp floor cannot be authored through generic writes or
+  restored through backups, copies or Timeline. It must not appear in public
+  content; a same-name field inside the user's crystal remains ordinary data.
 - Exceed former group/member, social and subspace-membership ceilings. Confirm
   late memberships and bans participate in authorization and no list is silently
   truncated. Preserve duplicate prevention and friend-request approval.

@@ -11,6 +11,9 @@ import { EPHEMERAL_CONTROL_THINGTIMES } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
 import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
+import { installThingAclWriteFence, isThingAclWriteFenceReady } from './aclWriteFence';
+import { StorageMutationError } from '../storage/storageCore';
+import { monotonicThingMutationParameters, withMonotonicThingTimestamps } from './thingMutationTimestamp';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -156,14 +159,48 @@ const runMongoTransaction = async <T>(client: any, work: (session: any) => Promi
 	}
 };
 
-export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
-	runMongoTransaction(
-		await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)),
-		work
-	);
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>, options: { requiresAclWriteFence?: boolean } = {}): Promise<T> => {
+  // Composed callers declare relational writes at their outermost boundary;
+  // installation must precede any snapshot read or write in the transaction.
+  if (options.requiresAclWriteFence) await ensureThingAclWriteFence();
+  return runMongoTransaction(
+    await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)), work
+  );
+};
 
-export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
-	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
+// Collection DDL is deliberately outside content transactions. Provision only
+// when relational grant writes need it, leaving unrelated reads/legacy writes
+// available to installations whose database role cannot install the fence.
+const aclWriteFenceReady = new WeakMap<object, Map<string, Promise<void>>>();
+export const ensureThingAclWriteFence = async (transactionActive = false, plane: 'active' | 'home' = 'active'): Promise<void> => {
+  const custom = plane === 'active' && isCustomMongoEndpointActive();
+  const client = await getClientCachedFor(custom ? getActiveMongoUri() : getMongoUri(), !custom);
+  const dbName = custom ? getActiveMongoDbName() : 'thingtime';
+  let databases = aclWriteFenceReady.get(client);
+  if (!databases) aclWriteFenceReady.set(client, databases = new Map());
+  let ready = databases.get(dbName);
+  if (!ready) {
+    ready = (async () => {
+      try {
+        if (!custom) await getRawHomeThingtimeDb();
+        const db = client.db(dbName), name = physicalCollectionName('things');
+        if (transactionActive) {
+          if (!await isThingAclWriteFenceReady(db, name)) throw new Error('Storage validation requires preparation outside the transaction');
+        } else await installThingAclWriteFence(db, name);
+      } catch {
+        databases!.delete(dbName);
+        throw new StorageMutationError(503, 'storage_invariant', 'Relational grant storage protection is unavailable. Database validation must be provisioned before editing grants.');
+      }
+    })();
+    databases.set(dbName, ready);
+  }
+  await ready;
+};
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>, options: { requiresAclWriteFence?: boolean } = {}): Promise<T> => {
+  if (options.requiresAclWriteFence) await ensureThingAclWriteFence(false, 'home');
+  return runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
+};
 
 /** Read-only worker boundary. Snapshot sessions pin every paged read to the
  * first server-selected cluster timestamp without holding a write transaction.
@@ -280,7 +317,7 @@ export const getHomeThingtimeDb = async () => {
         const value = col[method];
         if (GUARDED_MUTATIONS.has(String(method))) return async (...parameters: any[]) => {
           await requireHomeIndexWriteReadiness();
-          return value.apply(col, parameters);
+          return value.apply(col, args[0] === physicalCollectionName('things') ? monotonicThingMutationParameters(String(method), parameters) : parameters);
         };
         return typeof value === 'function' ? value.bind(col) : value;
       } });
@@ -363,7 +400,10 @@ export const warnIfTransactionsUnsupported = async (): Promise<void> => {
 // by accident. getCollection follows the request's ACTIVE endpoint (the open
 // data plane); getHomeCollection is pinned to the home deployment and is what
 // every identity / auth / control-plane getter uses.
-export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
+export const getCollection = async (logical: string) => {
+  const collection = (await getThingtimeDb()).collection(physicalCollectionName(logical));
+  return logical === 'things' && isCustomMongoEndpointActive() ? withMonotonicThingTimestamps(collection) : collection;
+};
 export const getHomeCollection = async (logical: string) => (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
 
 export const getUsersCollection = async () => getHomeCollection('users');

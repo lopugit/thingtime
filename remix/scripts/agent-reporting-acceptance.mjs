@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Real HTTP and MCP acceptance with a fresh disposable replica set. The only
 // direct database commands initialize that set and inspect operation metadata
-// during cold registration; application fixtures use APIs.
+// during cold registration. Mixed-version checks read physical fence metadata;
+// application fixtures and mutations use APIs.
 // Saved workspace definitions must be externally authored synthetic fixtures.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -23,6 +24,7 @@ const collectionsUiOnly = process.argv.includes('--collections-ui-only');
 const collectionsScale = process.argv.includes('--relational-collections') || collectionsUiOnly;
 const aclScale = process.argv.includes('--acl-scale');
 const aclBoundaries = aclScale || process.argv.includes('--acl-boundaries');
+const mixedLegacyAcl = process.argv.includes('--mixed-legacy-acl');
 const reconnectOnly = process.argv.includes('--scoped-reconnect');
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
 assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
@@ -61,8 +63,8 @@ const env = { PATH: process.env.PATH || '/usr/bin:/bin', HOME: dir, TMPDIR: dir,
   JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_CHATGPT_CREDENTIAL_KEY: randomBytes(32).toString('base64'),
   THINGTIME_CHATGPT_ALLOWED_ENDPOINTS: origin, THINGTIME_DATA_ENV: 'development', THINGTIME_USER_VAULT_KEY: randomBytes(32).toString('base64url') };
 // No inherited application configuration, credentials, profile or network rules.
-function start(command, args) {
-  const child = spawn(command, args, { cwd: command === process.execPath ? dir : cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+function start(command, args, overrides = {}) {
+  const child = spawn(command, args, { cwd: command === process.execPath ? dir : cwd, env: { ...env, ...overrides }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const counters = command === process.execPath ? childDiagnostics.nitro : childDiagnostics.mongo;
   const observe = chunk => {
     // Whitelisted counters only: never retain or emit raw server messages,
@@ -81,8 +83,8 @@ async function waitFor(fn, label, timeout = 30000) {
   while (Date.now() < deadline) { if (await fn()) return; await delay(200); }
   throw Error(`Timed out: ${label}`);
 }
-async function request(path, { body, cookie, token, form, requestOrigin = origin, method = body === undefined && !form ? 'GET' : 'POST', status = 200, timeout = 45000 } = {}) {
-  const response = await fetch(origin + path, { method, redirect: 'manual', headers: { Origin: requestOrigin,
+async function request(path, { body, cookie, token, form, requestOrigin = origin, targetOrigin = origin, method = body === undefined && !form ? 'GET' : 'POST', status = 200, timeout = 45000 } = {}) {
+  const response = await fetch(targetOrigin + path, { method, redirect: 'manual', headers: { Origin: requestOrigin,
     'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json',
     ...(cookie ? { Cookie: cookie } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(form ? { body: form.toString() } : body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) }).catch(error => { throw new Error(`${method} ${path.split('?')[0]} failed (${error.name || 'request error'})`); });
@@ -464,6 +466,10 @@ try {
   assert.equal(selectedOrigin.defaultHost, `127.0.0.1:${ports.db}`);
   assert.equal(selectedOrigin.endpoint.custom, false);
   checks.push('standalone server runs from a fresh synthetic cwd with explicit disposable home Mongo host, no active data override and generated-only environment credentials');
+  if (mixedLegacyAcl) await runSection('mixed-legacy-ACL-write-fence', async () => {
+    const { runMixedLegacyAclAcceptance } = await import('./relational-acl-legacy-acceptance.mjs');
+    await runMixedLegacyAclAcceptance({ request, owner, stranger, checks, evidenceDir, dir, env, start, port, waitFor, MongoClient });
+  });
   const create = async (kind, crystal) => { const data = (await request('/api/v1/things', { cookie: owner.cookie, body: { thingtime: [kind], acl: ['tt:user'], crystal } })).data; assert(data.thing?.id || data.id, `Saved ${kind} returned an ID`); return data.thing?.id || data.id; };
   const plain = await oauth(owner.cookie, ['things']);
   const upgraded = await scopedReconnect(owner, stranger, plain);

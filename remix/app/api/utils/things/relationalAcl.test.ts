@@ -257,3 +257,12 @@ test('token mutation authority is bound to exact owner, live generation, revisio
   f.roots.length = 0;
   assert.equal(await tokenGrantAllows(f.collection, doc, 'allowed'), false);
 });
+
+test('ACL migration advances legacy replacement CAS even in one millisecond or a reversed wall clock', async () => {
+  const { nextAclUpdatedAt } = await import('./relationalAcl');
+  const before = new Date('2026-11-13T00:00:00.000Z');
+  assert.equal(nextAclUpdatedAt(before, before.getTime()).getTime(), before.getTime() + 1);
+  assert.equal(nextAclUpdatedAt(before, before.getTime() - 1000).getTime(), before.getTime() + 1);
+  assert.equal(nextAclUpdatedAt(before, before.getTime() + 1000).getTime(), before.getTime() + 1000);
+  assert.throws(() => nextAclUpdatedAt(new Date(NaN)), (error: any) => error.status === 409);
+});

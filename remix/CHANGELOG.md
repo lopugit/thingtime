@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Enforce migrated ACL compatibility in MongoDB before relational
+  writes. Preserve existing validators and reject stale legacy ACL overwrites;
+  protect the migration timestamp against clock regression and old conversion
+  races. See the provisioning and verification requirements in
+  [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
 - 2026-11-12: Move selected app grants, registered origins/callbacks, encrypted
   endpoint/deployment settings, subspace definitions and learned algorithm
   weights into protected child Things. Remove associated total count caps and

@@ -38,7 +38,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "lopu-recording-job": [],
   "lopu-recording-reminder": [],
   "lopu-reminder": [],
-  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "aclRevision", "tokenAcl", "tokenAclGeneration", "tokenAclRevision", "tokenAclEntryCount", "tokenGrantFence", "aclBaseline", "aclBaselineVersion", "aclGeneration", "aclEntryCount", "aclLegacyRevision", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentFileSyncOrigin", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "aclRevision", "tokenAcl", "tokenAclGeneration", "tokenAclRevision", "tokenAclEntryCount", "tokenGrantFence", "aclBaseline", "aclBaselineVersion", "aclWriteFenceAfter", "aclGeneration", "aclEntryCount", "aclLegacyRevision", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentFileSyncOrigin", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
   "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
   "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
   "comment": ["text"],
@@ -175,7 +175,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['passwordFileEnvelope', 'passwordFileParent', 'attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
+	for (const name of ['aclWriteFenceAfter', 'passwordFileEnvelope', 'passwordFileParent', 'attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}

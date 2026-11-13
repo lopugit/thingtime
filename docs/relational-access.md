@@ -172,16 +172,45 @@ Action, and independently read that record back. Never create a replacement
 task to conceal an incomplete preparation or bypass a revoked grant.
 
 Before production ACL writes, verify the compatibility fence against an older
-reader and resolve older explicit ACL writers. Moving a public alias and
-checking the new capability manifest do not stop immutable older deployments
-from holding direct database connections.
+runtime and verify the selected database principal can install and read back
+the collection validator. Moving a public alias and checking the new capability
+manifest do not stop immutable older deployments from holding direct database
+connections.
 The migrated root carries a legacy-reader deny-all audience for nonowners;
 new readers authorize from its separate finite baseline and relational rows.
-Ordinary content edits by old readers preserve that fence. An older writer
-explicitly replacing an ACL can overwrite it; new readers fail closed on the
-result. Drain or scope such legacy ACL mutations and pre-migration in-flight
-writes before first production migration, while preserving unrelated running
-tasks and connections.
+`mongodb/aclWriteFence.ts` installs a strict, error-enforcing MongoDB validator
+before the first relational write. It preserves existing validators in a
+conjunction and independently verifies the installed rule. A migrated root
+must retain its exact legacy audience fence and empty inline token grants.
+Old explicit ACL writes and stale sandbox writes that violate it are rejected
+by MongoDB, even when they come from another deployment.
+
+Migration advances `updatedAt` strictly beyond the captured version and saves
+a protected `aclWriteFenceAfter` floor. The validator prevents an older writer
+from restoring that captured timestamp and reopening an old full-document
+conversion's compare-and-swap. Canonical Things operator updates preserve
+monotonic operational timestamps; user-authored crystal dates are unchanged.
+The floor is omitted from public content, backups, copies and Timeline content.
+Ordinary old content edits that preserve the fence and timestamp floor remain
+valid. A legacy client receiving a storage refusal must use the current server
+to change its ACL; never retry by weakening the validator.
+
+The validator does not compare a replacement document with its previous value.
+The audited older runtime's three full-document replacement paths operate only
+on protected kinds, which ACL management cannot migrate. Keep that boundary:
+any future replacement of an ACL-manageable root must retain its authorization
+generation, baseline and floor through the canonical write path. A new general
+replacement writer requires another compatibility review.
+
+Provisioning needs `listCollections` and `collMod` on the selected home or data
+plane, plus `createCollection` only if the physical Things collection does not
+yet exist. Do not assume a generic read/write role includes these actions.
+Missing privileges or an unverifiable validator produce a sanitized 503 before
+ACL migration; there is no unguarded inline fallback. Provision outside content
+transactions. A caller composing an ACL write inside an outer transaction must
+use `withMongoTransaction(..., { requiresAclWriteFence: true })` (or the home
+variant); nested writes verify readiness without running DDL in the transaction.
+Fork setup is documented in the README's MongoDB section.
 The compatibility promise for complete ACL responses applies to old clients
 calling the new server. Older server deployments deliberately lose nonowner
 access to migrated public/custom Things; an owner-scoped personal token on an
@@ -205,3 +234,18 @@ It requires a built server/client, MongoDB replica-set binary and an explicitly
 selected isolated Playwright module/Chrome executable. Retain its evidence
 outside the source tree. The deployment-link test uses a synthetic local remote
 fixture, not a real external account; it honors normal issuance rate windows.
+
+For the old/new write regression, prepare a separate fixture with
+`node scripts/prepare-legacy-acl-fixture.mjs <external-new-directory>` from
+`remix/`, then run the printed legacy build command. The helper archives the
+audited old revision, verifies the dependency lock, copies no environment files
+and records the timing-only instrumentation hashes. Set
+`AGENT_REPORTING_LEGACY_SERVER` to that fixture's built server and run the current
+`agent-reporting-acceptance.mjs --scoped-reconnect --mixed-legacy-acl` harness.
+It starts both servers against one disposable replica with generated test auth,
+uses HTTP for all business writes and reads physical metadata only to verify
+the fence. `node --import tsx scripts/relational-acl-validator-acceptance.mts`
+separately verifies real authenticated `collMod`/`listCollections` refusals,
+idempotent provisioning and existing-validator preservation in an empty DDL
+fixture. Both commands require an external `AGENT_REPORTING_EVIDENCE_DIR` and
+remove their disposable database state at completion.

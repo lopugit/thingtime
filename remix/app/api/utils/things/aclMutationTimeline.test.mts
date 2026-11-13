@@ -49,7 +49,7 @@ const collection = {
   }
 };
 mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedExports: {
-  ...originals, getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, withMongoTransaction: async (work: any) => work(session)
+  ...originals, ensureThingAclWriteFence: async () => {}, getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, withMongoTransaction: async (work: any) => work(session)
 } });
 mock.module(new URL('../timeline/recordMutation.ts', import.meta.url).href, { namedExports: {
   ...history, recordThingMutation: async (_things: any, before: any, after: any, capture: any, active: any) => {
@@ -145,12 +145,15 @@ test('canonical content edits preserve the legacy fence and generic payloads can
   root.storageClass = 'content'; root.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION;
   root.sizeBytes = thingStorageSizeBytes({ crystal: root.crystal, extended: null, tags: [] });
   const before = structuredClone(root);
-  const result = await updateThing({ id: 'owner' }, root.shareId, { crystal: { text: 'edited' }, aclBaseline: ['tt:all'], aclBaselineVersion: 999 } as any);
+  const result = await updateThing({ id: 'owner' }, root.shareId, { crystal: { text: 'edited', aclWriteFenceAfter: 'ordinary data' }, aclBaseline: ['tt:all'], aclBaselineVersion: 999, aclWriteFenceAfter: new Date('2099-01-01') } as any);
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(root.acl, before.acl);
   assert.deepEqual(root.aclBaseline, before.aclBaseline);
   assert.equal(root.aclBaselineVersion, 1);
   assert.equal(root.aclRevision, before.aclRevision);
+  assert.deepEqual(root.aclWriteFenceAfter, before.aclWriteFenceAfter);
+  assert.equal(root.crystal.aclWriteFenceAfter, 'ordinary data');
+  assert.equal((result as any).thing.aclWriteFenceAfter, undefined);
   assert.deepEqual((result as any).thing.acl, ['tt:user', 'tt:custom', 'tt:user/bob']);
   assert.equal((result as any).thing.aclBaseline, undefined);
   assert.equal((result as any).thing.aclBaselineVersion, undefined);

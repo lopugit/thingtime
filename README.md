@@ -1695,6 +1695,24 @@ MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 
 ### Index and storage hygiene
 
+Relational ACL writes require a strict MongoDB collection validator that keeps
+older deployments from restoring inline grants after migration. On each selected
+home or data database, the deployment principal needs `listCollections` and
+`collMod` for the physical Things collection resolved by the collection registry;
+it also needs `createCollection` when that collection does not yet exist. Check
+these specific privileges rather than assuming a generic read/write role has
+them. Keep credentials in the existing database configuration and grant only
+the required database/collection scope; no new Vercel variable is needed.
+
+The canonical ACL writer installs protection before its transaction, preserves
+any existing validator and verifies strict/error enforcement. Missing privileges
+or failed verification return a sanitized 503 before migration. Never bypass
+document validation or weaken an existing constraint to make a write succeed.
+Callers composing ACL writes in an outer transaction must request
+`requiresAclWriteFence` on the canonical transaction helper before entering it.
+See [relational access rollout and acceptance](docs/relational-access.md#verification-and-rollout)
+for mixed-version writes, timestamp protection and original-task recovery.
+
 The boot-time `ensureIndexes` converges every collection to the index plan in
 `remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
 `RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass

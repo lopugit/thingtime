@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS, aclFromVisibility, type AclViewer } from '../../../schemas/registry';
 import type { ThingDoc } from './things';
 import { StorageMutationError } from '../storage/storageCore';
+import { ACL_ROOT_BASELINE } from '../mongodb/aclWriteFence';
 
 export const ACL_ENTRY_KIND = 'acl-entry';
 export type GrantFamily = 'audience' | 'token';
@@ -18,7 +19,15 @@ export const legacyTokenAcl = (doc: ThingDoc): string[] => {
 
 // Only this finite vocabulary remains on a root. Subject membership is a
 // relation, never an ever-growing root document or an authorization snapshot.
-const BASELINE = new Set(['tt:all', 'tt:user', 'tt:userFriends', 'tt:userFamily', 'tt:inherit', 'tt:hidden', 'tt:custom', 'tt:extsourced', 'tt:service-workspace']);
+const BASELINE = new Set(ACL_ROOT_BASELINE);
+/** Legacy full-document conversion uses updatedAt CAS but knows no ACL
+ * revision. Always invalidate its captured timestamp, even within one ms. */
+export const nextAclUpdatedAt = (previous: Date | string, now = Date.now()): Date => {
+  const before = new Date(previous).getTime();
+  if (!Number.isFinite(before) || !Number.isFinite(now) || Math.max(now, before + 1) > 8640000000000000)
+    throw new StorageMutationError(409, 'storage_conflict', 'The Thing timestamp is unavailable. Refresh before editing grants.');
+  return new Date(Math.max(now, before + 1));
+};
 /** Strict-private flows must not infer an owner-only audience from the finite
  * root baseline when additional entries live in a relation. Missing counts on
  * a relational root are unavailable, never an empty audience. */
@@ -150,6 +159,7 @@ export const replaceRelationalAcl = async (things: any, doc: ThingDoc, entries: 
       createdAt: doc.updatedAt, updatedAt: doc.updatedAt
     })), { session });
   }
+  doc.aclWriteFenceAfter = new Date(doc.updatedAt);
   (doc as any)[fields.value] = family === 'audience' ? legacyAclFence(baseline) : baseline;
   if (family === 'audience') { doc.aclBaseline = baseline; doc.aclBaselineVersion = ACL_BASELINE_VERSION; }
   (doc as any)[fields.generation] = revision;
