@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
+import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
 import { promotePreviewAlias } from './preview-alias-promotion.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { previewRetirementRequest, redactedProviderEndpoint } from './preview-retirement-request.mjs';
@@ -380,6 +381,7 @@ const workflowDeploymentCommitSha = (deployment) => deployment?.meta?.githubComm
 const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubCommitRef ?? deployment?.gitSource?.ref ?? null;
 
 const prGatewayPolicy = (branch) => gatewayPolicy({ branch, target: PR_PREVIEW_TARGET, follower: true });
+const sourceSha = (config, pullRequest) => config.maintenance?.retainedSourceSha ?? pullRequest.head.sha;
 const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
@@ -387,7 +389,8 @@ const deploymentMetadata = ({ pullRequest, config }) => {
 		githubCommitOrg,
 		githubCommitRepo,
 		githubCommitRef: pullRequest.head.ref,
-		githubCommitSha: pullRequest.head.sha,
+		githubCommitSha: sourceSha(config, pullRequest),
+		...(config.maintenance ? maintenanceMetadata(config.maintenance) : {}),
 		githubPrId: String(pullRequest.number),
 		githubRepoId: String(config.gitRepoId),
 		githubRepositoryId: String(config.repositoryId),
@@ -449,7 +452,9 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 		if (deployment.meta.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
 	}
 	if (!legacyAlias && gatewayDeploymentIssue(deployment, prGatewayPolicy(deployment.meta.githubCommitRef))) return 'gateway-policy';
-	if (expectedSha && workflowDeploymentCommitSha(deployment) !== expectedSha) return 'wrong-git-sha';
+	if (expectedSha && deployment.meta?.thingtimePreviewRole === 'maintenance') {
+		if (expectedSha !== config.maintenance?.expectedHeadSha || maintenanceMetadataIssue(deployment, config.maintenance)) return 'maintenance-identity';
+	} else if (expectedSha && workflowDeploymentCommitSha(deployment) !== expectedSha) return 'wrong-git-sha';
 	if (expectedRef && workflowDeploymentCommitRef(deployment) !== expectedRef) return 'wrong-git-ref';
 	return null;
 };
@@ -458,7 +463,7 @@ const choosePreferredDeployment = (deployments, config, expectedSha) =>
 	deployments
 		.filter(
 			(deployment) =>
-				workflowDeploymentCommitSha(deployment) === expectedSha &&
+				deployment.meta?.thingtimePreviewRole !== 'maintenance' && workflowDeploymentCommitSha(deployment) === expectedSha &&
 				deployment.meta?.thingtimePrPreviewPolicy === PR_PREVIEW_POLICY_VERSION &&
 				deployment.meta?.thingtimeBuildTarget === PR_VERCEL_TARGET &&
 				deployment.meta?.thingtimeCustomEnvironmentId === config.customEnvironmentId &&
@@ -1265,7 +1270,7 @@ const runSelfTest = async () => {
 	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf('await execute('));
 	truthy(!source.slice(source.lastIndexOf('const main = async')).includes('reconcileStableDevelopAlias('));
 	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
-	truthy(deployHandler.includes('if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
+	truthy(deployHandler.includes('if (!config.maintenance && !error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
 	let inactiveClosed = 0;
 	const closedCleanup = { cleanup: async () => ({ disabled: false, removedIds: ['dpl_removed'], retainedIds: [] }), read: async () => ({ ...base, state: 'closed' }), inactive: async () => { inactiveClosed++; } };
 	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, closedCleanup), { aliasRemoved: false, deleted: 1 });
@@ -1274,6 +1279,22 @@ const runSelfTest = async () => {
 	equal(inactiveClosed, 1);
 	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, cleanup: async () => ({ disabled: true, removedIds: [], retainedIds: null }) }), { aliasRemoved: false, deleted: 0, retained: true });
 	equal(inactiveClosed, 1);
+	const intent = { retainedSourceSha: 'b'.repeat(40), expectedHeadSha: base.head.sha, sourceTree: 'c'.repeat(40), patchSha256: 'd'.repeat(64), retainedDeploymentId: 'dpl_retained', artifact: { commit: 'e'.repeat(40), path: 'ops/preview-maintenance/example/manifest.json', digest: 'f'.repeat(64) } };
+	const maintainedConfig = { ...config, maintenance: intent };
+	const maintained = { ...prebuiltDeployment, meta: deploymentMetadata({ pullRequest: base, config: maintainedConfig }) };
+	equal(maintained.meta.githubCommitSha, intent.retainedSourceSha);
+	equal(maintained.meta.thingtimeMaintenanceAuthorizedHead, base.head.sha);
+	equal(sourceSha(config, base), base.head.sha);
+	equal(prPreviewRuntimeEnvironment(maintainedConfig, base).THINGTIME_GIT_COMMIT_SHA, intent.retainedSourceSha);
+	equal(deploymentIdentityIssue(maintained, maintainedConfig, { prNumber: base.number, expectedSha: base.head.sha, expectedRef: base.head.ref }), null);
+	equal(deploymentIdentityIssue(maintained, config, { expectedSha: base.head.sha }), 'maintenance-identity');
+	equal(deploymentIdentityIssue({ ...maintained, meta: { ...maintained.meta, thingtimeMaintenanceTree: '0'.repeat(40) } }, maintainedConfig, { expectedSha: base.head.sha }), 'maintenance-identity');
+	equal(choosePreferredDeployment([maintained], config, intent.retainedSourceSha), null);
+	let maintenanceCleanup = false;
+	equal(await prepareDeployment(maintainedConfig, base, { list: async () => [maintained], cleanup: async () => { maintenanceCleanup = true; } }), null);
+	equal(maintenanceCleanup, false);
+	equal(await prepareDeployment({ ...maintainedConfig, maintenanceCandidate: maintained }, base, { list: async () => [maintained], cleanup: async () => { maintenanceCleanup = true; } }), maintained);
+	equal(maintenanceCleanup, false);
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
 
@@ -1534,7 +1555,7 @@ const upsertComment = (repository, number, body) => upsertPreviewComment({
 });
 
 const publishDevelopStatus = (config, pullRequest, fields, { bestEffort = false } = {}) =>
-	publishPreviewNotifications([
+	config.maintenance ? upsertComment(config.repository, pullRequest.number, `### Retained-source preview maintenance: ${fields.state}\n\n- Authorization head (not deployed): \`${pullRequest.head.sha}\`\n- Source baseline: \`${config.maintenance.retainedSourceSha}\`\n- Patched tree: \`${config.maintenance.sourceTree}\`\n- Reviewed manifest: \`${config.maintenance.artifact.commit}:${config.maintenance.artifact.path}\`\n- Preview: https://${fields.alias}\n\n${fields.note || ''}`) : publishPreviewNotifications([
 		() => publishPreviewSummary({ request: githubRequest, repository: config.repository, number: pullRequest.number,
 			sha: pullRequest.head.sha, summary: deploymentComment({ pullRequest, ...fields }) }),
 		() => upsertComment(config.repository, pullRequest.number, deploymentComment({ pullRequest, ...fields })),
@@ -1559,10 +1580,17 @@ const findGithubDeployment = async (repository, pullRequest) => {
 	);
 };
 
-const createGithubDeployment = async (repository, pullRequest) => {
+const findGithubMaintenanceDeployment = async (repository, intent) => {
+	const params = new URLSearchParams({ environment: `develop-pr-${intent.prNumber}-maintenance`, ref: intent.retainedSourceSha });
+	const deployments = await completeInventory(githubRequest, `/repos/${repository}/deployments?${params}`, null, { github: true });
+	if (!Array.isArray(deployments)) throw new Error('Invalid maintenance deployment inventory');
+	return deployments.find(deployment => maintenanceGithubDeploymentMatches(deployment, intent)) ?? null;
+};
+
+const createGithubDeployment = async (repository, pullRequest, config = {}) => {
 	const body = {
-		ref: pullRequest.head.sha,
-		environment: `develop-pr-${pullRequest.number}`,
+		ref: sourceSha(config, pullRequest),
+		environment: `develop-pr-${pullRequest.number}${config.maintenance ? '-maintenance' : ''}`,
 		description: 'Thingtime custom-develop PR deployment with Preview gateway',
 		auto_merge: false,
 		required_contexts: [],
@@ -1571,9 +1599,14 @@ const createGithubDeployment = async (repository, pullRequest) => {
 		payload: {
 			kind: WORKFLOW_DEPLOYMENT_MARKER,
 			pullRequest: pullRequest.number,
-			sha: pullRequest.head.sha
+			sha: sourceSha(config, pullRequest),
+			...(config.maintenance ? { role: 'maintenance', authorizationHead: pullRequest.head.sha, ...maintenanceMetadata(config.maintenance) } : {})
 		}
 	};
+	if (config.maintenance) return getOrCreateMaintenanceDeployment(config.maintenance, {
+		read: () => findGithubMaintenanceDeployment(repository, config.maintenance),
+		create: () => githubRequest(`/repos/${repository}/deployments`, { method: 'POST', accept: [201], retries: 0, body })
+	});
 	try {
 		return await githubRequest(`/repos/${repository}/deployments`, {
 			method: 'POST',
@@ -1995,9 +2028,28 @@ const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}
 	}
 };
 
+const admitMaintenanceRecovery = async (config, pullRequest) => {
+	const intent = config.maintenance;
+	const binding = await getAliasBinding(config, pullRequest.number);
+	const state = maintenanceBindingState(intent, binding);
+	const candidates = state === 'published' ? [binding.deployment] : await listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: intent.retainedSourceSha });
+	const matching = candidates.filter(candidate => !maintenanceMetadataIssue(candidate, intent));
+	if (matching.some(candidate => ACTIVE_STATES.has(candidate.readyState))) throw new Error('Matching maintenance upload is still active; preserve it before retrying');
+	const candidate = matching.filter(candidate => candidate.readyState === 'READY').sort((left,right) => Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))[0] ?? null;
+	if (candidate) {
+		const issue = deploymentIdentityIssue(candidate, config, { prNumber: pullRequest.number, expectedSha: intent.expectedHeadSha, expectedRef: intent.headRef });
+		if (issue) throw new Error(`Maintenance recovery candidate refused (${issue})`);
+		await assertNoProtectedAlias(config, candidate);
+		await verifyPublishedAlias(deploymentUrl(candidate));
+		if (state === 'published') await verifyPublishedAlias(`https://${binding.alias}`);
+	}
+	return { ...config, maintenanceCandidate: candidate };
+};
+
 const prepareDeployment = async (config, pullRequest, {
 	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
 } = {}) => {
+	if (config.maintenance) return config.maintenanceCandidate ?? null;
 	const deployments = await list(config, { prNumber: pullRequest.number });
 	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
 	if (reusable) await guard(config, reusable);
@@ -2043,7 +2095,7 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEn
 
 const prPreviewRuntimeEnvironment = (config, pullRequest) => ({
 	THINGTIME_BRANCH_NAME: pullRequest.head.ref,
-	THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha,
+	THINGTIME_GIT_COMMIT_SHA: sourceSha(config, pullRequest),
 	// The runtime accepts the one alias this publisher assigns. The direct
 	// Vercel URL is admitted independently through VERCEL_URL.
 	THINGTIME_GATEWAY_SOURCE_ORIGINS: `https://${previewAlias(pullRequest.number, config.previewAliasSuffix)}`
@@ -2163,12 +2215,12 @@ const guardPreviewUpload = async (config, pullRequest, upload, {
 	names = protectedPreviewAliasNames, read = (name) => getOwnedAlias(config, name),
 	assign = (name, id) => vercelRequest(`/v2/deployments/${id}/aliases`, { method: 'POST', retries: 0, body: { alias: name } }),
 	remove = async (name) => { const alias = await getOwnedAlias(config, name); if (alias) await vercelRequest(`/v2/aliases/${encodeURIComponent(alias.uid)}`, { method: 'DELETE', accept: [200, 204, 404] }); },
-	inventory = () => listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: pullRequest.head.sha }),
+	inventory = () => listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: sourceSha(config, pullRequest) }),
 	receipt = savePreviewUploadReceipt
 } = {}) => {
 	const expected = { prNumber: pullRequest.number, expectedSha: pullRequest.head.sha, expectedRef: pullRequest.head.ref, expectedAttempt: config.deploymentAttempt };
 	const before = new Map(await Promise.all((await names(config, pullRequest)).map(async (name) => [name, await read(name)])));
-	const record = { attempt: config.deploymentAttempt, prNumber: pullRequest.number, sha: pullRequest.head.sha, ref: pullRequest.head.ref,
+	const record = { attempt: config.deploymentAttempt, prNumber: pullRequest.number, sha: sourceSha(config, pullRequest), authorizationHead: pullRequest.head.sha, ...(config.maintenance ? { maintenance: maintenanceMetadata(config.maintenance) } : {}), ref: pullRequest.head.ref,
 		aliases: [...before].map(([name, binding]) => ({ name, deploymentId: binding?.deploymentId || null })), state: 'uploading', deploymentId: null };
 	await receipt(record);
 	try {
@@ -2346,6 +2398,17 @@ const reconcile = async (config) => {
 	let removedDeployments = 0;
 	await reconcilePreviewInventory({ numbers: [...byPullRequest.keys()], inspect: async (prNumber) => {
 		const owned = byPullRequest.get(prNumber);
+		const activeBinding = await getAliasBinding(config, prNumber);
+		if (activeBinding?.deployment.meta?.thingtimePreviewRole === 'maintenance') {
+			const current = await getPullRequest(config.repository, prNumber);
+			if (current.state === 'open' && pullRequestIsLive(current, config.retentionPolicy)) {
+				const intent = await loadMaintenance(maintenancePinFromDeployment(activeBinding.deployment), { github: githubRequest, repository: config.repository, prNumber });
+				if (!preserveMaintenanceAlias(activeBinding, current, intent)) throw new Error('Maintenance alias provenance changed; preserving for review');
+				await assertTrustedPullRequestStack(config, current);
+				console.log(`Preserving reviewed retained-source maintenance for PR #${prNumber}; normal healthy publication owns replacement`);
+				return;
+			}
+		}
 		if (await previewWorkActive(githubRequest, config.repository, prNumber)) return;
 		let pullRequest = null;
 		let candidate = null;
@@ -2393,7 +2456,7 @@ const reconcile = async (config) => {
 			await assignAliasVerified(config, keeper, prNumber, {
 				assertCurrent: () => assertCurrentPullRequest(config, snapshot, null)
 			});
-			const githubDeployment = await createGithubDeployment(config.repository, pullRequest);
+			const githubDeployment = await createGithubDeployment(config.repository, pullRequest, config);
 			const statuses = await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`);
 			if (!Array.isArray(statuses)) throw new Error('Invalid deployment status inventory');
 			if (statuses[0]?.state !== 'success' || statuses[0]?.environment_url !== `https://${alias}`) {
@@ -2418,7 +2481,7 @@ const requestRecoveryBuild = async (config, pullRequest) => {
 	const snapshot = pullRequestSnapshot(pullRequest);
 	await assertCurrentPullRequest(config, snapshot, null);
 	if (await previewWorkActive(githubRequest, config.repository, pullRequest.number)) return;
-	const deployment = await createGithubDeployment(config.repository, pullRequest);
+	const deployment = await createGithubDeployment(config.repository, pullRequest, config);
 	const statuses = await githubRequest(`/repos/${config.repository}/deployments/${deployment.id}/statuses?per_page=100`);
 	const decision = recoveryAttempt(statuses);
 	if (!decision.allowed) {
@@ -2457,6 +2520,10 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 	} catch {
 		immutableUrl = null;
 	}
+	if (config.maintenance) {
+		if (githubDeployment?.id) await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'failure', { description: 'Retained-source maintenance failed; current PR head was not deployed' });
+		return;
+	}
 	const reporting = [];
 	reporting.push(syncPreviewLabels({ request: githubRequest, repository: config.repository,
 		number: pullRequest.number, sha: pullRequest.head.sha, status: 'failed' }));
@@ -2489,7 +2556,11 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 const deploy = async (config, pullRequest) => {
 	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive PR preview publication skipped'); return; }
-	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
+	if (config.maintenance) {
+		assertMaintenanceHead(config.maintenance, pullRequest);
+		maintenanceBindingState(config.maintenance, await getAliasBinding(config, pullRequest.number));
+		if (!config.maintenanceCandidate) assertMaintenanceReceipt(JSON.parse(await readFile(requiredEnv('PREVIEW_MAINTENANCE_RECEIPT_PATH'), 'utf8')), config.maintenance);
+	} else await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
 	const snapshot = pullRequestSnapshot(pullRequest);
@@ -2502,8 +2573,8 @@ const deploy = async (config, pullRequest) => {
 	let published = false;
 	const estimatedReady = expectedReadyForRun();
 	try {
-		githubDeployment = await createGithubDeployment(config.repository, pullRequest);
-		await publishDevelopStatus(config, pullRequest, {
+		githubDeployment = await createGithubDeployment(config.repository, pullRequest, config);
+		if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				expectedReady: estimatedReady
@@ -2511,12 +2582,12 @@ const deploy = async (config, pullRequest) => {
 		vercelDeployment = await createVercelDeployment(config, pullRequest, reusable);
 		const immutableUrl = deploymentUrl(vercelDeployment);
 		const dashboard = dashboardUrl(vercelDeployment.id, config);
-		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'in_progress', {
+		if (!config.maintenanceCandidate) await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'in_progress', {
 			environmentUrl: immutableUrl,
 			logUrl: dashboard,
-				description: 'Deploying exact SHA with custom-develop credentials and Preview gateway'
+				description: config.maintenance ? 'Deploying reviewed retained baseline plus protection patch; not current PR head' : 'Deploying exact SHA with custom-develop credentials and Preview gateway'
 		});
-		await publishDevelopStatus(config, pullRequest, {
+		if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
@@ -2532,14 +2603,22 @@ const deploy = async (config, pullRequest) => {
 		await verifyCors(aliasUrl, corsProbeUrl);
 		await assertCurrentPullRequest(config, snapshot, config.actor);
 		await assignAliasVerified(config, ready, pullRequest.number, {
-			assertCurrent: () => assertCurrentPullRequest(config, snapshot, config.actor)
+			assertCurrent: async () => {
+				await assertCurrentPullRequest(config, snapshot, config.actor);
+				if (config.maintenance) {
+					const binding = await getAliasBinding(config, pullRequest.number);
+					if (binding?.deployment.id !== ready.id) maintenanceBindingState(config.maintenance, binding);
+				}
+			}
 		});
 		published = true;
 
-		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
+		const priorStatuses = config.maintenanceCandidate ? await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`) : null;
+		if (priorStatuses && !Array.isArray(priorStatuses)) throw new Error('Invalid maintenance deployment status inventory');
+		if (!priorStatuses || priorStatuses[0]?.state !== 'success' || priorStatuses[0]?.environment_url !== aliasUrl) await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
 			environmentUrl: aliasUrl,
 			logUrl: dashboard,
-			description: 'PR preview is ready at the exact current SHA'
+			description: config.maintenance ? 'Reviewed retained-source maintenance ready; current PR head was not deployed' : 'PR preview is ready at the exact current SHA'
 		});
 		await publishDevelopStatus(config, pullRequest, {
 				state: 'ready',
@@ -2551,23 +2630,24 @@ const deploy = async (config, pullRequest) => {
 			});
 		const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
 		await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
-		await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
+		if (!config.maintenance) await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
 		console.log(`PR preview ready for PR #${pullRequest.number}: ${aliasUrl}`);
 	} catch (error) {
 		if (!published) {
-			if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources(config, pullRequest.number)]);
+			if (!config.maintenance && !error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources(config, pullRequest.number)]);
 			await reportFailure(config, pullRequest, githubDeployment, vercelDeployment);
 		}
 		throw error;
 	}
 };
 
-const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null }) => {
+const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null, maintenance = null }) => {
 	const outputPath = requiredEnv('GITHUB_OUTPUT');
 	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`];
 	if (pullRequest) {
 		lines.push(`pr_number=${boundedInteger(pullRequest.number, 'PR number')}`);
 		lines.push(`head_sha=${pullRequest.head.sha}`);
+		lines.push(`source_sha=${maintenance?.retainedSourceSha ?? pullRequest.head.sha}`);
 		lines.push(`head_ref=${pullRequest.head.ref}`);
 		if (expectedReady) lines.push(`expected_ready_at=${expectedReady}`);
 	}
@@ -2584,6 +2664,7 @@ const prepareBuildPlan = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	maintenanceRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber: event.inputs?.pr_number });
 	previewRetirementRequest({ eventName, prNumber: event.inputs?.pr_number,
 		deploymentIds: process.env.PREVIEW_RETIREMENT_DEPLOYMENT_IDS || '', dryRun: process.env.PREVIEW_RETIREMENT_DRY_RUN || 'false' });
 	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
@@ -2609,6 +2690,13 @@ const prepareBuildPlan = async () => {
 			? boundedInteger(event.inputs?.pr_number, 'PR number')
 			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
 	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const maintenancePin = maintenanceRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber });
+	if (maintenancePin) {
+		await assertTrustedPrincipal(config, config.actor, 'maintenance-actor');
+		config = { ...config, maintenance: await loadMaintenance(maintenancePin, { github: githubRequest, repository: config.repository, prNumber }) };
+		assertMaintenanceHead(config.maintenance, pullRequest);
+		config = await admitMaintenanceRecovery(config, pullRequest);
+	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {
 		await writePrepareOutputs({ shouldBuild: false });
@@ -2626,14 +2714,14 @@ const prepareBuildPlan = async () => {
 	}
 	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { await writePrepareOutputs({ shouldBuild: false }); return; }
-	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
+	if (!config.maintenance) await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const expectedReady = expectedReadyAt();
-	await publishDevelopStatus(config, pullRequest, {
+	if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 			state: 'deploying',
 			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 			expectedReady
 		}, { bestEffort: true });
-	await writePrepareOutputs({ shouldBuild: true, pullRequest, expectedReady });
+	await writePrepareOutputs({ shouldBuild: !config.maintenanceCandidate, pullRequest, expectedReady, maintenance: config.maintenance });
 	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
 };
 
@@ -2660,6 +2748,7 @@ const main = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	maintenanceRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber: event.inputs?.pr_number });
 	const retirement = previewRetirementRequest({ eventName, prNumber: event.inputs?.pr_number,
 		deploymentIds: process.env.PREVIEW_RETIREMENT_DEPLOYMENT_IDS || '', dryRun: process.env.PREVIEW_RETIREMENT_DRY_RUN || 'false' });
 	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
@@ -2689,6 +2778,13 @@ const main = async () => {
 			? boundedInteger(event.inputs?.pr_number, 'PR number')
 			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
 	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const maintenancePin = maintenanceRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber });
+	if (maintenancePin) {
+		await assertTrustedPrincipal(config, config.actor, 'maintenance-actor');
+		config = { ...config, maintenance: await loadMaintenance(maintenancePin, { github: githubRequest, repository: config.repository, prNumber }) };
+		assertMaintenanceHead(config.maintenance, pullRequest);
+		config = await admitMaintenanceRecovery(config, pullRequest);
+	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {
 		console.log(`Skipped stale controller dispatch for PR #${prNumber}: ${dispatchIssue}`);
