@@ -218,7 +218,7 @@ replacement writer requires another compatibility review.
 
 Administrators can inspect and provision through the registered
 `provision-relational-acl-validator` migration in `/migrations` (status capability
-1.5.0; run capability 1.6.1). Dry run uses a separate uncached metadata read
+1.5.0; run capability 1.7.0). Dry run uses a separate uncached metadata read
 without adoption, indexes, collection creation or validator changes. Real runs
 use the canonical installer and its independent strict/error readback under the
 existing migration lease. No business documents, grants or privileges change.
@@ -232,6 +232,14 @@ label. Arbitrary exception names/code names become `unknown`/`other`; absent or
 malformed numeric codes become `none`. No original message, cause or command is
 retained. A generic Atlas error code alone does not prove a privilege or tier
 restriction; diagnose the observed code and stage before changing anything.
+Run capability 1.7.0 also reports `collModAuthority` as `granted`, `absent` or
+`unknown` on this migration's Dry run. It reads effective privileges from the
+same authenticated home database connection, without DDL, and exposes no
+principal, role, resource, action or raw error. Missing authentication, denied
+or incomplete privilege metadata yields `unknown`; `absent` requires a complete
+authenticated response. This is informational: an already installed guard
+remains ready regardless of current authority, and `granted` does not prove a
+future provisioning command will succeed.
 For a server code 8000 at the modification stage, only the exact documented
 Atlas `collMod` refusal template maps to `reason=command-policy-or-syntax`.
 This deliberately keeps policy versus syntax ambiguous. Changed, extended or

@@ -14,7 +14,7 @@ export async function runAclProvisioningAcceptance({ request, owner, stranger, c
   }, 'admin provisioning HTTP server');
   const call = (path, args = {}) => request(path, { ...args, targetOrigin: adminOrigin, requestOrigin: adminOrigin });
   const manifest = (await call('/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.features['api.admin-migrations-run'].version, '1.6.1');
+  assert.equal(manifest.features['api.admin-migrations-run'].version, '1.7.0');
   assert.equal(manifest.features['api.admin-migrations'].version, '1.5.0');
   const path = '/api/v1/admin/migrations/run', migration = 'provision-relational-acl-validator';
   await call(path, { body: { migration, dryRun: true }, status: 401 });
@@ -24,12 +24,17 @@ export async function runAclProvisioningAcceptance({ request, owner, stranger, c
     const dry = await run(true);
     assert.equal(dry.data.report.matched, 1, 'Repeated dry run must leave protection unprovisioned');
     assert.equal(dry.data.report.migrated, 0);
+    assert.equal(dry.data.report.collModAuthority, 'unknown', 'unauthed fixture cannot claim collMod absent');
+    assert.match(dry.data.report.notes.join(' '), /collMod authority: unknown/);
+    assert.doesNotMatch(JSON.stringify(dry.data.report), /authenticatedUsers|authenticatedUserPrivileges|roles|resources|connectionStatus/);
     assert.match(dry.response.headers.get('cache-control'), /no-store/);
   }
   checks.push('real built admin API authenticates admin, refuses anonymous/non-admin and repeated dry run leaves collection protection pending without DDL');
   const result = await run(false);
   assert.equal(result.data.report.migrated, 1);
-  assert.equal((await run(true)).data.report.matched, 0);
+  const readyDry = (await run(true)).data.report;
+  assert.equal(readyDry.matched, 0);
+  assert.equal(readyDry.collModAuthority, 'unknown', 'installed guard readiness stays independent of authority');
   assert.equal((await run(false)).data.report.migrated, 0);
   const status = (await call('/api/v1/admin/migrations', { cookie: owner.cookie })).data;
   assert.equal(status.migrations.find(item => item.id === migration)?.pending, 0);

@@ -1,9 +1,11 @@
 import type { Migration, MigrationReport } from './migrations';
 import { AclWriteFenceError } from '../mongodb/aclWriteFence';
+import type { CollModAuthority } from '../mongodb/aclWriteFenceAuthority';
 
 type Dependencies = {
   customPlane: () => boolean;
   inspect: () => Promise<boolean>;
+  inspectAuthority: () => Promise<CollModAuthority>;
   provision: () => Promise<void>;
 };
 
@@ -17,7 +19,7 @@ export const createAclWriteFenceMigration = (dependencies: Dependencies): Migrat
   return {
     id: 'provision-relational-acl-validator', homeOnly: true, collection: 'things', fromVersion: 2, toVersion: 2,
     title: 'Provision relational ACL database protection',
-    description: 'Home database only. Inspect or install the canonical strict/error Things validator, preserving independent constraints. No document, grant or privilege changes. Dry run only reads collection metadata; a real run requires the existing database principal to have provisioning authority.',
+    description: 'Home database only. Inspect or install the canonical strict/error Things validator, preserving independent constraints. No document, grant or privilege changes. Dry run reads metadata and effective collMod authority without changing database state.',
     pending: async () => {
       try { return await inspect() ? 0 : 1; }
       catch (error) {
@@ -34,7 +36,9 @@ export const createAclWriteFenceMigration = (dependencies: Dependencies): Migrat
         notes: [ready ? 'Home collection protection is ready.' : 'Home collection protection requires provisioning.',
           'Counts describe collection protection, not Thing documents. No grants, documents or database privileges are changed.'] };
       if (dryRun) {
-        report.notes.push('Read-only metadata inspection; no DDL attempted. Readiness does not prove permission to provision.');
+        const authority = await dependencies.inspectAuthority().catch(() => 'unknown' as const);
+        report.collModAuthority = authority;
+        report.notes.push(`Home Things collMod authority: ${authority}. Read-only inspection; no DDL attempted. Authority does not prove provisioning will succeed.`);
         return report;
       }
       await assertLease?.();

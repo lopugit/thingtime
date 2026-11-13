@@ -723,7 +723,7 @@ export function useApi() {
 			),
       migrationsRun: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.admin-migrations-run', '1.6.0');
+          await requireThingtimeCapability('api.admin-migrations-run', args?.migration === 'provision-relational-acl-validator' && args?.dryRun ? '1.7.0' : '1.6.0');
           return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {

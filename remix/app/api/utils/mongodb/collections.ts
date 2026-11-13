@@ -13,6 +13,7 @@ import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
 import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
 import { AclWriteFenceError, aclWriteFenceError, installThingAclWriteFence, isThingAclWriteFenceReady } from './aclWriteFence';
+import { classifyThingCollModAuthority, type CollModAuthority } from './aclWriteFenceAuthority';
 import { StorageMutationError } from '../storage/storageCore';
 import { monotonicThingMutationParameters, withMonotonicThingTimestamps } from './thingMutationTimestamp';
 
@@ -182,6 +183,13 @@ export const inspectHomeThingAclWriteFence = async (): Promise<boolean> => {
     const client = await getClientCachedFor(getMongoUri(), true);
     return await isThingAclWriteFenceReady(client.db('thingtime'), physicalCollectionName('things'));
   } catch (error) { throw aclWriteFenceError(error, 'connect'); }
+};
+export const inspectHomeThingCollModAuthority = async (): Promise<CollModAuthority> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    const response = await client.db('thingtime').command({ connectionStatus: 1, showPrivileges: true }, { timeoutMS: 5000 });
+    return classifyThingCollModAuthority(response, 'thingtime', physicalCollectionName('things'));
+  } catch { return 'unknown'; }
 };
 export const provisionHomeThingAclWriteFence = async (): Promise<void> => {
   try {
