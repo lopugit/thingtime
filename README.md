@@ -148,6 +148,22 @@ syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
 
+CodeQL quota snapshots run immediately before the Analyze action and under
+`always()` afterward using that analysis job's built-in token. They emit only
+observed UTC and numeric `limit`, `remaining`, and `reset` values for `core` and
+`code_scanning_upload`; missing values stay `null` (unknown). The two resources
+are distinct, and an actual request's rate-limit headers remain authoritative
+if they disagree with the snapshot. `GET /rate_limit` is primary-quota-exempt,
+not secondary-limit-exempt; each snapshot makes one bounded read.
+
+For current repository-token measurement without a scan, explicitly dispatch
+`codeql-analysis.yml` on `github-actions` with `quota_only=true` and leave PR,
+head and backfill inputs unset. This mode is refused on other refs/repositories
+or with analysis selection. It uses minimum token permissions and distinct
+check names, so it cannot supply a required product Analyze result. It measures
+the new diagnostic job's token, not a historical failed job's token or upload
+response. No token is exported, and no probe loop or automatic retry is created.
+
 CI concurrency is scoped to the PR number or pushed/dispatched ref. A newer
 run may supersede the same subject, but unrelated PRs never share a cancellation
 slot. Event-admission and preview-comment regression tests run in the required
