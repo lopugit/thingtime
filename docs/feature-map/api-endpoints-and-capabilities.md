@@ -1,5 +1,16 @@
 # API endpoints and capabilities
 
+`api.chatgpt-mcp` 2.2.1 and `chatgpt.ui` 1.1.1 fix the shared result card's
+MCP Apps bridge. `pluginLimitlessCore.ts` initializes the parent host before
+standard `tools/call`, bounds and correlates requests, and retains displayed
+results on failure. `plugin.ts` advertises the versioned review resource while
+serving the historical URI alias. `apiDocs.ts` supplies both API manifests;
+`pluginCore.ts` supplies the connector manifest. Legacy `window.openai` is
+selected only after initialization is unsupported or times out, never after a
+tool dispatch. The read-only MCP Lab hosts the same handshake and refuses tool
+execution. Run `test:chatgpt`, `test:api-capabilities` and `test:mcp-demo`, then
+complete the connected-host and desktop/mobile checklist in `TESTING.md`.
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;

@@ -24,6 +24,11 @@ retention grammar remains at the independently published Things 1.65 / update
 primitives advance Things to 1.66 / update 1.30 so PDF clients reject the earlier
 board-only deployment. Both schema additions and their independent tests remain.
 
+The release branch also integrates main's Commander fix (`451e79e72`) and MCP
+result-card host initialization (`b530d760a`). The latter's independent
+`api.chatgpt-mcp` 2.2.1 contract and regression tests are preserved alongside the
+PDF contracts. Media and PDF implementation files are unchanged by these merges.
+
 ## Verification
 
 - Things suite: 356 tests plus 35 projection tests passed.
@@ -37,4 +42,4 @@ The first merged server build hit `ENOSPC` while writing a Workflow bundle. A ve
 
 Private lifecycle reporting could not initialize: the workspace ACL reached its 64-entry limit and the partial binding then refused Character access. No alternate public reporting identity or duplicate task was created.
 
-Before main integration, Graphify semantic extraction was attempted through the local proxy but expanded to 120 chunks for the existing large documentation. It was stopped as a slow indexing step; structural graph, report, manifest and HTML outputs were refreshed. The combined integration tree still requires the parent’s final refresh and verification. Changed Markdown semantic coverage is not claimed.
+Before main integration, Graphify semantic extraction was attempted through the local proxy but expanded to 120 chunks for the existing large documentation. It was stopped as a slow indexing step; structural graph, report, manifest and HTML outputs are refreshed after integration. Changed Markdown semantic coverage is not claimed.
