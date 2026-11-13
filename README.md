@@ -844,3 +844,11 @@ READY alias or a verified matching candidate without a new build/upload. GitHub
 deployment records are read back by exact maintenance environment/source/intent
 before creation and after an uncertain response; already-successful statuses
 are left intact. A concurrent successor or a different intent is never adopted.
+
+The maintenance build uses only its existing read-only GitHub token. Provenance
+reads have one finite absolute budget across requests, retries and response bodies.
+Only explicit quota403/429, temporary service errors and network failures retry;
+permission403 fails immediately. Retry-After/reset waits must fit within that
+budget. Errors expose fixed endpoint classes and numeric rate metadata, with no
+raw provider body or credential output. A terminal quota failure requires fresh
+recovery evidence before another hosted attempt; permission is not broadened.
