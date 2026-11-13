@@ -218,7 +218,7 @@ replacement writer requires another compatibility review.
 
 Administrators can inspect and provision through the registered
 `provision-relational-acl-validator` migration in `/migrations` (status capability
-1.5.0; run capability 1.6.0). Dry run uses a separate uncached metadata read
+1.5.0; run capability 1.6.1). Dry run uses a separate uncached metadata read
 without adoption, indexes, collection creation or validator changes. Real runs
 use the canonical installer and its independent strict/error readback under the
 existing migration lease. No business documents, grants or privileges change.
@@ -226,7 +226,17 @@ Custom-plane requests are refused before acquiring a lease. A failed real run
 may have installed protection before verification failed; inspect with Dry run
 before retrying. Closed stage/category diagnostics distinguish connection,
 adoption, inspection, creation, modification and verification without exposing
-raw database messages or command bodies. Unverifiable protection remains pending in the census so the recovery UI stays accessible. Existing DB authority is still needed;
+raw database messages or command bodies. Run capability 1.6.1 retains a bounded
+numeric MongoDB error code, a closed driver label and an enumerated code-name
+label. Arbitrary exception names/code names become `unknown`/`other`; absent or
+malformed numeric codes become `none`. No original message, cause or command is
+retained. A generic Atlas error code alone does not prove a privilege or tier
+restriction; diagnose the observed code and stage before changing anything.
+For a server code 8000 at the modification stage, only the exact documented
+Atlas `collMod` refusal template maps to `reason=command-policy-or-syntax`.
+This deliberately keeps policy versus syntax ambiguous. Changed, extended or
+unrecognized messages map to `reason=unclassified`; no raw message fragments
+are returned. See [Atlas command restrictions](https://www.mongodb.com/docs/atlas/unsupported-commands/). Unverifiable protection remains pending in the census so the recovery UI stays accessible. Existing DB authority is still needed;
 this API does not expand it.
 
 Provisioning needs `listCollections` and `collMod` on the selected home or data

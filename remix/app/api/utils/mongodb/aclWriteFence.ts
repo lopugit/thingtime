@@ -67,14 +67,40 @@ const upgradePreviousFence = (validator: any): any => {
 export type AclWriteFenceStage = 'connect' | 'adoption' | 'inspect' | 'create' | 'modify' | 'verify' | 'selection';
 export type AclWriteFenceCategory = 'unauthorized' | 'authentication' | 'timeout' | 'connection' | 'unsupported' | 'not-ready' | 'wrong-plane' | 'unknown';
 
-// Driver messages can contain credentials, hosts, command bodies and user data.
-// Retain only this closed diagnostic vocabulary, never the original cause.
+export type AclWriteFenceDriver = 'server' | 'selection' | 'network' | 'timeout' | 'argument' | 'parse' | 'runtime' | 'unknown';
+const DRIVER_NAMES: Record<string, AclWriteFenceDriver> = {
+  MongoServerError: 'server', MongoServerSelectionError: 'selection', MongoNetworkError: 'network',
+  MongoOperationTimeoutError: 'timeout', MongoNetworkTimeoutError: 'timeout', TimeoutError: 'timeout', AbortError: 'timeout',
+  MongoInvalidArgumentError: 'argument', MongoParseError: 'parse', MongoRuntimeError: 'runtime'
+};
+const CODE_NAMES = ['Unauthorized', 'AuthenticationFailed', 'MaxTimeMSExpired', 'ExceededTimeLimit', 'AtlasError',
+  'BadValue', 'FailedToParse', 'CommandNotFound', 'InvalidOptions', 'NotImplemented', 'TypeMismatch', 'IllegalOperation',
+  'NamespaceNotFound', 'NamespaceExists', 'OperationFailed', 'LockTimeout', 'ConflictingOperationInProgress',
+  'QueryFeatureNotAllowed', 'InvalidNamespace', 'DocumentValidationFailure'] as const;
+export type AclWriteFenceCodeName = typeof CODE_NAMES[number] | 'other' | null;
+export type AclWriteFenceReason = 'command-policy-or-syntax' | 'unclassified';
+type Diagnostic = { mongoCode: number | null; driver: AclWriteFenceDriver; mongoCodeName: AclWriteFenceCodeName; reason: AclWriteFenceReason };
+// Exact documented Atlas refusal template, not a broad substring heuristic:
+// https://www.mongodb.com/docs/atlas/unsupported-commands/
+const ATLAS_COLL_MOD_REFUSAL = /^collMod is not allowed or the syntax is incorrect, see the Atlas documentation for more information\.?$/;
+
+
+// Retain only bounded numeric codes and explicitly enumerated labels. Driver
+// messages, arbitrary names, command bodies and original causes are discarded.
 export class AclWriteFenceError extends Error {
   readonly stage: AclWriteFenceStage;
   readonly category: AclWriteFenceCategory;
-  constructor(stage: AclWriteFenceStage, category: AclWriteFenceCategory) {
-    super(`Relational grant storage protection is unavailable (${stage}/${category}). Database validation must be provisioned before editing grants.`);
+  readonly mongoCode: number | null;
+  readonly driver: AclWriteFenceDriver;
+  readonly mongoCodeName: AclWriteFenceCodeName;
+  readonly reason: AclWriteFenceReason;
+  constructor(stage: AclWriteFenceStage, category: AclWriteFenceCategory,
+    diagnostic: Diagnostic = { mongoCode: null, driver: 'unknown', mongoCodeName: null, reason: 'unclassified' }) {
+    const code = diagnostic.mongoCode === null ? 'none' : String(diagnostic.mongoCode);
+    const detail = `; code=${code}; driver=${diagnostic.driver}; name=${diagnostic.mongoCodeName || 'none'}; reason=${diagnostic.reason}`;
+    super(`Relational grant storage protection is unavailable (${stage}/${category}${detail}). Database validation must be provisioned before editing grants.`);
     this.name = 'AclWriteFenceError'; this.stage = stage; this.category = category;
+    this.mongoCode = diagnostic.mongoCode; this.driver = diagnostic.driver; this.mongoCodeName = diagnostic.mongoCodeName; this.reason = diagnostic.reason;
   }
 }
 export const aclWriteFenceError = (error: any, stage: AclWriteFenceStage): AclWriteFenceError => {
@@ -83,7 +109,13 @@ export const aclWriteFenceError = (error: any, stage: AclWriteFenceStage): AclWr
     [50, 262].includes(error?.code) || ['MongoOperationTimeoutError', 'MongoNetworkTimeoutError', 'TimeoutError', 'AbortError'].includes(error?.name) ? 'timeout' :
     ['MongoNetworkError', 'MongoServerSelectionError'].includes(error?.name) ? 'connection' :
     [2, 9, 59, 72, 115].includes(error?.code) ? 'unsupported' : 'unknown';
-  return new AclWriteFenceError(stage, category);
+  const mongoCode = typeof error?.code === 'number' && Number.isSafeInteger(error.code) && error.code >= 0 && error.code <= 2_147_483_647 ? error.code : null;
+  const driver = typeof error?.name === 'string' && Object.prototype.hasOwnProperty.call(DRIVER_NAMES, error.name) ? DRIVER_NAMES[error.name] : 'unknown';
+  const mongoCodeName = typeof error?.codeName !== 'string' ? null :
+    CODE_NAMES.includes(error.codeName as typeof CODE_NAMES[number]) ? error.codeName as typeof CODE_NAMES[number] : 'other';
+  const reason: AclWriteFenceReason = stage === 'modify' && mongoCode === 8000 && driver === 'server' &&
+    typeof error?.message === 'string' && ATLAS_COLL_MOD_REFUSAL.test(error.message) ? 'command-policy-or-syntax' : 'unclassified';
+  return new AclWriteFenceError(stage, category, { mongoCode, driver, mongoCodeName, reason });
 };
 const atStage = async <T>(stage: AclWriteFenceStage, work: () => Promise<T>): Promise<T> => {
   try { return await work(); } catch (error) { throw aclWriteFenceError(error, stage); }

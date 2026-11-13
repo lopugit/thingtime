@@ -14,7 +14,7 @@ export async function runAclProvisioningAcceptance({ request, owner, stranger, c
   }, 'admin provisioning HTTP server');
   const call = (path, args = {}) => request(path, { ...args, targetOrigin: adminOrigin, requestOrigin: adminOrigin });
   const manifest = (await call('/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.features['api.admin-migrations-run'].version, '1.6.0');
+  assert.equal(manifest.features['api.admin-migrations-run'].version, '1.6.1');
   assert.equal(manifest.features['api.admin-migrations'].version, '1.5.0');
   const path = '/api/v1/admin/migrations/run', migration = 'provision-relational-acl-validator';
   await call(path, { body: { migration, dryRun: true }, status: 401 });

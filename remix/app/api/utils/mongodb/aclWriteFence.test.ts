@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { installThingAclWriteFence, isThingAclWriteFenceReady, THING_ACL_WRITE_FENCE } from './aclWriteFence';
+import { AclWriteFenceError, aclWriteFenceError, installThingAclWriteFence, isThingAclWriteFenceReady, THING_ACL_WRITE_FENCE } from './aclWriteFence';
 
 const fixture = (initial: any = { options: {} }) => {
   let current = initial;
@@ -95,4 +95,40 @@ test('provisioning failures expose only closed stage/category without retaining 
   const f = fixture();
   f.db.listCollections = () => ({ toArray: async () => { throw Object.assign(new Error('sensitive'), { code: 13 }); } });
   await assert.rejects(() => isThingAclWriteFenceReady(f.db, 'fixture'), (error: any) => error.stage === 'inspect' && error.category === 'unauthorized');
+});
+
+test('unclassified server rejection preserves numeric code and only enumerated driver metadata', () => {
+  const original = Object.assign(new Error('mongodb://private-user:private-password@private-host/secret-data'), {
+    name: 'MongoServerError', code: 8000, codeName: 'AtlasError', command: { collMod: 'private-collection' },
+    errorResponse: { errmsg: 'private response' }, cause: new Error('private cause')
+  });
+  const safe = aclWriteFenceError(original, 'modify');
+  assert.equal(safe.category, 'unknown', 'a generic Atlas code does not establish privilege or compatibility failure');
+  assert.equal(safe.mongoCode, 8000); assert.equal(safe.driver, 'server'); assert.equal(safe.mongoCodeName, 'AtlasError');
+  assert.match(safe.message, /code=8000; driver=server; name=AtlasError/);
+  assert.doesNotMatch(safe.message + JSON.stringify(safe), /private|secret-data|mongodb:/);
+  assert.equal(Object.prototype.hasOwnProperty.call(safe, 'cause'), false); assert.equal(aclWriteFenceError(safe, 'connect'), safe);
+  assert(safe instanceof AclWriteFenceError);
+});
+test('malformed codes and arbitrary driver/code names cannot become diagnostics', () => {
+  for (const code of ['secret-value', '8000', -1, NaN, Infinity, 1.5, 2_147_483_648]) {
+    const safe = aclWriteFenceError({ code, name: 'private-host', codeName: 'private-password' }, 'modify');
+    assert.equal(safe.mongoCode, null); assert.equal(safe.driver, 'unknown'); assert.equal(safe.mongoCodeName, 'other');
+    assert.doesNotMatch(safe.message + JSON.stringify(safe), /private|secret-value/);
+  }
+  const argument = aclWriteFenceError({ name: 'MongoInvalidArgumentError' }, 'modify');
+  assert.equal(argument.driver, 'argument'); assert.equal(argument.mongoCodeName, null);
+});
+
+test('only the exact documented Atlas collMod refusal maps to an ambiguous safe reason', () => {
+  const documented = 'collMod is not allowed or the syntax is incorrect, see the Atlas documentation for more information.';
+  const error = { code: 8000, name: 'MongoServerError', codeName: 'AtlasError', message: documented };
+  const safe = aclWriteFenceError(error, 'modify');
+  assert.equal(safe.reason, 'command-policy-or-syntax'); assert.equal(safe.category, 'unknown');
+  for (const changed of [{ ...error, code: 13 }, { ...error, name: 'Error' }, { ...error, message: documented + ' private-host' },
+    { ...error, message: 'private-host says ' + documented }, { ...error, message: 'User not allowed on private-host' }]) {
+    const other = aclWriteFenceError(changed, 'modify');
+    assert.equal(other.reason, 'unclassified'); assert.doesNotMatch(other.message + JSON.stringify(other), /private-host/);
+  }
+  assert.equal(aclWriteFenceError(error, 'inspect').reason, 'unclassified');
 });
