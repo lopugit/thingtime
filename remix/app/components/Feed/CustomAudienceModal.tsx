@@ -264,7 +264,7 @@ export const CustomAudienceModal = (props: {
     } catch (err: any) {
       setGroupSaveError({
         message: err?.groupId
-          ? `Group ${err.groupId} was preserved. Its membership is uncertain; review it before using it as an audience.`
+          ? `Group “${name || 'Your group'}” was preserved, but its membership is uncertain. Check the group, then choose Retry membership if you still want these people included.`
           : err?.name === 'AbortError'
             ? 'The account or storage selection changed. Check groups in the original account before trying again.'
           : err?.outcome === 'unknown'

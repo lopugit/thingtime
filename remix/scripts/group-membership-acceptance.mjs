@@ -188,10 +188,11 @@ try {
         } else await route.continue();
       });
       await save(mobile, 'Preserved uncertain group');
-      await mobile.getByRole('alert').getByText(/Its membership is uncertain/).waitFor();
+      await mobile.getByRole('alert').getByText(/Group “Preserved uncertain group” was preserved, but its membership is uncertain/).waitFor();
       assert(failedPatch && failedReadback, 'Both response and readback were interrupted');
       const preserved = (await request('/api/v1/groups', { cookie: owner.cookie })).data.groups.find(group => group.name === 'Preserved uncertain group');
       assert.equal(preserved.memberCount, 1, 'Uncertain group remains available for recovery');
+      assert(!(await mobile.getByRole('alert').textContent()).includes(preserved.id), 'Recovery ID stays out of the picker message');
       await mobile.screenshot({ path: join(evidence, 'picker-390-uncertain.png'), fullPage: true });
       await mobile.getByRole('button', { name: 'Retry membership' }).click();
       await mobile.getByRole('alert').waitFor({ state: 'hidden' });
