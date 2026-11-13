@@ -229,3 +229,14 @@ listener contract. See [the rollout](../../README.md#reviewed-preview-retirement
 and the preview-retention checklist in [TESTING.md](../../TESTING.md). Policy,
 authorization and execution remain protected controller work; the caller adds no
 runner, secret handling or deletion implementation.
+
+## Reviewed retained-preview maintenance
+
+`.github/workflows/develop-pr-preview.yml` forwards the optional pinned main
+artifact commit, manifest path and SHA-256 only to the protected controller.
+Frozen manifests and protection overlays live under `ops/preview-maintenance/`;
+the [artifact runbook](../../ops/preview-maintenance/README.md) describes exact
+source reconstruction, provenance and honest maintenance metadata. Run
+`node remix/scripts/workflow-caller-contract.mjs`; protected controller tests
+cover trust, source fences, atomic promotion and retention. Live candidate and
+protected-browser acceptance remain required before a protection rollout.

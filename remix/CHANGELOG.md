@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Forward pinned, reviewed main release artifacts for retained-preview
+  protection maintenance through the trusted manual controller path. Preserve
+  exact-current-head ordinary builds and distinguish retained source/tree from
+  the authorizing PR head. [Artifact runbook](../ops/preview-maintenance/README.md). **Codex (AI)**
+
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
 - 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
@@ -721,6 +726,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
 
 ### Deployment request cost controls
+
+- 2026-11-13: Repair only the built gateway acceptance harness for Nitro's MongoDB driver factory export and compatible gateway feature versions. Keep actual driver instrumentation, major-version refusal and transport assertions; runtime behavior is unchanged. **Codex (AI)**
 
 - 2026-11-13: Preserve the Status footer's Branch target while identifying exact platform 401/403 responses as authentication required. Keep diagnostics anonymous, refuse redirects and bound response bodies/fallback by one deadline. No preview-access bypass is introduced. **Codex (AI)**
 

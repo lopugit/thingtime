@@ -16,6 +16,21 @@ on:
         description: Existing open same-repository PR (any base branch) to preview in the develop environment
         required: true
         type: number
+      maintenance_artifact_commit:
+        description: Merged main commit containing a reviewed immutable preview-maintenance artifact
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_path:
+        description: Exact ops/preview-maintenance artifact manifest path at the pinned main commit
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_sha256:
+        description: SHA-256 of the reviewed manifest bytes at that commit
+        required: false
+        default: ''
+        type: string
       retirement_deployment_ids:
         description: JSON array of reviewed obsolete deployment IDs; requires pr_number 0
         required: false
@@ -45,6 +60,9 @@ jobs:
       # workflow_dispatch values arrive as strings, while workflow_call enforces
       # the reusable workflow's declared number type before creating any jobs.
       pr_number: ${{ fromJSON(inputs.pr_number || '0') }}
+      maintenance_artifact_commit: ${{ inputs.maintenance_artifact_commit || '' }}
+      maintenance_manifest_path: ${{ inputs.maintenance_manifest_path || '' }}
+      maintenance_manifest_sha256: ${{ inputs.maintenance_manifest_sha256 || '' }}
       retirement_deployment_ids: ${{ inputs.retirement_deployment_ids || '' }}
       retirement_dry_run: ${{ inputs.retirement_dry_run || false }}
     secrets: inherit
