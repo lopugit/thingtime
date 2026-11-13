@@ -46,12 +46,14 @@ export type ThingsItemMenuArgs = {
   dataPlane?: string | null;
   libraryAction?: 'archive' | 'restore';
   allowCreation?: boolean;
+  pinState?: { pinned: boolean; disabled?: boolean };
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, libraryAction, allowCreation = true }: ThingsItemMenuArgs): ThingContextMenuModel => {
-  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, libraryAction, allowCreation = true, pinState }: ThingsItemMenuArgs): ThingContextMenuModel => {
+  const pinActions = pinState ? { [pinState.pinned ? 'unpin' : 'pin']: { disabled: pinState.disabled }, 'reorder-pins': { disabled: pinState.disabled } } : {};
+  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ ...pinActions, open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
   if (thing.libraryArchivePresentation === 'metadata') return buildThingEntityMenu(
-    libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: 'Private library placement; content stays in its original conversation or audience' } } : {},
+    { ...pinActions, ...(libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: 'Private library placement; content stays in its original conversation or audience' } } : {}) },
     [], actCount === 1 ? thing.id : undefined);
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
@@ -61,6 +63,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
+    ...pinActions,
     'storage-placement': actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
     open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
@@ -95,6 +98,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
 };
 
 export type ThingsBackgroundMenuArgs = {
+  reorderPins?: boolean;
   libraryNavigation?: boolean;
   allowCreation?: boolean;
   clipboardCount: number;
@@ -168,6 +172,7 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode, allowColu
 
 export const buildThingsBackgroundMenu = ({
   allowCreation = true,
+  reorderPins = false,
   libraryNavigation = false,
   clipboardCount,
   itemCount,
@@ -201,6 +206,7 @@ export const buildThingsBackgroundMenu = ({
       id: 'arrange',
       label: 'Arrange',
       actions: [
+        ...(reorderPins ? [{ id: 'reorder-pins', command: 'reorder-pins', label: 'Reorder pins', icon: '📌', lucide: 'pin' }] : []),
         { id: 'sort-by', label: 'Sort by…', icon: '🔃', lucide: 'arrow-up-down', submenu: sortSubmenu(sort) },
         { id: 'group-by', label: 'Group by…', icon: '🗂️', lucide: 'layers', submenu: groupSubmenu(groupBy) },
         { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode, allowCreation) }

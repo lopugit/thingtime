@@ -2991,7 +2991,7 @@ const isPrivateConnectionThing = (doc: ThingDoc) => {
 // carries another schema marker. No generic owner, shared, inherited, export
 // or reference read may turn those records into ordinary editable content.
 const isBackupControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === 'backup-job' || kind === 'backup-job-event');
-const isThingStorageControl = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === THING_STORAGE_POLICY_KIND || kind === THING_DEVICE_STORAGE_POLICY_KIND || kind === THING_STORAGE_POLICY_INDEX_KIND);
+const isThingStorageControl = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === THING_STORAGE_POLICY_KIND || kind === THING_DEVICE_STORAGE_POLICY_KIND || kind === THING_STORAGE_POLICY_INDEX_KIND || kind === 'thing-browser-pin' || kind === 'thing-browser-pin-scope');
 
 // Single and batched exact reads share the same protected-record exclusion.
 const genericThingReadBlocked = (doc: ThingDoc) => isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
@@ -6012,10 +6012,19 @@ export const upsertThing = async (
 
 // Availability, single actions, bulk placement and archive listing share the
 // same eligibility predicate. The result never contains source content.
-const findLibraryArchiveSubject = async (ownerId: string, id: string, things: Awaited<ReturnType<typeof getThingsCollection>>) => {
-  const doc = await things.findOne(withMatch(libraryArchiveMatch(ownerId), { shareId: id }) as any) as unknown as ThingDoc | null;
-  if (!doc || !eligibleLibraryArchive(doc) || await contentExecutionHeld(doc, things)) return null;
+const findLibraryArchiveSubject = async (ownerId: string, id: string, things: Awaited<ReturnType<typeof getThingsCollection>>, session?: any) => {
+  const doc = await things.findOne(withMatch(libraryArchiveMatch(ownerId), { shareId: id }) as any, session ? { session } : undefined) as unknown as ThingDoc | null;
+  if (!doc || !eligibleLibraryArchive(doc) || await contentExecutionHeld(doc, things, session)) return null;
   return libraryArchiveNeedsMinimalPresentation(doc) || await canViewInherited(doc, { id: ownerId }) ? doc : null;
+};
+/** Exact owner-only browser card for archived dedicated content. This shares
+ * list/action eligibility and deliberately never calls its body projector. */
+export const readOwnedArchivedLibraryCard = async (viewer: Viewer, id: string, session?: any, collection = getThingsCollection): Promise<PublicThing | null> => {
+  if (!viewer?.id || viewer.pat || isCustomMongoEndpointActive()) return null;
+  const doc = await findLibraryArchiveSubject(viewer.id, id, await collection(), session);
+  if (!doc || doc.ownerId !== viewer.id || doc.libraryArchived !== true || !libraryArchiveNeedsMinimalPresentation(doc)) return null;
+  return minimalLibraryArchivePresentation({ id: doc.shareId, thingtime: thingtimeOf(doc), author: null,
+    createdAt: new Date(doc.createdAt).toISOString(), updatedAt: new Date(doc.updatedAt).toISOString() });
 };
 export const getLibraryArchiveAction = async (ownerId: string, id: string, collection = getThingsCollection) => {
   if (isCustomMongoEndpointActive()) return fail(409, 'Select your home Thingtime data source.');
