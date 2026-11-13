@@ -814,3 +814,27 @@ the upload receipt/candidate for inspection. Scheduled reconciliation uses the
 same promotion path. A shell or unrelated API canary alone is not application
 bootstrap acceptance. Run `node --test .github/scripts/preview-alias-promotion.test.mjs`
 and the existing publisher `--self-test` before publishing controller changes.
+
+### Reviewed retained-source preview maintenance
+
+A trusted manual main-branch dispatch may pass `maintenance_artifact_commit`,
+`maintenance_manifest_path` and `maintenance_manifest_sha256` with a positive
+`pr_number`. Empty defaults retain ordinary exact-current-head publication.
+The pinned canonical-main commit must contain a reviewed schema-v1 manifest at
+`ops/preview-maintenance/<id>/manifest.json` and its `protection.patch` sibling.
+The manifest binds the current PR authorization head, exact retained incumbent
+deployment/base, reviewed implementation commit, patch digest and resulting tree.
+The controller verifies merged-main ancestry and immutable blob/digest provenance;
+a separate build without deployment secrets applies the patch and checks the
+full tree plus gateway source fences. The protected publisher rechecks the
+current head, original incumbent and source receipt, then uses ordinary immutable
+candidate checks and conditional alias rollback. No arbitrary source URL or
+old-head override is accepted.
+
+Maintenance metadata reports the actual retained baseline and patched tree, with
+the current head identified only as authorization. It uses a separate GitHub
+maintenance environment and never reports ordinary current-head success.
+Scheduled reconciliation preserves its active alias until a healthy ordinary
+publication replaces it; canonical closed-PR/inactivity retention still applies.
+Unknown provenance is preserved for review. Do not dispatch before the matching
+main caller/artifact PR has merged.

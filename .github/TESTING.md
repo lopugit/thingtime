@@ -442,3 +442,17 @@ pre-queued with no jobs, logs, or cancellable run graph.
   privileged identity drop. Verify failure diagnostics reject arbitrary output,
   command arguments/messages, environment values and unregistered labels;
   malformed prefixed JSON and non-string stage/error-type fields are ignored.
+
+### Retained-source protection maintenance
+
+Run `node --test .github/scripts/preview-maintenance.test.mjs` alongside the
+publisher self-test and workflow control-plane contract. Verify ordinary empty
+inputs still build only the current PR head. For maintenance, reject non-manual
+or non-main dispatch, stale/forked PR identity, changed incumbent, wrong project,
+non-main artifact ancestry, tampered Git blob/manifest/patch/tree and mismatched
+prebuilt receipt. Reconstruct a synthetic retained repository through real Git
+apply/index/tree verification; preserve the gateway database/ingress fences.
+Verify no deployment secret reaches build, metadata distinguishes authorization
+head from retained baseline/overlay tree, and no ordinary current-head status is
+greened. Reconciliation must preserve a maintained alias and leave replacement
+to the same immutable candidate checks/conditional rollback as normal publishing.

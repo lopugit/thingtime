@@ -8,6 +8,21 @@ on:
         required: false
         default: 0
         type: number
+      maintenance_artifact_commit:
+        description: Reviewed canonical-main commit containing a retained-source protection manifest
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_path:
+        description: Pinned ops/preview-maintenance/<id>/manifest.json path
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_sha256:
+        description: SHA256 of the exact reviewed maintenance manifest bytes
+        required: false
+        default: ''
+        type: string
       retirement_deployment_ids:
         description: JSON array of reviewed deployment IDs; manual PR 0 maintenance only
         required: false
@@ -106,9 +121,13 @@ jobs:
       should_build: ${{ steps.plan.outputs.should_build }}
       pr_number: ${{ steps.plan.outputs.pr_number }}
       head_sha: ${{ steps.plan.outputs.head_sha }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
       expected_ready_at: ${{ steps.plan.outputs.expected_ready_at }}
     env:
+      PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
@@ -153,10 +172,31 @@ jobs:
       - name: Check out the authorized exact PR SHA
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ needs.prepare.outputs.head_sha }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
           path: product
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Check out protected maintenance reconstruction helper
+        if: inputs.maintenance_artifact_commit != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          path: control
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Reconstruct exact reviewed retained source without secrets
+        if: inputs.maintenance_artifact_commit != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit }}
+          PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path }}
+          PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 }}
+          PREVIEW_MAINTENANCE_PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          PREVIEW_MAINTENANCE_PRODUCT_DIR: ${{ github.workspace }}/product
+          PREVIEW_MAINTENANCE_RECEIPT_PATH: ${{ runner.temp }}/maintenance-source.json
+        run: node control/.github/scripts/preview-maintenance.mjs
 
       - name: Install pinned package manager
         run: |
@@ -185,7 +225,7 @@ jobs:
           VERCEL_ENV: preview
           VERCEL_TARGET_ENV: develop
           VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.head_ref }}
-          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.head_sha }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.source_sha }}
           VERCEL_GIT_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
           VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
           VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
@@ -199,7 +239,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
-          path: ${{ runner.temp }}/vercel-prebuilt.tgz
+          path: |
+            ${{ runner.temp }}/vercel-prebuilt.tgz
+            ${{ runner.temp }}/maintenance-source.json
           if-no-files-found: error
           retention-days: 1
 
@@ -218,6 +260,9 @@ jobs:
       issues: write
       pull-requests: write
     env:
+      PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
@@ -270,6 +315,7 @@ jobs:
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          PREVIEW_MAINTENANCE_RECEIPT_PATH: ${{ runner.temp }}/prebuilt-artifact/maintenance-source.json
           VERCEL_PREBUILT_DIR: ${{ runner.temp }}/validated-prebuilt
         run: node .github/scripts/deploy-develop-pr-preview.mjs
 

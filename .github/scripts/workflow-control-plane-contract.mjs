@@ -1247,8 +1247,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewBuildJob,
-    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
-    "develop preview builds only the exact SHA authorized by the protected controller",
+    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.source_sha \}\}/u,
+    "develop preview builds only the exact source SHA authorized by the protected controller",
   );
   assert.match(
     developPreviewBuildJob,
@@ -1290,6 +1290,11 @@ export function assertControlPlaneContract() {
     resolve(scripts, "deploy-develop-pr-preview.mjs"),
     "utf8",
   );
+
+  assert.match(developPreviewController, /source_sha=\$\{maintenance\?\.retainedSourceSha \?\? pullRequest\.head\.sha\}/u,
+    "ordinary builds remain exact head; retained baseline requires explicit validated maintenance intent");
+  assert.match(developPreviewBuildJob, /Reconstruct exact reviewed retained source without secrets[\s\S]*node control\/\.github\/scripts\/preview-maintenance\.mjs/u,
+    "maintenance overlay must be reconstructed by protected controller code before building");
   assert.match(
     developPreviewController,
     /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
@@ -1297,7 +1302,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady, maintenance: config\.maintenance \}\)/u,
     "develop preview publishes its expected URL and estimate before releasing the build plan",
   );
   assert.match(
@@ -1307,7 +1312,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /THINGTIME_GIT_COMMIT_SHA:\s*pullRequest\.head\.sha/u,
+    /THINGTIME_GIT_COMMIT_SHA:\s*sourceSha\(config, pullRequest\)/u,
     "develop previews publish the exact PR SHA into the runtime",
   );
   const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
