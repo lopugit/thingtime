@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep PR preview environment-gateway discovery and signed relay working under Vercel deployment protection; reject spoofed or reflected bypass headers. Bump `api.environment-gateway` to 1.1.1. **Codex (AI)**
+
 - 2026-10-26: Reconcile PR992 with develop `cd6f8b8ab`: retain Connections2, gateway1.1's proxy default, explicit dedicated policy and Vercel fail-closed admission. Preserve signed OAuth fixtures and a bounded ten-port compiled acceptance runner. Canonical gateway/Connections rollout remains separate. [PR992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI)
 
 - 2026-10-26: Integrate canonical gateway ownership, signed origin-preserving relays, Mongo admission/draining and durable index readiness into PR992. Keep all six Connections contracts at major2; test restored frontend callbacks, exact data-environment vault selection and rotating refresh isolation. Roll out a compatible canonical backend before follower-dependent actions; current major1 refusal is expected. [Details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md#environment-gateway-integration--26-october-2026). — Codex (AI)
