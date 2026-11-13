@@ -150,20 +150,20 @@ async function browserAcceptance(fixture,out){
  await context.addCookies(cookies(fixture.cookie)); const page=await context.newPage(); const errors=[],checks=[],pinResponses=[];page.on('response',async r=>{if(new URL(r.url()).pathname==='/api/v1/things/pins'){try{pinResponses.push({path:new URL(r.url()).searchParams.get('path'),origin:new URL(r.url()).origin,headers:Object.fromEntries(Object.entries(r.request().headers()).filter(([key])=>key.startsWith('x-thingtime-expected'))),status:r.status(),body:await r.json()})}catch{}}});page.on('pageerror',e=>errors.push(e.message));
  const tile=id=>page.locator(`[data-thing-id="${id}"]`).first();
  try {
-   await page.goto(fixture.origin+'/things?view=grid'); await tile(fixture.cases[0].id).waitFor({timeout:90000});
+   await page.goto(fixture.origin+'/things?view=grid',{waitUntil:'domcontentloaded',timeout:90000}); await tile(fixture.cases[0].id).waitFor({timeout:90000});
    await page.screenshot({path:join(out,'initial.png'),fullPage:true});
    const ids=fixture.cases.map(t=>t.id);
    const pinIds=()=>page.locator('[data-pin-surface]').first().locator('[data-pin-id]').evaluateAll(nodes=>[...new Set(nodes.map(n=>n.dataset.pinId))]);
-   const goto=async(path,id=ids[0])=>{await page.goto(fixture.origin+path);await tile(id).waitFor({timeout:90000});};
+   const goto=async(path,id=ids[0])=>{await page.goto(fixture.origin+path,{waitUntil:'domcontentloaded',timeout:90000});await tile(id).waitFor({timeout:90000});};
    const menu=async(id)=>{await tile(id).hover();await tile(id).getByRole('button',{name:/actions$/}).click();await page.getByRole('menuitem').first().waitFor();};
    const waitPins=async(expected)=>{await page.waitForFunction(expected=>{const surface=document.querySelector('[data-pin-surface]');return JSON.stringify(surface?[...new Set([...surface.querySelectorAll('[data-pin-id]')].map(n=>n.dataset.pinId))]:[])===JSON.stringify(expected)},expected);await page.waitForFunction(()=>!document.querySelector('[data-pin-surface] [aria-busy="true"], [aria-label="Saving pins"]'));
      const saved=await page.evaluate(async()=>{const path=JSON.parse(document.querySelector('[data-pin-surface]').getAttribute('data-pin-surface'));return (await fetch('/api/v1/things/pins?'+new URLSearchParams({path:JSON.stringify(path)}))).json();});assert(saved.ok);assert.deepEqual(saved.pins.sort((a,b)=>a.order-b.order).map(p=>p.thingId).filter(id=>expected.includes(id)),expected,'independent API read agrees with visible order');};
    if(process.env.THING_PINS_BROWSER_FROM){
-     await page.evaluate(async ids=>{let revision='0';for(const thingId of ids){const data=await(await fetch('/api/v1/things/pins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:['/things'],revision,operation:'pin',thingId})})).json();if(!data.ok)throw Error(data.error);revision=data.revision;}},ids.slice(0,3));const freshRead=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/v1/things/pins'&&r.request().method()==='GET'&&r.request().headers()['x-thingtime-expected-api-origin']===fixture.origin);await page.reload();assert.equal((await freshRead).status(),200);await waitPins(ids.slice(0,3));checks.push('fresh mount reads API-seeded pins under StrictMode without cached state; resumed parents checkpoint');
+     await page.evaluate(async ids=>{let revision='0';for(const thingId of ids){const data=await(await fetch('/api/v1/things/pins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:['/things'],revision,operation:'pin',thingId})})).json();if(!data.ok)throw Error(data.error);revision=data.revision;}},ids.slice(0,3));const freshRead=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/v1/things/pins'&&r.request().method()==='GET'&&r.request().headers()['x-thingtime-expected-api-origin']===fixture.origin);await page.reload({waitUntil:'domcontentloaded',timeout:90000});assert.equal((await freshRead).status(),200);await waitPins(ids.slice(0,3));checks.push('fresh mount reads API-seeded pins under StrictMode without cached state; resumed parents checkpoint');
    }else{
    for(const id of ids.slice(0,3)){await menu(id);await page.getByRole('menuitem',{name:/Pin/}).click();}
    await waitPins(ids.slice(0,3)); checks.push('three menu pin writes render in insertion order');
-   await page.reload(); await waitPins(ids.slice(0,3)); checks.push('pin order persists after reload');
+   await page.reload({waitUntil:'domcontentloaded',timeout:90000}); await waitPins(ids.slice(0,3)); checks.push('pin order persists after reload');
    await page.getByRole('heading',{name:'Things',exact:true}).click();await page.keyboard.press('Meta+a');
    for(const id of ids.slice(0,3))assert.equal(await tile(id).getByRole('checkbox').isChecked(),true,'Cmd+A includes pinned '+id);
    await page.keyboard.press('Escape');checks.push('Cmd+A includes pinned entries');
@@ -190,14 +190,14 @@ async function browserAcceptance(fixture,out){
    for(const [parent,target] of [[ids[4],ids[0]],[ids[5],ids[2]]]){
      const saved=await page.evaluate(async({parent,target})=>(await fetch('/api/v1/things/pins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:['/things',parent],revision:'0',operation:'pin',thingId:target})})).json(),{parent,target});assert(saved.ok);
      const seeded=await page.evaluate(async parent=>(await fetch('/api/v1/things/pins?'+new URLSearchParams({path:JSON.stringify(['/things',parent])}))).json(),parent);await writeFile(join(out,'parent-seed.json'),JSON.stringify({parent,target,saved,seeded},null,2));
-     await goto('/things?folder='+parent,target);await waitPins([target]);await page.reload();await waitPins([target]);
+     await goto('/things?folder='+parent,target);await waitPins([target]);await page.reload({waitUntil:'domcontentloaded',timeout:90000});await waitPins([target]);
    }
    checks.push('independent parent paths hydrate exact pinned Things outside current folder and persist');
    await goto('/things?files=thingtime');
    await menu(ids[0]);await page.getByRole('menuitem',{name:/Pin/}).click();
    await menu(ids[2]);await page.getByRole('menuitem',{name:/Pin/}).click();
    await page.getByRole('button',{name:'Reorder pins',exact:true}).click();await page.getByRole('button',{name:/Drag Visiblepin 0 to reorder pins/}).press('End');
-   await page.getByRole('button',{name:'Done',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('[aria-label="Saving pins"]'));await page.reload();
+   await page.getByRole('button',{name:'Done',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('[aria-label="Saving pins"]'));await page.reload({waitUntil:'domcontentloaded',timeout:90000});
    await tile(ids[0]).getByLabel('Pinned here').waitFor();
    const cloudOrder=await page.locator('[data-pin-surface] [data-thing-id]').evaluateAll(nodes=>nodes.map(n=>n.dataset.thingId));assert.deepEqual(cloudOrder.slice(0,2),[ids[2],ids[0]]);
    await page.getByRole('combobox',{name:'File view',exact:true}).selectOption('list');await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(out,'cloud-files-mobile-list.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.setViewportSize({width:1440,height:1000});
@@ -212,7 +212,7 @@ async function browserAcceptance(fixture,out){
    const first=await handle(ids[0]).boundingBox(),last=await handle(ids[2]).boundingBox(); assert(first&&last);
    await page.mouse.move(first.x+first.width/2,first.y+first.height/2);await page.mouse.down();await page.mouse.move(last.x+last.width/2,last.y+last.height/2,{steps:12});await page.mouse.up();
    assert.notDeepEqual(await pinIds(),ids.slice(0,3),'pointer drag changes order');checks.push('pointer drag reorder');
-   const afterPointer=await pinIds();await waitPins(afterPointer);await page.getByRole('button',{name:'Done',exact:true}).click();await page.reload();await waitPins(afterPointer);checks.push('reorder persists through reload');
+   const afterPointer=await pinIds();await waitPins(afterPointer);await page.getByRole('button',{name:'Done',exact:true}).click();await page.reload({waitUntil:'domcontentloaded',timeout:90000});await waitPins(afterPointer);checks.push('reorder persists through reload');
    await page.setViewportSize({width:390,height:844});await waitPins(afterPointer);
    await menu(ids[0]);await page.getByRole('menuitem',{name:/Reorder pins/}).click();
    const earlier=page.getByRole('button',{name:/^Move .* earlier$/}).last();await earlier.tap();
@@ -225,13 +225,13 @@ async function browserAcceptance(fixture,out){
    if(process.env.THING_PINS_BROWSER_FROM!=='account'){
    const deviceMenu=async()=>{const name=page.getByText('Synthetic Pin Device',{exact:true}).first();await name.evaluate(el=>el.scrollIntoView({block:'center'}));await name.hover();await page.getByRole('button',{name:'Synthetic Pin Device actions',exact:true}).click();await page.getByRole('menuitem').first().waitFor();};
    const beforeDevice=await pinIds();await deviceMenu();await page.getByRole('menuitem',{name:/Pin/}).click();await waitPins([...beforeDevice,fixture.deviceId]);
-   await deviceMenu();await page.getByRole('menuitem',{name:/Reorder pins/}).click();await page.getByRole('button',{name:'Drag Synthetic Pin Device to reorder pins',exact:true}).press('Home');await waitPins([fixture.deviceId,...beforeDevice]);await page.getByRole('button',{name:'Done',exact:true}).click();await page.reload();await waitPins([fixture.deviceId,...beforeDevice]);
+   await deviceMenu();await page.getByRole('menuitem',{name:/Reorder pins/}).click();await page.getByRole('button',{name:'Drag Synthetic Pin Device to reorder pins',exact:true}).press('Home');await waitPins([fixture.deviceId,...beforeDevice]);await page.getByRole('button',{name:'Done',exact:true}).click();await page.reload({waitUntil:'domcontentloaded',timeout:90000});await waitPins([fixture.deviceId,...beforeDevice]);
    await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:join(out,'device-mixed-pins-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:join(out,'device-mixed-pins-mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.setViewportSize({width:1440,height:1000});
    await page.setViewportSize({width:390,height:844});await deviceMenu();await page.getByRole('menuitem',{name:/Reorder pins/}).click();await page.evaluate(()=>scrollTo(0,0));const surfaceWidth=(await page.locator('[data-pin-surface]').first().boundingBox()).width;for(const box of await page.locator('[data-pin-surface] [data-pin-id]').all()){const bounds=await box.boundingBox();assert(bounds.width>=surfaceWidth-2,'mobile pinned card fills assigned column');}await page.screenshot({path:join(out,'mobile-reorder-final.png'),fullPage:true});await page.getByRole('button',{name:'Done',exact:true}).click();await page.setViewportSize({width:1440,height:1000});checks.push('mobile pinned cards fill their assigned reorder column');
    await deviceMenu();await page.getByRole('menuitem',{name:/Unpin/}).click();await waitPins(beforeDevice);checks.push('real synthetic signed device pairing, mixed Thing/device pin/reorder/reload and desktop/mobile');
    await menu(ids[0]);await page.getByRole('menuitem',{name:/Unpin/}).click();assert(!(await pinIds()).includes(ids[0]));checks.push('unpin removes only selected entry');
    }
-   await context.clearCookies();await context.addCookies(cookies(fixture.otherCookie));await page.reload();await page.getByRole('heading',{name:'Things',exact:true}).waitFor();const switched=await page.evaluate(async()=>(await fetch('/api/v1/auth/me')).json());assert.equal(switched.user.username,'navigation-other');assert.deepEqual(await pinIds(),[],'independent account sees no owner pins');const otherPins=await page.evaluate(async()=>(await fetch('/api/v1/things/pins?path='+encodeURIComponent(JSON.stringify(['/things'])))).json());assert.equal(otherPins.pins.length,0);checks.push('independent account pins isolated');
+   await context.clearCookies();await context.addCookies(cookies(fixture.otherCookie));await page.reload({waitUntil:'domcontentloaded',timeout:90000});await page.getByRole('heading',{name:'Things',exact:true}).waitFor();const switched=await page.evaluate(async()=>(await fetch('/api/v1/auth/me')).json());assert.equal(switched.user.username,'navigation-other');assert.deepEqual(await pinIds(),[],'independent account sees no owner pins');const otherPins=await page.evaluate(async()=>(await fetch('/api/v1/things/pins?path='+encodeURIComponent(JSON.stringify(['/things'])))).json());assert.equal(otherPins.pins.length,0);checks.push('independent account pins isolated');
    assert.deepEqual(errors,[]);
    await writeFile(join(out,'receipt.json'),JSON.stringify({checks,errors},null,2));
  } catch(error) {await page.screenshot({path:join(out,'failure.png'),fullPage:true});await writeFile(join(out,'browser-failure.json'),JSON.stringify({error:error.stack,errors,checks,pinResponses,url:page.url(),text:await page.locator('body').innerText()},null,2));throw error;}

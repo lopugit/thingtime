@@ -59,15 +59,21 @@ and mounted state are separated by account and plane.
 
 Evidence: `/tmp/thing-pins-acceptance/{api,manifest,accounting,protected}-receipt.json`,
 `upstream-ui-receipt.json`, `remainder-ui-receipt.json`,
-`device-ui-receipt.json`, and task-owned screenshots.
+`device-ui-receipt.json`, final `receipt.json`, and task-owned screenshots.
 These are local isolated acceptance results, not production acceptance.
 
 ## Remaining acceptance at note creation
 
-The final browser pass is still checking independent account behavior.
-Earlier retained receipts identify the completed cases; screenshots alone are
-not recorded passes.
+The final browser account switch passed: a fresh authenticated profile read
+confirmed the second identity, and both the rendered view and API returned no
+first-account pins. Disposable listeners, browser context and database were
+removed after acceptance. The final client build passed.
 Positive live custom-plane acceptance was unavailable; selected-plane routing
 and fences were reviewed, without switching a real account's database.
+Graphify uses the structural refresh fallback. A semantic pass expanded the
+large existing documents to 128 chunks; a narrower four-document pass reached
+four of eleven chunks while the shared model service remained queued. Both
+were stopped after bounded investigation. Changed Markdown is not claimed as
+newly semantically indexed; portable code graph generation remains required.
 Final PR-head checks, preview/deployed behavior and production acceptance remain
 to be recorded by the task owner. No production success is claimed here.
