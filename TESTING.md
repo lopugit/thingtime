@@ -7669,6 +7669,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       menu do not navigate or expand. The Move dialog remains a folder picker
       without browse controls. Column folder clicks retain the parent column
       and show children in the next column.
+- [ ] With nested folders and a long name in the browsing sidebar and Move
+      picker, check that the caret sits beside the icon/name and rows are compact
+      without clipping. On desktop, hover and keyboard-focus the name to read
+      its full label; on mobile, press and hold the name. A hold must not open
+      the folder, while a tap, caret click, selection, menu and drag/drop keep
+      their usual behavior. Check the bottom of the tree at narrow and wide sizes.
 
 - Real-app isolated acceptance: after `npm run worktree-setup`, build the
   local server with `NITRO_PRESET=node-server pnpm --dir remix run build:server`,

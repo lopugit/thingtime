@@ -12,6 +12,7 @@ import { colors } from './colors';
 import { space } from './space';
 import { ChakraButton } from './Components/Button';
 import { ChakraSelect } from './Components/Select';
+import { TRANSFER_MENU_Z } from '~/components/Things/transferLayers';
 
 export const theme = extendTheme({
   colors,
@@ -64,6 +65,11 @@ export const theme = extendTheme({
     }
   },
   components: {
+    Tooltip: {
+      variants: {
+        folderTree: { zIndex: TRANSFER_MENU_Z }
+      }
+    },
     Button: ChakraButton,
     Input: {
       defaultProps: {
