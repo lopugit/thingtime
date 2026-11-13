@@ -132,7 +132,7 @@
     "test:lopu-ui": "node --import tsx --test app/components/Lopu/*.test.ts",
     "test:partial-json": "node --import tsx --test app/utils/partialJson.test.ts",
     "test:migrations": "node --import tsx --test app/api/utils/migrations/*.test.ts app/components/Schemas/migrationUiCore.test.ts",
-    "test:messenger": "node --import tsx --test app/api/utils/messenger/*.test.ts app/components/Messenger/*.test.ts",
+    "test:messenger": "node --import tsx --test app/api/utils/messenger/*.test.ts app/components/Messenger/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/messenger/messageNotifications.test.mts",
     "test:inline-tokens": "node --import tsx --test app/components/Feed/hashtags.test.ts app/utils/mentions.test.ts",
     "test:mcp-demo": "node --import tsx --test app/routes/docs/mcpDemoCore.test.ts",
     "test:nav": "node --import tsx --test app/components/Nav/*.test.ts",

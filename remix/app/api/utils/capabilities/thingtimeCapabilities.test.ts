@@ -114,7 +114,7 @@ test('Messenger custom-emoji parsing and projections publish a compatible correc
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://emoji.test');
   for (const feature of ['api.chats-messages', 'api.chats-messages-edit', 'api.chats-react']) {
-    const expected = feature === 'api.chats-messages' ? '1.6.0' : feature === 'api.chats-messages-edit' ? '1.3.0' : feature === 'api.chats-react' ? '1.0.3' : '1.0.2';
+    const expected = feature === 'api.chats-messages' ? '1.7.0' : feature === 'api.chats-messages-edit' ? '1.3.0' : feature === 'api.chats-react' ? '1.0.3' : '1.0.2';
     assert.equal(source.features[feature], expected); assert.equal(origin.features[feature].version, expected);
     assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
     assert.equal(capabilitySatisfies('1.0.2', '1.0.1'), true);
@@ -294,8 +294,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.3.0');
   assert.equal(manifest.features['api.subspaces-delete']?.version, '1.3.0');
   // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
-  assert.equal(manifest.features['api.notifications-list']?.version, '1.8.0');
-  assert.equal(manifest.features['api.notifications-settings']?.version, '1.8.0');
+  assert.equal(manifest.features['api.notifications-list']?.version, '1.9.0');
+  assert.equal(manifest.features['api.notifications-settings']?.version, '1.9.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.29.0');
 
@@ -386,8 +386,8 @@ test('both manifests publish notification history and system notification contra
   const apiManifest = createApiCapabilitiesManifest();
   // Both subspace moderation and private recording reminders are preserved.
   const expected: Record<string, string> = {
-    'api.notifications-list': '1.8.0',
-    'api.notifications-settings': '1.8.0'
+    'api.notifications-list': '1.9.0',
+    'api.notifications-settings': '1.9.0'
   };
   for (const [feature, version] of Object.entries(expected)) {
     assert.equal(originManifest.features[feature]?.version, version);
@@ -743,7 +743,7 @@ test('shared content input and projection contracts agree on both origin manifes
 
 
 test('authenticated shared-content body contracts publish deliberate minors in both manifests', () => {
- const expected = {'api.things':'1.65.0','api.things-update':'1.29.0','api.things-comment':'1.12.0','api.chats-messages':'1.6.0','api.chats-messages-edit':'1.3.0','api.attachment-uploads':'1.11.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.13.1'};
+ const expected = {'api.things':'1.65.0','api.things-update':'1.29.0','api.things-comment':'1.12.0','api.chats-messages':'1.7.0','api.chats-messages-edit':'1.3.0','api.attachment-uploads':'1.11.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.13.1'};
  const source=createApiCapabilitiesManifest(), runtime=thingtimeCapabilityManifest('https://shared-content.test');
  for (const [feature,version] of Object.entries(expected)) {
   assert.equal(source.features[feature],version); assert.equal(runtime.features[feature].version,version);
@@ -886,4 +886,21 @@ test('Archive extended reads reject the deployed Component-only 1.62 contract', 
   const runtime = thingtimeCapabilityManifest('https://archive.test').features['api.things'].version;
   for (const version of [current, runtime]) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), true);
   for (const version of [undefined, '1.62.0', '1.62.99', '2.0.0']) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), false);
+});
+
+
+test('private message notification contracts publish and negotiate on both manifests', () => {
+  const docs = createApiCapabilitiesManifest();
+  const origin = thingtimeCapabilityManifest('https://messages.example');
+  for (const [feature, minimum, previous] of [
+    ['api.chats-messages', '1.7.0', '1.6.0'],
+    ['api.notifications-list', '1.9.0', '1.8.0'],
+    ['api.notifications-settings', '1.9.0', '1.8.0']
+  ]) {
+    assert.equal(docs.features[feature], minimum);
+    assert.equal(origin.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(previous, minimum), false);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+  }
 });

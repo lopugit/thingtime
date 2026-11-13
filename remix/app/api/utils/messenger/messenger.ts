@@ -1,3 +1,4 @@
+import { notifyChatMessage } from './messageNotifications';
 import { ensureViewerSubspaceMessaging } from './subspaceMessages';
 import { activeSubspaceMemberCounts, currentSubspaceChatMembers, filterSubspaceMessagingChats, linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Chats, membership, messages, reactions, read receipts and message requests.
@@ -1363,6 +1364,7 @@ export const sendMessage = async (
 			docs.map((doc: any) => String(doc.shareId))
 		);
 		if (!exact) return fail(409, 'That message request id is already in use');
+		void notifyChatMessage(viewerId, String(existing.shareId), resolveChatAccess);
 		const projected = await projectMessages(viewerId, chat.shareId, [existing], { withThreadCounts: false });
 		return { ok: true, message: projected.messages[0], customEmojis: projected.customEmojis };
 	};
@@ -1424,6 +1426,7 @@ export const sendMessage = async (
 		if (error?.message === 'message_membership_changed') return fail(409, 'Chat membership changed — try again');
 		throw error;
 	}
+  void notifyChatMessage(viewerId, String(message.shareId), resolveChatAccess);
   const projected = await projectMessages(viewerId, chat.shareId, [message], { withThreadCounts: false });
   return { ok: true, message: projected.messages[0], customEmojis: projected.customEmojis };
 };

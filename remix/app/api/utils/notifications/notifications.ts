@@ -1,6 +1,6 @@
 import { withGatewayWork } from '../deployment/environmentGateway';
 import { waitUntil } from '@vercel/functions';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { NotificationDelivery } from '../lopu/remindersCore';
 import { ObjectId } from 'mongodb';
 
@@ -25,6 +25,7 @@ import {
   type NotificationListOptions as NotificationListQueryOptions,
   type ResolvedNotificationListQuery
 } from './listQuery';
+import { thingUniqueKey } from '../mongodb/uniqueKeys';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
@@ -165,6 +166,35 @@ const emitNotificationNow = async (input: EmitNotificationInput): Promise<void> 
   } catch (err: any) {
     console.error('[notifications] emit failed:', err?.message || err);
   }
+};
+
+// Actor-preserving server events. Resolve current authorization again before delivery;
+// immutable event identity deduplicates retries without resetting history/read state.
+// Delivery is best effort after persistence, not an exactly-once external transport.
+export const emitNotificationOnce = (eventKey: string, resolve: () => Promise<EmitNotificationInput | null>, coalesceKey?: (input: EmitNotificationInput) => string | undefined): Promise<void> => {
+  const task = withGatewayWork(async () => {
+    try {
+      const input = await resolve();
+      if (!input || !input.recipientId || input.recipientId === input.actor.id) return;
+      const doc = notificationDoc(input, new Date());
+      const keys = [thingUniqueKey('notificationEvent', createHash('sha256').update(eventKey).digest('hex'))];
+      const coalescing = coalesceKey?.(input);
+      if (coalescing) keys.push(thingUniqueKey('notificationCoalescing', createHash('sha256').update(coalescing).digest('hex')));
+      const things = await getThingsCollection();
+      try { await things.insertOne({ ...doc, uniqueKeys: keys } as any); }
+      catch (error: any) { if (error?.code === 11000) return; throw error; }
+      const fresh = await resolve();
+      if (!fresh || fresh.recipientId !== input.recipientId || fresh.actor.id !== input.actor.id || fresh.type !== input.type || input.historyOnly || fresh.historyOnly) return;
+      const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(fresh.recipientId));
+      if (prefs.masters.push && prefs.push[fresh.type] !== false)
+        await sendNotificationPush({ ...fresh, notificationId: doc.shareId }).catch(() => {});
+      await maybeEmailNotification(fresh).catch(() => {});
+    } catch (error: any) {
+      console.error('[notifications] event emit failed:', error?.message || 'Unavailable');
+    }
+  });
+  waitUntil(task);
+  return task;
 };
 
 type BulkRecipient = { recipientId: string; type: NotificationType };

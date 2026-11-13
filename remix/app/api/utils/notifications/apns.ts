@@ -12,6 +12,8 @@ type ApnsConfig = { keyId: string; teamId: string; privateKey: string };
 type PushEnvelope = EmitNotificationInput & { notificationId: string };
 
 const ACTIONS: Record<string, string> = {
+  'chat-message': 'sent you a message',
+  'chat-request': 'sent you a message request',
   'friend-request': 'sent you a friend request',
   'friend-accepted': 'accepted your friend request',
   'new-follower': 'followed you',
@@ -61,6 +63,7 @@ const providerToken = (config: ApnsConfig): string => {
 };
 
 export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'> & Partial<Pick<EmitNotificationInput, 'type' | 'href'>>): string => {
+  if (notification.type === 'chat-message' || notification.type === 'chat-request') return safeInternalHref(notification.href) || '/messages';
   if (notification.type === 'lopu-reminder') return safeInternalHref(notification.href) || '/settings';
   if (notification.type === 'lopu-message') return safeInternalHref(notification.href) || '/lopu';
   if (notification.type === 'recording-reminder') return safeInternalHref(notification.href) || '/lopu/recordings';

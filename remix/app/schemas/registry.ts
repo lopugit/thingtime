@@ -2706,6 +2706,8 @@ const friendThingSchema: ThingtimeSchema = {
 // demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
   'device-alert',
+  'chat-message',
+  'chat-request',
   'friend-request',
   'friend-accepted',
   'new-follower',
@@ -2782,6 +2784,8 @@ export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: s
 
 export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCategory> = {
   'device-alert':'system',
+  'chat-message': 'social',
+  'chat-request': 'social',
   'friend-request': 'social',
   'friend-accepted': 'social',
   'new-follower': 'social',
@@ -2836,7 +2840,7 @@ export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 // action can run sixty times a minute, and the mod-queue traffic of a big
 // subspace (join requests, reports) is the same class of firehose —
 // moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['chat-message', 'chat-request', 'post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {

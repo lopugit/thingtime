@@ -7370,14 +7370,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
-      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
+      'Version 1.7.0 adds private chat-message and chat-request notifications with actor-only copy, durable idempotent history and email opt-in. Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Version 1.5 adds lopu.deviceTranscript:true for an unverified device-reported assistant transcript, without hosted provider, model, billing or tool metadata. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
@@ -12599,14 +12599,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // subspace family together; additive
     // Includes the 1.6.2 APNs collapse-identifier fix.
     // 1.7.0 adds lopu-message for scheduled conversation updates.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
     summary: 'Your searchable notification history. Add history=1 to include all records regardless of delivery settings; the default bell view still applies preferences.',
     detail:
-      'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
+      'Version 1.9.0 adds private chat-message and chat-request notifications with actor-only copy, durable idempotent history and email opt-in. Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
       'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
       'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
       'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
@@ -12848,14 +12848,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
     // 1.7.0 makes action-run delivery opt-in in both channels; saved choices survive.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
     summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
     detail:
-      'Includes recording-reminder for opted-in daily Watch recording todos (push on, email opt-in). Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'Version 1.9.0 adds private chat-message and chat-request notifications with actor-only copy, durable idempotent history and email opt-in. Includes recording-reminder for opted-in daily Watch recording todos (push on, email opt-in). Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
       '(reserved), action-run, login-success, system-message (system notes; email defaults off), the subspace family ' +
