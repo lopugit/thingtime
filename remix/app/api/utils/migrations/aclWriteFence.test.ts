@@ -7,7 +7,7 @@ import { migrationFailureResult } from './migrationFailure';
 const fixture = (initial = false) => {
   let ready = initial, custom = false, reads = 0, writes = 0;
   const migration = createAclWriteFenceMigration({ customPlane: () => custom,
-    inspect: async () => { reads++; return ready; }, provision: async () => { writes++; ready = true; } });
+    inspect: async () => { reads++; return ready; }, inspectAuthority: async () => 'unknown', provision: async () => { writes++; ready = true; } });
   return { migration, counts: () => ({ reads, writes }), custom: () => { custom = true; } };
 };
 test('dry-run reports missing collection protection without provisioning and explains counts', async () => {
@@ -16,7 +16,8 @@ test('dry-run reports missing collection protection without provisioning and exp
   const report = await f.migration.run({ dryRun: true });
   assert.equal(report.matched, 1); assert.equal(report.migrated, 0);
   assert.equal(f.counts().writes, 0);
-  assert.match(report.notes.join(' '), /does not prove permission/);
+  assert.equal(report.collModAuthority, 'unknown');
+  assert.match(report.notes.join(' '), /does not prove provisioning/);
 });
 test('provisioning uses canonical installer and lease checks; subsequent run remains idempotent', async () => {
   const f = fixture(); let checks = 0;
@@ -45,7 +46,26 @@ test('lost lease prevents provisioning and closed diagnostic remains a 503', asy
 test('denied metadata inspection preserves recovery census but explicit dry-run exposes closed failure', async () => {
   const migration = createAclWriteFenceMigration({ customPlane: () => false,
     inspect: async () => { throw new AclWriteFenceError('inspect', 'unauthorized'); },
+    inspectAuthority: async () => 'unknown',
     provision: async () => assert.fail('inspection denial must not attempt DDL') });
   assert.equal(await migration.pending(), 1);
   await assert.rejects(() => migration.run({ dryRun: true }), /inspect\/unauthorized/);
+});
+
+test('installed protection stays ready when current principal lacks collMod', async () => {
+  const migration = createAclWriteFenceMigration({ customPlane: () => false, inspect: async () => true,
+    inspectAuthority: async () => 'absent', provision: async () => assert.fail('dry run must not provision') });
+  assert.equal(await migration.pending(), 0);
+  const report = await migration.run({ dryRun: true });
+  assert.equal(report.matched, 0);
+  assert.equal(report.collModAuthority, 'absent');
+});
+
+test('denied authority command becomes unknown without leaking its error', async () => {
+  const migration = createAclWriteFenceMigration({ customPlane: () => false, inspect: async () => false,
+    inspectAuthority: async () => { throw Error('private principal and resource'); },
+    provision: async () => assert.fail('dry run must not provision') });
+  const report = await migration.run({ dryRun: true });
+  assert.equal(report.collModAuthority, 'unknown');
+  assert.doesNotMatch(JSON.stringify(report), /private principal and resource/);
 });
