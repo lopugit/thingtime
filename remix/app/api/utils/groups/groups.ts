@@ -27,8 +27,8 @@ import { COLLECTION_SCHEMA_VERSIONS, ACL_OWNER } from '~/schemas/registry';
 
 const THINGS_SCHEMA_VERSION = COLLECTION_SCHEMA_VERSIONS.things;
 
-export const MAX_GROUPS_PER_USER = 64;
-export const MAX_GROUP_MEMBERS = 128;
+// A processing batch is not a product limit. Memberships remain relational.
+const GROUP_BATCH_SIZE = 100;
 export const GROUP_NAME_MAX = 60;
 
 type Fail = { ok: false; status: number; error: string };
@@ -55,13 +55,14 @@ const sanitizeMemberIds = async (ownerId: string, value: unknown): Promise<strin
   const wanted = [...new Set(value.filter((id): id is string => typeof id === 'string' && !!id.trim()).map((id) => id.trim()))].filter(
     (id) => id !== ownerId
   );
-  if (wanted.length > MAX_GROUP_MEMBERS) return fail(400, `Groups hold at most ${MAX_GROUP_MEMBERS} members`);
   if (!wanted.length) return [];
   // findUserById resolves BOTH user eras (things-era user things and legacy
   // users-collection rows) — new signups only exist as user things
-  const resolved = await Promise.all(wanted.map(async (id) => ({ id, user: await findUserById(id) })));
-  const missing = resolved.find((entry) => !entry.user);
-  if (missing) return fail(400, `Unknown member user id: ${missing.id}`);
+  for (let offset = 0; offset < wanted.length; offset += GROUP_BATCH_SIZE) {
+    const resolved = await Promise.all(wanted.slice(offset, offset + GROUP_BATCH_SIZE).map(async (id) => ({ id, user: await findUserById(id) })));
+    const missing = resolved.find((entry) => !entry.user);
+    if (missing) return fail(400, `Unknown member user id: ${missing.id}`);
+  }
   return wanted;
 };
 
@@ -69,23 +70,30 @@ const memberIdsByGroup = async (ownerId: string, groupIds: string[]): Promise<Ma
   const map = new Map<string, string[]>();
   if (!groupIds.length) return map;
   const things = await getThingsCollection();
-  const docs = await things
-    .find({ thingtime: 'group-member', ownerId, 'crystal.groupId': { $in: groupIds } } as any)
-    .project({ targetId: 1, crystal: 1 })
-    .toArray();
-  for (const doc of docs as any[]) {
-    const groupId = String(doc.crystal?.groupId || '');
-    if (!groupId) continue;
-    const list = map.get(groupId) || [];
-    list.push(String(doc.targetId));
-    map.set(groupId, list);
+  for (let offset = 0; offset < groupIds.length; offset += GROUP_BATCH_SIZE) {
+    const docs = await things
+      .find({ thingtime: 'group-member', ownerId, 'crystal.groupId': { $in: groupIds.slice(offset, offset + GROUP_BATCH_SIZE) } } as any)
+      .project({ targetId: 1, crystal: 1 })
+      .batchSize(GROUP_BATCH_SIZE)
+      .toArray();
+    for (const doc of docs as any[]) {
+      const groupId = String(doc.crystal?.groupId || '');
+      if (!groupId) continue;
+      const list = map.get(groupId) || [];
+      list.push(String(doc.targetId));
+      map.set(groupId, list);
+    }
   }
   return map;
 };
 
 const projectGroups = async (ownerId: string, docs: any[]): Promise<PublicGroup[]> => {
   const members = await memberIdsByGroup(ownerId, docs.map((doc) => String(doc.shareId)));
-  const profiles = await resolveProfiles([...new Set([...members.values()].flat())]);
+  const ids = [...new Set([...members.values()].flat())];
+  const profiles = new Map<string, FeedAuthor>();
+  for (let offset = 0; offset < ids.length; offset += GROUP_BATCH_SIZE) {
+    for (const [id, profile] of await resolveProfiles(ids.slice(offset, offset + GROUP_BATCH_SIZE))) profiles.set(id, profile);
+  }
   return docs.map((doc) => {
     const ids = members.get(String(doc.shareId)) || [];
     return {
@@ -104,7 +112,7 @@ export const listGroups = async (ownerId: string): Promise<{ ok: true; groups: P
   const docs = await things
     .find({ thingtime: 'group', ownerId } as any)
     .sort({ createdAt: -1 })
-    .limit(MAX_GROUPS_PER_USER)
+    .batchSize(GROUP_BATCH_SIZE)
     .toArray();
   return { ok: true, groups: await projectGroups(ownerId, docs as any[]) };
 };
@@ -139,10 +147,6 @@ export const createGroup = async (
   if (!Array.isArray(memberIds)) return memberIds;
 
   const things = await getThingsCollection();
-  const existing = await things.countDocuments({ thingtime: 'group', ownerId } as any);
-  if (existing >= MAX_GROUPS_PER_USER) {
-    return fail(409, `You already have ${MAX_GROUPS_PER_USER} groups — delete some first`);
-  }
 
   const now = new Date();
   const doc = {
@@ -160,7 +164,9 @@ export const createGroup = async (
   };
   await things.insertOne(doc as any);
   if (memberIds.length) {
-    await things.insertMany(memberIds.map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+    for (let offset = 0; offset < memberIds.length; offset += GROUP_BATCH_SIZE) {
+      await things.insertMany(memberIds.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+    }
   }
   return { ok: true, group: (await projectGroups(ownerId, [doc]))[0] };
 };
@@ -193,10 +199,14 @@ export const updateGroup = async (
     const toRemove = current.filter((memberId) => !wanted.has(memberId));
     const toAdd = memberIds.filter((memberId) => !have.has(memberId));
     if (toRemove.length) {
-      await things.deleteMany({ thingtime: 'group-member', ownerId, 'crystal.groupId': doc.shareId, targetId: { $in: toRemove } } as any);
+      for (let offset = 0; offset < toRemove.length; offset += GROUP_BATCH_SIZE) {
+        await things.deleteMany({ thingtime: 'group-member', ownerId, 'crystal.groupId': doc.shareId, targetId: { $in: toRemove.slice(offset, offset + GROUP_BATCH_SIZE) } } as any);
+      }
     }
     if (toAdd.length) {
-      await things.insertMany(toAdd.map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+      for (let offset = 0; offset < toAdd.length; offset += GROUP_BATCH_SIZE) {
+        await things.insertMany(toAdd.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+      }
     }
   }
 

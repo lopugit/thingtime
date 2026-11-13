@@ -207,8 +207,7 @@ test('a long node key cannot expand through ttActionInputs', () => {
 // The same amplifier once more, through the last unmetered path: { ttArg }.
 // It is the wrapper form of a '{arg}' token, but it returned the scope value
 // straight out without charging it, so the char budget metered the token form
-// and not this one. A saved version stores up to MAX_COMPONENT_SAVED_ARGS
-// values of MAX_COMPONENT_SAVED_ARG_CHARS (2000) chars each, and `component` is
+// and not this one. A saved version stores scalar values, and `component` is
 // not in PROTECTED_THINGTIME, so any signed-in user can publish this. Uncharged,
 // the 139-byte template below (14 raw nodes, depth 8 — inside every server cap)
 // resolved to 7,658,014 chars, 29x over the 256KB budget, while the identical

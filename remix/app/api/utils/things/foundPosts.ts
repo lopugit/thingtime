@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import type { ThingDoc, Viewer } from './things';
+import { aclMarkerClause, rootAcl } from './relationalAcl';
 
 export const FOUND_POST_KIND = 'post-discovery';
 export const FOUND_POST_PREFIX = 'post-discovery-';
@@ -13,7 +14,7 @@ export const foundPostDigest = (key: string) => createHash('sha256').update(key)
 export const foundPostGrantMatches = (post: ThingDoc, digest: unknown): boolean =>
 	!!post.thingtime?.includes('post') &&
 	Array.isArray(post.acl) &&
-	post.acl.includes('tt:hidden') &&
+	rootAcl(post).includes('tt:hidden') &&
 	typeof post.linkKey === 'string' &&
 	!!post.linkKey &&
 	typeof digest === 'string' &&
@@ -29,7 +30,7 @@ export const foundPostReceiptMatches = (receipt: ThingDoc | null, post: ThingDoc
 
 export const withFoundPostGrant = async (post: ThingDoc, viewer: Viewer, lookup: (id: string) => Promise<ThingDoc | null>): Promise<Viewer> => {
 	const viewerId = foundPostViewerId(viewer);
-	if (!viewerId || !post.thingtime?.includes('post') || !post.acl?.includes('tt:hidden')) return viewer;
+	if (!viewerId || !post.thingtime?.includes('post') || !rootAcl(post).includes('tt:hidden')) return viewer;
 	const receipt = await lookup(foundPostId(viewerId, post.shareId));
 	if (!foundPostReceiptMatches(receipt, post, viewerId)) return viewer;
 	return { id: '', ...viewer, foundPosts: new Map([...(viewer?.foundPosts || []), [post.shareId, foundPostDigest(post.linkKey!)]]) };
@@ -45,7 +46,7 @@ export const createFoundPostStore = (getCollection = getThingsCollection) => {
 			!viewer ||
 			viewerId === post.ownerId ||
 			!post.thingtime?.includes('post') ||
-			!post.acl?.includes('tt:hidden') ||
+			!rootAcl(post).includes('tt:hidden') ||
 			!post.linkKey ||
 			(!viewer.linkKeys?.has(post.linkKey) && !viewer.linkThingIds?.has(post.shareId))
 		)
@@ -107,8 +108,8 @@ export const createFoundPostStore = (getCollection = getThingsCollection) => {
 		// Batch revalidate the current link generation; retired/rotated links and
 		// deleted posts never remain in profile candidates or their count.
 		const posts = await collection
-			.find({ ownerId: authorId, shareId: { $in: [...byTarget.keys()] }, thingtime: 'post', acl: 'tt:hidden' } as any, {
-				projection: { shareId: 1, ownerId: 1, thingtime: 1, acl: 1, linkKey: 1 }
+			.find({ ownerId: authorId, shareId: { $in: [...byTarget.keys()] }, thingtime: 'post', ...aclMarkerClause('tt:hidden') } as any, {
+				projection: { shareId: 1, ownerId: 1, thingtime: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, linkKey: 1 }
 			})
 			.toArray();
 		return new Map(

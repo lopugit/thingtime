@@ -1,6 +1,9 @@
+import { IncompatibleThingtimeCapabilityError } from '~/api/utils/capabilities/requireCapability.client';
+import { requireOAuthSharingCapabilities } from '~/utils/relationalCollectionsCapabilities';
 import { ssoReturnUrl } from '../Account/ssoNavigation';
 import React from 'react';
-import { Box, Button, Flex } from '@chakra-ui/react';
+import { rootIdentity } from '~/utils/rootIdentity';
+import { Box, Button, Flex, Spinner } from '@chakra-ui/react';
 
 import { Login } from '~/components/Login/Login';
 import { Register } from '~/components/Login/Register';
@@ -49,9 +52,8 @@ type ScopeDescriptor = {
 type PickerThing = { id: string; label: string; detail: string };
 
 const MAX_STATE_CHARS = 512;
-// Matches the server's MAX_SHARED_THINGS cap so the picker can surface every
-// thing a user is allowed to share.
-const MAX_PICKER_THINGS = 100;
+// One page of choices; the selection has no product count ceiling.
+const PICKER_PAGE_SIZE = 50;
 
 const SCOPE_EMOJI: Record<string, string> = {
   profile: '🪪',
@@ -244,8 +246,17 @@ export const AuthorizePage = () => {
   const [done, setDone] = React.useState<'approved' | 'cancelled' | null>(null);
   const [issueError, setIssueError] = React.useState<string | null>(null);
   const [pickerThings, setPickerThings] = React.useState<PickerThing[] | null>(null);
-  const [pickerError, setPickerError] = React.useState(false);
+  const [pickerError, setPickerError] = React.useState<string | null>(null);
+  const [pickerCursor, setPickerCursor] = React.useState<string | null>(null);
+  const [pickerLoading, setPickerLoading] = React.useState(false);
+  const [pickerRequest, setPickerRequest] = React.useState(0);
+  const pickerCursorRef = React.useRef<string | null>(null);
   const [pickedThings, setPickedThings] = React.useState<Record<string, boolean>>({});
+  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+  const pickerIdentity = `${user?.id || (sandbox ? 'sandbox' : 'guest')}:${identity.generation}`;
+  const [pickerOwner, setPickerOwner] = React.useState<string | null>(null);
+  const pickerOwnerRef = React.useRef<string | null>(null);
+  const visiblePickerThings = pickerOwner === pickerIdentity && !identity.pending ? pickerThings : null;
 
   // ---- boot: catalog (+ app validation in real mode, auth probe) -----------
 
@@ -321,14 +332,23 @@ export const AuthorizePage = () => {
       }
     });
 
-    // Always resolves (fetchJson never rejects); a failed auth probe just
-    // means "not logged in yet" — the login form handles it from there.
-    fetchJson('/api/v1/auth/me').then((resp) => {
-      if (resp?.user && !resp.user.temporary) setUser(resp.user);
-      setCheckedAuth(true);
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-verify the visible consent identity after cookie/account changes.
+  // A prior account's choices cannot seed consent for a newly signed-in user.
+  React.useEffect(() => {
+    if (identity.pending) { setUser(null); setCheckedAuth(false); return; }
+    let cancelled = false;
+    const controller = new AbortController();
+    const generation = identity.generation;
+    fetchJson('/api/v1/auth/me', { signal: controller.signal }).then(resp => {
+      if (cancelled || rootIdentity.read().generation !== generation || rootIdentity.read().pending) return;
+      setUser(resp?.user && !resp.user.temporary ? resp.user : null);
+      setCheckedAuth(true);
+    });
+    return () => { cancelled = true; controller.abort(); };
+  }, [identity.generation, identity.pending]);
 
   // Sandbox mode builds its "app" + scope sets client-side from the catalog —
   // the pretend app is named after the demo's clientId text.
@@ -398,61 +418,42 @@ export const AuthorizePage = () => {
   // ---- things picker -------------------------------------------------------
 
   React.useEffect(() => {
-    if (!pickerActive || pickerThings !== null) return;
-
-    if (sandbox) {
-      // Sandbox always uses mock things — it never reads the real account.
-      setPickerThings(SANDBOX_THINGS);
-      return;
-    }
+    if (!pickerActive || identity.pending) return;
+    if (sandbox) { setPickerThings(SANDBOX_THINGS); setPickerOwner(pickerIdentity); return; }
     if (!user) return;
-
-    // The server clamps each page to its own max (currently 50), so a single
-    // request can't fill the 100-thing share cap — follow nextCursor until we
-    // have MAX_PICKER_THINGS or run out of posts.
     let cancelled = false;
-    (async () => {
-      const posts: any[] = [];
-      let cursor: string | null = null;
-      let failed = false;
-      do {
-        const url =
-          `/api/v1/things/user?username=${encodeURIComponent(user.username)}&limit=${MAX_PICKER_THINGS}` +
-          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
-        const resp = await fetchJson(url);
-        if (cancelled) return;
-        if (!resp?.ok || !Array.isArray(resp.posts)) {
-          failed = true;
-          break;
-        }
-        posts.push(...resp.posts);
-        cursor = typeof resp.nextCursor === 'string' && resp.nextCursor ? resp.nextCursor : null;
-      } while (cursor && posts.length < MAX_PICKER_THINGS);
-
-      // Distinguish "no things" from "couldn't load" — a failed fetch must
-      // not masquerade as an empty Thingtime (with a retry, not a dead end).
-      // A mid-pagination failure surfaces the retry banner rather than
-      // silently passing off a partial list as everything.
-      setPickerError(failed);
-      setPickerThings(
-        posts.slice(0, MAX_PICKER_THINGS).map((post: any) => ({
-          id: String(post.id ?? post.shareId ?? ''),
-          label:
-            (typeof post.text === 'string' && post.text.trim().slice(0, 60)) ||
-            (typeof post.crystal?.text === 'string' && post.crystal.text.trim().slice(0, 60)) ||
-            (Array.isArray(post.tags) && post.tags.length ? `#${post.tags[0]}` : 'Untitled thing'),
-          detail: Array.isArray(post.thingtime) ? post.thingtime.join(' + ') : post.type || 'thing'
-        })).filter((thing: PickerThing) => thing.id)
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [pickerActive, pickerThings, sandbox, user]);
+    const controller = new AbortController();
+    const sameOwner = pickerOwnerRef.current === pickerIdentity;
+    const cursor = sameOwner && pickerRequest ? pickerCursorRef.current : null;
+    if (!sameOwner) { pickerCursorRef.current = null; setPickerCursor(null); setPickedThings({}); }
+    pickerOwnerRef.current = pickerIdentity; setPickerOwner(pickerIdentity);
+    setPickerLoading(true); setPickerError(null);
+    if (!cursor) setPickerThings(previous => sameOwner ? previous : null);
+    const url = `/api/v1/things/user?username=${encodeURIComponent(user.username)}&limit=${PICKER_PAGE_SIZE}` +
+      (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+    requireOAuthSharingCapabilities(desktopFlow,controller.signal).then(() => fetchJson(url, { signal: controller.signal })).then(resp => {
+      if (cancelled) return;
+      if (!resp?.ok || !Array.isArray(resp.posts)) { setPickerError(resp?.error || 'Couldn’t load more choices.'); return; }
+      const nextCursor = typeof resp.nextCursor === 'string' && resp.nextCursor ? resp.nextCursor : null;
+      if (nextCursor && nextCursor === cursor) { setPickerError('The sharing choices did not advance. Retry this page.'); return; }
+      const page: PickerThing[] = resp.posts.map((post: any) => ({
+        id: String(post.id ?? post.shareId ?? ''),
+        label: (typeof post.text === 'string' && post.text.trim().slice(0, 60)) ||
+          (typeof post.crystal?.text === 'string' && post.crystal.text.trim().slice(0, 60)) ||
+          (Array.isArray(post.tags) && post.tags.length ? `#${post.tags[0]}` : 'Untitled thing'),
+        detail: Array.isArray(post.thingtime) ? post.thingtime.join(' + ') : post.type || 'thing'
+      })).filter((thing: PickerThing) => thing.id);
+      setPickerThings(previous => [...new Map([...(cursor ? previous || [] : []), ...page].map(thing => [thing.id, thing])).values()]);
+      pickerCursorRef.current = nextCursor; setPickerCursor(nextCursor);
+    }).catch(error => { if (!cancelled) setPickerError(error instanceof IncompatibleThingtimeCapabilityError ? 'This server needs an update before larger sharing selections can load.' : 'Could not verify this server’s sharing support. Check the connection and retry.'); }).finally(() => { if (!cancelled) setPickerLoading(false); });
+    return () => { cancelled = true; controller.abort(); };
+    // A request is an explicit next-page/retry action; it never loops through all data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerActive, sandbox, user?.id, pickerRequest, pickerIdentity, identity.pending]);
 
   const pickedIds = React.useMemo(
-    () => Object.keys(pickedThings).filter((id) => pickedThings[id]),
-    [pickedThings]
+    () => pickerOwner === pickerIdentity && !identity.pending ? Object.keys(pickedThings).filter((id) => pickedThings[id]) : [],
+    [pickedThings, pickerOwner, pickerIdentity, identity.pending]
   );
 
   // ---- approve / cancel ----------------------------------------------------
@@ -514,6 +515,11 @@ export const AuthorizePage = () => {
       setIssuing(false);
       setTimeout(() => window.close(), 700);
       return;
+    }
+
+    if (thingsActive) {
+      try { await requireOAuthSharingCapabilities(desktopFlow); }
+      catch (error) { setIssueError(error instanceof IncompatibleThingtimeCapabilityError ? 'This server needs an update before larger sharing selections can be approved.' : 'Could not verify this server’s sharing support. Check the connection and retry.'); setIssuing(false); return; }
     }
 
     if (desktopFlow) {
@@ -899,29 +905,14 @@ export const AuthorizePage = () => {
             <Box fontSize="12px" color="var(--tt-muted, #9a9aa6)">
               Only the things you tick here are shared — read-only, just with this app.
             </Box>
-            {pickerThings === null ? (
-              <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)" paddingY={1}>
-                Loading your things…
-              </Box>
-            ) : pickerError ? (
-              <Flex gap={2} alignItems="center" paddingY={1}>
-                <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)">
-                  Couldn’t load your things.
-                </Box>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => {
-                    setPickerError(false);
-                    setPickerThings(null);
-                  }}
-                >
-                  Retry
-                </Button>
-              </Flex>
-            ) : pickerThings.length ? (
+            <Flex gap={2} alignItems="center" minHeight="24px" aria-busy={pickerLoading}>
+              {pickerLoading ? <Spinner size="xs" label="Loading sharing choices" /> : null}
+              {pickerError ? <><Box fontSize="12px" role="alert">{pickerError}</Box><Button size="xs" variant="ghost" onClick={() => setPickerRequest(value => value + 1)}>Retry</Button></> :
+                pickerCursor && !pickerLoading ? <Button size="xs" variant="ghost" onClick={() => setPickerRequest(value => value + 1)}>Load more</Button> : null}
+            </Flex>
+            {visiblePickerThings?.length ? (
               <Flex flexDirection="column" maxHeight="160px" overflowY="auto">
-                {pickerThings.map((thing) => (
+                {visiblePickerThings.map((thing) => (
                   <Flex
                     key={thing.id}
                     as="label"
@@ -948,11 +939,11 @@ export const AuthorizePage = () => {
                   </Flex>
                 ))}
               </Flex>
-            ) : (
+            ) : !pickerLoading && !pickerError ? (
               <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)" paddingY={1}>
                 Nothing to share yet — your Thingtime is empty.
               </Box>
-            )}
+            ) : null}
           </Flex>
         ) : null}
 

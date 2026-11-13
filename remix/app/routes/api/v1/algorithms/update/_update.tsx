@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { updateAlgorithm } from '~/api/utils/algorithms/algorithms';
@@ -14,7 +14,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await readJsonBody(request, 64 * 1024);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
   const result = await updateAlgorithm(user.id, body);
 
   if (result.ok === false) {

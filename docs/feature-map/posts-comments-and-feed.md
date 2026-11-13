@@ -169,3 +169,11 @@ checks desktop/mobile rendering and saved controls.
 The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
 covers saved/embedded render declarations, exact saved content and both embed
 placements with rendered/data views and reload.
+
+Growing subspace rules/flairs/reasons are ordered billable child Things in
+`subspaces/definitions.ts`; pin cursors in `subspaces/pinPaging.ts` exhaust all
+pins before ordinary posts. `algorithms/weightEntries.ts` stores each learned
+weight separately with generation/count integrity and canonical accounting.
+Ranking math is unchanged. Run `test:subspaces`, `test:feed` and the new
+`test:acl:relational` regressions; scale acceptance exercises real moderator
+forms and feed pagination. See [relational access](../relational-access.md).

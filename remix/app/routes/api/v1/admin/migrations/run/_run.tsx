@@ -5,7 +5,9 @@ import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { captureMigrationFailureDiagnostic, migrationFailureResult } from '~/api/utils/migrations/migrationFailure';
 import { createMigrationDiagnostic, formatMigrationDiagnosticDetail } from '~/api/utils/migrations/migrationDiagnostics';
 import { withHomeIndexRecovery } from '~/api/utils/mongodb/collections';
-import { runMigration } from '~/api/utils/migrations/migrations';
+import { getRequestMongoEndpoint } from '~/api/utils/mongodb/endpoint';
+import { AclWriteFenceError } from '~/api/utils/mongodb/aclWriteFence';
+import { getMigration, runMigration } from '~/api/utils/migrations/migrations';
 
 // POST /api/v1/admin/migrations/run — { migration: <id>, dryRun?, confirm? } —
 // run (or dry-run) a registered schema-version migration. Admin-only;
@@ -19,6 +21,12 @@ export const action = async ({ request }: { request: Request }) =>
 
   return withHomeIndexRecovery(async () => {
   const body: any = await readJsonBody(request, 64 * 1024);
+  // The dispatcher home-pins admin handlers. Inspect the original selection
+  // explicitly so this home-only operation refuses an ambiguous target before
+  // acquiring a lease, without activating or connecting to the custom plane.
+  if (getMigration(body?.migration)?.homeOnly && await getRequestMongoEndpoint(request))
+    return json({ ok: false, error: new AclWriteFenceError('selection', 'wrong-plane').message, outcome: 'rejected' }, { status: 503 });
+
 		const dryRun = body?.dryRun === true || body?.dryRun === 'true';
   // runMigration normally returns a structured failure. This final boundary
   // also catches lease-release or other orchestration errors so Nitro never
