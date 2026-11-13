@@ -185,7 +185,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('1.4.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('2.0.0', '1.3.0'), false);
-  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.6.0');
+  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.6.1');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.2.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
@@ -908,7 +908,7 @@ test('Archive extended reads reject the deployed Component-only 1.62 contract', 
 test('relational access management is origin-scoped, registered and explicitly negotiated', () => {
   const source = createApiCapabilitiesManifest();
   const runtime = thingtimeCapabilityManifest('https://acl.example');
-  const versions = { 'api.things-acl': '1.0.0', 'api.agent-reporting': '1.2.0', 'api.groups': '1.1.0', 'api.groups-audience-sources': '1.1.0' };
+  const versions = { 'api.things-acl': '1.0.0', 'api.agent-reporting': '1.2.0', 'api.groups': '1.2.0', 'api.groups-audience-sources': '1.1.0' };
   for (const [feature, minimum] of Object.entries(versions)) {
     assert.equal(source.features[feature], minimum);
     assert.equal(runtime.features[feature].version, minimum);

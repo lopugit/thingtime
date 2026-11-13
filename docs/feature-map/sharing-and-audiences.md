@@ -25,6 +25,7 @@ for migration, concurrency, reporting recovery and verification.
 | Hidden-post discovery receipts (anonymous browser identity) | `app/api/utils/things/foundPosts.ts`, `foundPostRequest.ts`, `app/hooks/foundPostIdentity.client.ts` |
 | ACL grammar, constants, `visibilityFromAcl`, `aclFromVisibility` | `app/schemas/registry.ts` |
 | Custom audiences UI (compose `tt:custom` ACLs) | `app/components/Feed/CustomAudienceModal.tsx` |
+| Audience group membership (transactional add/remove batches, legacy replacement, owner session fence) | `app/routes/api/v1/groups/_groups.tsx`, `app/api/utils/groups/groups.ts`, `app/hooks/useApi.tsx` (`groups.createWithMembers` / `groups.updateMembers`), `app/hooks/groupMemberBatches.ts` |
 | Audience labels, share paths (`sharePathForThing`, `thingPath`) | `app/components/Sharing/audienceCore.ts` |
 | Shared compositions (pages/components embedding media), collaborator writes | `app/api/utils/actions/sharedComposition.ts`, `compositionMediaCore.ts`, `forkCompositionCore.ts` |
 | Fork / private copy of shared Things | `app/components/Sharing/forkThingCore.ts`, `ForkSharedThingButton.tsx`, `app/routes/api/v1/things/fork` |
@@ -69,6 +70,8 @@ for migration, concurrency, reporting recovery and verification.
 - `npm --prefix remix run test:acl:relational` includes validator readiness,
   monotonic timestamps, generation races and protected metadata checks. The
   isolated mixed-runtime HTTP checks are in `scripts/agent-reporting-acceptance.mjs`.
+- Group delta batches, uncertain outcomes and identity changes: `node --experimental-test-module-mocks --import tsx --test app/api/utils/groups/groups.test.mts` and `node --import tsx --test app/hooks/groupMemberBatches.test.mts` from `remix/`. Built HTTP acceptance is `node scripts/group-membership-acceptance.mjs`; `--browser-only` checks the real picker at desktop/mobile widths, interrupted responses and inline recovery. `--legacy-only` with `GROUP_MEMBERSHIP_LEGACY_BUILD` pointing to a built pre-change API creates an unstamped group through that prior API, verifies finite-quota edits fail closed, then runs `backfill-user-storage-accounting` through the admin API and verifies editing and exact ledger refund. These need local `mongod`, a Node-preset build, and Playwright for the browser variant. The disposable admin test setup raises registration throughput only inside its isolated replica set. Foreign owners receive 404.
+- Rollout prerequisite for existing PR1497 groups: run the supported `backfill-user-storage-accounting` admin migration after deployment and verify storage readiness before accepting group edits. Those older content rows have no storage stamps; finite-quota growth correctly returns `accounting_unavailable` until migration. Preserve the normal subscription quota and ledger. No group/member count ceiling or new index is introduced.
 - `TESTING.md`: "Post interactions & inherit chains", "Things page" (share
   dialog), sharing sections under the attachments and webpages checklists.
 

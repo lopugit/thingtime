@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
+import { deleteAccountedThing, deleteAccountedThings, insertAccountedThing, insertAccountedThings, updateAccountedThing } from '../storage/accountedThings';
 import { findUserById } from '../auth/users';
 import { friendIdsOf } from '../users/social';
 import { resolveProfiles, type FeedAuthor } from '../things/things';
@@ -29,7 +30,6 @@ const THINGS_SCHEMA_VERSION = COLLECTION_SCHEMA_VERSIONS.things;
 
 // A processing batch is not a product limit. Memberships remain relational.
 const GROUP_BATCH_SIZE = 100;
-export const GROUP_NAME_MAX = 60;
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -45,7 +45,7 @@ export type PublicGroup = {
 
 const sanitizeName = (value: unknown): string | Fail => {
   if (typeof value !== 'string' || !value.trim()) return fail(400, 'Groups need a name');
-  return value.trim().slice(0, GROUP_NAME_MAX);
+  return value.trim();
 };
 
 // member ids must be real users (and never the owner — they're implicit)
@@ -64,6 +64,13 @@ const sanitizeMemberIds = async (ownerId: string, value: unknown): Promise<strin
     if (missing) return fail(400, `Unknown member user id: ${missing.id}`);
   }
   return wanted;
+};
+
+// Removal must also work after an account has been deleted. Do not require a
+// live user for that side of the delta, but reject malformed input explicitly.
+const normalizeMemberIds = (value: unknown): string[] | Fail => {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id.trim())) return fail(400, 'removeMemberIds must be a list of user ids');
+  return [...new Set(value.map((id: string) => id.trim()))];
 };
 
 const memberIdsByGroup = async (ownerId: string, groupIds: string[]): Promise<Map<string, string[]>> => {
@@ -117,12 +124,6 @@ export const listGroups = async (ownerId: string): Promise<{ ok: true; groups: P
   return { ok: true, groups: await projectGroups(ownerId, docs as any[]) };
 };
 
-const findOwnedGroup = async (ownerId: string, id: unknown): Promise<any | null> => {
-  if (typeof id !== 'string' || !id.trim()) return null;
-  const things = await getThingsCollection();
-  return await things.findOne({ shareId: id.trim(), thingtime: 'group', ownerId } as any);
-};
-
 const memberDoc = (ownerId: string, groupId: string, userId: string, now: Date) => ({
   shareId: randomUUID(),
   schemaVersion: THINGS_SCHEMA_VERSION,
@@ -162,26 +163,41 @@ export const createGroup = async (
     createdAt: now,
     updatedAt: now
   };
-  await things.insertOne(doc as any);
-  if (memberIds.length) {
+  await withMongoTransaction(async (session) => {
+    await insertAccountedThing(things, doc as any, { session });
     for (let offset = 0; offset < memberIds.length; offset += GROUP_BATCH_SIZE) {
-      await things.insertMany(memberIds.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+      await insertAccountedThings(things, memberIds.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any, { session });
     }
-  }
+  });
   return { ok: true, group: (await projectGroups(ownerId, [doc]))[0] };
 };
 
-// name and/or the WHOLE member list (replacement semantics, like tokenAcl —
-// merging lists is ambiguous)
+// The legacy memberIds field replaces the whole list. Delta fields below are
+// additive, idempotent and independently batchable by clients. Every group
+// mutation writes its root in the same transaction as its member rows, so
+// concurrent changes to the same group conflict and the driver retries from
+// a fresh snapshot. A delete cannot race a late add into orphaned membership.
 export const updateGroup = async (
   ownerId: string,
   id: unknown,
-  input: { name?: unknown; memberIds?: unknown }
-): Promise<Fail | { ok: true; group: PublicGroup }> => {
-  const doc = await findOwnedGroup(ownerId, id);
-  if (!doc) return fail(404, 'Group not found');
-
+  input: { name?: unknown; memberIds?: unknown; addMemberIds?: unknown; removeMemberIds?: unknown }
+): Promise<Fail | { ok: true; group: PublicGroup } | { ok: true; membership: { id: string; memberCount: number } }> => {
+  if (typeof id !== 'string' || !id.trim()) return fail(404, 'Group not found');
   const things = await getThingsCollection();
+  const groupId = id.trim();
+  // Do not disclose member validation details for another owner's group.
+  if (!await things.findOne({ shareId: groupId, thingtime: 'group', ownerId } as any)) return fail(404, 'Group not found');
+  if (input.memberIds !== undefined && (input.addMemberIds !== undefined || input.removeMemberIds !== undefined)) {
+    return fail(400, 'Choose memberIds replacement or member deltas');
+  }
+  const replacement = input.memberIds === undefined ? undefined : await sanitizeMemberIds(ownerId, input.memberIds);
+  if (replacement !== undefined && !Array.isArray(replacement)) return replacement;
+  const replacementIds = replacement as string[] | undefined;
+  const additions = input.addMemberIds === undefined ? [] : await sanitizeMemberIds(ownerId, input.addMemberIds);
+  if (!Array.isArray(additions)) return additions;
+  const removals = input.removeMemberIds === undefined ? [] : normalizeMemberIds(input.removeMemberIds);
+  if (!Array.isArray(removals)) return removals;
+  if (additions.some((id) => removals.includes(id))) return fail(400, 'A member cannot be added and removed together');
   const now = new Date();
   const patch: Record<string, any> = { updatedAt: now };
   if (input.name !== undefined) {
@@ -190,40 +206,57 @@ export const updateGroup = async (
     patch['crystal.name'] = name;
   }
 
-  if (input.memberIds !== undefined) {
-    const memberIds = await sanitizeMemberIds(ownerId, input.memberIds);
-    if (!Array.isArray(memberIds)) return memberIds;
-    const current = (await memberIdsByGroup(ownerId, [doc.shareId])).get(doc.shareId) || [];
-    const wanted = new Set(memberIds);
-    const have = new Set(current);
-    const toRemove = current.filter((memberId) => !wanted.has(memberId));
-    const toAdd = memberIds.filter((memberId) => !have.has(memberId));
+  const outcome = await withMongoTransaction(async (session) => {
+    const rootFilter = { shareId: groupId, thingtime: 'group', ownerId } as any;
+    const rootUpdate = await updateAccountedThing(things, rootFilter, { $set: patch }, { session });
+    if (!rootUpdate.matchedCount) return fail(404, 'Group not found');
+    const updated = await things.findOne(rootFilter, { session });
+    if (!updated) return fail(404, 'Group not found');
+    let toRemove = removals, toAdd = additions;
+    if (replacementIds !== undefined) {
+      const currentDocs = await things.find({ thingtime: 'group-member', ownerId, 'crystal.groupId': groupId } as any, { session })
+        .project({ targetId: 1 }).batchSize(GROUP_BATCH_SIZE).toArray();
+      const current = new Set<string>(currentDocs.map((row: any) => String(row.targetId)));
+      const wanted = new Set(replacementIds);
+      toRemove = [...current].filter((memberId) => !wanted.has(memberId));
+      toAdd = replacementIds.filter((memberId) => !current.has(memberId));
+    } else if (additions.length) {
+      const existing = await things.find({ thingtime: 'group-member', ownerId, 'crystal.groupId': groupId, targetId: { $in: additions } } as any, { session })
+        .project({ targetId: 1 }).batchSize(GROUP_BATCH_SIZE).toArray();
+      const have = new Set(existing.map((row: any) => String(row.targetId)));
+      toAdd = additions.filter((memberId) => !have.has(memberId));
+    }
     if (toRemove.length) {
       for (let offset = 0; offset < toRemove.length; offset += GROUP_BATCH_SIZE) {
-        await things.deleteMany({ thingtime: 'group-member', ownerId, 'crystal.groupId': doc.shareId, targetId: { $in: toRemove.slice(offset, offset + GROUP_BATCH_SIZE) } } as any);
+        await deleteAccountedThings(things, { thingtime: 'group-member', ownerId, 'crystal.groupId': groupId, targetId: { $in: toRemove.slice(offset, offset + GROUP_BATCH_SIZE) } } as any, { session });
       }
     }
     if (toAdd.length) {
       for (let offset = 0; offset < toAdd.length; offset += GROUP_BATCH_SIZE) {
-        await things.insertMany(toAdd.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, doc.shareId, userId, now)) as any);
+        await insertAccountedThings(things, toAdd.slice(offset, offset + GROUP_BATCH_SIZE).map((userId) => memberDoc(ownerId, groupId, userId, now)) as any, { session });
       }
     }
+    return { ok: true as const, doc: updated };
+  });
+  if (outcome.ok === false) return fail(outcome.status, outcome.error);
+  if (input.addMemberIds !== undefined || input.removeMemberIds !== undefined) {
+    const memberCount = await things.countDocuments({ thingtime: 'group-member', ownerId, 'crystal.groupId': groupId } as any);
+    return { ok: true, membership: { id: groupId, memberCount } };
   }
-
-  await things.updateOne({ shareId: doc.shareId } as any, { $set: patch });
-  const updated = await things.findOne({ shareId: doc.shareId } as any);
-  return { ok: true, group: (await projectGroups(ownerId, [updated]))[0] };
+  return { ok: true, group: (await projectGroups(ownerId, [outcome.doc]))[0] };
 };
 
 export const deleteGroup = async (ownerId: string, id: unknown): Promise<Fail | { ok: true }> => {
-  const doc = await findOwnedGroup(ownerId, id);
-  if (!doc) return fail(404, 'Group not found');
+  if (typeof id !== 'string' || !id.trim()) return fail(404, 'Group not found');
   const things = await getThingsCollection();
-  // member docs are not targetId-children of the group (targetId = the
-  // member), so the generic cascade can't reach them — delete them here
-  await things.deleteMany({ thingtime: 'group-member', ownerId, 'crystal.groupId': doc.shareId } as any);
-  await things.deleteOne({ shareId: doc.shareId, thingtime: 'group', ownerId } as any);
-  return { ok: true };
+  return withMongoTransaction(async (session) => {
+    const groupId = id.trim();
+    const removed = await deleteAccountedThing(things, { shareId: groupId, thingtime: 'group', ownerId } as any, { session });
+    if (!removed.deletedCount) return fail(404, 'Group not found');
+    // targetId carries the member, so the generic group cascade cannot see these.
+    await deleteAccountedThings(things, { thingtime: 'group-member', ownerId, 'crystal.groupId': groupId } as any, { session });
+    return { ok: true };
+  });
 };
 
 // The viewer-membership preload (groupIdsOf) lives in users/social.ts beside

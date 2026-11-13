@@ -12170,25 +12170,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'groups',
-    featureVersion: '1.1.0', contractVersion: '1.1.0',
+    featureVersion: '1.2.0', contractVersion: '1.2.0',
     group: 'things',
     title: 'Audience groups',
     endpoint: '/api/v1/groups',
     summary: 'Reusable "share with these people" lists for custom-audience things.',
     detail:
-      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole (list semantics mirror tokenAcl — merging is ambiguous); DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Group and membership totals have no product ceiling. Membership validation, writes and profile reads use batches without truncating the result. Deleting a group instantly retires every tt:group acl entry that referenced it (the entries become inert).',
+      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole for compatibility. PATCH { id, addMemberIds?, removeMemberIds? } applies an idempotent member delta and returns { membership: { id, memberCount } } so clients can send arbitrarily many members in successive bounded requests without returning the entire group each time. Replacement and delta fields cannot be mixed. DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Group and membership totals have no product ceiling; group and member rows use the normal content storage accounting and subscription admission. Group writes serialize through the group root in one transaction; deleting a group retires every tt:group acl entry that referenced it (the entries become inert).',
     auth: { mode: 'session', description: 'Full session only — tokens and apps cannot manage your audience groups.' },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     steps: [
       'GET to list your groups.',
       'POST { name, memberIds } to create — pick members from /api/v1/groups/audience-sources or /api/v1/users/search.',
       'Grant it on a thing: acl [..., "tt:group/<group id>/comment"].',
-      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.'
+      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.',
+      'For large groups, PATCH { id, addMemberIds } or PATCH { id, removeMemberIds } in successive batches. After an uncertain reply, read the group and stop if its state differs; an opposing edit from another tab may have happened, so require fresh user intent before replaying.'
     ],
     requestExamples: [
       { name: 'List groups', description: 'Your groups + members.', method: 'GET' },
       { name: 'Create', description: 'A study group.', method: 'POST', body: { name: 'Study group 📚', memberIds: ['<user id>', '<user id>'] } },
       { name: 'Replace members', description: 'Member list replaces whole.', method: 'PATCH', body: { id: '<group id>', memberIds: ['<user id>'] } },
+      { name: 'Add members', description: 'Add one transport batch without replacing others.', method: 'PATCH', body: { id: '<group id>', addMemberIds: ['<user id>'] } },
+      { name: 'Remove members', description: 'Remove one transport batch without replacing others.', method: 'PATCH', body: { id: '<group id>', removeMemberIds: ['<user id>'] } },
       { name: 'Delete', description: 'Group + memberships.', method: 'DELETE', body: { id: '<group id>' } }
     ],
     responseExamples: [
@@ -14506,14 +14509,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.6.1',
+    featureVersion: '1.6.1',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
-      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata only and does not prove provisioning permission. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, never raw database messages. ' +
+      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata only and does not prove provisioning permission. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, a bounded numeric MongoDB code and enumerated driver/code-name labels, never raw database messages or arbitrary exception names. Generic codes do not establish a permission or compatibility failure. ' +
       'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +

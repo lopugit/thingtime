@@ -160,15 +160,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-13: Preserve independent gateway leases for shared MongoDB connect/index
-  initialization after its HTTP waiter cancels. Combine handover drains with
-  request budgets, conditional discovery and origin-fenced platform protection;
-  publish gateway contract 1.2.3 after main used 1.2.2 for protection handling. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
+- 2026-11-14: Preserve bounded numeric MongoDB error codes and enumerated driver
+  labels for ACL-validator provisioning failures; keep raw messages, causes,
+  command contents and arbitrary names discarded. Combine incremental group
+  membership add/remove, client batching and exact storage accounting; existing
+  groups require accounting backfill before production writes. See
+  [PR 1520 release notes](../PRs/1520-codex-acl-validator-command-diagnostics-and-group-membership-batches.md). — Codex (AI)
+
 - 2026-11-14: Add authenticated home-only ACL-validator provisioning through the
   existing migration API, read-only inspection and safe stage/category failures;
   retain canonical strict/error validation and independent constraints. — Codex (AI)
 
-
+- 2026-11-13: Preserve independent gateway leases for shared MongoDB connect/index
+  initialization after its HTTP waiter cancels. Combine handover drains with
+  request budgets, conditional discovery and origin-fenced platform protection;
+  publish gateway contract 1.2.3 after main used 1.2.2 for protection handling. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
 - 2026-11-13: Enforce migrated ACL compatibility in MongoDB before relational
   writes. Preserve existing validators and reject stale legacy ACL overwrites;
   protect the migration timestamp against clock regression and old conversion

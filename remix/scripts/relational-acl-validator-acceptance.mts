@@ -99,11 +99,11 @@ try {
   await db.command({ collMod: name, validationLevel: 'moderate', validationAction: 'warn' });
   const read = await connect('readFence', readPassword);
   assert.equal(await isThingAclWriteFenceReady(read.db(db.databaseName), name), false);
-  await assert.rejects(() => installThingAclWriteFence(read.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized');
+  await assert.rejects(() => installThingAclWriteFence(read.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized' && error.mongoCode === 13 && error.driver === 'server' && error.mongoCodeName === 'Unauthorized');
   assert.equal((await options()).validationLevel, 'moderate');
   const none = await connect('noFencePermissions', noListPassword);
-  await assert.rejects(() => isThingAclWriteFenceReady(none.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized');
-  await assert.rejects(() => installThingAclWriteFence(none.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized');
+  await assert.rejects(() => isThingAclWriteFenceReady(none.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized' && error.mongoCode === 13 && error.driver === 'server' && error.mongoCodeName === 'Unauthorized');
+  await assert.rejects(() => installThingAclWriteFence(none.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized' && error.mongoCode === 13 && error.driver === 'server' && error.mongoCodeName === 'Unauthorized');
   assert.equal(await db.collection(name).countDocuments(), 0);
   checks.push('actual authenticated read-only user cannot collMod and no-permission user cannot listCollections; both readiness/install paths fail closed with Unauthorized (13); fixture remains empty');
   passed = true;
