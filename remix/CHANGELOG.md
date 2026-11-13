@@ -165,6 +165,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   protect the migration timestamp against clock regression and old conversion
   races. See the provisioning and verification requirements in
   [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-12: Move selected app grants, registered origins/callbacks, encrypted
   endpoint/deployment settings, subspace definitions and learned algorithm
   weights into protected child Things. Remove associated total count caps and
