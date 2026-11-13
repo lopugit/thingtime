@@ -17,8 +17,8 @@ const run = (key: string, inputs: Record<string, unknown>, request: BrowserActio
 			viewer: { id: 'fixture' },
 			inputs: (() => {
 				const checked = validateRunInputs(parts.actions.find((a) => a.key === key)!.crystal.inputs as Record<string, unknown>[], inputs);
-				assert.equal(checked.ok, true);
 				if (checked.ok === false) throw Error(checked.error);
+				assert.equal(checked.ok, true);
 				return checked.inputs;
 			})(),
 			program: parts.actions.find((a) => a.key === key)!.crystal
@@ -44,8 +44,8 @@ test('saved recipes preserve Bash literally and defer device/run inputs until ex
 	assert.equal(checked.ok, true);
 	if (!checked.ok) throw Error('Invalid saved recipe');
 	const prepared = validateRunInputs(checked.crystal.inputs as Record<string, unknown>[], { deviceId: 'mac', requestId: 'run-1' });
-	assert.equal(prepared.ok, true);
 	if (prepared.ok === false) throw Error(prepared.error);
+	assert.equal(prepared.ok, true);
 	let submitted: any;
 	await executeBrowserAction(
 		{
