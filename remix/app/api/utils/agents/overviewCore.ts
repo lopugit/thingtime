@@ -7,8 +7,11 @@ export type OverviewRole = (typeof OVERVIEW_ROLES)[number];
 export type OverviewThing = { id: string; crystal: Record<string, unknown>; createdAt?: string; updatedAt?: string };
 const taskLevels = ['top-level', 'subtasks'] as const;
 type TaskLevel = (typeof taskLevels)[number];
+type StatusGroup = 'complete' | 'blocked' | 'waiting' | 'todo' | 'active' | 'other';
+type InlineQuestion = { id: string; title: string; body: string; answer: string; status: string; answered: boolean; taskId: string; createdAt: string | null; updatedAt: string | null };
 export type OverviewInput = { view: string; q: string; status: string; projectId: string; taskId: string; cursor: string; schemas: Partial<Record<OverviewRole, string>>; scanStart?: Partial<Record<OverviewRole, string | null>>;
 	statuses?: string[]; projectIds?: string[]; taskLevels?: TaskLevel[];
+	archive?: 'active' | 'archived' | 'all';
 	activeStatuses?: string[]; blockedStatuses?: string[]; completeStatuses?: string[] };
 export type OverviewRow = ReturnType<typeof overviewRow>;
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -39,7 +42,7 @@ const statusGroups = (input: OverviewInput) => ({ active: input.activeStatuses ?
 const normalizedValues = (values: string[]) => [...new Set(values)].sort();
 const hasControlCharacters = (value: string) => Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
 export const overviewContext = (input: OverviewInput) => {
-	const legacy = [input.schemas, input.view, input.q, input.status, input.projectId, input.taskId, statusGroups(input)];
+	const legacy = [input.schemas, input.view, input.q, input.status, input.projectId, input.taskId, statusGroups(input), input.archive ?? 'active'];
 	if (input.statuses === undefined && input.projectIds === undefined && !input.taskLevels?.length) return JSON.stringify(legacy);
 	// Keep cursors compact even when many projects or statuses are selected.
 	const context = [...legacy,
@@ -99,8 +102,10 @@ export function parseOverviewInput(params: URLSearchParams): OverviewInput {
 	const requestedLevels = filterValues('taskLevels');
 	if (requestedLevels?.some(level => level !== 'all' && !taskLevels.some(value => value === level))) throw new OverviewError(400, 'Invalid taskLevels filter values');
 	const levels = requestedLevels && taskLevels.filter(level => !requestedLevels.length || requestedLevels.includes('all') || requestedLevels.includes(level));
+	const archive = params.getAll('archive');
+	if (archive.length > 1 || (archive.length && !['active', 'archived', 'all'].includes(archive[0]))) throw new OverviewError(400, 'Invalid archive filter');
 	return { schemas, view: params.get('view') || 'hierarchy', q: params.get('q') || '', status: params.get('status') || '', projectId: params.get('projectId') || '', taskId: params.get('taskId') || '', cursor,
-		statuses: filterValues('statuses'), projectIds: filterValues('projectIds'), taskLevels: levels,
+		statuses: filterValues('statuses'), projectIds: filterValues('projectIds'), taskLevels: levels, archive: (archive[0] || 'active') as OverviewInput['archive'],
 		activeStatuses: statuses('activeStatuses', defaultStatuses.active), blockedStatuses: statuses('blockedStatuses', defaultStatuses.blocked), completeStatuses: statuses('completeStatuses', defaultStatuses.complete) };
 }
 
@@ -111,7 +116,9 @@ export function overviewRow(thing: OverviewThing, role: OverviewRole) {
 	const startedAt = date(c.startedAt), endedAt = date(c.endedAt ?? c.completedAt);
 	return { id: thing.id, title: text(c.title) || text(c.name), description: text(c.description) || text(c.body), body: text(c.body), answer: text(c.answer),
 		chatUrl: chatHref(c.chatUrl), externalId: text(c.externalId), model: text(c.model), reasoningEffort: text(c.reasoningEffort),
-		recordType: text(c.recordType) || (role === 'agent' ? 'agent' : `agent-${role}`), status: text(c.status), done: typeof c.done === 'boolean' ? c.done : null,
+		recordType: text(c.recordType) || (role === 'agent' ? 'agent' : `agent-${role}`), status: text(c.status), statusGroup: 'other' as StatusGroup, done: typeof c.done === 'boolean' ? c.done : null,
+		archived: c.archived === true, effectiveArchived: false, archivedAncestorId: null as string | null,
+		lastActivityAt: null as string | null, relatedRecordsComplete: false, questions: [] as InlineQuestion[], openQuestions: [] as InlineQuestion[], openQuestionCount: 0,
 		projectId: text(c.projectId), parentId: text(c.parentId), agentId: text(c.agentId), taskId: text(c.taskId) || text(c.parentId),
 		hierarchyParentId: text(c.parentId) || (role === 'agent' ? text(c.taskId) || text(c.projectId) : role === 'task' ? text(c.projectId) : ''),
 		progress, tokenUsage: usage, startedAt, endedAt, createdAt: date(c.createdAt ?? thing.createdAt), updatedAt: date(thing.updatedAt),
@@ -144,13 +151,67 @@ export function hierarchyRows(rows: OverviewRow[]): OverviewRow[] {
 export function buildOverview(input: OverviewInput, records: Record<OverviewRole, OverviewThing[]>, complete: boolean, measuredAt: string) {
 	const normalized = Object.fromEntries(OVERVIEW_ROLES.map(role => [role, records[role].map(row => overviewRow(row, role))])) as Record<OverviewRole, OverviewRow[]>;
 	const reports = normalized.progress, questions = normalized.question;
+	const groups = statusGroups(input);
+	const statusGroup = (status: string): StatusGroup => {
+		if (groups.complete.includes(status)) return 'complete';
+		if (status === 'waiting' || status.startsWith('waiting-')) return 'waiting';
+		if (groups.blocked.includes(status)) return 'blocked';
+		if (status === 'todo' || status === 'to-do') return 'todo';
+		if (groups.active.includes(status)) return 'active';
+		return 'other';
+	};
+	const related = (rows: OverviewRow[]) => {
+		const byTask = new Map<string, OverviewRow[]>();
+		for (const row of rows) { const id = row.taskId || row.parentId; const group = byTask.get(id) || []; group.push(row); byTask.set(id, group); }
+		return byTask;
+	};
+	const questionsByTask = related(questions), reportsByTask = related(reports), todosByTask = related(normalized.todo), agentsByTask = related(normalized.agent);
+	const activityAt = (rows: OverviewRow[]) => {
+		let latest: number | null = null;
+		for (const row of rows) { const at = date(row.updatedAt) ?? date(row.createdAt); if (at) latest = Math.max(latest ?? 0, Date.parse(at)); }
+		return latest === null ? null : new Date(latest).toISOString();
+	};
+	const isOpenQuestion = (row: OverviewRow) => !['answered', 'complete', 'resolved'].includes(row.status.toLowerCase()) && !row.answer.trim();
+	const inlineQuestion = (row: OverviewRow): InlineQuestion => ({ id: row.id, title: row.title, body: row.body, answer: row.answer, status: row.status, answered: !isOpenQuestion(row), taskId: row.taskId, createdAt: row.createdAt, updatedAt: row.updatedAt });
 	const childCount = (rows: OverviewRow[]) => { const out = new Map<string, number>(); for (const row of rows) { const parent = row.taskId || row.parentId; out.set(parent, (out.get(parent) || 0) + 1); } return out; };
 	const questionCounts = childCount(questions), reportCounts = childCount(reports);
-	const allRows = hierarchyRows([...normalized.project, ...normalized.task.map(row => ({ ...row, questionCount: questionCounts.get(row.id) || 0, reportCount: reportCounts.get(row.id) || 0 })), ...normalized.agent]).map(row => !complete && row.orphan ? { ...row, orphan: false, unresolvedParent: true } : row);
+	const allRows = hierarchyRows([...normalized.project.map(row => ({ ...row, statusGroup: statusGroup(row.status) })), ...normalized.task.map(row => {
+		const taskQuestions = questionsByTask.get(row.id) || [];
+		const openQuestions = taskQuestions.filter(isOpenQuestion).map(inlineQuestion);
+		const allQuestions = [...taskQuestions.filter(isOpenQuestion), ...taskQuestions.filter(question => !isOpenQuestion(question))].map(inlineQuestion);
+		return { ...row, statusGroup: statusGroup(row.status), questionCount: questionCounts.get(row.id) || 0, openQuestionCount: openQuestions.length, questions: allQuestions, openQuestions,
+			relatedRecordsComplete: complete, reportCount: reportCounts.get(row.id) || 0,
+			lastActivityAt: activityAt([row, ...(reportsByTask.get(row.id) || []), ...(questionsByTask.get(row.id) || []), ...(todosByTask.get(row.id) || []), ...(agentsByTask.get(row.id) || [])]) };
+	}), ...normalized.agent.map(row => ({ ...row, statusGroup: statusGroup(row.status) }))]).map(row => !complete && row.orphan ? { ...row, orphan: false, unresolvedParent: true } : row);
 	const taskIds = new Set(normalized.task.map(row => row.id));
+	const byId = new Map(allRows.map(row => [row.id, row]));
+	const ancestorCache = new Map<string, string | null>();
+	const archivedAncestor = (row: OverviewRow) => {
+		const path: string[] = [], seen = new Set([row.id]);
+		let id = row.hierarchyParentId, result: string | null = null, cycle = false;
+		while (id) {
+			if (seen.has(id)) { cycle = true; break; }
+			seen.add(id);
+			const parent = byId.get(id);
+			if (!parent) break;
+			if (taskIds.has(id) && parent.archived) { result = id; break; }
+			if (ancestorCache.has(id)) { result = ancestorCache.get(id)!; break; }
+			path.push(id); id = parent.hierarchyParentId;
+		}
+		if (!cycle) for (const nodeId of path) ancestorCache.set(nodeId, result);
+		return result;
+	};
+	for (const row of allRows) if (taskIds.has(row.id)) { row.archivedAncestorId = archivedAncestor(row); row.effectiveArchived = row.archived || !!row.archivedAncestorId; }
 	const taskRows = allRows.filter(row => taskIds.has(row.id));
+	const archivedTaskIds = new Set(taskRows.filter(row => row.effectiveArchived).map(row => row.id));
+	const archiveMode = input.archive ?? 'active';
+	const matchesArchive = (id: string) => archiveMode === 'all' || archivedTaskIds.has(id) === (archiveMode === 'archived');
 	const agentIds = new Set(normalized.agent.map(row => row.id));
 	const agentRows = allRows.filter(row => agentIds.has(row.id));
+	const matchesAgentArchive = (row: OverviewRow) => {
+		const taskId = taskIds.has(row.taskId) ? row.taskId : taskIds.has(row.parentId) ? row.parentId : '';
+		return taskId ? matchesArchive(taskId) : archiveMode !== 'archived';
+	};
 	const taskById = new Map(taskRows.map(row => [row.id, row]));
 	const statuses = input.statuses ?? (input.status && input.status !== 'all' ? [input.status] : []);
 	const projectIds = input.projectIds ?? (input.projectId ? [input.projectId] : []);
@@ -162,8 +223,10 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 		return !levels.length || levels.includes(nested ? 'subtasks' : 'top-level');
 	};
 	const matches = (row: OverviewRow) => matchesStatus(row.status) && (!projectFilter.size || projectFilter.has(row.projectId) || projectFilter.has(row.id)) && (!input.q || `${row.title}\n${row.description}`.toLocaleLowerCase().includes(input.q.toLocaleLowerCase()));
-	const tasks = taskRows.filter(row => matches(row) && matchesTaskLevel(row));
+	const tasks = taskRows.filter(row => matchesArchive(row.id) && matches(row) && matchesTaskLevel(row));
 	const selected = taskRows.find(row => row.id === input.taskId) || null;
+	const selectedAgentIds = new Set(agentRows.filter(row => row.taskId === input.taskId || row.parentId === input.taskId).map(row => row.id));
+	const selectedChildren = selected ? taskRows.filter(row => row.id !== selected.id && (row.parentId === selected.id || selectedAgentIds.has(row.parentId))) : [];
 	// Relational child records store only parentId. Resolve their scope through
 	// already-authorized task projections; never fetch a hidden parent or rely
 	// on a caller-supplied projectId to grant access. Global status filters refer
@@ -172,13 +235,14 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 		const parent = taskById.get(row.taskId || row.parentId);
 		return { row: { ...row, projectId: row.projectId || parent?.projectId || '', chatUrl: row.chatUrl || parent?.chatUrl || '', externalId: row.externalId || parent?.externalId || '' }, parent };
 	}).filter(({ row, parent }) => input.taskId ? row.taskId === input.taskId || row.parentId === input.taskId :
+		(parent ? matchesArchive(parent.id) : archiveMode !== 'archived') &&
 		(!projectFilter.size || projectFilter.has(row.projectId)) &&
 		matchesStatus(parent?.status || row.status) &&
 		(!levels.length || (!!parent && matchesTaskLevel(parent))) &&
 		(!input.q || `${row.title}\n${row.description}\n${parent?.title || ''}\n${parent?.description || ''}`.toLocaleLowerCase().includes(input.q.toLocaleLowerCase()))
 	).map(({ row }) => row);
 	const selectedQuestions = forSelected(questions), selectedReports = forSelected(reports), selectedTodos = forSelected(normalized.todo);
-	const source = input.view === 'agents' ? agentRows.filter(matches) : input.view === 'projects' ? normalized.project.filter(matches) : input.view === 'reports' ? selectedReports : input.view === 'questions' ? selectedQuestions : input.view === 'kanban' || levels.length ? tasks : allRows.filter(matches);
+	const source = input.view === 'agents' ? agentRows.filter(row => matchesAgentArchive(row) && matches(row)) : input.view === 'projects' ? normalized.project.filter(matches) : input.view === 'reports' ? selectedReports : input.view === 'questions' ? selectedQuestions : input.view === 'kanban' || levels.length ? tasks : allRows.filter(row => (taskIds.has(row.id) ? matchesArchive(row.id) : agentIds.has(row.id) ? matchesAgentArchive(row) : true) && matches(row));
 	let start = 0;
 	if (input.cursor) {
 		try {
@@ -195,16 +259,16 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 	const nextCursor = start + rows.length < source.length ? overviewCursor(input, rows[rows.length - 1].id) : null;
 	const values = tasks.flatMap(row => row.tokenUsage === null ? [] : [row.tokenUsage]);
 	const columnStatuses = [...new Set(tasks.map(row => row.status))];
-	const groups = statusGroups(input);
-	return { view: input.view, q: input.q, status: input.status, projectId: input.projectId,
+	return { view: input.view, q: input.q, status: input.status, projectId: input.projectId, archive: archiveMode,
 		statuses, projectIds, taskLevels: levels,
 		availableStatuses: normalizedValues(taskRows.map(row => row.status).filter(Boolean)),
 		statusGroups: groups,
 		stats: { projects: normalized.project.length, tasks: tasks.length, agents: normalized.agent.length, active: tasks.filter(row => groups.active.includes(row.status)).length,
-			blocked: tasks.filter(row => groups.blocked.includes(row.status)).length, questions: selectedQuestions.filter(row => !['answered','complete','resolved'].includes(row.status)).length,
+			blocked: tasks.filter(row => groups.blocked.includes(row.status)).length, questions: selectedQuestions.filter(isOpenQuestion).length,
 			complete: tasks.filter(row => groups.complete.includes(row.status)).length, tokenUsage: values.length ? values.reduce((sum, value) => sum + value, 0) : null },
-		rows, projects: normalized.project, agents: agentRows, selected, todos: selectedTodos,
-		columns: columnStatuses.map(status => ({ status, count: tasks.filter(row => row.status === status).length, rows: rows.filter(row => taskIds.has(row.id) && row.status === status) })),
+		rows, projects: normalized.project, agents: agentRows, selected, selectedChildren, todos: selectedTodos,
+		columns: columnStatuses.map(status => ({ status, statusGroup: statusGroup(status), count: tasks.filter(row => row.status === status).length, rows: rows.filter(row => taskIds.has(row.id) && row.status === status) })),
 		reports: selectedReports, questions: selectedQuestions, nextCursor, measuredAt,
-		coverage: { complete, countsScope: complete ? 'all-authorized-records' : 'scanned-authorized-records', countsLabel: complete ? 'Authorized records; task counts follow the current filters' : 'Partial scan; counts are lower bounds, not totals', matchedRows: source.length, pageSize: 50 } };
+		coverage: { complete, relatedRecordsComplete: complete, archiveTreeComplete: complete,
+			countsScope: complete ? 'all-authorized-records' : 'scanned-authorized-records', countsLabel: complete ? 'Authorized records; task counts follow the current filters' : 'Partial scan; counts are lower bounds, not totals', matchedRows: source.length, pageSize: 50 } };
 }

@@ -275,9 +275,18 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 - [ ] Author the dashboard page, components, schema references and write
       Actions as saved Things in Thingtime. Confirm no account-specific Thing
       definitions or credentials are committed with the reusable adapter.
+- [ ] Run `node scripts/live-source-navigation.browser.mjs` from `remix/`
+      (set `TT_PLAYWRIGHT_MODULE` to an installed Playwright module when needed).
+      At desktop and mobile widths, verify same-page URL filters preserve the
+      input and focus, Enter applies the query, permitted refreshes retain
+      content, stale responses cannot win, and cached results survive reload.
+      Changing the selected target or viewer must clear the old result and
+      local draft before the replacement can render.
 - [ ] Use an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture to identify
       disposable local saved Things. Keep it outside Git and verify selected
-      origin, IDs and `api.agent-overview` 2.0.0 before the run.
+      origin, IDs and `api.agent-overview` 2.2.0 before the run. A saved source
+      using `retainOnInputChange` also requires Things 1.65.0, Things update
+      1.29.0 and Webpages resolve 1.20.0 at that origin.
 - [ ] Compare project/task/agent records and relational todo, question and
       progress Things with ordinary API readback under the same authorized
       viewer. Verify ACL, Character, app namespace and scoped-token boundaries.
@@ -287,10 +296,26 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 - [ ] Change classifications or another cursor-bound filter and confirm the
       old cursor is rejected. Confirm raw statuses, numeric depth and absent
       titles are left for saved-page presentation; no indent, label or fallback
-      title is expected from the API.
+      title is expected from the API. Check the semantic statusGroup on task,
+      project and agent rows and Kanban columns against the configured groups;
+      the saved page chooses colour and labels.
+- [ ] Compare a task card's `lastActivityAt` against the newest actual task,
+      directly linked progress, question, todo and agent source timestamp.
+      Verify malformed/missing dates stay null and child task updates belong
+      to the child card. Show every authorized question, open first, with
+      answered Q/answer available on the same card; verify the per-question
+      answered flag and open counts agree with status and answer text.
+- [ ] Archive a task with a saved Action and confirm active board views hide it
+      and its descendants through task and agent parents without changing
+      status, audience or child records. Switch to Archived and All, follow
+      an archived ancestor link, restore the owning task and verify the board
+      returns. Exact task detail and its `selectedChildren` must stay readable.
+      Reject invalid or repeated archive filters and stale cursors.
 - [ ] Confirm complete versus partial coverage and lower-bound partial counts.
       Include detached parents and cycles; preserve rows and identify unresolved
-      parents until their scan completes.
+      parents until their scan completes. When relatedRecordsComplete or
+      archiveTreeComplete is false, do not present latest-seen activity,
+      question counts or inherited archive state as final.
 - [ ] Leave measurements unknown and verify null/unavailable display, never
       fabricated zero or inferred runtime. Record only measured values and
       compare them against source Things.
