@@ -402,7 +402,9 @@ export class FileSystemIndexerClient {
     });
     this.#stderrBytes = 0;
     this.#process = child;
-    createInterface({ input: child.stdout }).on('line', (line) => this.#receive(line));
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      if (this.#process === child) this.#receive(line);
+    });
     child.stderr.on('data', (chunk: Buffer) => {
       if (this.#stderrBytes >= 16_384) return;
       const remaining = 16_384 - this.#stderrBytes;
@@ -410,6 +412,9 @@ export class FileSystemIndexerClient {
       this.#stderrBytes += chunk.length;
       if (message) process.stderr.write(`[commander-indexer] ${message}\n`);
     });
+    // A write callback does not consume the stream's separate error event.
+    // Keep this listener on retired children too, until their pipe has drained.
+    child.stdin.on('error', (error) => this.#failProcess(child, error));
     child.once('error', (error) => this.#failProcess(child, error));
     child.once('exit', (code, signal) =>
       this.#failProcess(child, new Error(`Filesystem indexer exited (${signal ?? code ?? 'unknown'})`)),
@@ -479,13 +484,7 @@ export class FileSystemIndexerClient {
       });
       if (['index', 'observe', 'readback'].includes(operation.operation)) this.#indexRequests.add(id);
       child.stdin.write(`${JSON.stringify({ id, ...operation })}\n`, (error) => {
-        if (!error) return;
-        const pending = this.#pending.get(id);
-        if (!pending) return;
-        this.#pending.delete(id);
-        this.#indexRequests.delete(id);
-        pending.timeout.cancel();
-        pending.reject(error);
+        if (error) this.#failProcess(child, error);
       });
     });
   }

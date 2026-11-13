@@ -16371,3 +16371,11 @@ never print the file-download JSON, encryption metadata or signed URL.
   and `node scripts/lidar-scan.browser.mjs`. These use isolated Chromium with
   synthetic HTTP/native data; keep their evidence separate from deployed data
   and physical LiDAR acceptance.
+
+### Commander Rust stdin pipe recovery — 2026-11-13
+
+- Run Commander daemon search and filesystem-indexer regressions. Close a real worker's stdin while it remains
+  alive: EPIPE must reject every pending request, remain handled after retirement, and allow a replacement worker.
+  Buffered old stdout/exit/error events must not settle or fail replacement requests; Rust search failures must
+  preserve deterministic local search. Verify the installed signed daemon stays healthy and serves real searches
+  after recovery, with bounded worker restarts and preserved settings. See `Commander/docs/TESTING.md`.
