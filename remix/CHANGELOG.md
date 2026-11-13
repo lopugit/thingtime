@@ -104,6 +104,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-03: Give saved password card account/type subtitles the readable card foreground, preserving individually editable layouts and custom colors while upgrading the prior default subtitle color. — Codex (AI)
 
 - 2026-11-03: Add the browser password workspace with account previews, explicit autofill, local QR scanning and exact popup return; shared timed/Never confirmation preferences and per-entry overrides; supported native verification reuse and tree/provider branding. OS-required verification remains enforced. [Release details](../PRs/1309-codex-password-verification-preferences-password-workspace.md). — Codex (AI).
