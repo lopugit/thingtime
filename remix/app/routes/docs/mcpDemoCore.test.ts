@@ -44,6 +44,10 @@ test('review payload is demo-only and gates only workflows that compose writes',
     } else {
       assert.equal(payload.receipt, undefined);
     }
+    assert.equal(payload.preview.previewId, `demo-preview:${scenario.id}`);
+    assert.equal(payload.preview.cursor, 0);
+    assert.equal(payload.preview.nextCursor, null);
+    assert.equal(payload.preview.total, scenario.steps.length);
     assert.equal(payload.preview.operations.length, scenario.steps.length);
     assert.ok(payload.preview.operations.every((operation) => operation.before.demo && operation.after.demo));
   }
