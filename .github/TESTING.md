@@ -1,5 +1,38 @@
 # Control-plane regression checklist
 
+## Durable CodeQL SARIF upload (2026-11-14)
+
+- Run `node --test .github/scripts/codeql-upload-recovery.test.mjs` alongside
+  the existing CodeQL polling and quota tests. Exercise core and upload reset,
+  unknown counters, deadline exhaustion, Retry-After, transient GET failures,
+  missing/failed/pending receipts, wrong repository and exact source hashes.
+- Analyze uses the pinned official action with `upload: never` and database
+  upload disabled. The same job retains raw and postprocessed SARIF with a
+  source/ref/category/hash manifest before waiting for quota. Recovery code is
+  inline trusted workflow code, never imported from the analyzed checkout.
+- The 65-minute shared quota/processing window fits inside a 120-minute job.
+  Quota reads are safe to retry and wait for the actual reset; 100 core units
+  and one upload unit are admission thresholds, not reservations. Other jobs
+  can still consume the shared installation budget before the upload.
+- Exactly one official `upload-sarif` invocation preserves the action's built-in
+  token, ref/SHA, category, fork and native transient transport behavior. Do not
+  replay an ambiguous upload, clear its uniqueness sentinel or change credentials
+  to evade quota. A failed one-shot upload stays failed with seven-day evidence;
+  further artifact-based upload recovery is not implemented in this increment.
+- An accepted ID is polled separately: only `processing_status: complete`
+  succeeds. Pending, missing, malformed, failed, unauthorized or expired reads
+  fail the check; safe read retries never submit another SARIF. The receipt
+  artifact records accepted versus completed independently of retained results.
+- After reviewed controller rollout, run the next already-authorized analysis
+  against its exact source. Verify both matrix evidence artifacts and immutable
+  source hashes, official upload IDs, successful strict processing steps and
+  actual code-scanning analyses for the same SHA/category. Local fixtures and
+  retained artifacts do not establish hosted upload acceptance. When the product listener calls `@github-actions`, rerunning all jobs
+  resolves its current reusable-workflow ref while preserving the original PR
+  event/source and check prefix. A failed-job or individual-job rerun reuses the
+  original controller SHA. After rollout, use the authorized all-job rerun for
+  that exact source; never substitute a different-head check or bypass a gate.
+
 ## CodeQL quota diagnostics (2026-11-14)
 
 - Run `node --test .github/scripts/codeql-polling.test.mjs .github/scripts/codeql-quota-diagnostics.test.mjs`.
