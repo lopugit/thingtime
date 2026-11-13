@@ -184,8 +184,17 @@ export async function reconcileOrphanPreviews(config, { github, vercel, prNumber
     const summaries = deploymentIds ? deploymentIds.map((id) => ({ id })) : await completeInventory(vercel, `/v7/deployments?projectId=${encodeURIComponent(config.projectId)}`, 'deployments');
     const ids = new Set(summaries.map(idOf));
     if ([...ids].some(id => !/^dpl_[A-Za-z0-9]+$/.test(id || ''))) throw new Error('Invalid cleanup deployment identifier');
+    // Summaries may only exclude a positively different PR, never authorize a
+    // mutation. Unknown metadata (including any duplicate summary) still needs
+    // an authoritative detail read. Keep every summary for keeper discovery.
+    const detailIds = new Set(summaries.filter(summary => {
+      const number = summary.meta?.githubPrId;
+      const valid = (typeof number === 'string' || typeof number === 'number') && /^[1-9][0-9]*$/.test(String(number)) && Number.isSafeInteger(Number(number));
+      return prNumber === null || !valid || String(number) === String(prNumber);
+    }).map(idOf));
     for (const id of ids) {
       if (!policy.enabled) { decision(id, 'policy-disabled'); continue; }
+      if (!detailIds.has(id)) { decision(id, 'outside-selection'); continue; }
       try {
         let deployment;
         try { deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`); }
