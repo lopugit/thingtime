@@ -16574,3 +16574,10 @@ including loading/retry, selection preservation and bottom-of-page controls.
       API afterward. Run authenticated DDL lifecycle acceptance separately to
       verify independent validators survive and denied metadata/DDL access returns
       only closed stage/category diagnostics, with no false readiness or secrets.
+
+- [ ] ACL provisioning diagnostics: authenticated DDL refusal retains numeric
+      MongoDB code 13 and only server/Unauthorized labels. Unknown server codes
+      stay unclassified; arbitrary names, string/negative/non-integer/out-of-range
+      codes, messages, nested causes and command bodies must never reach public
+      migration failures or saved diagnostics. Preserve actual origin/account and
+      inspect readiness before retrying any uncertain provisioning attempt.

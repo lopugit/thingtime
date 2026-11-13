@@ -1776,7 +1776,7 @@ the required database/collection scope; no new Vercel variable is needed.
 
 For supported provisioning, open `/migrations` as an administrator and choose
 `provision-relational-acl-validator`. Negotiate `api.admin-migrations` 1.5.0 and
-`api.admin-migrations-run` 1.6.0 on the intended origin first. Run Dry run to
+`api.admin-migrations-run` 1.6.1 on the intended origin first. Run Dry run to
 inspect the home collection metadata without DDL; pending counts refer to one
 collection protection requirement, not Thing documents. A ready inspection does
 not establish authority to install a missing validator. Run installs the exact
@@ -1784,7 +1784,11 @@ canonical constraint and independently reads it back, preserving unrelated
 constraints and changing no documents, grants or database privileges. Custom
 data-plane selection is refused before a migration lease is acquired.
 Failures expose only a closed stage/category such as `modify/unauthorized`,
-`inspect/unauthorized`, `modify/timeout` or `verify/not-ready`. A denial needs an
+`inspect/unauthorized`, `modify/timeout` or `verify/not-ready`. The error also
+includes a bounded numeric MongoDB code and enumerated driver/code-name labels
+(for example `code=8000; driver=server; name=AtlasError`); no raw error message,
+original cause, arbitrary exception name, command body or connection details are
+retained. An unclassified/generic code does not establish its cause. A denial needs an
 already-authorized administrative provisioning path; this migration does not
 grant privileges or make a runtime role more powerful. Unverifiable protection stays pending in the census so Dry run remains reachable. An uncertain real run
 must be followed by Dry run before another attempt.

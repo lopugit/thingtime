@@ -1,9 +1,11 @@
-Admin migration status 1.5.0 and run 1.6.0 register
+Admin migration status 1.5.0 and run 1.6.1 register
 `provision-relational-acl-validator`. `migrations/aclWriteFence.ts` composes the
 canonical MongoDB validator installer; `requireAdmin` remains the auth boundary.
 Dry run only inspects home collection metadata; real run preserves independent
 constraints and verifies strict/error readback. Custom plane requests fail before
-the lease. No privilege or business-data changes. Test `test:migrations`,
+the lease. Version 1.6.1 adds only safe numeric error codes and closed
+driver/code-name labels; raw driver messages and causes are discarded. No
+privilege or business-data changes. Test `test:migrations`,
 `test:api-capabilities`, ACL fence tests and
 `agent-reporting-acceptance.mjs --acl-provisioning` against the built server.
 

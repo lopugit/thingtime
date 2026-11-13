@@ -14506,14 +14506,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.6.1',
+    featureVersion: '1.6.1',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
-      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata only and does not prove provisioning permission. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, never raw database messages. ' +
+      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata only and does not prove provisioning permission. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, a bounded numeric MongoDB code and enumerated driver/code-name labels, never raw database messages or arbitrary exception names. Generic codes do not establish a permission or compatibility failure. ' +
       'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
