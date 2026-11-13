@@ -110,6 +110,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-04: Repair sync resource freshness and local-idle status, accept measured CPU scopes, and retain source-device observations across dashboard closure and app restarts. Add editable Live, recent-window and custom-range views with explicit sample coverage and gaps; remote history negotiates `api.devices-sync-control` 1.4.0. Details: [PR #1340](../PRs/1340-codex-device-sync-history-device-resource-history.md). — Codex (AI)
 - 2026-11-04: Consolidate filesystem indexing and database code into the local `filesystem-indexer/` Rust workspace. Commander, native sync and iOS builds reference the same engine, with scoped inventories, cache reuse, paginated PhotoKit observations and cancellation coverage. Installed acceptance is tracked in the [PR #1327](../PRs/1327-codex-shared-rust-index-sync-share-one-rust-filesystem-engine.md). **Codex (AI)**
 - 2026-11-04: Accept Codex's shared OAuth client with its issuer-bound loopback callback so the Thingtime MCP login reaches consent. **Codex (AI)**
