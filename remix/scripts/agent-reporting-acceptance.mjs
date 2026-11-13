@@ -471,6 +471,52 @@ try {
     const identity = { externalTaskId: 'scoped-oauth-acceptance', accountId: upgraded.accountId };
     const prepared = await tool(upgraded.bridge, 'prepare_thingtime_agent_task', { ...identity, displayName: 'Synthetic OAuth reporter', workspace: syntheticWorkspace });
     assert(prepared.binding?.characterId && prepared.binding.characterId !== owner.data.user.id);
+    if (aclScale) await runSection('relational-ACL-boundaries', async () => {
+      const createAudience = async acl => {
+        const result = await request('/api/v1/things', { cookie: owner.cookie,
+          body: { thingtime: ['data'], acl, crystal: { name: 'Synthetic ACL boundary' } } });
+        assert(result.data.thing?.id); return result.data.thing;
+      };
+      const publicThing = await createAudience(['tt:all']);
+      const allowedPublicReader = await register('allowedreader');
+      const excluded = `-tt:user/${stranger.data.user.username}`;
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: publicThing.id, operation: 'add', entries: [excluded] } });
+      const readAudience = (id, options = {}) => request('/api/v1/things?id=' + encodeURIComponent(id), options);
+      await readAudience(publicThing.id);
+      await readAudience(publicThing.id, { cookie: allowedPublicReader.cookie });
+      await readAudience(publicThing.id, { cookie: stranger.cookie, status: 404 });
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: publicThing.id, crystal: { name: 'Edited public relational audience' } } });
+      const publicRead = (await readAudience(publicThing.id, { cookie: owner.cookie })).data.thing;
+      assert(publicRead.acl.includes('tt:all') && publicRead.acl.includes(excluded));
+      await readAudience(publicThing.id); await readAudience(publicThing.id, { cookie: stranger.cookie, status: 404 });
+      await readAudience(publicThing.id, { cookie: allowedPublicReader.cookie });
+      const hidden = await createAudience(['tt:hidden']); assert(hidden.linkKey);
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: hidden.id, operation: 'add', entries: ['tt:user/synthetic-hidden-reader'] } });
+      await readAudience(hidden.id, { status: 404 });
+      const hiddenPath = '/api/v1/things?' + new URLSearchParams({ id: hidden.id, key: hidden.linkKey });
+      await request(hiddenPath);
+      await request('/api/v1/things/update', { cookie: owner.cookie,
+        body: { id: hidden.id, crystal: { name: 'Edited hidden relational audience' } } });
+      await request(hiddenPath); await readAudience(hidden.id, { status: 404 });
+      const hiddenRead = (await readAudience(hidden.id, { cookie: owner.cookie })).data.thing;
+      assert(hiddenRead.acl.includes('tt:hidden') && hiddenRead.acl.includes('tt:user/synthetic-hidden-reader'));
+      assert(hiddenRead.linkKey === hidden.linkKey, 'Hidden link identity survives the generic edit');
+      const custom = await createAudience(['tt:user']);
+      const writer = `tt:user/${stranger.data.user.username}/write`;
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: custom.id, operation: 'add', entries: ['tt:custom', writer] } });
+      await readAudience(custom.id, { cookie: stranger.cookie });
+      await request('/api/v1/things/update', { cookie: stranger.cookie,
+        body: { id: custom.id, crystal: { name: 'Authorized custom capability edit' } } });
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: custom.id, operation: 'remove', entries: [writer] } });
+      await request('/api/v1/things/update', { cookie: stranger.cookie, status: 404,
+        body: { id: custom.id, crystal: { name: 'Revoked capability must refuse' } } });
+      checks.push('built HTTP relational ACL preserves anonymous/allowed-user public access, explicit exclusion, hidden-link proof, direct custom write/revoke and ordinary crystal edits without dropping audience or rotating link identity');
+    });
     if (aclScale) await runSection('large-workspace-ACL', async () => {
       // Exercise the real saved-workspace path beyond the former 64-entry cap.
       // Distinct batches concurrently grant the same references; each task must

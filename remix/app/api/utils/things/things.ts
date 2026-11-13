@@ -3029,6 +3029,7 @@ const aclManagementDoc = async (things: any, viewer: Viewer, id: string, session
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const doc = await things.findOne({ shareId: id, ownerId: viewer.id }, session ? { session } : {});
   if (!doc || genericThingReadBlocked(doc) || isProtectedThingtime(thingtimeOf(doc)) || doc.appId || await patSandboxBlocks(viewer, doc, session)) return fail(404, 'Thing not found');
+  if (doc.aclGeneration !== undefined && !validRelationalAclRoot(doc)) return fail(409, 'The audience compatibility fence changed. Refresh before editing grants.');
   if (await patVisibilityBlocksDoc(viewer, doc)) return patVisibilityFail(viewer);
   if (family === 'audience' && rootAcl(doc).includes(ACL_INHERIT)) return fail(400, 'Attached things inherit their target audience');
   return doc as ThingDoc;
@@ -3589,6 +3590,7 @@ const appMembershipOk = (app: AppNamespaceScope, doc: ThingDoc): boolean => {
 // thing is as visible as that thing; a chain that escapes the namespace or
 // breaks fails closed).
 const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+	if (doc.aclGeneration !== undefined && !validRelationalAclRoot(doc)) return false;
 	// moderation-blocked docs are invisible under app lenses too — this path
 	// never reaches canView, so it needs its own gate; born-pending docs are
 	// visible only when the lens acts for their owner
@@ -3604,7 +3606,8 @@ const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promi
   let judged: ThingDoc = doc;
   if (aclOf(doc).includes(ACL_INHERIT)) {
     const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
-    if (!terminal || !appMembershipOk(app, terminal)) return false;
+    if (!terminal || !appMembershipOk(app, terminal) ||
+        (terminal.aclGeneration !== undefined && !validRelationalAclRoot(terminal))) return false;
     judged = terminal;
   }
   if (String(doc.ownerId) === app.ownerId && String(judged.ownerId) === app.ownerId) return true;

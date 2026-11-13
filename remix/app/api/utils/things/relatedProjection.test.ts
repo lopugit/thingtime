@@ -32,6 +32,8 @@ test('an unavailable audience proof does not revoke exact owner authority or byp
   assert.equal(canView({ ...doc, moderation: { status: 'blocked' } } as ThingDoc, { id: 'owner' }), false);
   assert.equal(canView({ ...doc, thingtime: ['acl-entry'] }, { id: 'owner' }), false);
   assert.equal(canView(doc, { id: 'owner', pat: { tokenId: 'restricted', onlyCreatedThings: false, visibility: 'public' } }), false);
+  assert.equal(canView({ ...doc, acl: ['tt:all'] }, { id: 'owner' }), false, 'a legacy inline edit cannot silently replace a protected baseline');
+  assert.equal(canView({ ...doc, aclBaselineVersion: 999 }, { id: 'owner' }), false, 'unknown formats stay unavailable even to the owner');
 });
 
 test('related projections keep a pending comment visible to its owner', () => {

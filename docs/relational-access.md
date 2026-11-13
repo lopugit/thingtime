@@ -182,6 +182,12 @@ explicitly replacing an ACL can overwrite it; new readers fail closed on the
 result. Drain or scope such legacy ACL mutations and pre-migration in-flight
 writes before first production migration, while preserving unrelated running
 tasks and connections.
+The compatibility promise for complete ACL responses applies to old clients
+calling the new server. Older server deployments deliberately lose nonowner
+access to migrated public/custom Things; an owner-scoped personal token on an
+older server can be less precise about public/private classification for that
+owner's already-public content. Use the current server for exact visibility
+semantics. The fence does not grant a new private audience.
 Ordinary PR previews currently advertise the development data authority;
 verify the exact preview's identity before using synthetic data and do not
 infer physical database isolation from the public identity alone. Preserve

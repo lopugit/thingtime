@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { aclMarkerClause, rootAcl, validRelationalAclRoot } from '../things/relationalAcl';
 
 import { getSessionsCollection, getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { consumeByteBudget, refundByteBudget } from '../rateLimit/byteBudget';
@@ -96,14 +97,14 @@ export const appNamespaceClauses = (scope: AppNamespaceScope): Record<string, un
   // holds app-data.shared (exact scope — never implied by app-data). Docs
   // carrying tt:inherit (comments/reactions) pass the COARSE tier — their
   // audience lives on their terminal ancestor, resolved by the exact verdict.
-  scope.sharedRead ? { $or: [{ ownerId: scope.ownerId }, { acl: { $in: [appAclEntry(scope.appId), 'tt:inherit'] } }] } : { ownerId: scope.ownerId }
+  scope.sharedRead ? { $or: [{ ownerId: scope.ownerId }, aclMarkerClause(appAclEntry(scope.appId), 'tt:inherit')] } : { ownerId: scope.ownerId }
 ];
 
 // Exact per-doc verdict for the app lens. NOTE: deliberately no owner
 // short-circuit against doc.ownerId === viewer alone — membership (appId)
 // comes first, so an app can never see the user's non-app things.
 export const appCanViewDoc = (scope: AppNamespaceScope, doc: any): boolean => {
-  if (!doc || doc.appId !== scope.appId) return false;
+  if (!doc || doc.appId !== scope.appId || (doc.aclGeneration !== undefined && !validRelationalAclRoot(doc))) return false;
   const own = String(doc.ownerId) === scope.ownerId;
   if (scope.sandbox) {
     const pooled = !!scope.sandbox.space && doc.sandboxSpace === scope.sandbox.space;
@@ -112,7 +113,7 @@ export const appCanViewDoc = (scope: AppNamespaceScope, doc: any): boolean => {
     return false; // sandbox junk written under a real clientId
   }
   if (own) return true;
-  return scope.sharedRead && Array.isArray(doc.acl) && doc.acl.includes(appAclEntry(scope.appId));
+  return scope.sharedRead && rootAcl(doc).includes(appAclEntry(scope.appId));
 };
 
 // ---------------------------------------------------------------------------
