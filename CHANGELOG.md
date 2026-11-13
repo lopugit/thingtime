@@ -1,5 +1,12 @@
 # Control-plane changelog
 
+## 2026-11-13 — Preserve native-provider guards during preview admission
+
+- Accept the existing native-home provider assertions around the required
+  gateway database fence. The controller previously rejected this valid source
+  shape as `database-fence-missing`, preventing protected-preview backports from
+  publishing. Missing, commented, reordered and unrecognized guards still fail.
+
 ## 2026-11-13 — Authenticate protected checks and review exact preview retirements
 
 - Share project-verified, expiring automation authentication across protected
