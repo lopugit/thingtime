@@ -1,5 +1,15 @@
 # Control-plane regression checklist
 
+## Gateway admission leases (2026-11-13)
+
+- Run `node --test .github/scripts/preview-gateway-source.test.mjs`. Both legacy
+  admission and scoped leases must pass; missing admission, scoped response
+  consumption, terminal release or database authority must fail closed. Keep
+  the database fence before MongoDB connect and preserve dedicated opt-in.
+- Validate the exact reviewed product SHA through the protected preview prepare
+  path after controller rollout. Passing source admission does not prove build,
+  publication, alias selection or database health; verify those independently.
+
 ## Prebuilt prepare environment (2026-11-02)
 
 - Run `node --test .github/scripts/deploy-vercel-prebuilt.test.mjs`; the prepare

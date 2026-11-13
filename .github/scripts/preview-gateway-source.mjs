@@ -13,9 +13,25 @@ export function gatewaySourceIssue(sources) {
   if (!/import\s*\{[^}]*requireGatewayDatabaseAccess[^}]*\}\s*from\s*['"]\.\.\/deployment\/environmentGateway['"]/.test(mongo) ||
       !/class\s+GatewayMongoClient\s+extends\s+mod\.MongoClient/.test(mongo) ||
       !/override\s+async\s+connect\(\)\s*\{\s*await\s+requireGatewayDatabaseAccess\(\);\s*await\s+super\.connect\(\)/.test(mongo)) return 'database-fence-missing';
+  const legacyIngress = /runAdmittedGatewayWork\(/.test(middleware);
+  // The leased ingress keeps admission through response consumption and releases
+  // it on completion, cancellation and errors instead of counting static traffic.
+  const leasedIngress = /import\s*\{[^}]*admitGatewayWork[^}]*\}\s*from\s*['"]\.\.\/\.\.\/app\/api\/utils\/deployment\/environmentGateway['"]/.test(middleware) &&
+    /lease\s*=\s*await\s+admitGatewayWork\(\)/.test(middleware) &&
+    /const\s+end\s*=\s*\(\)\s*=>\s*lease\?\.end\(\)/.test(middleware) &&
+    /await\s+lease\.run\(/.test(middleware) &&
+    /await\s+lease!\.run\(\(\)\s*=>\s*reader\.read\(\)\)/.test(middleware) &&
+    /await\s+lease!\.run\(\(\)\s*=>\s*reader\.cancel\(reason\)\)/.test(middleware) &&
+    /chunk\.done\)\s*\{\s*controller\.close\(\);\s*end\(\)/.test(middleware) &&
+    /finally\s*\{\s*end\(\)/.test(middleware) && /catch\s*\(error\)\s*\{\s*end\(\)/.test(middleware);
   if (!/import\s*\{[^}]*environmentGatewayIngress[^}]*\}\s*from\s*['"]\.\.\/utils\/environmentGateway['"]/.test(middleware) ||
-      !/await\s+environmentGatewayIngress\(event\.req\)/.test(middleware) || !/runAdmittedGatewayWork\(/.test(middleware)) return 'gateway-ingress-missing';
-  if (!/export\s+const\s+requireGatewayDatabaseAccess\s*=/.test(authority) || !/await\s+gatewayAuthority\.requireDatabase\(\)/.test(authority)) return 'gateway-authority-missing';
+      !/await\s+environmentGatewayIngress\(event\.req\)/.test(middleware) || !(legacyIngress || leasedIngress)) return 'gateway-ingress-missing';
+  const legacyAuthority = /await\s+gatewayAuthority\.requireDatabase\(\)/.test(authority);
+  const leasedAuthority = /const\s+gatewayWork\s*=\s*createGatewayWorkLifecycle\(\(\)\s*=>\s*gatewayAuthority\.requireDatabase\(\)\)/.test(authority) &&
+    /await\s+requireDatabase\(\)/.test(authority) && /const\s+lease\s*=\s*await\s+admit\(\)/.test(authority) &&
+    /try\s*\{\s*return\s+await\s+lease\.run\(work\);\s*\}\s*finally\s*\{\s*lease\.end\(\)/.test(authority) &&
+    /await\s+gatewayWork\.withWork\(async\s*\(\)\s*=>\s*\{\s*\}\)/.test(authority);
+  if (!/export\s+const\s+requireGatewayDatabaseAccess\s*=/.test(authority) || !(legacyAuthority || leasedAuthority)) return 'gateway-authority-missing';
   // Dedicated remains an explicit existing branch opt-in, never a fallback for
   // unsupported source. This admission only establishes gateway integration.
   if (!/export\s+const\s+mongoConnectionPolicy[^=]*=\s*['"](?:proxy|dedicated)['"]/.test(policy)) return 'connection-policy-missing';
