@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep PR preview environment-gateway discovery and signed relay working under Vercel deployment protection; reject spoofed or reflected bypass headers. Bump `api.environment-gateway` to 1.1.1. **Codex (AI)**
+
 - 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. [PR 1280 details](../PRs/1280-codex-builder-thing-navigation-open-builder-things-in-their-editors.md). — Codex (AI)
 - 2026-10-29: Localize the native AutoFill host name as Thingtime while preserving its installed filename and identity; verify bundled localization rather than raw plist branding alone.
 
