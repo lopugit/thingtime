@@ -16565,3 +16565,12 @@ including loading/retry, selection preservation and bottom-of-page controls.
 
 - [ ] Build both client and server before `test:environment-gateway:acceptance`. Confirm instrumentation resolves the MongoClient exported by the actual Nitro driver bundle (factory, default or namespace), with a callable connect method; never substitute a separate driver copy for command evidence.
 - [ ] The manifest check must accept compatible `api.environment-gateway` updates from1.2.1 while rejecting older or breaking-major versions. Preserve actual API registration/cookie/write/promotion/rollback checks and the zero follower Mongo dial assertion.
+
+- [ ] ACL validator provisioning: on an isolated replica with an API-created
+      administrator, run `agent-reporting-acceptance.mjs --acl-provisioning`.
+      Anonymous/non-admin calls fail, repeated Dry run leaves missing protection
+      pending, Run provisions and repeated Run is idempotent. A custom data plane
+      fails before lease/provisioning. Grant/read/revoke works through the real
+      API afterward. Run authenticated DDL lifecycle acceptance separately to
+      verify independent validators survive and denied metadata/DDL access returns
+      only closed stage/category diagnostics, with no false readiness or secrets.
