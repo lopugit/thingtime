@@ -158,39 +158,76 @@ export const createGatewayAuthority = (options: {
   return { current, requireDatabase: async () => { const authority = await current(); if (authority && !authority.owner && getMongoConnectionMode() !== 'dedicated') throw new GatewayUnavailable(); } };
 };
 
-let activeWork = 0;
-let draining = false;
-let drainBarrier: Promise<unknown> = Promise.resolve();
-const drains = new Set<() => Promise<void>>();
-const finishDrain = () => {
-  if (draining && activeWork === 0) {
-    draining = false;
-    // A rollback may re-admit this worker while close is still pending. All
-    // new work waits for close + cache eviction before opening a fresh pool.
-    drainBarrier = drainBarrier.then(() => Promise.allSettled([...drains].map(drain => drain())));
-  }
+/** Only admitted database work participates in pool draining. Each scope expires
+ * with its lease; a detached job must acquire its own lease while its parent is
+ * still active rather than retaining an expired AsyncLocalStorage boolean. */
+export const createGatewayWorkLifecycle = (requireDatabase: () => Promise<void>) => {
+  let activeWork = 0;
+  let generation = 0;
+  let drainBarrier: Promise<void> = Promise.resolve();
+  let pendingDrain: { started: boolean; previous: Promise<void>; finish: () => void } | null = null;
+  const drains = new Set<() => Promise<void>>();
+  const admittedWork = new AsyncLocalStorage<{ active: boolean }>();
+  const finishDrain = () => {
+    const pending = pendingDrain;
+    if (!pending || pending.started || activeWork !== 0) return;
+    pending.started = true;
+    void pending.previous.then(() => Promise.allSettled([...drains].map(drain => Promise.resolve().then(drain)))).then(() => {
+      if (pendingDrain === pending) pendingDrain = null;
+      pending.finish();
+    });
+  };
+  const demote = () => {
+    // Close admission synchronously, including callers awaiting authority.
+    generation++;
+    if (!pendingDrain) {
+      const previous = drainBarrier;
+      let finish!: () => void;
+      drainBarrier = new Promise<void>(resolve => { finish = resolve; });
+      pendingDrain = { started: false, previous, finish };
+    }
+    finishDrain();
+  };
+  const isAdmitted = () => admittedWork.getStore()?.active === true;
+  const admit = async () => {
+    if (!isAdmitted()) {
+      const observedGeneration = generation;
+      await drainBarrier;
+      await requireDatabase();
+      if (generation !== observedGeneration || pendingDrain) throw new GatewayUnavailable();
+    }
+    const scope = { active: true };
+    activeWork++;
+    return {
+      run: <T>(work: () => T): T => admittedWork.run(scope, work),
+      end: () => {
+        if (!scope.active) return;
+        scope.active = false;
+        activeWork--;
+        finishDrain();
+      }
+    };
+  };
+  const withWork = async <T>(work: () => Promise<T>): Promise<T> => {
+    const lease = await admit();
+    try { return await lease.run(work); } finally { lease.end(); }
+  };
+  return { demote, admit, withWork, isAdmitted,
+    registerDrain: (drain: () => Promise<void>) => { drains.add(drain); return () => drains.delete(drain); } };
 };
-export const registerGatewayDrain = (drain: () => Promise<void>) => { drains.add(drain); return () => drains.delete(drain); };
-export const beginGatewayWork = () => {
-  activeWork++;
-  let ended = false;
-  return () => { if (!ended) { ended = true; activeWork--; finishDrain(); } };
-};
-/** Detached waitUntil jobs must keep their lease through the final save. */
-export const withGatewayWork = async <T>(work: () => Promise<T>): Promise<T> => {
-  const end = beginGatewayWork();
-  try { return await work(); } finally { end(); }
-};
-export const gatewayAuthority = createGatewayAuthority({ demoted: () => { draining = true; finishDrain(); } });
-const admittedWork = new AsyncLocalStorage<boolean>();
-export const runAdmittedGatewayWork = async <T>(work: () => Promise<T>) => {
-  await drainBarrier;
-  return admittedWork.run(true, work);
-};
+
+const gatewayWork = createGatewayWorkLifecycle(() => gatewayAuthority.requireDatabase());
+export const gatewayAuthority = createGatewayAuthority({ demoted: gatewayWork.demote });
+export const registerGatewayDrain = gatewayWork.registerDrain;
+export const admitGatewayWork = gatewayWork.admit;
+/** Detached waitUntil jobs must acquire a lease through their final save. */
+export const withGatewayWork = gatewayWork.withWork;
+export const runAdmittedGatewayWork = gatewayWork.withWork;
 export const requireGatewayDatabaseAccess = async () => {
-  // A request admitted while this was the owner may finish its transaction or
-  // stream after promotion; new requests cannot borrow that scoped admission.
-  if (admittedWork.getStore()) return;
-  await drainBarrier;
-  await gatewayAuthority.requireDatabase();
+  // Already admitted requests and their leased jobs may finish after promotion.
+  if (gatewayWork.isAdmitted()) return;
+  // This is an authorization check, not an operation lifetime. Standalone
+  // DB work must wrap connect + use in withGatewayWork, as Workflow steps do.
+  // The short lease also waits for rollback pool close/cache eviction.
+  await gatewayWork.withWork(async () => {});
 };
