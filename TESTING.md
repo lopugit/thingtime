@@ -1853,7 +1853,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
       row, expand Full details, and scroll to the bottom. The read-only morning
       mission must not show an Apply control. Write-composing missions must keep
-      Apply disabled until the confirmation checkbox is selected, then fail
+      Apply disabled until the confirmation checkbox is selected; each demo
+      preview includes its page identity, cursor, end marker and total, so no
+      NaN range or phantom Next page appears. Then fail
       closed with the host-only message rather than mutating data.
 - [ ] Load the page with MCP discovery unavailable. The release contract and
       workflow cards remain immediately usable, the page shows the quiet

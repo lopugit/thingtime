@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
 import { renderThingtimeMcpUi } from './pluginLimitlessCore';
+import { mcpDemoScenarios, reviewPayloadForScenario } from '../../../routes/docs/mcpDemoCore';
 
 // Execute the shipped module, including its actual event listener and button callbacks.
 const app = (legacy?: Record<string, unknown>) => {
@@ -67,7 +68,7 @@ test('shipped MCP App initializes before readiness and renders early tool result
   assert.match(ui.root.innerHTML, /Early result/);
   await ui.init();
   assert.equal(ui.messages[1].method, 'ui/notifications/initialized');
-  assert.equal(Object.hasOwn(ui.messages[1], 'id'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(ui.messages[1], 'id'), false);
   assert.equal(ui.timers.size, 0);
 });
 
@@ -262,4 +263,23 @@ test('an initialization error other than unsupported method never silently selec
   assert.equal(ui.messages.length, 1);
   assert.match(ui.elements.get('#status')!.textContent, /connect/);
   assert.equal(ui.timers.size, 0);
+});
+
+
+test('each MCP Lab payload renders complete review pages and policy-gated Apply controls', async () => {
+  for (const scenario of mcpDemoScenarios) {
+    const ui = app(); await ui.init();
+    const payload = reviewPayloadForScenario(scenario);
+    ui.result(payload);
+    assert.doesNotMatch(ui.root.innerHTML, /NaN|of undefined/);
+    assert.equal(ui.elements.has('#next'), false);
+    assert.equal(ui.elements.has('#apply'), payload.confirmationRequired);
+    assert.equal(ui.elements.has('#confirm'), payload.confirmationRequired);
+    if (payload.confirmationRequired) {
+      assert.equal(ui.elements.get('#apply')!.disabled, true);
+      const confirm = ui.elements.get('#confirm')!;
+      confirm.checked = true; confirm.handlers.change();
+      assert.equal(ui.elements.get('#apply')!.disabled, false);
+    }
+  }
 });
