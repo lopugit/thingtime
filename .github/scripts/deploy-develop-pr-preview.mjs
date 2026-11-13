@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
+import { promotePreviewAlias } from './preview-alias-promotion.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { previewRetirementRequest, redactedProviderEndpoint } from './preview-retirement-request.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
@@ -1933,33 +1934,39 @@ const getAliasBinding = async (config, prNumber, { readAlias = getOwnedAlias, re
 };
 
 
-const assignAliasVerified = async (config, deployment, prNumber) => {
+const assignAliasVerified = async (config, deployment, prNumber, { assertCurrent } = {}) => {
+	if (typeof assertCurrent !== 'function') throw new Error('Preview publication requires a current-head guard');
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
 	const issue = deploymentIdentityIssue(deployment, config, { prNumber });
 	if (issue || deployment.readyState !== 'READY') {
 		throw new Error(`Refusing to alias an unverified deployment (${issue ?? deployment.readyState})`);
 	}
 	await assertNoProtectedAlias(config, deployment);
-	const existing = await getAliasBinding(config, prNumber);
-	if (existing?.deployment.id === deployment.id) return { alias, oldDeploymentId: null };
-
-	let assignment = null;
-	try {
-		assignment = await vercelRequest(`/v2/deployments/${encodeURIComponent(deployment.id)}/aliases`, {
-			method: 'POST',
-			accept: [200],
-			retries: 0,
-			body: { alias }
-		});
-	} catch (error) {
-		const reconciled = await getAliasBinding(config, prNumber);
-		if (reconciled?.deployment.id !== deployment.id) throw error;
-		return { alias, oldDeploymentId: reconciled.record.deploymentId ?? null };
-	}
-	if (assignment?.alias !== alias) throw new Error('Vercel assigned an unexpected alias');
-	const verified = await getAliasBinding(config, prNumber);
-	if (verified?.deployment.id !== deployment.id) throw new Error('Alias did not resolve to the expected deployment');
-	return { alias, oldDeploymentId: assignment.oldDeploymentId ?? null };
+	return promotePreviewAlias({
+		alias, deploymentId: deployment.id, assertCurrent,
+		verifyCandidate: () => verifyPublishedAlias(deploymentUrl(deployment)),
+		verifyAlias: name => verifyPublishedAlias(`https://${name}`),
+		read: async () => (await getAliasBinding(config, prNumber))?.record || null,
+		assign: async (name, id) => {
+			// Revalidate a retained predecessor before restoring it. Older policy
+			// generations remain eligible only as the already-owned incumbent.
+			if (id !== deployment.id) {
+				const previous = await deploymentDetail(id);
+				const previousIssue = deploymentIdentityIssue(previous, config, { prNumber,
+					legacyAlias: previous.meta?.thingtimePrPreviewPolicy == null, allowPreviousPolicy: true });
+				if (previousIssue || previous.readyState !== 'READY') throw new Error('Previous preview deployment is no longer restorable');
+			}
+			const result = await vercelRequest(`/v2/deployments/${encodeURIComponent(id)}/aliases`, {
+				method: 'POST', accept: [200], retries: 0, body: { alias: name }
+			});
+			if (result?.alias !== name) throw new Error('Vercel assigned an unexpected alias');
+		},
+		remove: async name => {
+			const current = await getOwnedAlias(config, name);
+			if (!current || current.deploymentId !== deployment.id) throw new Error('Preview alias rollback ownership changed');
+			await vercelRequest(`/v2/aliases/${encodeURIComponent(current.uid)}`, { method: 'DELETE', retries: 0, accept: [200, 204, 404] });
+		}
+	});
 };
 
 const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
@@ -2383,9 +2390,9 @@ const reconcile = async (config) => {
 			const alias = previewAlias(prNumber, config.previewAliasSuffix);
 			await verifyCors(`https://${alias}`, safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL')));
 			await assertCurrentPullRequest(config, snapshot, null);
-			if (binding?.deployment.id !== keeper.id) await assignAliasVerified(config, keeper, prNumber);
-			await verifyPublishedAlias(`https://${alias}`);
-			await assertCurrentPullRequest(config, snapshot, null);
+			await assignAliasVerified(config, keeper, prNumber, {
+				assertCurrent: () => assertCurrentPullRequest(config, snapshot, null)
+			});
 			const githubDeployment = await createGithubDeployment(config.repository, pullRequest);
 			const statuses = await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`);
 			if (!Array.isArray(statuses)) throw new Error('Invalid deployment status inventory');
@@ -2524,9 +2531,9 @@ const deploy = async (config, pullRequest) => {
 		const aliasUrl = `https://${alias}`;
 		await verifyCors(aliasUrl, corsProbeUrl);
 		await assertCurrentPullRequest(config, snapshot, config.actor);
-		await assignAliasVerified(config, ready, pullRequest.number);
-		await verifyPublishedAlias(aliasUrl);
-		await assertCurrentPullRequest(config, snapshot, config.actor);
+		await assignAliasVerified(config, ready, pullRequest.number, {
+			assertCurrent: () => assertCurrentPullRequest(config, snapshot, config.actor)
+		});
 		published = true;
 
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
