@@ -5,8 +5,9 @@ const originals = await import('../mongodb/collections');
 const history = await import('../timeline/recordMutation');
 const storage = await import('../storage/userStorage');
 const subspaces = await import('../subspaces/gate');
-const { thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } = await import('../storage/storageCore');
-let root: any, rows: any[], captures: any[], reactions: any[];
+const { thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION, StorageMutationError } = await import('../storage/storageCore');
+let root: any, rows: any[], captures: any[], reactions: any[], writeFilters: any[], storageDeltas: number[];
+let fenceFailure: Error | null = null;
 const session = { inTransaction: () => true };
 const setPath = (value: any, path: string, next: any) => {
   const parts = path.split('.'), last = parts.pop()!;
@@ -43,13 +44,14 @@ const collection = {
   },
   updateOne: async (filter: any, update: any, options: any) => {
     assert.equal(options.session, session);
+    writeFilters.push(structuredClone(filter));
     if (filter._id !== root._id && filter.shareId !== root.shareId) return { matchedCount: 0 };
     Object.assign(root, structuredClone(update.$set));
     return { matchedCount: 1 };
   }
 };
 mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedExports: {
-  ...originals, ensureThingAclWriteFence: async () => {}, getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, withMongoTransaction: async (work: any) => work(session)
+  ...originals, ensureThingAclWriteFence: async () => { if (fenceFailure) throw fenceFailure; }, getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, withMongoTransaction: async (work: any) => work(session)
 } });
 mock.module(new URL('../timeline/recordMutation.ts', import.meta.url).href, { namedExports: {
   ...history, recordThingMutation: async (_things: any, before: any, after: any, capture: any, active: any) => {
@@ -58,14 +60,14 @@ mock.module(new URL('../timeline/recordMutation.ts', import.meta.url).href, { na
     return { event: { id: `history-${captures.length}` } };
   }
 } });
-mock.module(new URL('../storage/userStorage.ts', import.meta.url).href, { namedExports: { ...storage, applyUserStorageDelta: async () => {} } });
+mock.module(new URL('../storage/userStorage.ts', import.meta.url).href, { namedExports: { ...storage, applyUserStorageDelta: async (_owner: string, delta: number) => { storageDeltas.push(delta); } } });
 mock.module(new URL('../subspaces/gate.ts', import.meta.url).href, { namedExports: { ...subspaces, assertSubspaceInteraction: async () => ({ ok: true, rootSubspaceId: null }) } });
 const { addThingAclEntries, removeThingAclEntries, createThing, updateThing, readAllTokenAclEntries, withSandboxedThingMutation } = await import(new URL('./things.ts?acl-mutation-timeline', import.meta.url).href);
 
 beforeEach(() => {
   root = { _id: 'mongo-root', shareId: 'root', ownerId: 'owner', schemaVersion: 2, thingtime: ['data'], crystal: {},
     acl: ['tt:user', 'tt:custom'], updatedAt: new Date(), createdAt: new Date() };
-  rows = []; captures = []; reactions = [];
+  rows = []; captures = []; reactions = []; writeFilters = []; storageDeltas = []; fenceFailure = null;
 });
 
 test('owner incremental ACL changes capture complete before-images in the same transaction', async () => {
@@ -157,4 +159,43 @@ test('canonical content edits preserve the legacy fence and generic payloads can
   assert.deepEqual((result as any).thing.acl, ['tt:user', 'tt:custom', 'tt:user/bob']);
   assert.equal((result as any).thing.aclBaseline, undefined);
   assert.equal((result as any).thing.aclBaselineVersion, undefined);
+});
+
+
+(['audience', 'token'] as const).forEach(family => test(`ordinary edits atomically upgrade a pre-floor ${family} root without changing grants or storage`, async () => {
+  const entry = family === 'audience' ? 'tt:user/legacy-member' : 'tt:token/legacy-token';
+  assert.equal((await addThingAclEntries({ id: 'owner' }, 'root', [entry], { family, captureTimeline: false })).ok, true);
+  // Synthetic first-release envelope; the real mixed-runtime acceptance suite
+  // creates the same format through the actual predecessor API.
+  delete root.aclWriteFenceAfter;
+  root.updatedAt = new Date('2099-01-01T00:00:00.000Z');
+  root.storageClass = 'content'; root.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION;
+  root.sizeBytes = thingStorageSizeBytes({ crystal: root.crystal, extended: null, tags: [] });
+  const before = structuredClone(root), beforeRows = structuredClone(rows);
+  writeFilters = []; storageDeltas = [];
+  const result = await updateThing({ id: 'owner' }, root.shareId, { crystal: {} }, { expectedUpdatedAt: before.updatedAt.toISOString() });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(root.aclWriteFenceAfter.getTime(), before.updatedAt.getTime() + 1);
+  assert.equal(root.updatedAt.getTime(), root.aclWriteFenceAfter.getTime());
+  assert.equal(root.aclRevision, before.aclRevision); assert.equal(root.aclGeneration, before.aclGeneration);
+  assert.equal(root.tokenAclRevision, before.tokenAclRevision); assert.equal(root.tokenAclGeneration, before.tokenAclGeneration);
+  assert.deepEqual(root.acl, before.acl); assert.deepEqual(root.tokenAcl, before.tokenAcl); assert.deepEqual(rows, beforeRows);
+  assert.equal(root.sizeBytes, before.sizeBytes); assert.deepEqual(storageDeltas, []);
+  assert.deepEqual(writeFilters[0].aclWriteFenceAfter, { $exists: false });
+  assert.deepEqual(writeFilters[0].updatedAt, before.updatedAt, 'original business timestamp CAS remains intact');
+  assert.equal((result as any).thing.updatedAt, root.updatedAt.toISOString());
+  assert.equal((result as any).thing.aclWriteFenceAfter, undefined);
+}));
+
+
+test('legacy floor upgrade refuses an unavailable storage fence before content or ledger changes', async () => {
+  assert.equal((await addThingAclEntries({ id: 'owner' }, 'root', ['tt:user/member'], { captureTimeline: false })).ok, true);
+  delete root.aclWriteFenceAfter;
+  const before = structuredClone(root), beforeRows = structuredClone(rows);
+  writeFilters = []; storageDeltas = [];
+  fenceFailure = new StorageMutationError(503, 'storage_invariant', 'Storage fence is unavailable');
+  const result = await updateThing({ id: 'owner' }, root.shareId, { crystal: { text: 'must not save' } });
+  assert.equal(result.ok, false); assert.equal((result as any).status, 503);
+  assert.deepEqual(root, before); assert.deepEqual(rows, beforeRows);
+  assert.deepEqual(writeFilters, []); assert.deepEqual(storageDeltas, []);
 });

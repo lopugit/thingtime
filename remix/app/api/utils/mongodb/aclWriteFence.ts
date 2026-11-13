@@ -30,20 +30,43 @@ export const THING_ACL_WRITE_FENCE = { $expr: { $and: [
   { $cond: [{ $eq: [{ $type: '$tokenAclGeneration' }, 'missing'] }, true, { $and: [
     nonemptyString('$tokenAclGeneration'), { $eq: ['$tokenAcl', []] }
   ] }] },
-  // Old full-document conversion uses only captured _id/updatedAt. The floor
-  // prevents another old writer from restoring that pre-migration timestamp.
+  // The first relational release predates the timestamp floor. Its exact
+  // negative audience/token fences remain mandatory above. Only an ABSENT
+  // floor selects that legacy format: null, other types and a regressed
+  // timestamp never do. Current content/ACL writers upgrade it atomically.
   { $cond: [{ $and: [{ $eq: [{ $type: '$aclGeneration' }, 'missing'] }, { $eq: [{ $type: '$tokenAclGeneration' }, 'missing'] }] }, true, { $and: [
+    { $eq: [{ $type: '$updatedAt' }, 'date'] },
+    { $or: [
+      { $eq: [{ $type: '$aclWriteFenceAfter' }, 'missing'] },
+      { $and: [{ $eq: [{ $type: '$aclWriteFenceAfter' }, 'date'] }, { $gte: ['$updatedAt', '$aclWriteFenceAfter'] }] }
+    ] }
+  ] }] }
+] } };
+
+// Recognize only the byte-structural canonical rule shipped by the earlier
+// guard implementation. Unknown validators remain independent constraints.
+const previousWriteFence = { $expr: { $and: [
+  ...THING_ACL_WRITE_FENCE.$expr.$and.slice(0, 2),
+  { $cond: [(THING_ACL_WRITE_FENCE.$expr.$and[2] as any).$cond[0], true, { $and: [
     { $eq: [{ $type: '$aclWriteFenceAfter' }, 'date'] }, { $eq: [{ $type: '$updatedAt' }, 'date'] },
     { $gte: ['$updatedAt', '$aclWriteFenceAfter'] }
   ] }] }
 ] } };
-
-const containsFence = (validator: any): boolean => JSON.stringify(validator) === JSON.stringify(THING_ACL_WRITE_FENCE) ||
-  (Array.isArray(validator?.$and) && validator.$and.some(containsFence));
+const sameRule = (left: any, right: any): boolean => JSON.stringify(left) === JSON.stringify(right);
+const containsRule = (validator: any, rule: any): boolean => sameRule(validator, rule) ||
+  (Array.isArray(validator?.$and) && validator.$and.some((entry: any) => containsRule(entry, rule)));
+const containsFence = (validator: any): boolean => containsRule(validator, THING_ACL_WRITE_FENCE);
+const containsPreviousFence = (validator: any): boolean => containsRule(validator, previousWriteFence);
+const upgradePreviousFence = (validator: any): any => {
+  if (sameRule(validator, previousWriteFence)) return THING_ACL_WRITE_FENCE;
+  if (!Array.isArray(validator?.$and)) return validator;
+  const entries = validator.$and.map(upgradePreviousFence);
+  return entries.some((entry: any, index: number) => entry !== validator.$and[index]) ? { ...validator, $and: entries } : validator;
+};
 
 export const isThingAclWriteFenceReady = async (db: any, collectionName: string): Promise<boolean> => {
   const options = (await db.listCollections({ name: collectionName }).toArray())[0]?.options;
-  return containsFence(options?.validator) && (options?.validationLevel || 'strict') === 'strict' && (options?.validationAction || 'error') === 'error';
+  return containsFence(options?.validator) && !containsPreviousFence(options?.validator) && (options?.validationLevel || 'strict') === 'strict' && (options?.validationAction || 'error') === 'error';
 };
 
 /** Provision outside content transactions. Existing constraints remain in the
@@ -59,12 +82,12 @@ export const installThingAclWriteFence = async (db: any, collectionName: string)
     existing = await info();
   }
   const options = existing?.options || {};
-  if (!containsFence(options.validator) || (options.validationLevel || 'strict') !== 'strict' || (options.validationAction || 'error') !== 'error') {
-    const previous = options.validator;
+  if (!containsFence(options.validator) || containsPreviousFence(options.validator) || (options.validationLevel || 'strict') !== 'strict' || (options.validationAction || 'error') !== 'error') {
+    const previous = upgradePreviousFence(options.validator);
     const validator = containsFence(previous) ? previous : previous && Object.keys(previous).length ? { $and: [previous, THING_ACL_WRITE_FENCE] } : THING_ACL_WRITE_FENCE;
     await db.command({ collMod: collectionName, validator, validationLevel: 'strict', validationAction: 'error', maxTimeMS: 5000 });
   }
   const installed = (await info())?.options;
-  if (!containsFence(installed?.validator) || (installed?.validationLevel || 'strict') !== 'strict' || (installed?.validationAction || 'error') !== 'error')
+  if (!containsFence(installed?.validator) || containsPreviousFence(installed?.validator) || (installed?.validationLevel || 'strict') !== 'strict' || (installed?.validationAction || 'error') !== 'error')
     throw new Error('The relational ACL storage write fence is not ready');
 };

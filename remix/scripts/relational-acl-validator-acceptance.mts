@@ -62,6 +62,37 @@ try {
   await installThingAclWriteFence(db, name); assert.equal(await isThingAclWriteFenceReady(db, name), true);
   assert.deepEqual(await options(), installed);
   checks.push('weakened strict/error options are detected and repaired without dropping existing constraints');
+  const oldRule = { $expr: { $and: [
+    ...structuredClone(THING_ACL_WRITE_FENCE.$expr.$and.slice(0, 2)),
+    { $cond: [(THING_ACL_WRITE_FENCE.$expr.$and[2] as any).$cond[0], true, { $and: [
+      { $eq: [{ $type: '$aclWriteFenceAfter' }, 'date'] }, { $eq: [{ $type: '$updatedAt' }, 'date'] },
+      { $gte: ['$updatedAt', '$aclWriteFenceAfter'] }
+    ] }] }
+  ] } };
+  const unrelated = { ownerId: { $type: 'string' } }, another = { 'crystal.retained': { $exists: true } };
+  const oldName = 'empty_previous_guard_fixture';
+  await db.createCollection(oldName, { validator: { $and: [unrelated, { $and: [oldRule, another] }] }, validationLevel: 'strict', validationAction: 'error' });
+  assert.equal(await isThingAclWriteFenceReady(db, oldName), false);
+  await installThingAclWriteFence(db, oldName);
+  const upgradedOptions = (await db.listCollections({ name: oldName }).toArray())[0]!.options;
+  assert.deepEqual(upgradedOptions.validator, { $and: [unrelated, { $and: [THING_ACL_WRITE_FENCE, another] }] });
+  assert.equal(await isThingAclWriteFenceReady(db, oldName), true);
+  assert.equal(await db.collection(oldName).countDocuments(), 0);
+  checks.push('real nested conjunction containing the exact previous strict-floor rule upgrades to the compatibility guard while both unrelated constraints survive');
+  const date = new Date('2026-01-01T00:00:00Z');
+  const audience = { aclGeneration: 'synthetic-audience', aclBaselineVersion: 1, aclBaseline: ['tt:all'], acl: ['tt:user', '-tt:all'], updatedAt: date };
+  const token = { tokenAclGeneration: 'synthetic-token', tokenAcl: [], acl: ['tt:user'], updatedAt: date };
+  const documents = [audience, token].flatMap((doc, family) => [
+    { ...doc, label: `${family}-missing`, expected: true },
+    { ...doc, aclWriteFenceAfter: date, label: `${family}-date`, expected: true },
+    { ...doc, aclWriteFenceAfter: null, label: `${family}-null`, expected: false },
+    { ...doc, aclWriteFenceAfter: 'invalid', label: `${family}-invalid`, expected: false },
+    { ...doc, aclWriteFenceAfter: new Date(date.getTime() + 1), label: `${family}-regressed`, expected: false }
+  ]);
+  const evaluated = await db.aggregate([{ $documents: documents }, { $project: { _id: 0, label: 1, expected: 1, accepted: THING_ACL_WRITE_FENCE.$expr } }]).toArray();
+  assert.equal(evaluated.length, documents.length);
+  for (const value of evaluated) assert.equal(value.accepted, value.expected, `Actual Mongo expression ${value.label}`);
+  checks.push('actual Mongo nonpersisted $documents evaluation accepts missing legacy/date floors and rejects null, wrong-type and regressed floors for both audience and token families; no business rows are written');
   const readPassword = password(); const noListPassword = password();
   await admin.db('admin').command({ createUser: 'readFence', pwd: readPassword, roles: [{ role: 'read', db: db.databaseName }] });
   await admin.db('admin').command({ createUser: 'noFencePermissions', pwd: noListPassword, roles: [] });

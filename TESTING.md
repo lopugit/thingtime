@@ -36,6 +36,12 @@
 - Verify the timestamp floor cannot be authored through generic writes or
   restored through backups, copies or Timeline. It must not appear in public
   content; a same-name field inside the user's crystal remains ordinary data.
+- Create a relational root with the earlier pre-floor preview runtime. After
+  protection is installed, its content edits and dedicated touches must remain
+  usable; current ordinary edits add the floor atomically without losing grants
+  or changing logical-byte accounting. Absent legacy floors are accepted, but
+  null/invalid floors and raw ACL overwrites remain refused before and after
+  the upgrade.
 - Exceed former group/member, social and subspace-membership ceilings. Confirm
   late memberships and bans participate in authorization and no list is silently
   truncated. Preserve duplicate prevention and friend-request approval.

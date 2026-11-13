@@ -16,7 +16,9 @@ const run = (command, args, options = {}) => new Promise((resolvePromise, reject
   const chunks = []; child.stdout?.on('data', chunk => chunks.push(chunk));
   child.on('error', reject); child.on('exit', code => code === 0 ? resolvePromise(Buffer.concat(chunks)) : reject(new Error(`${command} exited ${code}`)));
 });
-const revision = (await run('git', ['rev-parse', '451e79e^{commit}'])).toString().trim();
+const selectedRevision = process.argv[3] || '451e79e';
+assert(['451e79e', 'b8912cec'].includes(selectedRevision), 'Select the known inline-ACL or pre-floor relational fixture revision');
+const revision = (await run('git', ['rev-parse', `${selectedRevision}^{commit}`])).toString().trim();
 assert.equal((await run('git', ['diff', revision, '--', 'remix/pnpm-lock.yaml'])).length, 0, 'Legacy/current dependency lock must match before read-only dependency sharing');
 await mkdir(destination, { recursive: true });
 const archive = spawn('git', ['archive', revision, 'remix', 'docs/design'], { cwd: current, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -53,7 +55,8 @@ const barrier = `  // Acceptance-only timing barrier: authorization and mutation
     }
   }
 `;
-const instrumented = original.replace(needle, barrier + needle); await writeFile(source, instrumented);
+const instrumented = selectedRevision === '451e79e' ? original.replace(needle, barrier + needle) : original;
+await writeFile(source, instrumented);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-await writeFile(join(remix, '.legacy-acl-fixture.json'), JSON.stringify({ revision, originalWriterSha256: hash(original), instrumentedWriterSha256: hash(instrumented), dependencyLockSha256: hash(await readFile(join(remix, 'pnpm-lock.yaml'))), ignoredEnvironmentCopied: false, generatedReuse: ['dist', 'server/assets'], instrumentation: 'timing-only before expectedSize/updateOne' }, null, 2));
+await writeFile(join(remix, '.legacy-acl-fixture.json'), JSON.stringify({ revision, originalWriterSha256: hash(original), instrumentedWriterSha256: hash(instrumented), dependencyLockSha256: hash(await readFile(join(remix, 'pnpm-lock.yaml'))), ignoredEnvironmentCopied: false, generatedReuse: ['dist', 'server/assets'], instrumentation: selectedRevision === '451e79e' ? 'timing-only before expectedSize/updateOne' : 'none' }, null, 2));
 console.log(JSON.stringify({ fixture: destination, revision, next: 'Build with NITRO_PRESET=node-server corepack pnpm exec nitro build from fixture/remix; run current harness --scoped-reconnect --mixed-legacy-acl with AGENT_REPORTING_LEGACY_SERVER pointing to fixture/remix/.output/server/index.mjs' }));

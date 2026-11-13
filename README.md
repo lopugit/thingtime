@@ -1765,6 +1765,10 @@ The canonical ACL writer installs protection before its transaction, preserves
 any existing validator and verifies strict/error enforcement. Missing privileges
 or failed verification return a sanitized 503 before migration. Never bypass
 document validation or weaken an existing constraint to make a write succeed.
+Earlier relational previews omitted the timestamp floor. Their exact legacy
+ACL fences remain valid; current content or grant edits add the floor atomically
+without changing stored grants or logical-byte accounting. Null or malformed
+floors are refused. No manual data rewrite or collection scan is needed.
 Callers composing ACL writes in an outer transaction must request
 `requiresAclWriteFence` on the canonical transaction helper before entering it.
 See [relational access rollout and acceptance](docs/relational-access.md#verification-and-rollout)

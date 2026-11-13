@@ -184,6 +184,10 @@ conjunction and independently verifies the installed rule. A migrated root
 must retain its exact legacy audience fence and empty inline token grants.
 Old explicit ACL writes and stale sandbox writes that violate it are rejected
 by MongoDB, even when they come from another deployment.
+An exact earlier platform-owned strict-floor expression is replaced during
+provisioning so it cannot defeat the legacy-format upgrade. This recognition
+is structural and limited to that known expression; unrelated or modified
+constraints remain enforced, including inside existing conjunctions.
 
 Migration advances `updatedAt` strictly beyond the captured version and saves
 a protected `aclWriteFenceAfter` floor. The validator prevents an older writer
@@ -194,6 +198,16 @@ The floor is omitted from public content, backups, copies and Timeline content.
 Ordinary old content edits that preserve the fence and timestamp floor remain
 valid. A legacy client receiving a storage refusal must use the current server
 to change its ACL; never retry by weakening the validator.
+
+Earlier relational preview builds wrote generations and the exact negative
+fence without a timestamp floor. That explicit legacy form remains writable:
+only an absent floor is accepted, never a null or malformed floor, and the full
+audience/token fence is still enforced. A current ordinary content edit or ACL
+mutation upgrades the root atomically with a strictly advanced timestamp and
+floor. Dedicated touches can retain the legacy form until that upgrade, so no
+collection scan, background backfill or extra per-write query is needed. Legacy
+roots do not have the timestamp floor guarantee until upgraded; the old runtime
+replacement restrictions below remain part of the compatibility proof.
 
 The validator does not compare a replacement document with its previous value.
 The audited older runtime's three full-document replacement paths operate only

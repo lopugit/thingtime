@@ -25,6 +25,7 @@ const collectionsScale = process.argv.includes('--relational-collections') || co
 const aclScale = process.argv.includes('--acl-scale');
 const aclBoundaries = aclScale || process.argv.includes('--acl-boundaries');
 const mixedLegacyAcl = process.argv.includes('--mixed-legacy-acl');
+const preFloorAcl = process.argv.includes('--prefloor-legacy-acl');
 const reconnectOnly = process.argv.includes('--scoped-reconnect');
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
 assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
@@ -466,6 +467,10 @@ try {
   assert.equal(selectedOrigin.defaultHost, `127.0.0.1:${ports.db}`);
   assert.equal(selectedOrigin.endpoint.custom, false);
   checks.push('standalone server runs from a fresh synthetic cwd with explicit disposable home Mongo host, no active data override and generated-only environment credentials');
+  if (preFloorAcl) await runSection('pre-floor-relational-ACL-upgrade', async () => {
+    const { runPreFloorAclAcceptance } = await import('./relational-acl-prefloor-acceptance.mjs');
+    await runPreFloorAclAcceptance({ request, owner, stranger, checks, evidenceDir, env, start, port, waitFor, MongoClient });
+  });
   if (mixedLegacyAcl) await runSection('mixed-legacy-ACL-write-fence', async () => {
     const { runMixedLegacyAclAcceptance } = await import('./relational-acl-legacy-acceptance.mjs');
     await runMixedLegacyAclAcceptance({ request, owner, stranger, checks, evidenceDir, dir, env, start, port, waitFor, MongoClient });

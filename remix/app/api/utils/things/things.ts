@@ -5944,7 +5944,9 @@ export const updateThing = async (
   const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
   if (isFail(nextTokenAcl)) return nextTokenAcl;
   const replaceAcl = input.acl !== undefined || input.visibility !== undefined;
-  if (replaceAcl || nextTokenAcl !== undefined) {
+  const needsAclFloorUpgrade = (doc.aclGeneration !== undefined || doc.tokenAclGeneration !== undefined) &&
+    !Object.prototype.hasOwnProperty.call(doc, 'aclWriteFenceAfter');
+  if (replaceAcl || nextTokenAcl !== undefined || needsAclFloorUpgrade) {
     try { await ensureThingAclWriteFence(); }
     catch (error) { const rejected = storageMutationFail(error); if (rejected) return rejected; throw error; }
   }
@@ -6002,6 +6004,7 @@ export const updateThing = async (
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
     tags,
     acl: !replaceAcl && doc.aclGeneration !== undefined ? doc.acl : acl,
+    ...(needsAclFloorUpgrade ? { aclWriteFenceAfter: now } : {}),
     ...(nextLinkKey ? { linkKey: nextLinkKey } : {}),
     updatedAt: now,
     ...(nextSubspacePrivate === true ? { subspacePrivate: true } : {}),
@@ -6083,6 +6086,7 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
+            ...(needsAclFloorUpgrade ? { aclWriteFenceAfter: { $exists: false } } : {}),
             aclRevision: doc.aclRevision || { $exists: false },
             tokenAclRevision: doc.tokenAclRevision || { $exists: false },
 						...((replaceAcl || storageCloudWrite || timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
@@ -6104,6 +6108,7 @@ export const updateThing = async (
       {
         _id: (doc as any)._id,
         ...expectedSize,
+        ...(needsAclFloorUpgrade ? { aclWriteFenceAfter: { $exists: false } } : {}),
         aclRevision: doc.aclRevision || { $exists: false },
             tokenAclRevision: doc.tokenAclRevision || { $exists: false },
         ...((timelineCapture || options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null) ? { updatedAt: doc.updatedAt } : {})

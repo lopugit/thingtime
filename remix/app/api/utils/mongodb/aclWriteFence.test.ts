@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { installThingAclWriteFence, THING_ACL_WRITE_FENCE } from './aclWriteFence';
+import { installThingAclWriteFence, isThingAclWriteFenceReady, THING_ACL_WRITE_FENCE } from './aclWriteFence';
 
 const fixture = (initial: any = { options: {} }) => {
   let current = initial;
@@ -46,4 +46,34 @@ test('unsupported or unauthorized validation never reports storage readiness', a
   const ignored = fixture();
   ignored.db.command = async () => {};
   await assert.rejects(installThingAclWriteFence(ignored.db, 'fixture'), /not ready/);
+});
+
+
+const previousWriteFence = () => ({ $expr: { $and: [
+  ...structuredClone(THING_ACL_WRITE_FENCE.$expr.$and.slice(0, 2)),
+  { $cond: [(THING_ACL_WRITE_FENCE.$expr.$and[2] as any).$cond[0], true, { $and: [
+    { $eq: [{ $type: '$aclWriteFenceAfter' }, 'date'] }, { $eq: [{ $type: '$updatedAt' }, 'date'] },
+    { $gte: ['$updatedAt', '$aclWriteFenceAfter'] }
+  ] }] }
+] } });
+
+test('known previous own rule upgrades inside nested conjunctions while unrelated constraints survive', async () => {
+  const unrelated = { ownerId: { $type: 'string' } }, another = { 'crystal.retained': { $exists: true } };
+  const f = fixture({ options: { validator: { $and: [unrelated, { $and: [previousWriteFence(), another] }] }, validationLevel: 'strict', validationAction: 'error' } });
+  await installThingAclWriteFence(f.db, 'fixture');
+  assert.deepEqual(f.commands[0].validator, { $and: [unrelated, { $and: [THING_ACL_WRITE_FENCE, another] }] });
+  assert.equal(await isThingAclWriteFenceReady(f.db, 'fixture'), true);
+  await installThingAclWriteFence(f.db, 'fixture');
+  assert.equal(f.commands.length, 1);
+});
+
+test('old plus new conjunction is not ready and unknown modified validators remain enforced', async () => {
+  const both = fixture({ options: { validator: { $and: [THING_ACL_WRITE_FENCE, previousWriteFence()] } } });
+  assert.equal(await isThingAclWriteFenceReady(both.db, 'fixture'), false);
+  await installThingAclWriteFence(both.db, 'fixture');
+  assert.equal(await isThingAclWriteFenceReady(both.db, 'fixture'), true);
+  const unknown = { ...previousWriteFence(), ownerId: 'additional-constraint' };
+  const f = fixture({ options: { validator: unknown } });
+  await installThingAclWriteFence(f.db, 'fixture');
+  assert.deepEqual(f.commands[0].validator, { $and: [unknown, THING_ACL_WRITE_FENCE] });
 });
