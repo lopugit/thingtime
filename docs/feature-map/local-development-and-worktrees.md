@@ -1,5 +1,16 @@
 # Local development and worktrees
 
+## Protected preview gateway bootstrap
+
+`api/utils/deployment/environmentGateway.ts` adds the server-only
+`VERCEL_AUTOMATION_BYPASS_SECRET` to discovery for the validated configured
+origin; `server/utils/environmentGateway.ts` strips caller bypass headers and
+adds the server value to signed relays. Keep platform protection separate from
+application authentication. Source support does not enable the Vercel setting.
+Follow [fork-safe bootstrap and rollback](../../README.md#preview-protection-and-request-cost-controls),
+run `test:environment-gateway`, and verify live cron/webhook and protected-access
+acceptance before activation. No VPS migration is required.
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,

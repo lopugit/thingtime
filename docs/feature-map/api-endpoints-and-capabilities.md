@@ -788,6 +788,25 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+## Request cost controls
+
+`server/handlers/thingtime-capabilities.ts` hashes the complete exact-origin
+manifest for ETag/304 and supports HEAD/OPTIONS without caching alias ownership.
+`requireCapability.client.ts` deduplicates checks, revalidates after its freshness
+window and scopes retained manifests to origin/transport; active-API checks keep
+their independent authority. Both public and active manifests remain registered.
+`seo-robots` 1.1.1 serves each deployment's crawler policy locally, outside
+gateway data ingress; an older or unavailable gateway cannot turn its exclusion
+into a 409. API and data-backed sitemap requests retain normal admission.
+`marketingPublications.ts` and its public/admin routes return explicit stale or
+unavailable read results; a committed write is distinct from failed readback.
+`mongodb/requestBudget.ts` carries opt-in driver/transaction deadlines through
+existing collection access. Device event/command/state routes reuse it alongside
+`devicePolling.ts` cancellation and bounded collision retries. Authentication,
+rate limits, accounting and private projections stay on their existing paths.
+Run the capability, marketing, devices and collections suites; see the
+[manual cost-control checks](../../TESTING.md#request-cost-controls-13-november-2026).
+
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
