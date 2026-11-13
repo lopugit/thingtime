@@ -1,3 +1,4 @@
+import { createGithubMaintenanceRead } from './github-maintenance-read.mjs';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
@@ -129,11 +130,7 @@ export function assertMaintenanceReceipt(value, intent) {
 if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
   const request = maintenanceRequest(process.env, { eventName:'workflow_dispatch',ref:'refs/heads/main',prNumber:process.env.PREVIEW_MAINTENANCE_PR_NUMBER });
   if (!request) fail('missing-pin');
-  const github = async path => {
-    const response = await fetch(`https://api.github.com${path}`, { headers:{ Accept:'application/vnd.github+json', Authorization:`Bearer ${process.env.GH_TOKEN}` },redirect:'error',signal:AbortSignal.timeout(30_000) });
-    if (!response.ok) fail(`github-http-${response.status}`);
-    return response.json();
-  };
+  const github = createGithubMaintenanceRead({ repository:process.env.GITHUB_REPOSITORY,token:process.env.GH_TOKEN });
   const intent = await loadMaintenance(request, {github,repository:process.env.GITHUB_REPOSITORY,prNumber:process.env.PREVIEW_MAINTENANCE_PR_NUMBER});
   await reconstructMaintenance(intent, process.env.PREVIEW_MAINTENANCE_PRODUCT_DIR);
   await writeFile(process.env.PREVIEW_MAINTENANCE_RECEIPT_PATH, JSON.stringify(maintenanceReceipt(intent)), {mode:0o600});

@@ -473,3 +473,14 @@ Simulate committed promotion followed by failed/uncertain GitHub status reportin
 retry must recognize the same verified source/artifact/authorization tuple, reuse
 the existing READY deployment and exact GitHub maintenance record, skip rebuild
 and upload, and retain a concurrent successor or conflicting intent unchanged.
+
+### Maintenance provenance HTTP reads
+
+Run `node --test .github/scripts/github-maintenance-read.test.mjs`. Use synthetic
+read-only tokens and a local HTTP fixture to verify explicit quota403/429 waits
+respect Retry-After/reset, ordinary permission403 fails once, network/5xx retries
+are finite, redirects are refused, and cancellation plus headers-fast/body-stall
+remain inside one absolute budget across all provenance reads. Diagnostics must
+contain only fixed endpoint labels/status/classification and numeric rate fields;
+never reflect provider messages, response bodies, Location, request paths or tokens.
+A bare403 is not proof of quota or a reason to broaden the build token.
