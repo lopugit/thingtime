@@ -55,6 +55,54 @@ test('quota unknown or malformed cannot authorize upload, and reset beyond budge
   }
 });
 
+// The real job recorded these core values. Its projected upload nulls cannot
+// distinguish absence from malformed fields; this fixture combines those core
+// values with the documented optional-family omission, not captured raw JSON.
+const observedBuiltinTokenQuota = { resources: {
+  core: { limit: 5000, remaining: 4187, reset: 1794586145 }
+} };
+
+test('documented missing upload bucket with recorded core values reaches the official uploader', async () => {
+  const result = await execute('quota', [response(observedBuiltinTokenQuota)]);
+  assert.ifError(result.error);
+  assert.equal(result.calls.length, 1);
+  assert.deepEqual(result.waits, []);
+  assert.match(result.logs, /quota is not advertised/u);
+});
+
+test('missing optional upload bucket never weakens the required core or authoritative header gate', async () => {
+  const reset = start / 1000 + 120;
+  const result = await execute('quota', [
+    response({ resources: { core: { remaining: 0, reset } } }),
+    response(observedBuiltinTokenQuota)
+  ]);
+  assert.ifError(result.error);
+  assert.deepEqual(result.waits, [125000]);
+  const headers = await execute('quota', [
+    response(observedBuiltinTokenQuota, 200, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) }),
+    response(observedBuiltinTokenQuota)
+  ]);
+  assert.ifError(headers.error);
+  assert.deepEqual(headers.waits, [125000]);
+  for (const core of [undefined, null, {}, { remaining: '4187', reset }, { remaining: 4187, reset: null }]) {
+    const invalid = await execute('quota', [response({ resources: { core } })]);
+    assert.match(invalid.error.message, /deadline elapsed/u);
+  }
+});
+
+test('an advertised upload bucket remains mandatory even when malformed or exhausted', async () => {
+  for (const upload of [null, {}, [], 0, 'unavailable', { remaining: null, reset: null },
+    { remaining: '1', reset: start / 1000 + 120 }, { remaining: 1, reset: 'invalid' },
+    { remaining: -1, reset: start / 1000 + 120 }]) {
+    const result = await execute('quota', [response({ resources: { core: observedBuiltinTokenQuota.resources.core, code_scanning_upload: upload } })]);
+    assert.match(result.error.message, /deadline elapsed/u);
+    assert.doesNotMatch(result.logs, /not advertised/u);
+  }
+  const exhausted = await execute('quota', [response(quota(1000, 0)), response(quota())]);
+  assert.ifError(exhausted.error);
+  assert.deepEqual(exhausted.waits, [305000]);
+});
+
 test('processing only succeeds after returned receipt is complete and never POSTs', async () => {
   const result = await execute('processing', [response({ processing_status: 'pending' }), response({ processing_status: 'complete' })]);
   assert.ifError(result.error);

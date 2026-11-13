@@ -539,11 +539,19 @@ jobs:
                 const quota = await request('rate_limit');
                 const core = quota?.resources?.core;
                 const upload = quota?.resources?.code_scanning_upload;
-                if ([core, upload].every(bucket => bucket && integer(bucket.remaining) && integer(bucket.reset))) {
+                // GitHub does not advertise this optional resource family for
+                // every built-in token. Absence is not an exhausted bucket;
+                // an advertised but malformed bucket must still fail closed.
+                const uploadAdvertised = quota?.resources && Object.hasOwn(quota.resources, 'code_scanning_upload');
+                const buckets = uploadAdvertised ? [core, upload] : [core];
+                if (buckets.every(bucket => bucket && integer(bucket.remaining) && integer(bucket.reset))) {
                   // Leave room for the action's metadata/status requests. This is a
                   // dispatch threshold, not a claim that the shared quota is reserved.
-                  if (core.remaining >= 100 && upload.remaining >= 1 && blockedUntil <= now()) break;
-                  for (const bucket of [core, upload]) {
+                  if (core.remaining >= 100 && (!uploadAdvertised || upload.remaining >= 1) && blockedUntil <= now()) {
+                    if (!uploadAdvertised) console.log('SARIF upload quota is not advertised; the official uploader enforces its applicable quota.');
+                    break;
+                  }
+                  for (const bucket of buckets) {
                     if (bucket.remaining < (bucket === core ? 100 : 1)) blockedUntil = Math.max(blockedUntil, bucket.reset * 1000 + 5000);
                   }
                 }
