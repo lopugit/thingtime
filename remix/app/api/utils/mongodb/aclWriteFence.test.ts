@@ -42,10 +42,10 @@ test('new collection is born protected and concurrent creation is verified', asy
 test('unsupported or unauthorized validation never reports storage readiness', async () => {
   const f = fixture();
   f.db.command = async () => { throw Object.assign(new Error('denied'), { code: 13 }); };
-  await assert.rejects(installThingAclWriteFence(f.db, 'fixture'), /denied/);
+  await assert.rejects(installThingAclWriteFence(f.db, 'fixture'), /modify\/unauthorized/);
   const ignored = fixture();
   ignored.db.command = async () => {};
-  await assert.rejects(installThingAclWriteFence(ignored.db, 'fixture'), /not ready/);
+  await assert.rejects(installThingAclWriteFence(ignored.db, 'fixture'), /verify\/not-ready/);
 });
 
 
@@ -76,4 +76,23 @@ test('old plus new conjunction is not ready and unknown modified validators rema
   const f = fixture({ options: { validator: unknown } });
   await installThingAclWriteFence(f.db, 'fixture');
   assert.deepEqual(f.commands[0].validator, { $and: [unknown, THING_ACL_WRITE_FENCE] });
+});
+
+test('provisioning failures expose only closed stage/category without retaining driver secrets', async () => {
+  for (const [error, category] of [
+    [{ code: 13 }, 'unauthorized'], [{ code: 18 }, 'authentication'], [{ code: 50 }, 'timeout'],
+    [{ name: 'MongoOperationTimeoutError' }, 'timeout'], [{ name: 'MongoNetworkTimeoutError' }, 'timeout'],
+    [{ name: 'MongoServerSelectionError' }, 'connection'], [{ code: 2 }, 'unsupported'], [{ code: 987654 }, 'unknown']
+  ] as const) {
+    const f = fixture();
+    f.db.command = async () => { throw Object.assign(new Error('mongodb://secret-user:secret-pass@private-host/?private=data'), error); };
+    await assert.rejects(() => installThingAclWriteFence(f.db, 'fixture'), (failure: any) => {
+      assert.equal(failure.stage, 'modify'); assert.equal(failure.category, category);
+      assert.doesNotMatch(failure.message + JSON.stringify(failure), /secret|private-host|private=data/);
+      assert.equal(failure.cause, undefined); return true;
+    });
+  }
+  const f = fixture();
+  f.db.listCollections = () => ({ toArray: async () => { throw Object.assign(new Error('sensitive'), { code: 13 }); } });
+  await assert.rejects(() => isThingAclWriteFenceReady(f.db, 'fixture'), (error: any) => error.stage === 'inspect' && error.category === 'unauthorized');
 });

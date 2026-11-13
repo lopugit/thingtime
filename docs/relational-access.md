@@ -216,6 +216,19 @@ any future replacement of an ACL-manageable root must retain its authorization
 generation, baseline and floor through the canonical write path. A new general
 replacement writer requires another compatibility review.
 
+Administrators can inspect and provision through the registered
+`provision-relational-acl-validator` migration in `/migrations` (status capability
+1.5.0; run capability 1.6.0). Dry run uses a separate uncached metadata read
+without adoption, indexes, collection creation or validator changes. Real runs
+use the canonical installer and its independent strict/error readback under the
+existing migration lease. No business documents, grants or privileges change.
+Custom-plane requests are refused before acquiring a lease. A failed real run
+may have installed protection before verification failed; inspect with Dry run
+before retrying. Closed stage/category diagnostics distinguish connection,
+adoption, inspection, creation, modification and verification without exposing
+raw database messages or command bodies. Unverifiable protection remains pending in the census so the recovery UI stays accessible. Existing DB authority is still needed;
+this API does not expand it.
+
 Provisioning needs `listCollections` and `collMod` on the selected home or data
 plane, plus `createCollection` only if the physical Things collection does not
 yet exist. Do not assume a generic read/write role includes these actions.

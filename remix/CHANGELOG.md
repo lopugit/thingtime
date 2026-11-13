@@ -164,6 +164,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   initialization after its HTTP waiter cancels. Combine handover drains with
   request budgets, conditional discovery and origin-fenced platform protection;
   publish gateway contract 1.2.2. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
+- 2026-11-14: Add authenticated home-only ACL-validator provisioning through the
+  existing migration API, read-only inspection and safe stage/category failures;
+  retain canonical strict/error validation and independent constraints. — Codex (AI)
+
+
 - 2026-11-13: Enforce migrated ACL compatibility in MongoDB before relational
   writes. Preserve existing validators and reject stale legacy ACL overwrites;
   protect the migration timestamp against clock regression and old conversion

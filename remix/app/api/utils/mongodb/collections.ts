@@ -12,7 +12,7 @@ import { EPHEMERAL_CONTROL_THINGTIMES } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
 import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
-import { installThingAclWriteFence, isThingAclWriteFenceReady } from './aclWriteFence';
+import { AclWriteFenceError, aclWriteFenceError, installThingAclWriteFence, isThingAclWriteFenceReady } from './aclWriteFence';
 import { StorageMutationError } from '../storage/storageCore';
 import { monotonicThingMutationParameters, withMonotonicThingTimestamps } from './thingMutationTimestamp';
 
@@ -175,25 +175,44 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 // Collection DDL is deliberately outside content transactions. Provision only
 // when relational grant writes need it, leaving unrelated reads/legacy writes
 // available to installations whose database role cannot install the fence.
+// Read-only inspection intentionally avoids adoption, indexes and readiness caches.
+// It is safe for the admin dry run even when no collection exists yet.
+export const inspectHomeThingAclWriteFence = async (): Promise<boolean> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    return await isThingAclWriteFenceReady(client.db('thingtime'), physicalCollectionName('things'));
+  } catch (error) { throw aclWriteFenceError(error, 'connect'); }
+};
+export const provisionHomeThingAclWriteFence = async (): Promise<void> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    await installThingAclWriteFence(client.db('thingtime'), physicalCollectionName('things'));
+  } catch (error) { throw aclWriteFenceError(error, 'connect'); }
+};
 const aclWriteFenceReady = new WeakMap<object, Map<string, Promise<void>>>();
 export const ensureThingAclWriteFence = async (transactionActive = false, plane: 'active' | 'home' = 'active'): Promise<void> => {
   const custom = plane === 'active' && isCustomMongoEndpointActive();
-  const client = await getClientCachedFor(custom ? getActiveMongoUri() : getMongoUri(), !custom);
-  const dbName = custom ? getActiveMongoDbName() : 'thingtime';
+  let client: any, dbName: string;
+  try {
+    client = await getClientCachedFor(custom ? getActiveMongoUri() : getMongoUri(), !custom);
+    dbName = custom ? getActiveMongoDbName() : 'thingtime';
+  } catch (error) { throw new StorageMutationError(503, 'storage_invariant', aclWriteFenceError(error, 'connect').message); }
   let databases = aclWriteFenceReady.get(client);
   if (!databases) aclWriteFenceReady.set(client, databases = new Map());
   let ready = databases.get(dbName);
   if (!ready) {
     ready = (async () => {
       try {
-        if (!custom) await getRawHomeThingtimeDb();
+        if (!custom) {
+          try { await getRawHomeThingtimeDb(); } catch (error) { throw aclWriteFenceError(error, 'adoption'); }
+        }
         const db = client.db(dbName), name = physicalCollectionName('things');
         if (transactionActive) {
-          if (!await isThingAclWriteFenceReady(db, name)) throw new Error('Storage validation requires preparation outside the transaction');
+          if (!await isThingAclWriteFenceReady(db, name)) throw new AclWriteFenceError('verify', 'not-ready');
         } else await installThingAclWriteFence(db, name);
-      } catch {
+      } catch (error) {
         databases!.delete(dbName);
-        throw new StorageMutationError(503, 'storage_invariant', 'Relational grant storage protection is unavailable. Database validation must be provisioned before editing grants.');
+        throw new StorageMutationError(503, 'storage_invariant', aclWriteFenceError(error, 'connect').message);
       }
     })();
     databases.set(dbName, ready);

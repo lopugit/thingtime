@@ -26,7 +26,8 @@ const aclScale = process.argv.includes('--acl-scale');
 const aclBoundaries = aclScale || process.argv.includes('--acl-boundaries');
 const mixedLegacyAcl = process.argv.includes('--mixed-legacy-acl');
 const preFloorAcl = process.argv.includes('--prefloor-legacy-acl');
-const reconnectOnly = process.argv.includes('--scoped-reconnect');
+const aclProvisioning = process.argv.includes('--acl-provisioning');
+const reconnectOnly = process.argv.includes('--scoped-reconnect') || aclProvisioning;
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
 assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
 assert(!fixturePath || !resolve(fixturePath).startsWith(resolve(cwd, '..') + '/'), 'Authored workspace definitions must remain outside the repository');
@@ -467,6 +468,10 @@ try {
   assert.equal(selectedOrigin.defaultHost, `127.0.0.1:${ports.db}`);
   assert.equal(selectedOrigin.endpoint.custom, false);
   checks.push('standalone server runs from a fresh synthetic cwd with explicit disposable home Mongo host, no active data override and generated-only environment credentials');
+  if (aclProvisioning) {
+    const { runAclProvisioningAcceptance } = await import('./acl-validator-provisioning-acceptance.mjs');
+    await runAclProvisioningAcceptance({ request, owner, stranger, checks, env, start, port, waitFor, cwd, ports });
+  } else {
   if (preFloorAcl) await runSection('pre-floor-relational-ACL-upgrade', async () => {
     const { runPreFloorAclAcceptance } = await import('./relational-acl-prefloor-acceptance.mjs');
     await runPreFloorAclAcceptance({ request, owner, stranger, checks, evidenceDir, env, start, port, waitFor, MongoClient });
@@ -777,6 +782,7 @@ try {
   await request('/api/v1/tokens/revoke', { cookie: owner.cookie, body: { id: grant.patId } });
   assert((await mcp(grant.bridge, 'get_thingtime_agent_task', { externalTaskId: args.externalTaskId })).error, 'Revoked upstream grant refuses bridge reads');
   checks.push('upstream token revocation stops private reporting through the real bridge');
+  }
   }
   if (sectionFailures.length) throw new Error(`${sectionFailures.length} independent acceptance section(s) failed: ${sectionFailures.map(failure => failure.name).join(', ')}`);
   await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: true, checks, fixtureSha256: fixturePath ? createHash('sha256').update(await readFile(fixturePath)).digest('hex') : null, source: 'real isolated HTTP + OAuth PKCE + MCP built Nitro', completedAt: new Date().toISOString(), isolation: 'fresh replica set; throwaway accounts and memory-only generated credentials; normal networking; no inherited app env', ports }, null, 2));

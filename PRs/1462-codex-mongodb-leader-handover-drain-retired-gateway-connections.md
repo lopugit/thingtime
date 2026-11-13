@@ -87,6 +87,22 @@ opt-in request budget may affect another fence waiter during bootstrap; no curre
 budgeted grant-writing route was established. This conditional availability
 concern is retained without claiming a reproduced failure or an authority bypass.
 
+## November 13 ACL provisioning integration
+
+Main subsequently advanced to `0bb200bff1399484aaab9e00911e510333460846`
+with the home-only ACL validator migration and diagnostic error categories.
+The integration retains those upstream APIs and feature versions, gateway
+`1.2.2`, all lease/drain protections and both regression sets. Because the
+collections/fence runtime changes, fresh canonical client/template/node-server
+builds and isolated real-Mongo acceptance were repeated on this frozen tree and
+passed at 17:24 UTC. The full auth/read/write/CSRF/dedicated metadata and
+promotion/rollback assertions pass again: follower dials zero, owner and successor
+client closures one each, unchanged cold DDL zero and peak DDL two. Independent
+review accepted the preserved home-only migration, dry-run, validator and lease
+contracts. Integrated focused checks pass 122 collections/lifecycle tests, 203
+capability tests and five migration-fence tests; prior unchanged gateway tests
+remain valid. Final-head required CI and deployed acceptance remain gates.
+
 ## Measurement limits
 
 One gateway deployment can contain multiple warm processes and connection pools.
