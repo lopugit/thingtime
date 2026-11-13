@@ -170,3 +170,41 @@ test('credential relay binds import headers and omits proofs and payloads from g
   const diagnostic = await response.text();
   assert.equal(diagnostic.includes(proof) || diagnostic.includes(body), false);
 }));
+
+test('platform protection bypass is server-selected, stripped on restore/response and never followed to a redirect', async t => fixture(async () => {
+  const previous = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = 'synthetic-platform-bypass';
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(aliasManifest()) }).current();
+    let sent = 0;
+    t.mock.method(globalThis, 'fetch', async (target, init) => {
+      sent++;
+      assert.equal(String(target), origin + '/api/v1/things');
+      assert.equal(init?.redirect, 'manual');
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('x-vercel-protection-bypass'), 'synthetic-platform-bypass');
+      assert.equal(Buffer.from(headers.get(GATEWAY_RELAY_HEADER)!, 'base64url').toString('utf8').includes('synthetic-platform-bypass'), false);
+      assert.equal(headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(new Request(target, init), settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return new Response(null, { status: 302, headers: {
+        Location: 'https://foreign.test/redirect', 'x-vercel-protection-bypass': 'synthetic-platform-bypass'
+      } });
+    });
+    const result = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(result.status, 302);
+    assert.equal(result.headers.get('Location'), 'https://foreign.test/redirect');
+    assert.equal(result.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(sent, 1, 'A foreign redirect must not receive the server-only header');
+    const refused = await proxyEnvironmentRequest(new Request('https://unrelated.test/api/v1/things'), authority!);
+    assert.equal(refused.status, 421);
+    assert.equal(sent, 1, 'An unrecognized source cannot relay a protected request');
+  } finally {
+    if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+  }
+}));

@@ -160,6 +160,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Add server-only automation support for protected preview gateways,
+  conditional exact-origin capability discovery, bounded publication reads with
+  visible degraded/retry state, and cancellable device polling/state retries.
+  Preserve signed gateway admission, account isolation and committed-write
+  reconciliation. Deployment-protection activation remains a separate live
+  rollout gate; no hosting migration. See the [cost-control checks](../TESTING.md#request-cost-controls-13-november-2026).
+  **Codex (AI)**
+
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and
   cloud saves; collapse device sections by default, page location history ten
   at a time, and move secondary navigation into context menus. Device setup

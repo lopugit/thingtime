@@ -1,5 +1,21 @@
 # API endpoints and capabilities
 
+## Request cost controls
+
+`server/handlers/thingtime-capabilities.ts` hashes the complete exact-origin
+manifest for ETag/304 and supports HEAD/OPTIONS without caching alias ownership.
+`requireCapability.client.ts` deduplicates checks, revalidates after its freshness
+window and scopes retained manifests to origin/transport; active-API checks keep
+their independent authority. Both public and active manifests remain registered.
+`marketingPublications.ts` and its public/admin routes return explicit stale or
+unavailable read results; a committed write is distinct from failed readback.
+`mongodb/requestBudget.ts` carries opt-in driver/transaction deadlines through
+existing collection access. Device event/command/state routes reuse it alongside
+`devicePolling.ts` cancellation and bounded collision retries. Authentication,
+rate limits, accounting and private projections stay on their existing paths.
+Run the capability, marketing, devices and collections suites; see the
+[manual cost-control checks](../../TESTING.md#request-cost-controls-13-november-2026).
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;

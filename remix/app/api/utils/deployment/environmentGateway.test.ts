@@ -88,3 +88,79 @@ test('Vercel uses the bundled default and cannot silently fall through missing o
   assert.equal(gatewayDescriptor(env), null);
   assert.throws(() => getGatewaySettings({ ...env, THINGTIME_GATEWAY_SECRET: '' }));
 });
+
+test('ownership revalidates at the same five-second bound without retransmitting unchanged manifests', async () => {
+  let time = 1, calls = 0;
+  const authority = createGatewayAuthority({ settings: () => selected, now: () => time, fetch: async (_url, init) => {
+    calls++;
+    assert.equal(init?.cache, 'no-store');
+    assert.equal(init?.credentials, 'omit');
+    assert.equal(new Headers(init?.headers).get('If-None-Match'), calls === 1 ? null : '"owner-one"');
+    return calls === 1 ? Response.json(manifest(), { headers: { ETag: '"owner-one"' } }) : new Response(null, { status: 304 });
+  } });
+  await authority.requireDatabase();
+  time += GATEWAY_OWNERSHIP_TTL_MS;
+  await Promise.all(Array.from({ length: 12 }, () => authority.requireDatabase()));
+  assert.equal(calls, 2);
+  time += GATEWAY_OWNERSHIP_TTL_MS;
+  await authority.requireDatabase();
+  assert.equal(calls, 3, 'A 304 starts only one new bounded ownership lease');
+});
+
+test('promotion and failed conditional discovery never retain stale ownership', async () => withConnectionMode('proxy', async () => {
+  let time = 1, calls = 0, fail = false;
+  const authority = createGatewayAuthority({ settings: () => selected, now: () => time, fetch: async () => {
+    calls++;
+    if (fail) throw new Error('Synthetic outage');
+    return Response.json(manifest(calls === 1 ? selected.deploymentId : 'new-owner'), { headers: { ETag: `"owner-${calls}"` } });
+  } });
+  await authority.requireDatabase();
+  time += GATEWAY_OWNERSHIP_TTL_MS;
+  await assert.rejects(authority.requireDatabase());
+  time += GATEWAY_OWNERSHIP_TTL_MS; fail = true;
+  await assert.rejects(authority.current());
+}));
+
+test('304 without an exact verified prior selection and redirected discovery fail closed', async () => {
+  for (const response of [new Response(null, { status: 304 }), Response.json(manifest())]) {
+    if (response.status === 200) Object.defineProperty(response, 'url', { value: 'https://other.test/.well-known/thingtime-capabilities.json' });
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async () => response });
+    await assert.rejects(authority.current());
+  }
+});
+
+test('late failure of a previous selection cannot invalidate a newer ownership lease', async () => {
+  let active = selected, calls = 0, rejectOld!: (error: Error) => void;
+  const newer = { ...selected, origin: 'https://newer.test', deploymentId: 'newer-owner' };
+  const authority = createGatewayAuthority({ settings: () => active, fetch: async () => {
+    calls++;
+    if (calls === 1) return new Promise<Response>((_resolve, reject) => { rejectOld = reject; });
+    return Response.json({ ...manifest(), origin: newer.origin, gateway: { ...newer, secret: undefined } });
+  } });
+  const old = assert.rejects(authority.current());
+  active = newer;
+  assert.equal((await authority.current())?.owner, true);
+  rejectOld(new Error('Old selection unavailable'));
+  await old;
+  assert.equal((await authority.current())?.owner, true);
+  assert.equal(calls, 2);
+});
+
+test('server-only Vercel protection bypass is limited to the configured discovery target', async () => {
+  const previous = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = 'synthetic-platform-bypass';
+  try {
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
+      assert.equal(String(url), selected.origin + '/.well-known/thingtime-capabilities.json');
+      assert.equal(init?.redirect, 'error');
+      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), 'synthetic-platform-bypass');
+      return Response.json(manifest());
+    } });
+    await authority.current();
+    const invalid = createGatewayAuthority({ settings: () => ({ ...selected, origin: selected.origin + '/foreign-path' }), fetch: async () => { assert.fail('Invalid configured origin must not receive a secret'); } });
+    await assert.rejects(invalid.current());
+  } finally {
+    if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+  }
+});

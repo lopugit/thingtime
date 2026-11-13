@@ -5853,6 +5853,47 @@ halves.
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)
 
+## Request cost controls (13 November 2026)
+
+- [ ] Run `test:marketing`, `test:api-capabilities`, `test:devices`,
+  `test:collections` and `test:environment-gateway` from `remix`; retain the
+  tested source revision. Unit/mocked checks do not establish live protection.
+- [ ] On desktop and narrow mobile, open the drawer and Admin → Marketing with
+  real publication data. Compare published/hidden entries with an independent
+  authorized API read. Exercise cold load, cached refresh, HTTP 503 with stale
+  data, unavailable cold data, Retry and a stalled response body. Keep usable
+  links/content visible with one inline status; stale data must not appear live
+  or become an empty success. Scroll both surfaces to the bottom and check
+  wrapping, focus, clipping and the opened drawer. Verify the read's underlying
+  driver deadline and the client's body-inclusive timeout, rather than merely
+  racing a still-running operation.
+- [ ] Change account/Character during a pending publication read and write;
+  audit data clears immediately and old completions cannot restore it. An
+  acknowledged write whose readback fails keeps useful optimistic content,
+  reports degraded verification and reconciles without replaying the write.
+- [ ] Read the exact-origin capability manifest, then send its ETag using
+  `If-None-Match`: expect bodyless 304, working HEAD/OPTIONS and no CDN/browser
+  ownership cache. Repeated client checks within the freshness window share a
+  request; expiry revalidates. Change alias ownership, origin, transport and
+  feature versions independently: tags/cache must not cross those boundaries.
+  Cancel during body consumption and verify a fresh retry; missing/breaking or
+  malformed manifests still refuse dependent actions, including active-API
+  checks behind a newer frontend.
+- [ ] With an isolated paired device, disconnect real HTTP event/command waits
+  and verify the server stops polling and issues no late command claim or
+  state write. Exercise deadline expiry, repeated snapshot collisions and
+  cancellation during state/accounting work; retries terminate, ownership and
+  transaction fences hold, and an independent caller remains usable. Retain
+  existing event cursors, lease semantics and authorization refusals.
+- [ ] Before enabling Vercel deployment protection, verify server-only automation
+  bootstrap against the intended protected gateway: manifest plus signed relay
+  work, forged incoming bypass headers are stripped, secrets never reach
+  responses/client bundles, and redirects cannot forward them elsewhere.
+  Then verify unauthenticated preview blocking, authorized access, production
+  public routes, and required cron/webhook automation on the live selected
+  scope. Record actual activation separately from source support. Restore the
+  previous protection scope on refusal and verify rollback without data reset.
+
 ## Environment gateway and index lifecycle
 
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
