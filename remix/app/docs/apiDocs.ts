@@ -14265,8 +14265,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -14509,13 +14509,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
+      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata only and does not prove provisioning permission. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, never raw database messages. ' +
       'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +

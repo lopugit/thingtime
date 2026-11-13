@@ -64,30 +64,57 @@ const upgradePreviousFence = (validator: any): any => {
   return entries.some((entry: any, index: number) => entry !== validator.$and[index]) ? { ...validator, $and: entries } : validator;
 };
 
-export const isThingAclWriteFenceReady = async (db: any, collectionName: string): Promise<boolean> => {
-  const options = (await db.listCollections({ name: collectionName }).toArray())[0]?.options;
-  return containsFence(options?.validator) && !containsPreviousFence(options?.validator) && (options?.validationLevel || 'strict') === 'strict' && (options?.validationAction || 'error') === 'error';
+export type AclWriteFenceStage = 'connect' | 'adoption' | 'inspect' | 'create' | 'modify' | 'verify' | 'selection';
+export type AclWriteFenceCategory = 'unauthorized' | 'authentication' | 'timeout' | 'connection' | 'unsupported' | 'not-ready' | 'wrong-plane' | 'unknown';
+
+// Driver messages can contain credentials, hosts, command bodies and user data.
+// Retain only this closed diagnostic vocabulary, never the original cause.
+export class AclWriteFenceError extends Error {
+  readonly stage: AclWriteFenceStage;
+  readonly category: AclWriteFenceCategory;
+  constructor(stage: AclWriteFenceStage, category: AclWriteFenceCategory) {
+    super(`Relational grant storage protection is unavailable (${stage}/${category}). Database validation must be provisioned before editing grants.`);
+    this.name = 'AclWriteFenceError'; this.stage = stage; this.category = category;
+  }
+}
+export const aclWriteFenceError = (error: any, stage: AclWriteFenceStage): AclWriteFenceError => {
+  if (error instanceof AclWriteFenceError) return error;
+  const category: AclWriteFenceCategory = error?.code === 13 ? 'unauthorized' : error?.code === 18 ? 'authentication' :
+    [50, 262].includes(error?.code) || ['MongoOperationTimeoutError', 'MongoNetworkTimeoutError', 'TimeoutError', 'AbortError'].includes(error?.name) ? 'timeout' :
+    ['MongoNetworkError', 'MongoServerSelectionError'].includes(error?.name) ? 'connection' :
+    [2, 9, 59, 72, 115].includes(error?.code) ? 'unsupported' : 'unknown';
+  return new AclWriteFenceError(stage, category);
 };
+const atStage = async <T>(stage: AclWriteFenceStage, work: () => Promise<T>): Promise<T> => {
+  try { return await work(); } catch (error) { throw aclWriteFenceError(error, stage); }
+};
+const collectionInfo = (db: any, collectionName: string, stage: 'inspect' | 'verify') =>
+  atStage(stage, async () => (await db.listCollections({ name: collectionName }, { timeoutMS: 5000 }).toArray())[0]);
+const readyOptions = (options: any): boolean => containsFence(options?.validator) && !containsPreviousFence(options?.validator) &&
+  (options?.validationLevel || 'strict') === 'strict' && (options?.validationAction || 'error') === 'error';
+
+export const isThingAclWriteFenceReady = async (db: any, collectionName: string): Promise<boolean> =>
+  readyOptions((await collectionInfo(db, collectionName, 'inspect'))?.options);
 
 /** Provision outside content transactions. Existing constraints remain in the
  * conjunction; strict/error is mandatory, including for already-invalid rows.
  * Old runtimes cannot weaken this contract by updating the root document. */
 export const installThingAclWriteFence = async (db: any, collectionName: string): Promise<void> => {
-  const info = async () => (await db.listCollections({ name: collectionName }).toArray())[0];
-  let existing = await info();
+  let existing = await collectionInfo(db, collectionName, 'inspect');
   if (!existing) {
-    try {
-      await db.createCollection(collectionName, { validator: THING_ACL_WRITE_FENCE, validationLevel: 'strict', validationAction: 'error' });
-    } catch (error: any) { if (error?.code !== 48) throw error; }
-    existing = await info();
+    await atStage('create', async () => {
+      try {
+        await db.createCollection(collectionName, { validator: THING_ACL_WRITE_FENCE, validationLevel: 'strict', validationAction: 'error', timeoutMS: 5000 });
+      } catch (error: any) { if (error?.code !== 48) throw error; }
+    });
+    existing = await collectionInfo(db, collectionName, 'inspect');
   }
   const options = existing?.options || {};
-  if (!containsFence(options.validator) || containsPreviousFence(options.validator) || (options.validationLevel || 'strict') !== 'strict' || (options.validationAction || 'error') !== 'error') {
+  if (!readyOptions(options)) {
     const previous = upgradePreviousFence(options.validator);
     const validator = containsFence(previous) ? previous : previous && Object.keys(previous).length ? { $and: [previous, THING_ACL_WRITE_FENCE] } : THING_ACL_WRITE_FENCE;
-    await db.command({ collMod: collectionName, validator, validationLevel: 'strict', validationAction: 'error', maxTimeMS: 5000 });
+    await atStage('modify', () => db.command({ collMod: collectionName, validator, validationLevel: 'strict', validationAction: 'error', maxTimeMS: 5000 }, { timeoutMS: 5000 }));
   }
-  const installed = (await info())?.options;
-  if (!containsFence(installed?.validator) || containsPreviousFence(installed?.validator) || (installed?.validationLevel || 'strict') !== 'strict' || (installed?.validationAction || 'error') !== 'error')
-    throw new Error('The relational ACL storage write fence is not ready');
+  if (!readyOptions((await collectionInfo(db, collectionName, 'verify'))?.options))
+    throw new AclWriteFenceError('verify', 'not-ready');
 };
