@@ -1,5 +1,6 @@
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 import { FIELD_TYPES } from '~/passwords/model';
+type LegacyLayoutBlock = WebpageBlock & { else?: WebpageBlock[]; empty?: WebpageBlock[] };
 const stack = { display: 'grid', gap: '12px', 'min-width': '0' };
 const row = { display: 'flex', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '8px', 'min-width': '0' };
 const card = { ...stack, padding: '16px', border: '1px solid var(--tt-border, #e6e6eb)', 'border-radius': '12px', background: 'var(--tt-card, white)' };
@@ -30,7 +31,7 @@ const propertyModeBlock = when('password-field-mode-visible', 'item.canStructure
 /** Add the new editable templates to older customised layouts without
  * replacing their existing controls, styling, order or labels. */
 export function upgradePasswordManagerBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
-  const visit = (nodes: WebpageBlock[]): WebpageBlock[] => nodes.map(block => {
+  const visit = (nodes: LegacyLayoutBlock[]): WebpageBlock[] => nodes.map(block => {
     let children = block.children ? visit(block.children) : undefined;
     const upgrade = block.id === 'password-field' && children && !block.props?.['data-tt-password-properties-version'] && !children.some(child => ['password-field-structured', 'password-field-mode-visible'].includes(child.id));
     if (upgrade) children = [...children!, ...structuredClone(propertyBlocks), structuredClone(propertyModeBlock)];

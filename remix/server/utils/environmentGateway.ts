@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -43,7 +43,7 @@ const cleanHeaders = (source: Headers) => {
   const headers = new Headers(source);
   // RFC 9110 Connection can nominate additional hop-by-hop fields.
   for (const name of (headers.get('connection') || '').split(',').map(value => value.trim()).filter(Boolean)) headers.delete(name);
-  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded') headers.delete(name);
+  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded' || name === VERCEL_PROTECTION_BYPASS_HEADER || name === 'x-vercel-set-bypass-cookie') headers.delete(name);
   for (const name of HOP_HEADERS) headers.delete(name);
   return headers;
 };
@@ -110,6 +110,7 @@ export const proxyEnvironmentRequest = async (request: Request, authority: NonNu
   const headers = cleanHeaders(request.headers);
   const payload = Buffer.from(JSON.stringify({ version: 1, hop: 1, environment: settings.environment, target: settings.origin,
     origin: url.origin, path: url.pathname + url.search, method: request.method, at: Date.now(), headers: digestHeaders(headers) })).toString('base64url');
+  for (const [name, value] of Object.entries(gatewayProtectionHeaders(settings))) headers.set(name, value);
   headers.set(GATEWAY_RELAY_HEADER, payload);
   headers.set(SIGNATURE_HEADER, sign(payload, settings));
   const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, redirect: 'manual', signal: request.signal, cache: 'no-store' };
