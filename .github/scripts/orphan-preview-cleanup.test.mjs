@@ -11,6 +11,7 @@ function fixture({ detail = deployment(), open = [], aliases = [], domains = [],
   const github = async (path) => {
     if (path === `/repos/${config.repository}`) return { full_name: config.repository, id: 42, default_branch: 'main' };
     if (path.endsWith('/pulls/12')) return { ...pr(state), updated_at: updatedAt, closed_at: closedAt, head: { ...pr(state).head, ref: detail.meta.githubCommitRef } };
+    if (path.includes('/pulls?state=closed')) return state === 'closed' ? [{ ...pr('closed'), closed_at: closedAt, head: { ...pr().head, ref: detail.meta.githubCommitRef } }] : [];
     if (path.includes('/pulls?')) return typeof open === 'function' ? open() : open;
     throw new Error('Unexpected GitHub fixture path');
   };
@@ -185,4 +186,55 @@ test('unaliased newer READY cannot evict the published current PR alias', async 
   const f = fixture({ detail: old, others: [keeper], state: 'open', open: [pr('open')], aliases: [{ alias: 'pr-12.previews.dev.example.com' }] });
   assert.deepEqual(await reconcileOrphanPreviews(configured, { ...f, now: () => now }), []);
   assert.equal(f.mutations.length, 0);
+});
+
+
+test('reviewed dry-run uses exact IDs, reads current policy and produces no mutations', async () => {
+  let refreshed = 0;
+  const configured = { ...config, retentionPolicy: { ...config.retentionPolicy, secret: 'must-not-appear' }, refreshRetentionPolicy: async () => { refreshed++; return config.retentionPolicy; } };
+  const f = fixture(); const read = f.vercel;
+  f.vercel = async (path, options) => { assert.ok(!path.startsWith('/v7/deployments?')); return read(path, options); };
+  const result = await reconcileWithReport(configured, { ...f, deploymentIds: ['dpl_test'], dryRun: true, reviewedRetirement: true });
+  assert.deepEqual(result.proposedIds, ['dpl_test']); assert.deepEqual(result.removedIds, []); assert.equal(f.mutations.length, 0); assert.equal(refreshed, 1);
+  assert.deepEqual(result.policy, config.retentionPolicy);
+  assert.deepEqual(result.decisions, [{ deploymentId: 'dpl_test', decision: 'would-delete', reason: 'verified-eligible' }]);
+  assert.ok(!JSON.stringify(result).includes('must-not-appear'));
+});
+test('reviewed execution preserves active builds, any alias, current preview target and unknown closed PRs', async () => {
+  for (const setting of [
+    { detail: { ...deployment(), readyState: 'BUILDING' } },
+    { aliases: [{ alias: 'old-feature.vercel.app' }] },
+    { project: { targets: { preview: { id: 'dpl_test' } } } },
+    { state: 'open', open: [pr('open')] }
+  ]) {
+    const f = fixture(setting);
+    const result = await reconcileWithReport(config, { ...f, deploymentIds: ['dpl_test'], reviewedRetirement: true });
+    assert.deepEqual(result.removedIds, []); assert.equal(f.mutations.length, 0);
+  }
+  const f = fixture(); const read = f.github;
+  f.github = path => path.includes('/pulls?state=closed') ? [] : read(path);
+  assert.deepEqual((await reconcileWithReport(config, { ...f, deploymentIds: ['dpl_test'], reviewedRetirement: true })).removedIds, []);
+});
+test('reviewed untagged previews respect grace since PR closure and recheck reopening', async () => {
+  const now = Date.now(), d = { ...deployment(), createdAt: now - 72 * 3_600_000 }; delete d.meta.githubPrId;
+  const configured = { ...config, retentionPolicy: { ...config.retentionPolicy, noOpenPrGraceHours: 24 } };
+  const f = fixture({ detail: d, closedAt: new Date(now - 3_600_000).toISOString() });
+  assert.deepEqual((await reconcileWithReport(configured, { ...f, deploymentIds: ['dpl_test'], reviewedRetirement: true, now: () => now })).removedIds, []);
+  assert.equal(f.mutations.length, 0);
+  let calls = 0;
+  const g = fixture({ open: () => ++calls === 1 ? [] : [pr('open')] });
+  assert.deepEqual((await reconcileWithReport(config, { ...g, deploymentIds: ['dpl_test'], reviewedRetirement: true })).removedIds, []);
+  assert.equal(g.mutations.length, 0);
+});
+test('reviewed execution deletes only selected verified IDs and reports sanitized failures', async () => {
+  const f = fixture();
+  const result = await reconcileWithReport(config, { ...f, deploymentIds: ['dpl_test'], reviewedRetirement: true });
+  assert.deepEqual(result.removedIds, ['dpl_test']); assert.equal(result.decisions[0].decision, 'deleted');
+  assert.deepEqual(f.mutations, [['/v13/deployments/dpl_test', 'DELETE']]);
+  const g = fixture(); g.vercel = async () => { throw Object.assign(new Error('fixture-secret'), { status: 403, endpoint: 'Vercel /v13/deployments/:deploymentId' }); };
+  await assert.rejects(reconcileWithReport(config, { ...g, deploymentIds: ['dpl_test'], dryRun: true, reviewedRetirement: true }), error => {
+    assert.deepEqual(error.retirementReport.failures, [{ httpStatus: 403, endpoint: 'Vercel /v13/deployments/:deploymentId' }]);
+    assert.ok(!JSON.stringify(error.retirementReport).includes('fixture-secret'));
+    return true;
+  });
 });

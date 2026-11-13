@@ -1,5 +1,29 @@
 # Control-plane regression checklist
 
+## Protected checks and reviewed preview retirement (2026-11-13)
+
+- Run the protected-deployment-fetch, preview-retirement-request, orphan-preview-
+  cleanup and saved-policy tests, both publisher self-tests, and the workflow
+  control-plane contract. A provider/project mismatch, changed alias, expired
+  lookup, redirect, missing automation credential or transport failure must not
+  disclose a bypass value. Verify actual fetch transport, not only mock headers.
+- Dry-run an explicit reviewed ID batch only after both protected workflow and
+  thin listener inputs are available. Require manual PR 0 and reject duplicate,
+  malformed, empty or oversized selections. Verify zero cancel/delete calls,
+  current saved policy and sanitized decisions in the private artifact.
+- Cover active builds, any alias/current target, stable/gateway identities,
+  open/unknown/reopened PRs, PR-close grace and disabled policy. Execution must
+  recheck those boundaries, delete only selected verified objects, and verify
+  exact provider absence. Preserve recent legitimate use and ambiguous objects.
+- Expected provider 403s must identify only the provider, redacted endpoint and
+  status. Policy admission may receive the existing repository PAT and exact
+  CI-router HMAC; unrelated/Vercel secrets and all untrusted-build secrets fail.
+- Import the storage gate from each actual workflow sparse tree to catch missing
+  transitive modules. Run the receipt/report initializer with spaced runner paths;
+  keep runner context out of job-level environment expressions.
+- Local fixtures do not establish hosted authentication or retirement acceptance.
+  Do not enable protection, move aliases or dispatch deletion solely to run tests.
+
 ## Gateway admission leases (2026-11-13)
 
 - Run `node --test .github/scripts/preview-gateway-source.test.mjs`. Both legacy

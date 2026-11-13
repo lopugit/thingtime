@@ -145,55 +145,87 @@ async function safeAliases(deployment, identity, config, vercel) {
   return true;
 }
 
-export async function reconcileOrphanPreviews(config, { github, vercel, prNumber = null, prBranch = null, deploymentIds = null, now = Date.now }) {
+// A reviewed manual batch is stricter than automatic retention: it never
+// cancels active builds, removes aliases, expires open PRs, or touches a current
+// project target. Closed PR state and its grace are checked again at deletion.
+async function reviewedRetirementAllowed(deployment, identity, config, github, vercel, policy, now) {
+  if (!TERMINAL.has(deployment.readyState) || protectedBranches(config).has(identity.branch)) return false;
+  const project = await vercel(`/v9/projects/${config.projectId}`);
+  if (project?.id !== config.projectId || project.name !== config.projectName) throw new Error('Cleanup project identity mismatch');
+  if (Object.values(project.targets || {}).some(value => idOf(value) === deployment.id)) return false;
+  if ((await completeInventory(vercel, `/v2/deployments/${deployment.id}/aliases`, 'aliases')).length) return false;
+  const owner = config.repository.split('/')[0];
+  const rows = await completeInventory(github, `/repos/${config.repository}/pulls?state=closed&head=${encodeURIComponent(`${owner}:${identity.branch}`)}`, null, { github: true });
+  if (rows.some(pr => pr?.state !== 'closed' || !Number.isSafeInteger(pr.number) || !Number.isFinite(Date.parse(pr.closed_at)))) throw new Error('Closed PR inventory unavailable');
+  const closed = rows.filter(pr => sameRepository(pr, config) && pr.head.ref === identity.branch && (identity.number === null || pr.number === identity.number))
+    .sort((a, b) => Date.parse(b.closed_at) - Date.parse(a.closed_at))[0];
+  return Boolean(closed && previewGraceElapsed(deployment, policy, closed, now));
+}
+
+export async function reconcileOrphanPreviews(config, { github, vercel, prNumber = null, prBranch = null, deploymentIds = null, dryRun = false, reviewedRetirement = false, now = Date.now }) {
+  if ((dryRun || reviewedRetirement) && (!Array.isArray(deploymentIds) || deploymentIds.length < 1 || deploymentIds.length > 100 || new Set(deploymentIds).size !== deploymentIds.length)) throw new Error('Reviewed retirement requires an explicit bounded selection');
+  const reporting = dryRun || reviewedRetirement;
   let policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: config.retentionPolicy }, config.repository);
+  const failures = [], removed = [], proposed = [], decisions = [], retained = new Set();
+  const safeFailure = error => ({ httpStatus: Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : null,
+    endpoint: /^(Vercel|GitHub) \/[A-Za-z0-9_:\/.-]+$/.test(error?.endpoint || '') ? error.endpoint : null });
+  const decision = (id, reason, state = 'retained') => { if (reporting) decisions.push({ deploymentId: id, decision: state, reason }); };
+  const report = () => ({ disabled: !policy.enabled, removedIds: removed, retainedIds: !policy.enabled && !retained.size && !removed.length ? null : [...retained],
+    ...(reporting ? { dryRun, proposedIds: proposed, policy, decisions, failures: failures.map(safeFailure) } : {}) });
   if (!policy.enabled) {
+    for (const id of deploymentIds || []) decision(id, 'policy-disabled');
     console.log('Preview retention reconciliation disabled by saved policy');
-    return { disabled: true, removedIds: [], retainedIds: null };
+    return report();
   }
-  const repository = await github(`/repos/${config.repository}`);
-  if (repository?.full_name !== config.repository || Number(repository.id) !== Number(config.repositoryId) || !repository.default_branch) throw new Error('Cleanup repository identity mismatch');
-  config = { ...config, defaultBranch: repository.default_branch };
-  const summaries = deploymentIds ? deploymentIds.map((id) => ({ id })) : await completeInventory(vercel, `/v7/deployments?projectId=${encodeURIComponent(config.projectId)}`, 'deployments');
-  const failures = [], removed = [], retained = new Set(), ids = new Set(summaries.map(idOf));
-  if ([...ids].some((id) => !/^dpl_[A-Za-z0-9]+$/.test(id || ''))) throw new Error('Invalid cleanup deployment identifier');
-  for (const id of ids) {
-    if (!policy.enabled) break;
-    try {
-      let deployment;
-      try { deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`); }
-      catch (error) { if (missing(error)) continue; throw error; }
-      const identity = previewIdentity(deployment, config);
-      const scoped = prNumber === null || String(deployment.meta?.githubPrId) === String(prNumber) || deployment.meta?.githubPrId == null && deployment.meta?.githubCommitRef === prBranch;
-      if (!scoped) continue;
-      retained.add(id);
-      if (!identity || !await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now())) continue;
-      if (!await safeAliases(deployment, identity, config, vercel)) continue;
-      // Re-read immutable source/project identity, PR state and aliases at each
-      // destructive boundary. Failed reads never mean "no PR" or "no alias".
-      const fenced = async () => {
-        if (config.refreshRetentionPolicy) policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: await config.refreshRetentionPolicy() }, config.repository);
-        if (!policy.enabled) return false;
-        deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`);
-        if (JSON.stringify(previewIdentity(deployment, config)) !== JSON.stringify(identity)) throw new Error('Cleanup deployment identity changed');
-        return await safeAliases(deployment, identity, config, vercel) && await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now());
-      };
-      if (!await fenced()) continue;
-      if (ACTIVE.has(deployment.readyState)) {
-        await vercel(`/v12/deployments/${id}/cancel`, { method: 'PATCH', retries: 0, accept: [200, 404, 409] });
-        if (!await fenced()) continue;
-      }
-      if (!TERMINAL.has(deployment.readyState)) continue; // Next sweep finishes a still-canceling upload.
-      try { await vercel(`/v13/deployments/${id}`, { method: 'DELETE', retries: 0, accept: [200, 204, 404] }); }
-      catch (error) { if (!missing(error)) throw error; }
-      try { await vercel(`/v13/deployments/${id}`); throw new Error('Deleted preview still exists'); }
-      catch (error) { if (!missing(error)) throw error; }
-      removed.push(id); retained.delete(id);
-    } catch (error) { failures.push(error); }
+  try {
+    const repository = await github(`/repos/${config.repository}`);
+    if (repository?.full_name !== config.repository || Number(repository.id) !== Number(config.repositoryId) || !repository.default_branch) throw new Error('Cleanup repository identity mismatch');
+    config = { ...config, defaultBranch: repository.default_branch };
+    const summaries = deploymentIds ? deploymentIds.map((id) => ({ id })) : await completeInventory(vercel, `/v7/deployments?projectId=${encodeURIComponent(config.projectId)}`, 'deployments');
+    const ids = new Set(summaries.map(idOf));
+    if ([...ids].some(id => !/^dpl_[A-Za-z0-9]+$/.test(id || ''))) throw new Error('Invalid cleanup deployment identifier');
+    for (const id of ids) {
+      if (!policy.enabled) { decision(id, 'policy-disabled'); continue; }
+      try {
+        let deployment;
+        try { deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`); }
+        catch (error) { if (missing(error)) { decision(id, 'already-absent', 'absent'); continue; } throw error; }
+        const identity = previewIdentity(deployment, config);
+        const scoped = prNumber === null || String(deployment.meta?.githubPrId) === String(prNumber) || deployment.meta?.githubPrId == null && deployment.meta?.githubCommitRef === prBranch;
+        if (!scoped) { decision(id, 'outside-selection'); continue; }
+        retained.add(id);
+        if (!identity) { decision(id, 'protected-or-unverified-identity'); continue; }
+        if (!await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now())) { decision(id, 'retained-by-policy-or-live-pr'); continue; }
+        if (!await safeAliases(deployment, identity, config, vercel)) { decision(id, 'protected-alias-or-target'); continue; }
+        const fenced = async () => {
+          if (config.refreshRetentionPolicy) policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: await config.refreshRetentionPolicy() }, config.repository);
+          if (!policy.enabled) return false;
+          deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`);
+          if (JSON.stringify(previewIdentity(deployment, config)) !== JSON.stringify(identity)) throw new Error('Cleanup deployment identity changed');
+          return await safeAliases(deployment, identity, config, vercel) && await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now()) &&
+            (!reviewedRetirement || await reviewedRetirementAllowed(deployment, identity, config, github, vercel, policy, now()));
+        };
+        if (!await fenced()) { decision(id, 'changed-or-protected-at-final-fence'); continue; }
+        if (dryRun) { proposed.push(id); decision(id, 'verified-eligible', 'would-delete'); continue; }
+        if (ACTIVE.has(deployment.readyState)) {
+          await vercel(`/v12/deployments/${id}/cancel`, { method: 'PATCH', retries: 0, accept: [200, 404, 409] });
+          if (!await fenced()) { decision(id, 'changed-after-cancel'); continue; }
+        }
+        if (!TERMINAL.has(deployment.readyState)) { decision(id, 'nonterminal-state'); continue; }
+        try { await vercel(`/v13/deployments/${id}`, { method: 'DELETE', retries: 0, accept: [200, 204, 404] }); }
+        catch (error) { if (!missing(error)) throw error; }
+        try { await vercel(`/v13/deployments/${id}`); throw new Error('Deleted preview still exists'); }
+        catch (error) { if (!missing(error)) throw error; }
+        removed.push(id); retained.delete(id); decision(id, 'verified-absent', 'deleted');
+      } catch (error) { failures.push(error); decision(id, 'verification-unavailable', 'error'); }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Orphan preview cleanup incomplete; unknown resources preserved');
+  } catch (error) {
+    if (reporting) error.retirementReport = { ...report(), ...(failures.length ? {} : { failures: [safeFailure(error)] }) };
+    throw error;
   }
-  if (failures.length) throw new AggregateError(failures, 'Orphan preview cleanup incomplete; unknown resources preserved');
   console.log(`Preview retention reconciliation: removed=${removed.length}; retained=${retained.size}; enabled=${policy.enabled}`);
-  return { disabled: !policy.enabled, removedIds: removed, retainedIds: [...retained] };
+  return report();
 }
 
 export async function assertPreviewHasOpenPullRequest(plan, config, github) {

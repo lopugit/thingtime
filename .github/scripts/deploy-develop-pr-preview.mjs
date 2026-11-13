@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
+import { previewRetirementRequest, redactedProviderEndpoint } from './preview-retirement-request.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
@@ -1369,20 +1371,26 @@ const githubRequest = async (path, options = {}) => {
 		});
 	} catch (error) {
 		if (error instanceof HttpError) {
-			const pathname = String(path).split('?')[0];
-			error.message = `GitHub ${String(options.method ?? 'GET').toUpperCase()} ${pathname} failed with HTTP ${error.status} (${error.code})`;
+			error.endpoint = redactedProviderEndpoint(githubUrl(path));
+			error.message = `${error.endpoint} ${String(options.method ?? 'GET').toUpperCase()} failed with HTTP ${error.status} (${error.code})`;
 		}
 		throw error;
 	}
 };
 
-const vercelRequest = (path, options = {}) => {
+const vercelRequest = async (path, options = {}) => {
 	const separator = path.includes('?') ? '&' : '?';
 	const teamId = encodeURIComponent(requiredEnv('VERCEL_TEAM_ID'));
-	return requestJson(`https://api.vercel.com${path}${separator}teamId=${teamId}`, {
-		...options,
-		token: requiredEnv('VERCEL_API_TOKEN')
-	});
+	const url = `https://api.vercel.com${path}${separator}teamId=${teamId}`;
+	try {
+		return await requestJson(url, { ...options, token: requiredEnv('VERCEL_API_TOKEN') });
+	} catch (error) {
+		if (error instanceof HttpError) {
+			error.endpoint = redactedProviderEndpoint(url);
+			error.message = `${error.endpoint} ${String(options.method ?? 'GET').toUpperCase()} failed with HTTP ${error.status} (${error.code})`;
+		}
+		throw error;
+	}
 };
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
@@ -1650,7 +1658,7 @@ const verifyCors = async (origin, probeUrl) => {
 // Only the protected stable publisher owns the preview master. This controller
 // reads its main-source/preview-target provenance and live runtime; it never
 // promotes develop or points arbitrary PR code at a stable gateway hostname.
-const verifyPreviewMasterRuntime = async (name, policy, deploymentId, { verifyManifest = verifyCanonicalGateway, fetcher = fetch, retry = verifyAlias } = {}) => retry(async ({ signal }) => {
+const verifyPreviewMasterRuntime = async (name, policy, deploymentId, { verifyManifest = verifyCanonicalGateway, fetcher = fetchProtectedDeployment, retry = verifyAlias } = {}) => retry(async ({ signal }) => {
 	await verifyManifest(name, policy, deploymentId, signal);
 	const response = await fetcher(`https://${name}/api/root-data`, { signal, cache: 'no-store', redirect: 'error' });
 	if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) throw new Error('Preview master API is not ready');
@@ -1744,7 +1752,7 @@ const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch, missingBu
 	let lastError = null;
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		try {
-			const response = await fetch(`https://${hostname}/${missingBuildPage ? '' : 'api/root-data'}`, {
+			const response = await fetchProtectedDeployment(`https://${hostname}/${missingBuildPage ? '' : 'api/root-data'}`, {
 				headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
 				redirect: 'manual',
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -1776,7 +1784,7 @@ const assertWildcardFallbackRuntimes = async (config) => {
 	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main', missingBuildPage: config.missingBuildPage });
 };
 
-const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl, { verifyApi: true });
+const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl, { verifyApi: true, fetcher: fetchProtectedDeployment });
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 
@@ -2569,6 +2577,8 @@ const prepareBuildPlan = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	previewRetirementRequest({ eventName, prNumber: event.inputs?.pr_number,
+		deploymentIds: process.env.PREVIEW_RETIREMENT_DEPLOYMENT_IDS || '', dryRun: process.env.PREVIEW_RETIREMENT_DRY_RUN || 'false' });
 	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
 		await writePrepareOutputs({ shouldBuild: false });
 		console.log('Manual retention reconciliation needs no build');
@@ -2643,10 +2653,23 @@ const main = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	const retirement = previewRetirementRequest({ eventName, prNumber: event.inputs?.pr_number,
+		deploymentIds: process.env.PREVIEW_RETIREMENT_DEPLOYMENT_IDS || '', dryRun: process.env.PREVIEW_RETIREMENT_DRY_RUN || 'false' });
 	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
 		await assertTrustedPrincipal(config, normalizeLogin(process.env.GITHUB_TRIGGERING_ACTOR || requiredEnv('GITHUB_ACTOR')), 'retention-actor');
-		config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
-		await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest });
+		let report = null;
+		try {
+			config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+			report = await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest, ...retirement });
+		} catch (error) {
+			report = error.retirementReport || { error: 'verification-unavailable', policy: config.retentionPolicy || null };
+			throw error;
+		} finally {
+			if (retirement.reviewedRetirement) await writeFile(requiredEnv('PREVIEW_RETIREMENT_REPORT_PATH'), JSON.stringify({
+				schemaVersion: 1, checkedAt: new Date().toISOString(), repository: config.repository, projectId: config.projectId,
+				requestedDeploymentIds: retirement.deploymentIds, dryRun: retirement.dryRun, ...report
+			}, null, 2), { mode: 0o600 });
+		}
 		return;
 	}
 	const dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;

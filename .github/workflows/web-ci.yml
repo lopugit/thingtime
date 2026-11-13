@@ -312,7 +312,9 @@ jobs:
           path: .storage-controller
           persist-credentials: false
           sparse-checkout-cone-mode: false
-          sparse-checkout: .github/scripts/storage-release-gate.mjs
+          sparse-checkout: |
+            .github/scripts/storage-release-gate.mjs
+            .github/scripts/protected-deployment-fetch.mjs
 
       # Inside the existing required build context: failed readiness cannot
       # become a skipped dependent check which GitHub considers mergeable.
@@ -437,7 +439,9 @@ jobs:
           ref: ${{ github.base_ref == 'github-actions' && github.event.pull_request.head.sha || 'github-actions' }}
           persist-credentials: false
           sparse-checkout-cone-mode: false
-          sparse-checkout: .github/scripts/storage-release-gate.mjs
+          sparse-checkout: |
+            .github/scripts/storage-release-gate.mjs
+            .github/scripts/protected-deployment-fetch.mjs
       - name: Require production storage readiness before merge
         run: node .github/scripts/storage-release-gate.mjs
       - name: Report the non-Remix build context

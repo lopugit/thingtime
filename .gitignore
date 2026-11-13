@@ -82,8 +82,9 @@ graphify-out/cache/*
 graphify-out/graph.html
 graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
-graphify-out/snapshots/**/cache/
 graphify-out/snapshots/**/.staging-*
+# Query freshness stamps are machine-local even when aliases resolve a snapshot.
+graphify-out/snapshots/**/cache/
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 

@@ -1,3 +1,4 @@
+import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { readPreviewRetentionPolicy } from './preview-retention-policy.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 import { assertPreviewHasOpenPullRequest, reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
@@ -240,7 +241,7 @@ const safeOrigin = (value) => {
   catch { return 'invalid'; }
 };
 export async function verifyCanonicalGateway(name, gateway, deploymentId, signal) {
-  const response = await fetch(`https://${name}/.well-known/thingtime-capabilities.json`, { signal, cache: 'no-store' });
+  const response = await fetchProtectedDeployment(`https://${name}/.well-known/thingtime-capabilities.json`, { signal, cache: 'no-store' });
   let manifest;
   try { manifest = await response.json(); } catch { manifest = null; }
   if (response.ok && manifest?.origin === `https://${name}` && manifest.gateway?.environment === gateway.environment && manifest.gateway?.origin === gateway.origin && manifest.gateway?.deploymentId === deploymentId) return;
@@ -252,17 +253,17 @@ export async function verifyCanonicalGateway(name, gateway, deploymentId, signal
 }
 
 async function smoke(url, { api = true, signal } = {}) {
-  const home = await fetch(url, { signal: signal || AbortSignal.timeout(30_000) });
+  const home = await fetchProtectedDeployment(url, { signal: signal || AbortSignal.timeout(30_000) });
   const html = await home.text();
   if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error(`Deployed Vite shell failed verification at ${url}`);
-  const index = await fetch(`${url}/index.html`, { signal: signal || AbortSignal.timeout(30_000) });
+  const index = await fetchProtectedDeployment(`${url}/index.html`, { signal: signal || AbortSignal.timeout(30_000) });
   if (!index.ok || !(await index.text()).includes('<div id="root"></div>')) throw new Error('Deployed index.html failed verification');
   const asset = html.match(/(?:src|href)="(\/assets\/[^"?]+\.js)[^"]*"/);
   if (!asset) throw new Error('No deployed JavaScript asset');
-  const response = await fetch(new URL(asset[1], url), { signal: signal || AbortSignal.timeout(30_000) });
+  const response = await fetchProtectedDeployment(new URL(asset[1], url), { signal: signal || AbortSignal.timeout(30_000) });
   if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error(`Deployed asset failed verification at ${url}`);
   if (!api) return;
-  const apiResponse = await fetch(`${url}/api/root-data`, { signal: signal || AbortSignal.timeout(30_000) });
+  const apiResponse = await fetchProtectedDeployment(`${url}/api/root-data`, { signal: signal || AbortSignal.timeout(30_000) });
   if (!apiResponse.ok || !(apiResponse.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
   await apiResponse.json();
 }

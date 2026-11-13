@@ -23,7 +23,9 @@ jobs:
           ref: github-actions
           persist-credentials: false
           sparse-checkout-cone-mode: false
-          sparse-checkout: .github/scripts/storage-release-gate.mjs
+          sparse-checkout: |
+            .github/scripts/storage-release-gate.mjs
+            .github/scripts/protected-deployment-fetch.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'

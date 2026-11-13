@@ -1,5 +1,19 @@
 # Control-plane changelog
 
+## 2026-11-13 — Authenticate protected checks and review exact preview retirements
+
+- Share project-verified, expiring automation authentication across protected
+  publishers and health checks, refusing redirects and redacting credentials.
+- Add manual exact-ID retirement dry-runs and sanitized policy/decision artifacts;
+  preserve active builds, all aliases/current targets, stable/gateway owners,
+  open/unknown PRs and saved grace. Default automatic retention is unchanged.
+- Align the admin preparation credential contract with its existing signed-policy
+  read while retaining strict secret-free builds and negative credential checks.
+- Stage the protected-fetch dependency in every storage-gate sparse checkout and
+  initialize runner-local report paths inside a runner step, with regressions.
+- This source change enables neither project protection nor preview deletion;
+  the thin listener input rollout and live acceptance remain separate.
+
 ## 2026-11-02 — Pass the existing team slug into prebuilt prepare
 
 - Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before

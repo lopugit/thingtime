@@ -299,6 +299,42 @@ repeat for idempotence and verify unchanged production/develop/staging/master
 aliases. This dispatch uses GitHub's existing protected secret; do not retrieve
 CI secrets locally or bypass capability/actor checks to run acceptance.
 
+### Protected deployment checks and reviewed retirement
+
+Protected publishers and storage-health checks can authenticate to a Vercel
+project that has Deployment Protection enabled. The shared
+`protected-deployment-fetch.mjs` helper reads the selected project's automation
+credential through the existing Vercel API token, verifies each destination's
+project identity, and sends the scoped bypass header only to that HTTPS origin.
+Credential and destination lookups expire after 30 seconds. Redirects refuse;
+caller-supplied bypass and bypass-cookie headers and Host overrides are removed. No token,
+bypass value, account cookie, or raw provider error belongs in inputs, artifacts
+or logs. This controller support does not turn on project protection.
+
+Reviewed retirement is an additional exact-selection mode. After this protected
+workflow is merged, add the optional `retirement_deployment_ids` string and
+`retirement_dry_run` boolean forwarding inputs to the thin main listener; older
+callers remain compatible. Only an authorized manual dispatch with `pr_number=0`
+can select this mode. Supply a JSON array of 1–100 distinct deployment IDs as a
+bounded maintenance batch, and run it first with `retirement_dry_run=true`.
+The controller reads the current saved policy using its existing protected CI
+secret. It never substitutes local retention settings.
+
+Inspect the private `preview-retirement-<run>-<attempt>` artifact before executing
+the reviewed exact selection with `retirement_dry_run=false`. The seven-day
+artifact contains only repository/project IDs, requested/proposed/retained/deleted
+IDs, observed time, canonical policy, fixed decision reasons, and redacted
+provider endpoint/status diagnostics. A failed policy or verification read is
+reported as unavailable and cannot authorize deletion. Recheck recent legitimate
+use independently before executing the reviewed batch.
+
+This mode additionally preserves every aliased deployment, every current project
+target, active builds, stable branches, gateway owners, open or unverified PRs,
+and deployments still within policy grace since PR closure. It performs fresh
+policy, source, PR and alias checks at the deletion boundary. Ordinary automatic
+retention keeps its existing behavior; no new schedule or automatic cleanup is
+created. Confirm exact provider absence afterward and preserve ambiguous cases.
+
 ### Discoverable preview status and recovery
 
 Both publishers post expected persistent URLs and a ready-time estimate before
