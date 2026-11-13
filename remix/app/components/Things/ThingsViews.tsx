@@ -344,6 +344,7 @@ const VisibilityChip = ({ thing }: { thing: ThingsThing }) => {
 // Grid view — Drive-style tiles ('name') that become a gallery in 'preview'.
 
 export const ThingsGridView = ({
+  singleColumn = false,
   items,
   handlers,
   displayMode,
@@ -358,12 +359,13 @@ export const ThingsGridView = ({
 	deviceSetup,
   devicePinControlFor
 }: {
+  singleColumn?: boolean;
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
 } & ThingsDevicePresentation) => (
-	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
+	<Grid gap={3} templateColumns={singleColumn ? 'minmax(0, 1fr)' : `repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
 		{devices.map((state) =>
 			state.summary ? (
 				<Box key={`device:${state.deviceId}`} minWidth={0} data-pin-id={devicePinControlFor?.(state)?.pinned ? state.deviceId : undefined} sx={PIN_DROP_SX}>

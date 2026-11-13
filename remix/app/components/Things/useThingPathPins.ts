@@ -53,7 +53,11 @@ export function useThingPathPins(paths: ThingPinPath[], enabled = true, dataPlan
   const read = useCallback(async (path: ThingPinPath) => {
     const key = pinPathKey(path), operationKey = `${identity}:${key}`;
     const existing = loading.current.get(operationKey);
-    if (existing) return existing;
+    // StrictMode replays effects after aborting their first setup. An aborted
+    // request cannot satisfy the replay; its eventual cleanup must also leave
+    // the fresh request registered under the same scope untouched.
+    if (existing && !controllers.current.get(operationKey)?.signal.aborted) return existing;
+    if (existing) loading.current.delete(operationKey);
     const controller = new AbortController(); controllers.current.set(operationKey, controller);
     const guard = () => { if (!alive.current || active.current !== identity || rootIdentity.read().pending || rootIdentity.read().generation !== root.generation) throw new DOMException('Account changed', 'AbortError'); controller.signal.throwIfAborted(); };
     const request = (async (): Promise<ThingPinSnapshot> => {
@@ -77,7 +81,10 @@ export function useThingPathPins(paths: ThingPinPath[], enabled = true, dataPlan
       confirmed.current.set(operationKey, result);
       if (active.current === identity && !queues.current.has(operationKey)) update(key, { ids: result.pins.map(pin => pin.thingId), revision: result.revision, presentations: Object.fromEntries(result.pins.filter(pin => pin.presentation).map(pin => [pin.thingId, pin.presentation!])), loaded: true, error: null });
       return result;
-    }).catch((cause: unknown) => { if (cause instanceof Error && cause.name === 'AbortError') throw cause; update(key, { error: cause instanceof Error ? cause.message : 'Could not load pins. Retry to reconnect.' }); throw cause; }).finally(() => { loading.current.delete(operationKey); controllers.current.delete(operationKey); });
+    }).catch((cause: unknown) => { if (cause instanceof Error && cause.name === 'AbortError') throw cause; update(key, { error: cause instanceof Error ? cause.message : 'Could not load pins. Retry to reconnect.' }); throw cause; }).finally(() => {
+      if (loading.current.get(operationKey) === request) loading.current.delete(operationKey);
+      if (controllers.current.get(operationKey) === controller) controllers.current.delete(operationKey);
+    });
     loading.current.set(operationKey, request);
     return request;
   }, [identity, options, update, root.generation]);

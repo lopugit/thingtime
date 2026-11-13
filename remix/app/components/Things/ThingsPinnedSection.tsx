@@ -34,7 +34,7 @@ export function ThingsPinnedSection({ controller, path, items, devices = [], han
         const thing = byId.get(id), device = devicesById.get(id);
         const common = { displayMode, handlers: compact ? { ...handlers, compact: true } : handlers, schemaRenderFor, ...devicePresentation, deviceSetup: undefined, items: thing ? [thing] : [], devices: device ? [device] : [] };
         return <Box key={id} minWidth={0} sx={{ '&[data-pin-drop-target="before"]': { boxShadow: '0 -3px 0 var(--tt-accent, #f472b6)' }, '&[data-pin-drop-target="after"]': { boxShadow: '0 3px 0 var(--tt-accent, #f472b6)' } }}>
-          {list ? <ThingsListView {...common} hideHeader allSelected={false} onToggleAll={() => {}} /> : <ThingsGridView {...common} />}
+          {list ? <ThingsListView {...common} hideHeader allSelected={false} onToggleAll={() => {}} /> : <ThingsGridView {...common} singleColumn />}
         </Box>;
       })}
     </Grid>
