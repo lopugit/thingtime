@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MongoClient } from 'mongodb';
+import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract.ts';
 
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
@@ -42,7 +43,10 @@ const mongoImport = (await readFile(endpointBundle, 'utf8')).match(/modulePromis
 assert.ok(mongoImport, 'Locate the built driver factory before collecting command evidence.');
 const driverBundle = new URL(mongoImport[1], pathToFileURL(endpointBundle)).href;
 await writeFile(instrumentation, `import{appendFileSync}from'node:fs';
-const {default:{MongoClient}}=await import(${JSON.stringify(driverBundle)});
+const driverModule=await import(${JSON.stringify(driverBundle)});
+const driver=typeof driverModule.t==='function'?driverModule.t():driverModule.default??driverModule;
+if(typeof driver?.MongoClient!=='function'||typeof driver.MongoClient.prototype?.connect!=='function')throw new Error('Built MongoDB driver must expose MongoClient.connect');
+const {MongoClient}=driver;
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
 for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
@@ -112,7 +116,7 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.ok(capabilitySatisfies(manifest.features['api.environment-gateway']?.version || '', '1.2.1'), 'Built gateway must advertise compatible api.environment-gateway 1.2.1 or newer.');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',

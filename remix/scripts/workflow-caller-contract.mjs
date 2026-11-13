@@ -173,6 +173,16 @@ assert.match(
 );
 
 
+// Retained-source maintenance is an explicit trusted manual input only. The
+// protected controller validates merged-main provenance and source identity.
+const maintenanceDispatch = developPreviewCaller.split('  workflow_dispatch:\n')[1]?.split('\n  repository_dispatch:')[0];
+assert.ok(maintenanceDispatch, 'maintenance must retain the trusted manual entry point');
+for (const input of ['maintenance_artifact_commit', 'maintenance_manifest_path', 'maintenance_manifest_sha256']) {
+  assert.ok(maintenanceDispatch.includes(`${input}:\n        description: `), `${input} must be a manual input`);
+  assert.match(maintenanceDispatch, new RegExp(`${input}:\\n        description: [^\\n]+\\n        required: false\\n        default: ''\\n        type: string`), `${input} must default empty`);
+  assert.ok(developPreviewCaller.includes(`      ${input}: \${{ inputs.${input} || '' }}`), `${input} must forward unchanged`);
+}
+
 const retirementDispatch = developPreviewCaller.split('  workflow_dispatch:\n')[1]?.split('\n  repository_dispatch:')[0];
 assert.ok(retirementDispatch, 'reviewed retirement must remain an explicit manual dispatch');
 assert.match(retirementDispatch, /retirement_deployment_ids:\n        description: [^\n]+\n        required: false\n        default: ''\n        type: string/, 'deployment selection is an optional JSON string with an empty default');
