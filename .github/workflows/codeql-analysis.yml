@@ -464,30 +464,77 @@ jobs:
             exit 0
           }
 
-          deadline=$((SECONDS + 600))
-          started=0
-          while :; do
-            # Scope to this attempt: a re-run must not count the previous
-            # attempt's finished legs and skip the barrier outright.
-            if leg_statuses="$(
-              gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
-                --jq '[.jobs[] | select(.name | contains("Analyze (")) | .status]' 2>/dev/null
-            )"; then
-              started="$(jq 'map(select(. != "queued")) | length' <<<"$leg_statuses")"
-              if [ "$started" -ge "$EXPECTED_LEGS" ]; then
-                echo "All $EXPECTED_LEGS analysis legs have started; their uploads will overlap."
-                break
-              fi
+          # Keep this transport embedded in the trusted workflow: the checked-out
+          # analysis tree may be an untrusted PR and must not supply executable helpers.
+          # Both ordering steps use the same implementation (pinned by regression tests).
+          poll_now() { date -u +%s; }
+          poll_interval=15
+          poll_blocked_until=0
+          poll_body=""
+          poll_api() {
+            local now remaining response ok status headers retry reset remaining_quota retry_epoch
+            now="$(poll_now)"
+            poll_body=""
+            (( now < deadline && now >= poll_blocked_until )) || return 1
+            remaining=$(( deadline - now ))
+            (( remaining <= 30 )) || remaining=30
+            ok=false
+            if response="$(timeout --signal=TERM "${remaining}s" gh api --include --method GET "$1" 2>/dev/null)"; then ok=true;
             else
-              echo "::warning::Could not read this run's jobs; analyzing without the sibling-start barrier."
-              break
+              status=$?
+              # Cancellation is not an unavailable API response to retry.
+              if [ "$status" = 130 ] || [ "$status" = 143 ]; then exit "$status"; fi
             fi
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::warning::Only $started of $EXPECTED_LEGS analysis legs started within the wait; analyzing anyway rather than leaving the commit unscanned."
-              break
+            response="${response//$'\r'/}"
+            headers="${response%%$'\n\n'*}"
+            poll_body="${response#*$'\n\n'}"
+            retry="$(awk 'tolower($1)=="retry-after:" {$1=""; sub(/^ /, ""); print; exit}' <<<"$headers")"
+            reset="$(awk 'tolower($1)=="x-ratelimit-reset:" {print $2; exit}' <<<"$headers")"
+            remaining_quota="$(awk 'tolower($1)=="x-ratelimit-remaining:" {print $2; exit}' <<<"$headers")"
+            now="$(poll_now)"
+            if [ -n "$retry" ] || [ "$remaining_quota" = 0 ] || { [ "$ok" = false ] && grep -qi 'rate limit' <<<"$poll_body"; }; then
+              # One token serves both endpoints. A quota response cools down all reads,
+              # including the sibling lookup, instead of hammering the exhausted budget.
+              poll_blocked_until=$(( now + 60 ))
+              if [[ "$reset" =~ ^[0-9]{1,10}$ ]] && (( 10#$reset > poll_blocked_until )); then poll_blocked_until=$((10#$reset)); fi
+              retry_epoch=0
+              if [[ "$retry" =~ ^[0-9]{1,10}$ ]]; then retry_epoch=$(( now + 10#$retry ));
+              elif [ -n "$retry" ]; then retry_epoch="$(date -u -d "$retry" +%s 2>/dev/null)" || retry_epoch=0; fi
+              if [[ "$retry_epoch" =~ ^[0-9]{1,10}$ ]] && (( 10#$retry_epoch > poll_blocked_until )); then poll_blocked_until=$((10#$retry_epoch)); fi
             fi
-            sleep 15
+            # Even a successful last read may spend the final quota unit; do
+            # not immediately hand an exhausted token to init or SARIF upload.
+            if [ "$ok" = true ] && (( poll_blocked_until > now )); then poll_wait ""; fi
+            [ "$ok" = true ]
+          }
+          poll_wait() {
+            local now delay limit="$deadline"
+            if [ -n "${1:-}" ] && (( $1 < limit )); then limit="$1"; fi
+            now="$(poll_now)"
+            delay="$poll_interval"
+            (( poll_blocked_until <= now + delay )) || delay=$(( poll_blocked_until - now ))
+            (( delay <= limit - now )) || delay=$(( limit - now ))
+            (( delay > 0 )) || return 0
+            sleep "$delay" || exit "$?"
+            poll_interval=$(( poll_interval * 2 ))
+            (( poll_interval <= 60 )) || poll_interval=60
+          }
+
+          deadline=$(( $(poll_now) + 600 ))
+          started=0
+          while [ "$(poll_now)" -lt "$deadline" ]; do
+            # Scope to this attempt; a previous attempt cannot satisfy the barrier.
+            if poll_api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"; then
+              if started="$(jq '[.jobs[] | select(.name | contains("Analyze (")) | .status] | map(select(. != "queued")) | length' <<<"$poll_body")" && [[ "$started" =~ ^[0-9]+$ ]]; then
+                if [ "$started" -ge "$EXPECTED_LEGS" ]; then
+                  echo "All $EXPECTED_LEGS analysis legs have started; their uploads will overlap."
+                  exit 0
+                fi
+              fi
+            fi
+            poll_wait ""
           done
+          echo "::warning::The sibling-start deadline elapsed; analyzing anyway rather than leaving the commit unscanned."
 
       - name: Initialize CodeQL
         if: steps.preinit.outputs.own != 'false'
@@ -580,6 +627,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           LANGUAGE: ${{ matrix.language }}
           SLOWEST_LANGUAGE: javascript-typescript
           ANALYSIS_REF: ${{ needs.scope.outputs.analysis_ref }}
@@ -622,8 +670,66 @@ jobs:
           # which is later still and so likewise never admits a stale analysis;
           # a sibling that uploaded before this leg began polling is then
           # released by the `done` grace window below rather than by a match.
+          # Keep this transport embedded in the trusted workflow: the checked-out
+          # analysis tree may be an untrusted PR and must not supply executable helpers.
+          # Both ordering steps use the same implementation (pinned by regression tests).
+          poll_now() { date -u +%s; }
+          poll_interval=15
+          poll_blocked_until=0
+          poll_body=""
+          poll_api() {
+            local now remaining response ok status headers retry reset remaining_quota retry_epoch
+            now="$(poll_now)"
+            poll_body=""
+            (( now < deadline && now >= poll_blocked_until )) || return 1
+            remaining=$(( deadline - now ))
+            (( remaining <= 30 )) || remaining=30
+            ok=false
+            if response="$(timeout --signal=TERM "${remaining}s" gh api --include --method GET "$1" 2>/dev/null)"; then ok=true;
+            else
+              status=$?
+              # Cancellation is not an unavailable API response to retry.
+              if [ "$status" = 130 ] || [ "$status" = 143 ]; then exit "$status"; fi
+            fi
+            response="${response//$'\r'/}"
+            headers="${response%%$'\n\n'*}"
+            poll_body="${response#*$'\n\n'}"
+            retry="$(awk 'tolower($1)=="retry-after:" {$1=""; sub(/^ /, ""); print; exit}' <<<"$headers")"
+            reset="$(awk 'tolower($1)=="x-ratelimit-reset:" {print $2; exit}' <<<"$headers")"
+            remaining_quota="$(awk 'tolower($1)=="x-ratelimit-remaining:" {print $2; exit}' <<<"$headers")"
+            now="$(poll_now)"
+            if [ -n "$retry" ] || [ "$remaining_quota" = 0 ] || { [ "$ok" = false ] && grep -qi 'rate limit' <<<"$poll_body"; }; then
+              # One token serves both endpoints. A quota response cools down all reads,
+              # including the sibling lookup, instead of hammering the exhausted budget.
+              poll_blocked_until=$(( now + 60 ))
+              if [[ "$reset" =~ ^[0-9]{1,10}$ ]] && (( 10#$reset > poll_blocked_until )); then poll_blocked_until=$((10#$reset)); fi
+              retry_epoch=0
+              if [[ "$retry" =~ ^[0-9]{1,10}$ ]]; then retry_epoch=$(( now + 10#$retry ));
+              elif [ -n "$retry" ]; then retry_epoch="$(date -u -d "$retry" +%s 2>/dev/null)" || retry_epoch=0; fi
+              if [[ "$retry_epoch" =~ ^[0-9]{1,10}$ ]] && (( 10#$retry_epoch > poll_blocked_until )); then poll_blocked_until=$((10#$retry_epoch)); fi
+            fi
+            # Even a successful last read may spend the final quota unit; do
+            # not immediately hand an exhausted token to init or SARIF upload.
+            if [ "$ok" = true ] && (( poll_blocked_until > now )); then poll_wait ""; fi
+            [ "$ok" = true ]
+          }
+          poll_wait() {
+            local now delay limit="$deadline"
+            if [ -n "${1:-}" ] && (( $1 < limit )); then limit="$1"; fi
+            now="$(poll_now)"
+            delay="$poll_interval"
+            (( poll_blocked_until <= now + delay )) || delay=$(( poll_blocked_until - now ))
+            (( delay <= limit - now )) || delay=$(( limit - now ))
+            (( delay > 0 )) || return 0
+            sleep "$delay" || exit "$?"
+            poll_interval=$(( poll_interval * 2 ))
+            (( poll_interval <= 60 )) || poll_interval=60
+          }
+
+          deadline=$(( $(poll_now) + 20 * 60 ))
           baseline_epoch="$(date -u +%s)"
-          if run_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID")"; then
+          if poll_api "repos/$REPO/actions/runs/$RUN_ID"; then
+            run_json="$poll_body";
             run_started_epoch="$(
               jq -r '.run_started_at? | strings | fromdateiso8601? // empty' <<<"$run_json"
             )" || run_started_epoch=""
@@ -633,11 +739,6 @@ jobs:
           else
             echo "::warning::Could not read this run's start time; holding $LANGUAGE against this step's own start instead."
           fi
-
-          # Well above the 2-7 minutes observed and well below the job's own
-          # 60-minute ceiling, so a pathological slow analysis still gets its
-          # ordering while a wedged one cannot strand this runner.
-          deadline=$(( SECONDS + 20 * 60 ))
 
           # A sibling that finished successfully has either already uploaded --
           # and is merely waiting on Advanced Security to process the SARIF --
@@ -651,10 +752,15 @@ jobs:
           sibling_grace=$(( 3 * 60 ))
           sibling_deadline=""
 
-          while [ "$SECONDS" -lt "$deadline" ]; do
+          while [ "$(poll_now)" -lt "$deadline" ]; do
+            if [ -n "$sibling_deadline" ] && [ "$(poll_now)" -ge "$sibling_deadline" ]; then
+              echo "::warning::The successful sibling processing grace elapsed; uploading $LANGUAGE now."
+              exit 0
+            fi
             # Preserve `gh`'s exit status rather than `|| true`: a rate-limited
             # lookup must retry, not be mistaken for "the sibling has landed".
-            if analyses="$(gh api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100")"; then
+            if poll_api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100"; then
+              analyses="$poll_body"
               # `// 0` rather than `// empty`: a malformed or absent timestamp
               # must evaluate to a definite "too old", not vanish out of the
               # predicate and leave `any` to report on a shorter list.
@@ -676,7 +782,8 @@ jobs:
             # no longer carries the slow language, or one whose slow leg has
             # already failed or been cancelled, must release this leg at once
             # instead of idling out the full deadline.
-            if jobs_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")"; then
+            if poll_api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"; then
+              jobs_json="$poll_body"
               # `gh api` exits 0 on any 2xx, so the body is not guaranteed to be
               # the shape this classifier expects — an edge-served HTML page, a
               # truncated body, or a payload without `.jobs` all reach here. An
@@ -712,8 +819,8 @@ jobs:
                   # sibling that completed before this leg even began polling
                   # still gets a full processing allowance rather than none.
                   if [ -z "$sibling_deadline" ]; then
-                    sibling_deadline=$(( SECONDS + sibling_grace ))
-                  elif [ "$SECONDS" -ge "$sibling_deadline" ]; then
+                    sibling_deadline=$(( $(poll_now) + sibling_grace ))
+                  elif [ "$(poll_now)" -ge "$sibling_deadline" ]; then
                     echo "::warning::The $SLOWEST_LANGUAGE leg succeeded but published no analysis for $ref@$sha within ${sibling_grace}s; it most likely declined the upload, so uploading $LANGUAGE now instead of idling out the ordering window."
                     exit 0
                   fi
@@ -723,7 +830,7 @@ jobs:
               echo "::warning::Could not read this run's jobs; continuing to wait for the $SLOWEST_LANGUAGE analysis."
             fi
 
-            sleep 15
+            poll_wait "$sibling_deadline"
           done
 
           echo "::warning::The $SLOWEST_LANGUAGE analysis for $ref@$sha did not land within the ordering window; uploading $LANGUAGE now so the revision is still scanned."
