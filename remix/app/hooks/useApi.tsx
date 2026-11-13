@@ -534,6 +534,11 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
+      secureFields: useCallback(async () => getJson('/api/v1/admin/secure-fields'), []),
+      setSecureFields: useCallback(
+        async (fields) => asyncFetcher.submit({ fields }, { action: '/api/v1/admin/secure-fields' }),
+        [asyncFetcher]
+      ),
       setLopuChatDefaults: useCallback(
         async (args: { model?: string | null; effort?: string | null; speed?: string | null }) =>
           asyncFetcher.submit(
