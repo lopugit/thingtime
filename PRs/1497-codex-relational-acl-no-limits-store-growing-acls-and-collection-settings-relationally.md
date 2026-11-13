@@ -9,14 +9,14 @@ The same task moves selected app grants, app origins/callbacks, encrypted accoun
 ## Source and branch
 
 - Isolated branch `codex/relational-acl-no-limits` started at fetched `origin/main` `f2538e19257bcfdf35ba050e7b187c94ea2252c0`.
-- Source commits: `ea2ae9728` and `cf2e49ee9`; merged fetched main `31d2f3579` through normal merge commit `cacdbdb42`. The only source-text conflicts were `TESTING.md` and `remix/CHANGELOG.md`; both task and device/LiDAR entries were retained.
+- Source commits: `ea2ae9728`, `cf2e49ee9`, `e9d290e54` and `28961da17`; merged fetched main `31d2f3579` and then `e640a5559` through normal merge commits `cacdbdb42` and `de5286973`. The later merge preserved its agent-overview and Builder source contracts alongside this task's ACL and collection contracts; the combined `api.things` feature is `1.66.0`.
 - Graphify wrapper needed two cross-volume fixes for this task's external scratch: absolute AST cache symlink and snapshot-local packed-graph hydration. Its focused suite passed 27/27. The final immutable graph snapshot is published separately after this note is staged. Long changed Markdown files were not newly semantically indexed: the earlier full semantic run was stopped after roughly 20 minutes and structural extraction is the documented fallback.
 
 ## Verified before PR publication
 
 - Source-level TypeScript passed. Changed-source lint had no errors; warnings were pre-existing. Capability coverage passed 183 assertions. Focused ACL, reporting, OAuth, storage, subspace, feed, namespace, PAT/media and Graphify wrapper suites passed at their recorded revisions.
 - Isolated built HTTP/OAuth/MCP/browser acceptance completed retained checks for concurrent workspace preparation above 64 Characters, exact ACL paging and readback, revocation/exclusion, selected-resource grants, large account settings and learned weights. Targeted desktop/mobile subspace UI passed after correcting two harness-only expectations. The synthetic runtime used a disposable APFS MongoDB because ExFAT index DDL exceeded the cold-start bound; it did not use production data.
-- The post-main client/server rebuild and scoped rendered acceptance are pending at initial PR publication. Synthetic acceptance does not prove the deployed origin or original connected reporting task is repaired.
+- Post-main client/template/server builds and scoped rendered acceptance passed on exact source `de528697332c1de78661230a2da8e481ea1fefc7` (source fingerprint `9580e2f56d973f0cae4dd5ff5d2551cd0a131e74bf6eebeddbdf2cba59184e7e`). Eleven final checks include desktop/mobile 700-character flair save, reload, full DOM data and one-line presentation; 70 workspace bindings with ACL paging, concurrent preparation, revocation and saved Action coordination; one explicit retryable 409 and no 5xx. Evidence is in the task-owned external `evidence/finalmerge` directory. Synthetic acceptance does not prove the deployed origin or original connected reporting task is repaired.
 
 ## Release gates still open
 

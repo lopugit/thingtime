@@ -21,6 +21,6 @@ test('bound-media discovery batches exact owner/target pairs and scopes purposes
 		{ $or: [{ targetId: 'page', ownerId: 'owner', $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] },
 			{ targetId: 'data', ownerId: 'other', $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] }] }
 	] });
-	assert.deepEqual(options.projection, { shareId: 1, ownerId: 1, targetId: 1, attachmentSortIndex: 1, thingtime: 1, acl: 1, aclGeneration: 1, aclRevision: 1, aclEntryCount: 1, schemaVersion: 1, moderation: 1, attachmentPurpose: 1, attachmentState: 1, updatedAt: 1 });
+	assert.deepEqual(options.projection, { shareId: 1, ownerId: 1, targetId: 1, attachmentSortIndex: 1, thingtime: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, aclEntryCount: 1, schemaVersion: 1, moderation: 1, attachmentPurpose: 1, attachmentState: 1, updatedAt: 1 });
 	assert.deepEqual(sort, { createdAt: 1, shareId: 1 });
 });
