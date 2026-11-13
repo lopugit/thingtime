@@ -968,6 +968,6 @@ PDF.js/React, desktop/mobile); production/installed acceptance remains separate.
 `pdfViewerBlocks()` exposes the toolbar, individual labels, inputs, buttons,
 status and page canvas as ordinary saved element blocks. `HtmlBlockElement`
 applies the narrow PDF context to each block while preserving Builder selection
-and editing. `api.things` 1.65 / update 1.29 negotiate the additive saved grammar.
+and editing. `api.things` 1.66 / update 1.30 negotiate the additive saved grammar.
 PDF documents load on viewport approach; ComponentMedia no longer rejects a
 valid attachment list merely because it exceeds 50 items.

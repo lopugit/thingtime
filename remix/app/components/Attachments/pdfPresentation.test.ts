@@ -28,8 +28,10 @@ test('PDF controls are individually persisted ordinary Builder elements with med
  const result = sanitizeWebpageBlocks(blocks); assert.equal(result.ok, true);
  assert.equal(usesPdfBlocks({ blocks }), true);
  assert.deepEqual([...compositionAttachmentIds(['webpage'], { blocks })], ['attachment-pdf-123']);
- assert.equal(capabilitySatisfies('1.64.0', PDF_BUILDER_REQUIREMENTS['api.things']), false);
- assert.equal(capabilitySatisfies('1.65.0', PDF_BUILDER_REQUIREMENTS['api.things']), true);
+ assert.equal(capabilitySatisfies('1.65.0', PDF_BUILDER_REQUIREMENTS['api.things']), false);
+ assert.equal(capabilitySatisfies('1.66.0', PDF_BUILDER_REQUIREMENTS['api.things']), true);
+ assert.equal(capabilitySatisfies('1.29.0', PDF_BUILDER_REQUIREMENTS['api.things-update']), false);
+ assert.equal(capabilitySatisfies('1.30.0', PDF_BUILDER_REQUIREMENTS['api.things-update']), true);
 });
 
 test('copied PDF consumes the rewritten canonical source; hidden metadata ids cannot execute', async () => {

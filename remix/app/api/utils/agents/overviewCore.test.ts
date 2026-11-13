@@ -235,6 +235,75 @@ test('JSON filter lists preserve exact labels and reject non-string or control v
 	}
 });
 
+test('task activity and inline open questions use only authorized, valid source timestamps and question fields', () => {
+	const data = records();
+	data.task.push({ id: 'task', crystal: { title: 'Task', status: 'active' }, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-02T00:00:00Z' },
+		thing('unknown', { title: 'Unknown' }));
+	data.progress.push({ id: 'progress', crystal: { parentId: 'task', body: 'Built' }, updatedAt: '2026-11-04T00:00:00Z' },
+		{ id: 'other-progress', crystal: { parentId: 'unreadable-task' }, updatedAt: '2026-11-12T00:00:00Z' });
+	data.todo.push({ id: 'todo', crystal: { parentId: 'task', title: 'Check' }, updatedAt: '2026-11-06T00:00:00Z' });
+	data.agent.push({ id: 'agent', crystal: { taskId: 'task', status: 'blocked' }, updatedAt: '2026-11-07T00:00:00Z' });
+	data.question.push({ id: 'open', crystal: { parentId: 'task', body: 'Which route?', password: 'hidden' }, createdAt: '2026-11-03T00:00:00Z' },
+		{ id: 'answered', crystal: { parentId: 'task', body: 'Resolved', answer: 'Use the saved page', status: 'answered' }, updatedAt: '2026-11-05T00:00:00Z' },
+		{ id: 'bad-date', crystal: { parentId: 'task', body: 'Still open' }, updatedAt: 'invalid-date' });
+	const result = buildOverview(input(), data, true, '2026-11-13T00:00:00Z');
+	const task = result.rows.find(row => row.id === 'task')!;
+	assert.equal(task.lastActivityAt, '2026-11-07T00:00:00.000Z');
+	assert.equal(task.statusGroup, 'active');
+	assert.equal(result.agents[0].statusGroup, 'blocked');
+	assert.equal(task.questionCount, 3);
+	assert.equal(task.openQuestionCount, 2);
+	assert.deepEqual(task.openQuestions.map(row => row.id), ['open', 'bad-date']);
+	assert.deepEqual(task.questions.map(row => row.id), ['open', 'bad-date', 'answered']);
+	assert.equal(task.questions[2].answer, 'Use the saved page');
+	assert.equal(task.openQuestions[0].body, 'Which route?');
+	assert.equal(JSON.stringify(task.openQuestions).includes('hidden'), false);
+	assert.equal(result.rows.find(row => row.id === 'unknown')?.lastActivityAt, null);
+	const partial = buildOverview(input(), data, false, 'now');
+	assert.equal(partial.rows.find(row => row.id === 'task')?.relatedRecordsComplete, false);
+	assert.equal(partial.coverage.relatedRecordsComplete, false);
+	assert.equal(partial.coverage.archiveTreeComplete, false);
+});
+
+test('archive filters task trees without changing status, descendants, exact detail or cursor authority', () => {
+	const data = records();
+	data.task.push(thing('archived-parent', { status: 'complete', archived: true }), thing('inherited-child', { parentId: 'archived-parent', status: 'active' }),
+		thing('active-parent', { status: 'todo' }), thing('explicit-child', { parentId: 'active-parent', status: 'blocked', archived: true }),
+		thing('active', { status: 'waiting-approval' }), thing('agent-descendant', { parentId: 'agent-under-archive', status: 'active' }));
+	data.agent.push(thing('agent-under-archive', { taskId: 'archived-parent' }));
+	data.question.push(thing('hidden-question', { parentId: 'archived-parent', body: 'Hidden in active board' }), thing('active-question', { parentId: 'active', body: 'Visible' }));
+	const active = buildOverview(input(), data, true, 'now');
+	assert.deepEqual(active.rows.map(row => row.id), ['active-parent', 'active']);
+	assert.deepEqual(active.questions.map(row => row.id), ['active-question']);
+	assert.equal(active.stats.tasks, 2);
+	assert.equal(active.rows.find(row => row.id === 'active')?.statusGroup, 'waiting');
+	assert.equal(active.rows.find(row => row.id === 'active-parent')?.statusGroup, 'todo');
+	const archived = buildOverview({ ...input(), archive: 'archived' }, data, true, 'now');
+	assert.deepEqual(archived.rows.filter(row => row.recordType === 'agent-task').map(row => row.id), ['archived-parent', 'inherited-child', 'agent-descendant', 'explicit-child']);
+	assert.equal(archived.rows.find(row => row.id === 'inherited-child')?.archived, false);
+	assert.equal(archived.rows.find(row => row.id === 'inherited-child')?.effectiveArchived, true);
+	assert.equal(archived.rows.find(row => row.id === 'inherited-child')?.archivedAncestorId, 'archived-parent');
+	assert.equal(archived.rows.find(row => row.id === 'agent-descendant')?.archivedAncestorId, 'archived-parent');
+	assert.equal(archived.rows.find(row => row.id === 'archived-parent')?.status, 'complete');
+	const all = buildOverview({ ...input(), archive: 'all' }, data, true, 'now');
+	assert.equal(all.rows.filter(row => row.recordType === 'agent-task').length, 6);
+	const detail = buildOverview({ ...input(), taskId: 'archived-parent' }, data, true, 'now');
+	assert.equal(detail.selected?.id, 'archived-parent');
+	assert.deepEqual(detail.selectedChildren.map(row => row.id), ['inherited-child', 'agent-descendant']);
+	assert.deepEqual(detail.questions.map(row => row.id), ['hidden-question']);
+	for (const invalid of ['archive=', 'archive=deleted', 'archive=active&archive=all'])
+		assert.throws(() => parseOverviewInput(new URLSearchParams(`taskSchema=tasks&${invalid}`)), /Invalid archive/);
+	const many = records();
+	for (let i = 0; i < 51; i++) many.task.push(thing(String(i)));
+	const first = buildOverview(input(), many, true, 'now');
+	assert.throws(() => buildOverview({ ...input(), archive: 'all', cursor: first.nextCursor! }, many, true, 'now'), /pagination changed/);
+	const cyclic = records();
+	cyclic.task.push(thing('cycle-a', { parentId: 'cycle-b', archived: true }), thing('cycle-b', { parentId: 'cycle-a' }), thing('outside', { parentId: 'cycle-b' }));
+	const cyclicRead = buildOverview({ ...input(), archive: 'archived' }, cyclic, true, 'now');
+	assert.deepEqual(new Set(cyclicRead.rows.map(row => row.id)), new Set(['cycle-a', 'cycle-b', 'outside']));
+	assert.equal(cyclicRead.rows.find(row => row.id === 'outside')?.archivedAncestorId, 'cycle-a');
+});
+
 test('project, task-status and search filters include relational children through authorized parent tasks', () => {
 	const data = records();
 	data.project.push(thing('project-one', { recordType: 'agent-project' }), thing('project-two', { recordType: 'agent-project' }));

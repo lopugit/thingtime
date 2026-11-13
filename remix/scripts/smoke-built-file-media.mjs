@@ -21,9 +21,9 @@ if (process.argv[2] !== '--worker') {
   const get = async path => { const response = await fetch(origin + path, { redirect: 'error', signal: AbortSignal.timeout(8000) }); assert.equal(response.status, 200); assert.match(response.headers.get('content-type'), /application\/json/); return response.json(); };
   const manifest = await get('/.well-known/thingtime-capabilities.json'); assert.equal(manifest.origin, origin);
   const registry = await get('/api/v1/capabilities');
-  for (const [feature, version] of Object.entries({ 'api.things': '1.65.0', 'api.things-update': '1.29.0' })) { assert.equal(manifest.features[feature].version, version); assert.equal(registry.features[feature], version); }
-  for (const [id, version] of [['things', '1.65.0'], ['things-update', '1.29.0']]) { const docs = await get(`/api/v1/${id === 'things-update' ? 'things/update' : id}-docs`); assert.equal(docs.docs.contractVersion, version); }
-  console.log(JSON.stringify({ builtManifest: 'passed', origin, versions: { things: '1.65.0', thingsUpdate: '1.29.0' } }));
+  for (const [feature, version] of Object.entries({ 'api.things': '1.66.0', 'api.things-update': '1.30.0' })) { assert.equal(manifest.features[feature].version, version); assert.equal(registry.features[feature], version); }
+  for (const [id, version] of [['things', '1.66.0'], ['things-update', '1.30.0']]) { const docs = await get(`/api/v1/${id === 'things-update' ? 'things/update' : id}-docs`); assert.equal(docs.docs.contractVersion, version); }
+  console.log(JSON.stringify({ builtManifest: 'passed', origin, versions: { things: '1.66.0', thingsUpdate: '1.30.0' } }));
  } finally { server.close(); }
  process.exit(0);
 }
