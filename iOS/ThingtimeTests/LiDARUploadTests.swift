@@ -5,6 +5,111 @@ import XCTest
 
 @MainActor
 final class LiDARUploadTests: XCTestCase {
+    func testLegacyStatusStillExposesExactRetryAndSavedReceiptWithoutUploadingDeviceOnlyScans() async throws {
+        let fixture = try LiDARUploadFixture()
+        defer { fixture.remove() }
+        let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
+        let outbox = fixture.outbox(), pendingID = try outbox.reserve(scope: scope)
+        let capture = try fixture.capture(id: pendingID, bytes: 54)
+        try outbox.record(capture, scope: scope)
+        let deviceID = try outbox.reserve(scope: scope)
+        try outbox.record(fixture.capture(id: deviceID, bytes: 28), scope: scope)
+        try outbox.saveOnDevice(id: deviceID, scope: scope)
+        let pending = try outbox.legacyStatus(scope: scope)
+        XCTAssertEqual(pending["state"] as? String, "pending")
+        XCTAssertEqual(pending["scanId"] as? String, pendingID.uuidString.lowercased())
+        let server = FakeLiDARServer(scope: scope, id: pendingID, bytes: try Data(contentsOf: capture.archiveURL))
+        XCTAssertTrue(server.calls.isEmpty)
+        let receipt = try await outbox.upload(id: pendingID, scope: scope, session: server)
+        let saved = try outbox.legacyStatus(scope: scope)
+        XCTAssertEqual(saved["state"] as? String, "saved")
+        XCTAssertEqual(saved["fileThingId"] as? String, receipt.fileThingId)
+        XCTAssertNil(try outbox.entry(id: deviceID, scope: scope).receipt)
+        XCTAssertEqual(try outbox.library(scope: scope).count, 2)
+        let incompleteID = try outbox.reserve(scope: scope)
+        let interrupted = try outbox.legacyStatus(scope: scope, errors: [incompleteID: "Recovery is pending."])
+        XCTAssertEqual(interrupted["scanId"] as? String, incompleteID.uuidString.lowercased())
+        XCTAssertEqual(interrupted["error"] as? String, "Recovery is pending.")
+        let other = try FileSyncOwnerScope(ownerId: "other", url: scope.origin)
+        XCTAssertEqual(try outbox.legacyStatus(scope: other)["state"] as? String, "idle")
+    }
+
+    func testDeviceOnlyCatalogueIsLocalDurableAndCloudRequiresSeparateUpload() async throws {
+        let fixture = try LiDARUploadFixture()
+        defer { fixture.remove() }
+        let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
+        let outbox = fixture.outbox(), id = try outbox.reserve(scope: scope)
+        let capture = try fixture.capture(id: id, bytes: 89)
+        try outbox.record(capture, scope: scope)
+        let bytes = try Data(contentsOf: capture.archiveURL)
+        let server = FakeLiDARServer(scope: scope, id: id, bytes: bytes)
+        XCTAssertNil(try outbox.entry(id: id, scope: scope).deviceSavedAt)
+        try outbox.saveOnDevice(id: id, scope: scope)
+        let saved = try XCTUnwrap(fixture.outbox().entry(id: id, scope: scope).deviceSavedAt)
+        try fixture.outbox().saveOnDevice(id: id, scope: scope)
+        XCTAssertEqual(try fixture.outbox().entry(id: id, scope: scope).deviceSavedAt, saved)
+        XCTAssertTrue(server.calls.isEmpty)
+        XCTAssertEqual(server.uploads, 0)
+        XCTAssertNil(try outbox.entry(id: id, scope: scope).receipt)
+        XCTAssertEqual(try Data(contentsOf: capture.archiveURL), bytes)
+        let library = try XCTUnwrap(outbox.library(scope: scope).first)
+        XCTAssertEqual(library["deviceSaved"] as? Bool, true)
+        XCTAssertEqual(library["available"] as? Bool, true)
+        XCTAssertNil(library["fileThingId"])
+        XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: library), as: UTF8.self).contains(capture.archiveURL.path))
+
+        let receipt = try await outbox.upload(id: id, scope: scope, session: server)
+        XCTAssertEqual(receipt.fileThingId, id.uuidString.lowercased())
+        XCTAssertEqual(server.uploads, 1)
+        XCTAssertEqual(try outbox.entry(id: id, scope: scope).deviceSavedAt, saved)
+    }
+
+    func testDeviceCatalogueDecodesLegacyEntriesAndRejectsForeignOrIncompleteScans() throws {
+        let fixture = try LiDARUploadFixture()
+        defer { fixture.remove() }
+        let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
+        let outbox = fixture.outbox(), id = try outbox.reserve(scope: scope)
+        XCTAssertThrowsError(try outbox.saveOnDevice(id: id, scope: scope))
+        let capture = try fixture.capture(id: id, bytes: 47)
+        try outbox.record(capture, scope: scope)
+        let file = fixture.directory.appendingPathComponent("outbox/\(id.uuidString.lowercased()).json")
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        legacy.removeValue(forKey: "deviceSavedAt")
+        try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+        XCTAssertNil(try fixture.outbox().entry(id: id, scope: scope).deviceSavedAt)
+        for other in [try FileSyncOwnerScope(ownerId: "other", url: scope.origin),
+                      try FileSyncOwnerScope(ownerId: scope.ownerId, url: URL(string: "https://other.test")!)] {
+            XCTAssertThrowsError(try outbox.saveOnDevice(id: id, scope: other))
+            XCTAssertTrue(try outbox.library(scope: other).isEmpty)
+        }
+        try outbox.saveOnDevice(id: id, scope: scope)
+        try outbox.discard(id: id, scope: scope)
+        XCTAssertThrowsError(try outbox.saveOnDevice(id: id, scope: scope))
+        XCTAssertTrue(try outbox.library(scope: scope).isEmpty)
+    }
+
+    func testLibraryRetainsEveryIncompleteAndRecoveredScanWithScopedRecoveryState() async throws {
+        let fixture = try LiDARUploadFixture()
+        defer { fixture.remove() }
+        let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
+        let outbox = fixture.outbox(), incompleteID = try outbox.reserve(scope: scope)
+        let interruptedID = try outbox.reserve(scope: scope)
+        var writer: LiDARCaptureStore? = try fixture.startCapture(id: interruptedID, bytes: 73)
+        XCTAssertNotNil(writer)
+        writer = nil
+        let recovered = try await outbox.recover(id: interruptedID, scope: scope)
+        XCTAssertEqual(recovered?.isPartial, true)
+        let library = try outbox.library(scope: scope, errors: [incompleteID: "Recovery is pending."])
+        XCTAssertEqual(library.count, 2)
+        let incomplete = try XCTUnwrap(library.first { $0["scanId"] as? String == incompleteID.uuidString.lowercased() })
+        XCTAssertEqual(incomplete["available"] as? Bool, false)
+        XCTAssertEqual(incomplete["error"] as? String, "Recovery is pending.")
+        let partial = try XCTUnwrap(library.first { $0["scanId"] as? String == interruptedID.uuidString.lowercased() })
+        XCTAssertEqual(partial["available"] as? Bool, true)
+        XCTAssertEqual(partial["isPartial"] as? Bool, true)
+        XCTAssertNil(partial["fileThingId"])
+    }
+
     func testOfflineArchiveRemainsPendingAndLostCommitReplaysExactPayload() async throws {
         let fixture = try LiDARUploadFixture()
         defer { fixture.remove() }

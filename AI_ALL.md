@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## One user-visible chat per task
+
+Original request (verbatim, 11 November 2026):
+
+> Can you find out which chat made all of these ??? :O And tell it not to and just use 1 chat for whatever it was doing? And to add this same instruction and example to AI_ALL.md please
+
+- Keep one existing user-visible chat for each task, including retries, recovery, release checks and completion monitoring. Resume that chat through supported continuation; never create or fork replacement chats, per-run chats or sidebar chats unless the user explicitly requests them. Retain and reuse the stable chat/task IDs. If creation has an uncertain outcome, inspect current state before retrying rather than creating a duplicate.
+- Bounded internal subagents may handle distinct work within the same chat when delegation is authorized; they must not create additional user-visible sidebar chats. Internal delegation does not reset retry budgets or task ownership.
+- This rule takes precedence over older five-minute retry and `/loop` defaults. Check whether the scheduler creates a new user-visible chat on each run before using it. If it cannot continue the existing chat, do not use it for task retries or monitoring. Where the runtime prohibits automations that track a specific task to completion, continue permitted work in the current chat; never substitute another scheduler or workaround.
+- If duplicates already exist, stop their duplicate work, preserve useful evidence and consolidate continuation into the original chat. Do not delete chat history or archive chats without authorization.
+- Example (11 November 2026): the “Add dismiss option to draft dialog” chat created the five-minute `finish-ios-draft-dismiss-release` automation, which produced repeated “Finish iOS draft dismiss release” chats; the user's screenshot showed eleven same-titled entries. The correct recovery is to stop the duplicate-producing automation and continue the release task in its original chat, preserving the existing history.
+
 ## Get it done; report decisions after completion
 
 Original request (verbatim):
@@ -154,6 +166,34 @@ authoritative.
 - Keep retries bounded, preserve sessions and unrelated data, and report the
   exact remaining human-only dependency after supported recovery. Record source,
   synthetic, deployed, installed and live-provider evidence separately.
+
+## Compact, collapsible multi-section interfaces
+
+User guidance (12 November 2026):
+
+> “multi-section pages with config/settings and many UI parts should always have headings and minimal info and be collapsable/expandable please defaulted to collapsed please”
+
+- Treat compact progressive disclosure as a foundational layout rule. Give each
+  section a clear heading, a concise useful summary where needed, and an
+  accessible expand/collapse control. Start configuration, settings and other
+  multi-section device surfaces collapsed; preserve deliberate user choices
+  when the surface explicitly remembers them. Do not expand every section on
+  first render or mount expensive hidden content merely to populate summaries.
+- Keep the main browsing surface focused on its Things. Give substantial tools
+  such as LiDAR capture their own page, with clear navigation back. Use ordinary
+  Thing browser cards, selection and context menus for saved and pending items;
+  distinguish device-only storage from an explicit cloud save.
+- Put secondary actions in the relevant Thing or page context menu instead of
+  crowding breadcrumbs and headers. Keep setup beside or directly below its
+  device item, and hide setup once that device is already configured. Preserve
+  a keyboard- and touch-accessible menu trigger; right-click cannot be the only
+  way to reach an action.
+- Show the ten most recent location-log entries initially, newest first. Put an
+  inline **Show more** control immediately below the list to fetch the next page.
+  This is a presentation batch size, never a retention or total-history limit.
+- Compose headings, summaries, controls and repeated fields as individually
+  editable Builder blocks. Check collapsed, expanded, menu, loading, empty and
+  error states at desktop and mobile widths, including the bottom of the page.
 
 ## Power users: no arbitrary product limits
 

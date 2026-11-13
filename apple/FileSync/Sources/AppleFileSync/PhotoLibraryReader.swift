@@ -104,7 +104,7 @@ public struct PhotoOriginalDownloadControl: Sendable {
     }
 }
 
-/// One temporary original at a time, shared by bounded range reads. PhotoKit has
+/// A bounded set of temporary originals, shared by bounded range reads. PhotoKit has
 /// no public random-access resource API, so exports are file-backed, never held
 /// in one Data value. The cache is private, ephemeral and partitioned by grant.
 public final class PhotoLibraryReader: @unchecked Sendable {
@@ -195,9 +195,43 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         public var assetKey: String { PhotoLibraryReader.hash(Data(resource.asset.utf8)) }
     }
     private var prefetched: PreparedCloudOriginal?
-    private var cached: (scope: Scope, resource: PhotoResource, entry: MobileFolderReader.Entry, native: MobileFolderReader.Entry, bookmark: Data)?
-    public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
-                queueDirectory: URL? = nil) {
+    private struct CachedOriginal {
+        let scope: Scope
+        let resource: PhotoResource
+        let entry: MobileFolderReader.Entry
+        let native: MobileFolderReader.Entry
+        let bookmark: Data
+        let ownedDirectory: URL?
+        // A borrowed cloud original owns its own cleanup. Keep its lifetime
+        // while referenced; eviction must never delete its directory directly.
+        let borrowed: PreparedCloudOriginal?
+    }
+    private var originals: [CachedOriginal] = []
+    private let maximumOriginals: Int
+    private let reusableOriginalBytes: Int64
+    private func removeOriginal(at index: Int) {
+        let original = originals.remove(at: index)
+        if let directory = original.ownedDirectory { try? FileManager.default.removeItem(at: directory) }
+    }
+    private func trimOriginals(keeping resource: PhotoResource? = nil) {
+        // This is a reuse budget, not an input-size limit. A larger original is
+        // valid and retained alone across consecutive reads until competing work needs space.
+        while originals.count > maximumOriginals || (originals.count > 1 && originals.reduce(Int64(0), { min(reusableOriginalBytes + 1, $0 + min(reusableOriginalBytes + 1, $1.entry.size)) }) > reusableOriginalBytes) {
+            guard let index = originals.firstIndex(where: { $0.resource != resource }) else { break }
+            removeOriginal(at: index)
+        }
+    }
+    public convenience init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
+                            queueDirectory: URL? = nil) {
+        // Five upload siblings and their five lookahead originals can reuse
+        // verified bytes. This never limits the size of an accepted original.
+        self.init(provider: provider, transport: transport, queueDirectory: queueDirectory,
+                  maximumCachedOriginals: 10, reusableOriginalBytes: 128 * 1024 * 1024)
+    }
+    init(provider: any PhotoResourceProvider, transport: (any RustInventoryTransport)?, queueDirectory: URL? = nil,
+         maximumCachedOriginals: Int, reusableOriginalBytes: Int64) {
+        precondition(maximumCachedOriginals > 0 && reusableOriginalBytes > 0 && reusableOriginalBytes < Int64.max / 2)
+        self.maximumOriginals = maximumCachedOriginals; self.reusableOriginalBytes = reusableOriginalBytes
         self.queueDirectory = queueDirectory
         self.provider = provider
         #if os(macOS)
@@ -207,11 +241,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         #endif
         client = selected.map { RustInventoryClient(transport: $0) }
     }
-    deinit { if let directory { try? FileManager.default.removeItem(at: directory) } }
+    deinit { for original in originals { if let directory = original.ownedDirectory { try? FileManager.default.removeItem(at: directory) } }; if let directory { try? FileManager.default.removeItem(at: directory) } }
     public static func hash(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
     public func access() -> String { provider.access() }
     private func require() throws { try Task.checkCancellation(); guard ["full", "limited"].contains(provider.access()) else { throw Failure.unavailable } }
-    private func clear() { cached = nil; if let directory { try? FileManager.default.removeItem(at: directory) }; directory = nil }
+    private func clear() { while !originals.isEmpty { removeOriginal(at: originals.count - 1) }; if let directory { try? FileManager.default.removeItem(at: directory) }; directory = nil }
     public func discard() { lock.lock(); defer { lock.unlock() }; clear(); membership = nil }
     private func requireClient() throws -> RustInventoryClient {
         guard let client else { throw RustInventoryTransportFailure.unavailable }
@@ -246,7 +280,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func scanEntry(_ resource: PhotoResource, scope: Scope) throws -> MobileFolderReader.Entry {
-        if let cached, cached.scope == scope, cached.resource == resource {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        if originals.contains(where: { $0.scope == scope && $0.resource == resource }) {
             return try materialize(resource, scope: scope).0
         }
         try require(); try provider.validate(resource)
@@ -270,6 +305,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                              download: PhotoOriginalDownloadControl? = nil, beginDownload: () -> Bool = { true },
                              cloudGap: (PhotoResource) -> Void = { _ in }, gapReason: (PhotoResource, String) -> Void = { _, _ in },
                              progress: () -> Void = {}) throws -> [MobileFolderReader.Entry] {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
         let client = try requireClient()
         for resource in resources { try authorize(); try require(); try provider.validate(resource) }
         let observed: [MobileFolderReader.Entry?] = try client.run("photoObservations", scope: scope,
@@ -327,18 +363,27 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     private func materialize(_ resource: PhotoResource, scope: Scope, download: PhotoOriginalDownloadControl? = nil,
                              beginDownload: () -> Bool = { true }) throws -> (MobileFolderReader.Entry, MobileFolderReader.Entry, Data) {
         try require(); try provider.validate(resource)
-        if let cached, cached.scope == scope, cached.resource == resource {
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        if let index = originals.firstIndex(where: { $0.scope == scope && $0.resource == resource }) {
+            let cached = originals[index]
             try MobileFolderReader.access(cached.bookmark) { try validateNative(cached.native, root: $0) }
+            originals.remove(at: index); originals.append(cached)
             return (cached.entry, cached.native, cached.bookmark)
         }
         _ = try requireClient()
-        clear()
+        // A changed current resource cannot reuse the previous revision's bytes.
+        for index in originals.indices.reversed() where originals[index].resource.path == resource.path { removeOriginal(at: index) }
+        trimOriginals()
+        // A different working original must not coexist with an oversized
+        // reusable copy. The previous read has finished under this same lock.
+        if originals.count == 1, originals[0].entry.size > reusableOriginalBytes { removeOriginal(at: 0) }
         if let prefetched, prefetched.scope == scope, prefetched.resource == resource {
             let bookmark = try FolderBookmark.create(prefetched.directory)
             let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
             try require(); try provider.validate(resource)
             let entry = try project(native, resource: resource)
-            cached = (scope, resource, entry, native, bookmark)
+            originals.append(.init(scope: scope, resource: resource, entry: entry, native: native, bookmark: bookmark, ownedDirectory: nil, borrowed: prefetched))
+            trimOriginals(keeping: resource)
             return (entry, native, bookmark)
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-" + UUID().uuidString, isDirectory: true)
@@ -360,7 +405,10 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
             try require(); try provider.validate(resource)
             let entry = try project(native, resource: resource)
-            cached = (scope, resource, entry, native, bookmark); return (entry, native, bookmark)
+            originals.append(.init(scope: scope, resource: resource, entry: entry, native: native, bookmark: bookmark, ownedDirectory: root, borrowed: nil))
+            directory = nil
+            trimOriginals(keeping: resource)
+            return (entry, native, bookmark)
         } catch { clear(); throw error }
     }
     public func scan(scope: Scope) throws -> [MobileFolderReader.Entry] {
@@ -393,7 +441,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     private func resolve(path: String, scope: Scope) throws -> PhotoResource? {
         try require()
-        let hint = cached.flatMap { $0.scope == scope && $0.resource.path == path ? $0.resource : nil }
+        if originals.contains(where: { $0.scope != scope }) { clear() }
+        let hint = originals.last(where: { $0.scope == scope && $0.resource.path == path })?.resource
             ?? membership.flatMap { $0.scope == scope ? $0.resources[path] : nil }
         if let hint {
             do { try provider.validate(hint); return hint }

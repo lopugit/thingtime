@@ -279,6 +279,25 @@ test('transient retry deadlines survive restart, reject noisy early wakes, and p
  journal.close();
 });
 
+test('app opening wakes the saved local cadence without bypassing retry backoff, Pause or attention', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'cycle', 300_000);
+ const scheduled = (await jobs.finish(first, 100))!;
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const restored = (await jobs.read())!;
+ assert.equal(syncJobDue(restored, 200, true), false);
+ assert.equal(syncJobDue(restored, 200, true, true), true);
+ const begun = (await jobs.begin(restored, 200, 'next-cycle', undefined, true, true))!;
+ assert.equal(begun.state, 'runnable');
+ const backoff = (await jobs.defer(begun, 200, 120_000))!;
+ assert.equal(syncJobDue(backoff, 201, true, true), false, 'ambiguous/server retry deadlines remain binding');
+ assert.equal(await jobs.begin(backoff, 201, 'not-admitted', undefined, true, true), null);
+ const paused = (await jobs.pause(backoff))!;
+ assert.equal(syncJobDue(paused, 999_999, true, true), false);
+ assert.equal(syncJobDue({ ...scheduled, state: 'attention' }, 999_999, true, true), false);
+ journal.close();
+});
+
 test('strict native capture survives a lost reply and a failed cleanup across a reopen', async () => {
  const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
  const initial = saved(), captureId = crypto.randomUUID(), replacement = crypto.randomUUID();

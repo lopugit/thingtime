@@ -42,7 +42,7 @@ export async function readDeviceLocations(
 	signal: AbortSignal,
 	options: { cursor?: string; from?: string; to?: string } = {}
 ): Promise<DeviceLocationPage> {
-	const query = new URLSearchParams({ deviceId: scope.deviceId, type: 'location', ...options });
+	const query = new URLSearchParams({ deviceId: scope.deviceId, type: 'location', limit: '10', ...options });
 	return (await deviceLocationRequest(scope, '/api/v1/devices/observations?' + query, signal)) as DeviceLocationPage;
 }
 export async function saveDeviceLocationSettings(

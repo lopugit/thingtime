@@ -3157,11 +3157,12 @@ email whose link points at the attacker.
       return exact 206 bytes for the signed version and Range; altered key,
       version, method, expiry, signature, or missing/changed Range must fail.
       Range-only URLs must never serve a whole object or a clamped range.
-- [ ] Download all (PR: download-all attachments): a post with two or more
-      stored attachments shows a `Download all · N files · size` pill under its
-      gallery/file rows (single-file posts and linked-only galleries show none).
-      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
-      first, then saves `<post opener>.zip`; unzip it and confirm every stored
+- [ ] Download all: at desktop and narrow mobile widths, posts and comments
+      with multiple stored attachments show no inline `Download all` pill or
+      bulk-download control in their media lightbox. Open the post/comment ⋯
+      context menu and choose **Files → Download all files (N files)**. This
+      fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1` first,
+      then saves `<post opener>.zip`; unzip it and confirm every stored
       file is present in gallery order with duplicate names suffixed ` (2)`,
       linked media listed in `links.txt`, and moderation-pending/blocked files
       absent for other viewers. The post ⋯ menu shows a **Files** section with
@@ -12713,6 +12714,52 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS Photos launch and retry
 
+- Exercise five concurrent originals with preparation lookahead and multiple
+  upload parts. Count real resource exports and inventory observations: unchanged
+  originals must be reused between verification and part reads instead of being
+  exported and hashed again after each sibling switch. Preserve provider access,
+  exact resource revision and native file-stamp checks on cache hits. Test edits,
+  removal, revoked access, tampered staging bytes, owner/root changes and cleanup.
+  Exceed the reusable cache byte budget with one large video: consecutive reads
+  must retain that valid original without rejecting its size or rebuilding it
+  for every part; competing resources may evict reusable entries safely.
+- Open an unrelated Thingtime page first with enabled local Photos and folder
+  sync configs. Without visiting Device setup or pressing Retry, verify the
+  app-wide lifecycle wake admits each eligible config and starts its existing
+  worker. Visit and revisit device files/sync during that work: the editable
+  status shows immediate progress without resetting counters or moving the
+  layout. Confirm the single Lopu startup notification follows verified
+  admission, and failed or unavailable configs never produce an all-started
+  success message.
+- Repeat cold start, native bridge readiness, route navigation, foreground
+  return, React effect replay and simultaneous wake signals. Verify one active
+  operation per config and no duplicate startup notification. Change account,
+  API origin, data plane or paired device during discovery and confirm stale
+  callbacks cannot start work or announce success for the new identity.
+- Hold an automatically started ordinary-folder transfer open, navigate to
+  another app route, and verify Photos discovery/wake and other saved-config
+  admission still finish. Queued folder siblings must drain after the active
+  transfer releases its existing lane; navigation must neither cancel it nor
+  run the just-completed sibling again. Hold discovery itself separately and
+  confirm immediate checking feedback, then one acknowledged startup message.
+- Keep one config explicitly paused and exercise Wi-Fi-only, charging-only,
+  speed limits, hourly budgets and server Retry-After separately. App entry
+  must preserve those settings and waits; it must not request new folder or
+  Photos permission, wake an unrelated device, or convert a refused config
+  into success. Reopen after a transient interruption and verify an eligible
+  existing run resumes automatically with the same receipts and no Retry tap.
+- Extend a future server/unknown retry deadline with a longer local interruption
+  delay, then foreground the app. Verify the earlier external barrier is not
+  relabeled as wakeable local cadence. For foreground-entry continuation, check
+  accepted, queued, OS-declined, already-active and held/cancelled outcomes;
+  periodic and connectivity callbacks must not submit continued tasks.
+- With a long native scan held open, exercise the negotiated startup control
+  lane's list/status/wake requests. Verify independent cancellation, fresh
+  paired-device verification before reply, wrong-owner and obsolete-token
+  refusal, and unchanged data-operation identity. Old hosts must keep the
+  serialized path. Include more than two saved setup intents and a revoked
+  Photos grant: drain only after durable progress, stop on no progress, and
+  never announce all configs started while an enabled one remains unverified.
 - Reopen a current native build with an enabled private Photos backup and an
   older unfinished journal. Interrupt the native scan while the app is inactive,
   including the legacy “Folder access paused” reply. Verify that foreground
@@ -16044,7 +16091,7 @@ private readback while an unrelated Home fixture remains paused.
   a 512 MiB native indexer budget from missing readings. The iOS browser fixture
   deliberately supplies stale policy-like readings to verify they stay hidden.
 
-## iOS LiDAR capture and automatic Things save
+## iOS LiDAR capture and explicit Things save
 
 - Recover a valid sparse archive larger than 6 GB and compare frame counts and
   original bytes. Inject an invalid early header and interrupt before the first
@@ -16309,7 +16356,9 @@ never print the file-download JSON, encryption metadata or signed URL.
   fixture. Simulator/build evidence does not establish physical background work.
 
 
-Relational collection scale acceptance: save more than 100 selected app Things,
+### Relational collection scale acceptance — 2026-11-12
+
+Save more than 100 selected app Things,
 20 database endpoints, 10 deployment links and 50 path rules through the real
 API with isolated identities. Check secret redaction, duplicate refusal,
 authoritative empty migration, unavailable vault key, revocation and rollback.
@@ -16318,3 +16367,33 @@ reload all four families and verify byte accounting/ownership/deletion. Pin
 more than five posts and exhaust feed cursors without duplicates or omissions.
 Inspect consent paging and subspace moderator forms at desktop/mobile widths,
 including loading/retry, selection preservation and bottom-of-page controls.
+
+### Compact devices and explicit scan library saves — 2026-11-12
+
+- At desktop/mobile widths, confirm Things breadcrumbs have no LiDAR panel,
+  Device setup or Unfiled files button. Reach LiDAR scans and Unfiled files from
+  the touch/keyboard and background menus; reach Show Folder from the device menu.
+- Fresh device details start with all sections collapsed. Expand every available
+  section and menu, scroll to the bottom, and check focus, wrapping and overflow.
+  Preserve deliberate remembered choices and account isolation.
+- Paired and unknown native status hide Device setup. Unpaired/pending/revoked
+  status shows setup below its device card (a compact This device entry when no
+  registered item exists); successful pairing hides it immediately.
+- Compare location rows with an independent authorized API read. Initially show
+  the newest ten; inline Show more immediately below the list appends ten more
+  without duplicates and disappears at the end. Test filters, refresh, failure,
+  retry, and identity/device changes during reads. Preserve all stored history.
+- In the dedicated LiDAR page, inspect device and unsaved/partial scan Things.
+  Exercise Save to Thingtime via both button and context menu. Device only must
+  survive restart with no cloud write; Cloud must save the exact chosen scan and
+  verify the File/attachment receipt. Preserve originals and prior explicit
+  upload intents; old hosts must show the update requirement.
+- Physical LiDAR iPhone/iPad acceptance covers capture, device-only restart,
+  cloud save, cancellation and account changes. Simulator/fixture checks do not
+  establish sensor capture or real upload. Edit a nested label/control in Builder,
+  save/reload and recheck its behavior independently.
+
+- Focused rendered regressions: `cd remix && node scripts/device-details.browser.mjs`
+  and `node scripts/lidar-scan.browser.mjs`. These use isolated Chromium with
+  synthetic HTTP/native data; keep their evidence separate from deployed data
+  and physical LiDAR acceptance.

@@ -145,6 +145,7 @@ export type ThingsItemAction =
 
 export type ThingsItemHandlers = {
   compact?: boolean;
+  itemActions?: (thing: ThingsThing) => React.ReactNode;
   builderMode?: boolean;
   menuZIndex?: number;
   itemHref?: (thing: ThingsThing) => string;
@@ -178,6 +179,8 @@ export type ThingsDevicePresentation = {
 	deviceCounts?: Record<string, { commands: number; approvals: number }>;
 	selectedDeviceId?: string | null;
 	deviceMenuId?: string | null;
+	deviceFooter?: (state: DeviceRuntimeState) => React.ReactNode;
+	deviceSetup?: React.ReactNode;
 	onDeviceSelect?: (deviceId: string) => void;
 	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
@@ -336,7 +339,9 @@ export const ThingsGridView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -346,10 +351,10 @@ export const ThingsGridView = ({
 	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
 		{devices.map((state) =>
 			state.summary ? (
-				<DeviceCard
+				<Box key={`device:${state.deviceId}`} minWidth={0}>
+					<DeviceCard
 					device={state.summary}
 					controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -357,8 +362,11 @@ export const ThingsGridView = ({
 					selected={selectedDeviceId === state.deviceId}
 					snapshot={state.snapshot}
 				/>
+					{deviceFooter?.(state)}
+				</Box>
 			) : null
 		)}
+    {deviceSetup}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
       const iconBlock = <ThingIconDisplay thing={thing} />;
@@ -414,6 +422,7 @@ export const ThingsGridView = ({
             {thing.author?.id === handlers.ownerId && <Button size="sm" variant="ghost" onClick={() => handlers.onItemAction(thing, 'edit')}>Edit app</Button>}
           </Flex>}
           <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
     })}
@@ -435,7 +444,9 @@ export const ThingsListView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -449,10 +460,10 @@ export const ThingsListView = ({
 			<Box {...CARD_STYLES} overflow="hidden" padding={0}>
 				{devices.map((state) =>
 					state.summary ? (
-						<DeviceListRow
+						<Box key={`device:${state.deviceId}`} minWidth={0}>
+							<DeviceListRow
 							device={state.summary}
 							controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -460,10 +471,13 @@ export const ThingsListView = ({
 							selected={selectedDeviceId === state.deviceId}
 							snapshot={state.snapshot}
 						/>
+							{deviceFooter?.(state)}
+						</Box>
 					) : null
 				)}
 			</Box>
 		) : null}
+		{deviceSetup}
 		{items.length ? (
   <Box {...CARD_STYLES} overflow="hidden">
     <Flex
@@ -560,6 +574,7 @@ export const ThingsListView = ({
           </Box>
         )}
         <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
         </Flex>
       );
     })}
@@ -586,7 +601,9 @@ export const ThingsColumnsView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceContextMenu
+	onDeviceContextMenu,
+	deviceFooter,
+	deviceSetup
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -617,10 +634,10 @@ export const ThingsColumnsView = ({
 					{depth === 0
 						? devices.map((state) =>
 								state.summary ? (
-									<DeviceListRow
+									<Box key={`device:${state.deviceId}`} minWidth={0}>
+										<DeviceListRow
 										device={state.summary}
 										controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
-										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
 					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
@@ -628,9 +645,12 @@ export const ThingsColumnsView = ({
 										selected={selectedDeviceId === state.deviceId}
 										snapshot={state.snapshot}
 									/>
+										{deviceFooter?.(state)}
+									</Box>
 								) : null
 						  )
 						: null}
+          {depth === 0 ? deviceSetup : null}
           {(items || []).map((thing) => {
             const selected = handlers.selected.has(thing.id);
             const folder = isFolder(thing);
@@ -674,6 +694,7 @@ export const ThingsColumnsView = ({
                   </Box>
                 )}
                 <RecordingThingTranscript thing={thing} />
+          {handlers.itemActions && <Box width="100%" onClick={event => event.stopPropagation()}>{handlers.itemActions(thing)}</Box>}
               </Flex>
             );
           })}

@@ -39,7 +39,20 @@ export type NativePhotoRunProgress = {
 	continuation?: 'active' | 'held';
 	activity?: NativePhotoRunActivity;
 };
-export type NativePhotoRunStatus = { configurationRevision: string | null; photoRunProgress: NativePhotoRunProgress | null };
+export type NativePhotoRunStatus = { configurationRevision: string | null; photoRunProgress: NativePhotoRunProgress | null; wake?: NativePhotoRunWake };
+const wakeReasons = ['inactive', 'identity', 'missing', 'authorization-required', 'paused', 'needs-review', 'source-changed', 'source-unavailable', 'conditions', 'backoff', 'budget'] as const;
+export type NativePhotoRunWake = { status: 'running' | 'queued' | 'waiting' | 'refused'; reason?: (typeof wakeReasons)[number]; continuation?: NativePhotoContinuation['status'] };
+export function parseNativePhotoRunWake(value: unknown): NativePhotoRunWake {
+    if (!record(value) || !['running', 'queued', 'waiting', 'refused'].includes(String(value.status)) ||
+        (value.reason !== undefined && !wakeReasons.some(reason => reason === value.reason)) ||
+        (['waiting', 'refused'].includes(String(value.status)) && value.reason === undefined) ||
+        (['running', 'queued'].includes(String(value.status)) && value.reason !== undefined) ||
+        (value.continuation !== undefined && !backgroundStatuses.some(status => status === value.continuation)) ||
+        (value.continuation === 'active' && value.status !== 'running'))
+        throw Error('Native Photos did not confirm the foreground wake.');
+    return { status: value.status as NativePhotoRunWake['status'], ...(value.reason ? { reason: value.reason as NativePhotoRunWake['reason'] } : {}),
+        ...(value.continuation ? { continuation: value.continuation as NativePhotoRunWake['continuation'] } : {}) };
+}
 const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const date = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
