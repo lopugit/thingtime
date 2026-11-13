@@ -343,10 +343,10 @@ test('verified vault reveal is explicit on both manifests with compatible client
 test('relationship consolidation publishes compatible additive migrations on both manifests', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
-	assert.equal(route['api.admin-migrations'], '1.4.1');
-	assert.equal(route['api.admin-migrations-run'], '1.5.0');
-	assert.equal(wellKnown['api.admin-migrations'].version, '1.4.1');
-	assert.equal(wellKnown['api.admin-migrations-run'].version, '1.5.0');
+	assert.equal(route['api.admin-migrations'], '1.5.0');
+	assert.equal(route['api.admin-migrations-run'], '1.6.0');
+	assert.equal(wellKnown['api.admin-migrations'].version, '1.5.0');
+	assert.equal(wellKnown['api.admin-migrations-run'].version, '1.6.0');
 	assert.equal(route['api.embed-things'], '1.0.1');
 	assert.equal(wellKnown['api.embed-things'].version, '1.0.1');
 	// Existing clients retain their compatible minimum; a client requiring the
@@ -375,7 +375,7 @@ test('both capability manifests advertise the bounded upload v2 contract', () =>
 	}
 	assert.equal(manifest.features['api.admin-subscriptions'].version, '1.1.1');
 	assert.equal(createApiCapabilitiesManifest().features['api.admin-subscriptions'], '1.1.1');
-	assert.equal(createApiCapabilitiesManifest().features['api.admin-migrations-run'], '1.5.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.admin-migrations-run'], '1.6.0');
 	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 
@@ -439,7 +439,7 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 
 test('the storage census and ciControl workbench allowlist publish their minor capability updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.admin-migrations'], '1.4.1');
+	assert.equal(manifest.features['api.admin-migrations'], '1.5.0');
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.1');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-raw-results'].version, '1.0.1');
 });
@@ -993,7 +993,7 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
   for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
  });
  test('incident cleanup is versioned on both origin manifests and rejects older or breaking servers', () => {
-  for (const [id, version] of [['api.admin-migrations', '1.4.1'], ['api.admin-migrations-run', '1.5.0']]) {
+  for (const [id, version] of [['api.admin-migrations', '1.5.0'], ['api.admin-migrations-run', '1.6.0']]) {
     assert.equal(createApiCapabilitiesManifest().features[id], version);
     assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[id].version, version);
   }

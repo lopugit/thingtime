@@ -1,5 +1,6 @@
 import { captureAdminErrorDiagnostic, type AdminErrorDiagnostic } from '../errors/adminDiagnostic';
 import { safeErrorText } from '../errors/safeError';
+import { AclWriteFenceError } from '../mongodb/aclWriteFence';
 import { StorageMutationError } from '../storage/storageCore';
 
 const safeMigrationId = (value: unknown): string =>
@@ -208,6 +209,9 @@ const storageMutationPresentation = (error: StorageMutationError): { status: num
 // while keeping the full original in server logs.
 export const migrationFailureResult = (migrationId: unknown, error: unknown, outcome: MigrationFailure['outcome'] = 'unknown'): MigrationFailure => {
 	const id = safeMigrationId(migrationId);
+  if (error instanceof AclWriteFenceError) {
+    return withDiagnosticSource({ ok: false, status: 503, error: error.message, outcome }, error);
+  }
   if (error instanceof StorageMutationError) {
 		console.error(`[migration ${id}]`, error);
 		const presentation = storageMutationPresentation(error);
