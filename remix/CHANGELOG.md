@@ -112,6 +112,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Permit protected legacy PR previews to discover and relay to their configured environment gateway with a server-only Vercel automation credential. Strip caller and response bypass headers, retain origin and signed-relay checks, and test secret non-reflection. `api.environment-gateway` 1.1.1. **Codex (AI)**
+
 - 2026-11-06: Exercise iOS inventory regressions through its supported backup mode and explicitly verify strict-watcher refusal; retain macOS strict coverage and all paging, policy, integrity and cancellation assertions. Full iOS runtime: 262 tests, zero failures, 10 existing opt-in skips. **Codex (AI)**
 
 - 2026-11-06: Add an independently negotiated bounded Mac compound byte upload beneath the existing guarded single-file commit, preserving fresh identity checks, callback-time authority and shared resources. Larger/custom-policy sources retain their existing transport. [PR 1375 verification](../PRs/1375-native-compound-upload-reduce-mac-upload-latency.md).
