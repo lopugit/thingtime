@@ -3,6 +3,7 @@ import React from 'react';
 import { Link as RouterLink } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { MarketingPublicationStatus } from '~/components/Marketing/MarketingPublicationStatus';
 import { useMarketingPublications, usePreviewAsVisitor } from '~/components/Marketing/marketingPublicationsStore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
 import { CATEGORIES, MARKETING_BASE, pageHref, pagesInCategory } from '~/marketing/catalog';
@@ -63,7 +64,8 @@ type SetState = (keys: string[], state: PublicationState | null, label: string) 
 
 export const MarketingPublishingTab = () => {
 	const lopu = useLopu();
-	const { publications, status, pending, apply, refresh } = useMarketingPublications();
+	const publicationsState = useMarketingPublications();
+	const { publications, status, pending, apply, refresh } = publicationsState;
 	const [preview, setPreview] = usePreviewAsVisitor();
 	const [openCategory, setOpenCategory] = React.useState<string | null>(null);
 	const [socialOpen, setSocialOpen] = React.useState(false);
@@ -125,6 +127,7 @@ export const MarketingPublishingTab = () => {
 						</Button>
 					</Flex>
 				</Flex>
+				<MarketingPublicationStatus state={publicationsState} retry={() => void refresh({ force: true })} />
 				<Flex gap={2} flexWrap="wrap" marginTop={4} data-testid="admin-marketing-stats">
 					<Stat label="Hub" value={<StateDot on={summary.hub} />} />
 					<Stat label="Category indexes" value={`${summary.categories.filter((category) => category.indexPublished).length} / ${summary.categories.length}`} />

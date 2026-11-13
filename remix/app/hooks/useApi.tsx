@@ -1,4 +1,5 @@
 import { usesPdfBlocks, PDF_BUILDER_REQUIREMENTS } from '../components/Attachments/pdfControlContract';
+import { THING_BROWSER_PIN_REQUIREMENTS, type ThingBrowserPinChange, type ThingBrowserPins } from '~/utils/thingBrowserPins';
 import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
 import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
 import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
@@ -1176,6 +1177,42 @@ export function useApi() {
       }, [asyncFetcher])
     },
     things: {
+      pins: {
+        get: useCallback(async (args: { path: string[]; cursor?: string; revision?: string }, options?: ThingRequestOptions): Promise<ThingBrowserPins> => {
+          const actor = options?.expectedActor ?? actionActor.current, plane = options?.expectedDataPlane ?? planeRef.current;
+          const origin = options?.expectedApiOrigin ?? window.location.origin;
+          const generation = rootIdentity.read().generation;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const identity = rootIdentity.read();
+            if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane) throw new DOMException('Account changed', 'AbortError');
+          };
+          guard();
+          await requireThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          await requireActiveThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          guard();
+          const result = await getJson(`/api/v1/things/pins${toQuery({ ...args, path: JSON.stringify(args.path) })}`, { ...options, expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin });
+          guard();
+          return result;
+        }, [getJson]),
+        update: useCallback(async (args: ThingBrowserPinChange, options?: ThingRequestOptions): Promise<ThingBrowserPins> => {
+          const actor = options?.expectedActor ?? actionActor.current, plane = options?.expectedDataPlane ?? planeRef.current;
+          const origin = options?.expectedApiOrigin ?? window.location.origin;
+          const generation = rootIdentity.read().generation;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const identity = rootIdentity.read();
+            if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane) throw new DOMException('Account changed', 'AbortError');
+          };
+          guard();
+          await requireThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          await requireActiveThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          guard();
+          const result = await asyncFetcher.submit(args, { action: '/api/v1/things/pins', ...options, expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin, errorContext: 'save pins' });
+          guard();
+          return result;
+        }, [asyncFetcher])
+      },
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
           await requireSharedContentCapability('api.things-export');

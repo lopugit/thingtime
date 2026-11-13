@@ -23,6 +23,9 @@ export type BasicServiceHealthStatus = {
 };
 
 const REQUEST_TIMEOUT_MS = 3500;
+export class ProtectedStatusTargetError extends PublicError {
+  constructor() { super('Branch deployment status requires authentication'); }
+}
 // Canonical local dev ports plus any worktree-derived overrides (set by
 // remix/scripts/worktree-ports.cjs via dev.mjs / PM2 env).
 const LOCAL_STATUS_PORTS = new Set(
@@ -127,21 +130,53 @@ export const resolveStatusTarget = (request: Request) => {
   };
 };
 
-export const fetchWithTimeout = async (url: string, init: RequestInit = {}) => {
+// Only platform supplied URLs can be identified as this project's protected
+// generated deployments. A caller supplied *.vercel.app target is not trusted.
+export const isPlatformGeneratedStatusOrigin = (origin: string) => {
+  const url = new URL(origin);
+  return url.protocol === 'https:' && url.hostname.endsWith('.vercel.app') &&
+    [process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL]
+      .map(normaliseOrigin).some(configured => configured === origin);
+};
+
+export const fetchWithTimeout = async <T = undefined>(url: string, init: RequestInit = {}, deadlineAt = Date.now() + REQUEST_TIMEOUT_MS,
+  consume?: (response: Response) => Promise<T>) => {
+  const remaining = deadlineAt - Date.now();
+  if (remaining <= 0) throw new DOMException('Remote status deadline exceeded', 'TimeoutError');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(new DOMException('Remote status deadline exceeded', 'TimeoutError')), remaining);
   const startedAt = Date.now();
 
   try {
     const response = await fetch(url, {
       ...init,
+      redirect: 'error',
       cache: 'no-store',
       signal: controller.signal
     });
 
+    if ((response.status === 401 || response.status === 403) && isPlatformGeneratedStatusOrigin(new URL(url).origin)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new ProtectedStatusTargetError();
+    }
+
+    // Keep the one deadline active through response consumption. Headers may
+    // arrive promptly while a body stalls indefinitely.
+    let abort: (() => void) | undefined;
+    const interrupted = new Promise<never>((_, reject) => {
+      abort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener('abort', abort, { once: true });
+    });
+    let body: T | undefined;
+    try {
+      body = consume ? await Promise.race([consume(response), interrupted]) : undefined;
+    } finally {
+      if (abort) controller.signal.removeEventListener('abort', abort);
+    }
     return {
       response,
-      responseMs: Date.now() - startedAt
+      responseMs: Date.now() - startedAt,
+      body
     };
   } finally {
     clearTimeout(timeout);
@@ -153,19 +188,19 @@ export const fetchRemoteJson = async <T,>(
   path: string,
   fallbackPath?: string
 ) => {
+  const deadlineAt = Date.now() + REQUEST_TIMEOUT_MS;
   const fetchJson = async (pathname: string) => {
-    const { response, responseMs } = await fetchWithTimeout(`${targetOrigin}${pathname}`, {
+    const { responseMs, body } = await fetchWithTimeout<T>(`${targetOrigin}${pathname}`, {
       headers: {
         Accept: 'application/json'
       }
+    }, deadlineAt, async response => {
+      if (!response.ok) throw new PublicError(`Remote status returned ${response.status}`);
+      return response.json() as Promise<T>;
     });
 
-    if (!response.ok) {
-      throw new PublicError(`Remote status returned ${response.status}`);
-    }
-
     return {
-      data: await response.json() as T,
+      data: body as T,
       responseMs
     };
   };
@@ -173,7 +208,7 @@ export const fetchRemoteJson = async <T,>(
   try {
     return await fetchJson(path);
   } catch (err) {
-    if (!fallbackPath) {
+    if (!fallbackPath || err instanceof ProtectedStatusTargetError) {
       throw err;
     }
 
@@ -192,7 +227,7 @@ export const unavailableServiceStatus = (
     ok: false,
     service,
     state: 'unavailable',
-    label: `${serviceLabel}: unavailable`,
+    label: `${serviceLabel}: ${error instanceof ProtectedStatusTargetError ? 'authentication required' : 'unavailable'}`,
     checkedAt: new Date().toISOString(),
     origin,
     targetOrigin: origin,

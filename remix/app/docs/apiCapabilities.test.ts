@@ -1,3 +1,4 @@
+import { THING_BROWSER_PIN_REQUIREMENTS } from '../utils/thingBrowserPins';
 import { LIBRARY_ARCHIVE_READ_REQUIREMENTS } from '~/schemas/libraryArchive';
 import { PAGE_COLLECTION_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesSourceInputReferences } from '../schemas/authoredControls';
 import { THING_STORAGE_CLOUD_WRITE_REQUIREMENTS, THING_STORAGE_POLICY_PATH, THING_STORAGE_POLICY_REQUIREMENTS } from '../utils/thingStoragePolicy';
@@ -393,7 +394,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
 	assert.equal(manifest.features['api.devices'], '1.16.0');
-	assert.equal(manifest.features['api.devices-node-state'], '1.15.1');
+	assert.equal(manifest.features['api.devices-node-state'], '1.15.2');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.11.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.3.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.8.0');
@@ -416,7 +417,7 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 		federationId: 'development',
 		authorityOrigin: 'https://dev.thingtime.com'
 	});
-	assert.equal(manifest.features['api.capabilities'], '1.2.0');
+	assert.equal(manifest.features['api.capabilities'], '1.3.0');
 	assert.deepEqual(manifest.dataEnvironment, {
 		schemaVersion: 1,
 		id: 'development',
@@ -535,7 +536,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.health-nitro'], '1.3.0');
+	assert.equal(manifest.features['api.health-nitro'], '1.3.1');
 	assert.equal(manifest.features['api.lopu-recordings-run'], '1.6.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
@@ -543,7 +544,7 @@ test('storage-aware health and the corrected email environment gate publish thei
 test('pooled MongoDB diagnostics publish compatible patches in both manifests', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
 	for (const [feature, version] of [
-		['api.health-mongodb', '1.0.2'],
+		['api.health-mongodb', '1.0.3'],
 		['api.mongodb-status', '1.0.1'],
 		['api.mongodb-status-data', '1.0.1']
 	] as const) {
@@ -708,8 +709,8 @@ test('subspace discovery publishes its contract versions', () => {
 
 test('marketing publishing publishes its public read and admin write contracts', () => {
 	const manifest = createApiCapabilitiesManifest(Object.keys(routeModules));
-	assert.equal(manifest.features['api.marketing-publications'], '1.0.0');
-	assert.equal(manifest.features['api.admin-marketing-publications'], '1.0.0');
+	assert.equal(manifest.features['api.marketing-publications'], '1.1.0');
+	assert.equal(manifest.features['api.admin-marketing-publications'], '1.1.0');
 	assert.match(manifest.features[apiRouteCapabilityId('v1/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
 	assert.match(manifest.features[apiRouteCapabilityId('v1/admin/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
 });
@@ -728,7 +729,7 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
 test('agent testing and task installation negotiate their additive contracts', () => {
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
-    ['api.health-nitro', '1.3.0', '1.2.0'],
+    ['api.health-nitro', '1.3.1', '1.2.0'],
     ['api.lopu-recordings-run', '1.6.0', '1.5.0'],
     ['api.webpages-suites-install', '1.6.0', '1.4.0']
   ]) {
@@ -1274,4 +1275,25 @@ test('Archive extended reads reject the deployed Component-only 1.62 contract', 
   const runtime = thingtimeCapabilityManifest('https://archive.test').features['api.things'].version;
   for (const version of [current, runtime]) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), true);
   for (const version of [undefined, '1.62.0', '1.62.99', '2.0.0']) assert.equal(capabilitySatisfies(version, LIBRARY_ARCHIVE_READ_REQUIREMENTS['api.things']), false);
+});
+
+test('private path pins register both manifests and reject missing or incompatible client capabilities', () => {
+  const feature = 'api.things-pins', minimum = THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'];
+  const runtime = thingtimeCapabilityManifest('https://pins.test');
+  assert.equal(typeof routeModules['v1/things/pins'], 'function');
+  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features[feature], minimum);
+  assert.equal(runtime.features[feature].version, minimum);
+  assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/things/pins'), { feature, path: '/api/v1/things/pins', methods: ['GET', 'POST'] });
+  for (const version of [undefined, '0.9.9', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, minimum), true);
+});
+
+
+test('health protection diagnostics use compatible corrective versions on both manifests', () => {
+  const docs = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const runtime = thingtimeCapabilityManifest('https://health.test');
+  for (const [feature, version] of Object.entries({ 'api.health-frontend': '1.0.1', 'api.health-mongodb': '1.0.3', 'api.health-nitro': '1.3.1', 'api.health-vercel': '1.0.1' })) {
+    assert.equal(docs.features[feature], version);
+    assert.equal(runtime.features[feature].version, version);
+  }
 });

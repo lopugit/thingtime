@@ -804,6 +804,21 @@ branch runs its own control-plane contract CI. Updating the implementation no
 longer requires separately merging the same behavior into `develop` and `main`;
 the thin listeners on both branches call the same reviewed revision immediately.
 
+### Reviewed preview retirement
+
+The manual `develop-pr-preview.yml` listener accepts optional
+`retirement_deployment_ids` (a JSON array of exact deployment IDs) and
+`retirement_dry_run` (boolean). Explicit selection requires `pr_number: 0`.
+The protected controller support must be merged before forwarding these inputs;
+[controller PR #1499](https://github.com/lopugit/thingtime/pull/1499) supplies it.
+Empty selection and false keep existing scheduled and PR-event behavior.
+
+Run a selected batch with dry-run enabled first. Review its private decision
+artifact and current saved retention policy, recheck recent legitimate use, then
+execute only the reviewed exact IDs. The protected job retains its existing
+credentials and rechecks policy, project/PR ownership, grace, aliases and active
+roles. Adding listener inputs performs no cleanup or protection change.
+
 ### CodeQL coverage for every PR target and branch
 
 Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
@@ -1602,6 +1617,48 @@ the logical preview gateway without exposing unrelated standard-preview settings
 to branch code. A recent configuration audit found previews and
 custom develop already share the development cluster, separate from production;
 the master preview alias and gateway activation are still pending.
+
+### Preview protection and request-cost controls
+
+Existing device clients keep their 20-second long-poll protocol and event cursors.
+Idle command checks now avoid transactions, and disconnects stop pending work.
+A persistent device connection remains a separate architecture decision: hosting
+SSE or WebSockets in the same metered function would still reserve memory.
+Evaluate a dedicated persistent device service only with reconnect, lease,
+authorization and load measurements; this release does not introduce one.
+
+The 13 November cost controls retain the existing Vercel/MongoDB architecture:
+protect preview entry points, revalidate capability manifests conditionally,
+bound publication reads, and cancel device polling when its caller disconnects.
+No VPS or database migration is part of this change. Deployment protection is
+**not yet enabled** by these source changes; verify its live project setting
+and acceptance separately before recording it as active.
+
+For a fork using a protected Vercel gateway, generate an automation bypass secret
+in that project's Deployment Protection settings and provide
+`VERCEL_AUTOMATION_BYPASS_SECRET="<project-automation-bypass-secret>"` only to
+the server deployments that must call that configured gateway. This is a
+platform-entry bootstrap value: protection runs before the application's vault
+or authentication can be reached. Keep the existing gateway origin,
+environment, deployment identity and signing-secret configuration from
+[the gateway runbook](docs/environment-api-gateway.md); the automation secret
+does not replace signed gateway admission, session validation or route ACLs.
+
+Deploy the server support before enabling protection. Authority discovery and
+relayed API requests send the bypass header only to the validated configured
+gateway origin; incoming bypass headers are stripped. Never use a client/public
+variable, URL parameter, committed env file, response, or log to distribute the
+secret. Verify protected preview access, signed gateway reads/writes, approved
+automation and cron/webhook integrations before widening the protected scope;
+keep intended public production routes reachable.
+
+If enabling protection blocks an integration, restore the previous protection
+scope first and verify the existing signed gateway path. Retain the prior
+working deployment and environment configuration for normal alias rollback;
+remove or rotate a bypass secret only after its consumers are verified. Do not
+reset account data, weaken application authorization, or change hosting as a
+rollback shortcut. The [cost-control checklist](TESTING.md#request-cost-controls-13-november-2026)
+separates source checks from live protection and browser acceptance.
 
 Configure a self-hosted API or the environment gateway owner with:
 

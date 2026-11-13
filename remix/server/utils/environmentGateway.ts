@@ -3,6 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
+import { ROBOTS_PATH } from '../../app/api/utils/seo/sitemapCore';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
 import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
@@ -24,7 +25,9 @@ export const gatewayFailure = (status = 503, code = 'ENVIRONMENT_GATEWAY_UNAVAIL
   ok: false, code, error: 'The selected environment API gateway is unavailable or incompatible.'
 }, { status, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && (
+// Crawler policy belongs to this deployment, contains no account data, and must
+// remain available when an older or unavailable gateway cannot serve its APIs.
+export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && pathname !== ROBOTS_PATH && (
   pathname === '/api' || pathname.startsWith('/api/') || pathname === '/social-card' || pathname === '/sitemap.xml' ||
   apiEndpointDocs.some(doc => doc.endpoint === pathname && pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH)
 );

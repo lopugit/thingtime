@@ -29,12 +29,19 @@ result-card host initialization (`b530d760a`). The latter's independent
 `api.chatgpt-mcp` 2.2.1 contract and regression tests are preserved alongside the
 PDF contracts. Media and PDF implementation files are unchanged by these merges.
 
+The final integration includes main `a9f0639bf` (parent-path pins and bounded
+capability/gateway revalidation), together with the resolver-authored gateway
+protection patch `1c91932fa`. Upstream gateway/capability implementations already
+contain the protection behavior and remain intact; distinct original regression
+tests are preserved. PDF write gates coexist with pin APIs and their tests.
+The same actual-media/PDF browser fixture was rerun against this integrated tree.
+
 ## Verification
 
-- Things suite: 356 tests plus 35 projection tests passed.
-- Merged-tree API capability suite: 182 tests passed; focused media, source-retention and schema suite: 29 passed.
+- Final integrated Things suite: 378 tests plus 35 projection tests passed.
+- Final integrated API capability suite: 201 tests passed; gateway discovery/relay suite: 24 passed. Earlier focused media, source-retention and schema suite: 29 passed.
 - Merged-tree TypeScript check passed with no diagnostics. Targeted lint had zero errors and existing `useApi` warnings.
-- Client build passed before main integration; the merged server was rebuilt successfully. A real HTTP smoke of that compiled server verified Things 1.66.0 and update 1.30.0 on both manifests and endpoint docs, without database writes or production credentials.
+- Final integrated client and server builds passed. A real HTTP smoke of that compiled server verified Things 1.66.0 and update 1.30.0 on both manifests and endpoint docs, without database writes or production credentials.
 - The merged-tree actual PDF.js/React browser fixture passed at 1280×900 and 390×844: Names/Previews thumbnails, full image pixels, page/zoom/fit/text controls, range reads for a document over 256 KiB, Character header/query identity, refusal and retry, individual Builder selection/edit/save/reload, full-page scrolling and overflow checks.
 - Browser API data was synthetic and isolated. This is browser viewport coverage, not physical iPhone acceptance. Real production image/PDF acceptance remains a release step and is recorded in the PR delivery status.
 

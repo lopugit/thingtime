@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+`api.things-pins` 1.0.0 registers the private session-only GET/POST
+`/api/v1/things/pins` contract. Pins use owner/origin/data-plane/parent-path
+identity, bounded cursor reads and revision-fenced writes. Generic Things
+reads/writes exclude its protected relational kinds. The shared browser client
+negotiates the feature before pin work. See [parent-path pins](../thing-browser-pins.md)
+and run `test:things` plus the disposable real API/browser pin acceptance.
+
 `api.chatgpt-mcp` 2.2.1 and `chatgpt.ui` 1.1.1 fix the shared result card's
 MCP Apps bridge. `pluginLimitlessCore.ts` initializes the parent host before
 standard `tools/call`, bounds and correlates requests, and retains displayed
@@ -781,6 +788,35 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+### Branch health diagnostics
+
+Health frontend 1.0.1, MongoDB 1.0.3, Nitro 1.3.1 and Vercel 1.0.1 preserve
+the selected Branch target. `health/statusTarget.ts` checks anonymously, rejects
+redirects and bounds headers, bodies and legacy fallback by one 3.5s deadline.
+Only an observed 401/403 from the exact platform-generated branch/deployment
+origin gets the redacted authentication-required label. No bypass credential is
+sent, so public diagnostics cannot grant access to protected previews.
+Run `test:api-capabilities` and verify the footer at desktop/mobile widths.
+
+## Request cost controls
+
+`server/handlers/thingtime-capabilities.ts` hashes the complete exact-origin
+manifest for ETag/304 and supports HEAD/OPTIONS without caching alias ownership.
+`requireCapability.client.ts` deduplicates checks, revalidates after its freshness
+window and scopes retained manifests to origin/transport; active-API checks keep
+their independent authority. Both public and active manifests remain registered.
+`seo-robots` 1.1.1 serves each deployment's crawler policy locally, outside
+gateway data ingress; an older or unavailable gateway cannot turn its exclusion
+into a 409. API and data-backed sitemap requests retain normal admission.
+`marketingPublications.ts` and its public/admin routes return explicit stale or
+unavailable read results; a committed write is distinct from failed readback.
+`mongodb/requestBudget.ts` carries opt-in driver/transaction deadlines through
+existing collection access. Device event/command/state routes reuse it alongside
+`devicePolling.ts` cancellation and bounded collision retries. Authentication,
+rate limits, accounting and private projections stay on their existing paths.
+Run the capability, marketing, devices and collections suites; see the
+[manual cost-control checks](../../TESTING.md#request-cost-controls-13-november-2026).
+
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
