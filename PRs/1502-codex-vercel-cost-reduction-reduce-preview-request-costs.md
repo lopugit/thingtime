@@ -83,3 +83,7 @@ snapshots remain preserved; changed Markdown semantic coverage is not claimed.
 A final bounded warm-cache pass determines the selected portable output; its
 observed result is retained in the release evidence rather than inferred from
 a passing source check.
+
+### Current main integration — 13 November 2026, 11:32 UTC
+
+Integrated main `4b6d67e4ea` (parent-path pins) after the previous head's four required checks passed. Only additive feature-map/changelog prose conflicted; both features remain. Cost notes now sit alongside deployment guidance to reduce common prepend conflicts. Combined capability tests pass 191/191 and the TypeScript ratchet reports zero errors. A bounded 120-second structural Graphify refresh reached all 4,505 files but did not finish; the existing valid immutable snapshots remain, and combined-source indexing is incomplete. Fresh required checks own this new head; no gate bypass.

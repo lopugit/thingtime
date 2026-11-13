@@ -262,6 +262,22 @@ action to `buildThingsItemMenu`, handle it in both `onItemAction` and
 `onItemMenuAction` in `ThingsPage.tsx`, and keep bulk selections in mind
 (`actCount > 1`).
 
+## Parent-path pins
+
+The shared Thing browser adds canonical Pin/Unpin and Reorder pins actions through
+`schemas/thingActions.ts`, `thingEntityMenu.ts` and `thingsMenuModel.ts`.
+`useThingPathPins.ts` fences account/origin/data-plane state and reads paginated
+private placement records; `thingPathPins.ts` defines stable page/parent paths
+and filtered ordering. `ThingPinControls.tsx` serves pointer/touch, keyboard and
+move-button controls in grid/list/columns and stored cloud-file views.
+
+The protected relational `thing-browser-pin` and `thing-browser-pin-scope` kinds
+are implemented by `api/utils/things/thingBrowserPins.ts`, with the origin-scoped
+`api.things-pins` 1.0.0 contract registered at `/api/v1/things/pins`. Source ACLs,
+shared unique/index helpers, transactions and storage accounting remain server
+owned. See [the pin contract](../thing-browser-pins.md), `TESTING.md` and
+`remix/scripts/test-thing-pins-ui.mjs` for isolation, paging and real-browser checks.
+
 ## Folder and metadata editing
 
 Explicit legacy data folders use the same browsing, owner and cycle fences as

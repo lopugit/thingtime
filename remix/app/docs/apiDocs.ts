@@ -11852,6 +11852,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       metadata: { id: null, targetId: 'source_thing', sourceHash: 'a'.repeat(64), canonicalVersion: 1, jsonBytes: 128, attachedBytes: 0, knownAttachedBytes: 0, attachmentCount: 0, unavailableAttachmentCount: 0 } } }]
   }),
   endpoint({
+    id: 'things-pins', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
+    title: 'Thing browser pins', endpoint: '/api/v1/things/pins', methods: ['GET', 'POST'],
+    summary: 'Private ordered pins scoped to an exact page and complete parent path.',
+    detail: 'GET path is a JSON array of stable page and ancestor identities. Follow nextCursor with the same revision until null, then sort combined pins by order; an authorization-filtered empty page can still have a cursor. A changed revision returns 409, requiring a fresh first page. Pins are independent for each origin, owning account, selected content plane and complete path. POST pin/unpin accepts thingId; reorder accepts the complete visible thingIds order. Every mutation requires the current revision (initially 0). A stale revision returns 409 without changing pins. Each pin is a private relational Thing; no target content, placement or audience is changed. Targets are reauthorized on every read and pin; missing, revoked and unsupported protected targets are omitted without an existence reason. An owned archived dedicated-content pin may include an optional presentation containing only its canonical minimal archive browser card (generic label, kinds and timestamps); protected source bodies, participants and media bindings are never returned. Active dedicated content and foreign-owner archived metadata remain unavailable. Owned device identities are supported only on the home content plane. App, device and scoped PAT callers are refused. Pin rows use canonical account storage admission, and scope revisions serialize concurrent first creation, pinning and reordering. There is no product pin count limit.',
+    auth: { mode: 'session-or-bearer', description: 'Full first-party user session or user JWT only.' },
+    steps: ['Negotiate api.things-pins 1.0.0 at the selected origin and active API.', 'Read the stable page and complete parent path.', 'Write the intended change with its current revision, then read back.'],
+    requestExamples: [{ name: 'Read pins', description: 'Root Thing browser pins.', method: 'GET', query: { path: '["/things"]' } }],
+    responseExamples: [{ status: 200, description: 'Private authorized pins in saved order.', body: { ok: true, revision: '0', pins: [] } }, { status: 409, description: 'Concurrent change requires refresh.', body: { ok: false, error: 'Pins changed. Refresh before trying again.' } }]
+  }),
+  endpoint({
     id: 'things-storage-policy',
     featureVersion: '1.0.0',
     contractVersion: '1.0.0',
