@@ -394,7 +394,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
 	assert.equal(manifest.features['api.devices'], '1.16.0');
-	assert.equal(manifest.features['api.devices-node-state'], '1.15.1');
+	assert.equal(manifest.features['api.devices-node-state'], '1.15.2');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.11.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.3.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.8.0');
@@ -417,7 +417,7 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 		federationId: 'development',
 		authorityOrigin: 'https://dev.thingtime.com'
 	});
-	assert.equal(manifest.features['api.capabilities'], '1.2.0');
+	assert.equal(manifest.features['api.capabilities'], '1.3.0');
 	assert.deepEqual(manifest.dataEnvironment, {
 		schemaVersion: 1,
 		id: 'development',
@@ -709,8 +709,8 @@ test('subspace discovery publishes its contract versions', () => {
 
 test('marketing publishing publishes its public read and admin write contracts', () => {
 	const manifest = createApiCapabilitiesManifest(Object.keys(routeModules));
-	assert.equal(manifest.features['api.marketing-publications'], '1.0.0');
-	assert.equal(manifest.features['api.admin-marketing-publications'], '1.0.0');
+	assert.equal(manifest.features['api.marketing-publications'], '1.1.0');
+	assert.equal(manifest.features['api.admin-marketing-publications'], '1.1.0');
 	assert.match(manifest.features[apiRouteCapabilityId('v1/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
 	assert.match(manifest.features[apiRouteCapabilityId('v1/admin/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
 });

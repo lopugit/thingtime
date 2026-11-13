@@ -202,10 +202,11 @@ export const respondSitemap = async (request: Request, origin: string, source: S
 	return sitemapDocumentResponse(document, method);
 };
 
-export const respondRobots = (request: Request, origin: string): Response => {
+export const respondRobots = (request: Request, origin: string, options: { allowCrawling?: boolean } = {}): Response => {
 	const method = request.method.toUpperCase();
 	if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
-	return new Response(method === 'HEAD' ? null : buildRobotsTxt(origin), { headers: textHeaders });
+	const body = options.allowCrawling === false ? 'User-agent: *\nDisallow: /\n' : buildRobotsTxt(origin);
+	return new Response(method === 'HEAD' ? null : body, { headers: textHeaders });
 };
 
 export { buildRobotsTxt };

@@ -1,3 +1,4 @@
+import { assertDeviceOperation, deviceMongoOptions, retryDeviceSnapshot, type DeviceOperationOptions } from './devicePolling';
 import { deviceFolderIdentity } from '../../../fileSync/deviceFolders';
 import { mongoDataPlane } from '../mongodb/dataPlane';
 import { randomUUID } from 'node:crypto';
@@ -190,8 +191,8 @@ export const publicDeviceConnector = (doc: any): PublicDeviceConnector | null =>
 	};
 };
 
-const deviceOwnedBy = async (ownerId: string, deviceId: string, session?: any): Promise<any | null> =>
-	(await getHomeThingsCollection()).findOne({ shareId: deviceId, thingtime: 'device', ownerId } as any, session ? { session } : undefined);
+const deviceOwnedBy = async (ownerId: string, deviceId: string, session?: any, options?: DeviceOperationOptions): Promise<any | null> =>
+	(await getHomeThingsCollection()).findOne({ shareId: deviceId, thingtime: 'device', ownerId } as any, { ...(session ? { session } : {}), ...(options ? deviceMongoOptions(options) : {}) });
 
 export const deviceControlEventScopeKey = (ownerId: string, deviceId: string): string => deviceHash('control-event-scope', ownerId, deviceId);
 
@@ -808,11 +809,13 @@ type UpdateDeviceStateInput = {
 	connectors?: unknown;
 };
 
-export const updateDeviceState = async (
+const writeDeviceState = async (
 	ownerId: string,
 	deviceId: string,
-	input: UpdateDeviceStateInput
+	input: UpdateDeviceStateInput,
+	options: DeviceOperationOptions
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	assertDeviceOperation(options);
 	const descriptorPatch = input?.descriptorPatch === undefined ? undefined : normalizeDeviceDescriptorPatch(input.descriptorPatch);
 	if (descriptorPatch === null) return deviceFail(400, 'descriptorPatch requires model and only optional osVersion/appVersion strings');
 	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
@@ -824,14 +827,14 @@ export const updateDeviceState = async (
 	if (!Array.isArray(input?.connectors)) return deviceFail(400, 'connectors must be a complete bounded snapshot');
 	const connectors = normalizeDeviceConnectors(input.connectors);
 	if (!connectors) return deviceFail(400, 'connectors are invalid or exceed their bounds');
-	if (!(await deviceOwnedBy(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	if (!(await deviceOwnedBy(ownerId, deviceId, undefined, options))) return deviceFail(404, 'Device not found');
 
 	const things = await getHomeThingsCollection();
 	const stateKey = deviceHash('state', ownerId, deviceId);
 	const connectorKeys = connectors.map((connector) => deviceHash('connector', ownerId, deviceId, connector.id));
 	const [existingState, existingConnectors] = await Promise.all([
-		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any),
-		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
+		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any, deviceMongoOptions(options)),
+		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any, deviceMongoOptions(options)).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
 	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities, descriptorPatch);
@@ -859,105 +862,107 @@ export const updateDeviceState = async (
 	});
 
 	const now = new Date();
-	try {
-		await withHomeMongoTransaction(async (session) => {
-			if (stateDecision === 'insert') {
-				await insertAccountedThing(
-					things,
-					newDeviceThing('device-state', {
-						ownerId,
-						targetId: deviceId,
-						crystal: { deviceStateKey: stateKey, revision, stateHash, snapshotHash, state, observedAt: now }
-					}),
-					// Match the logical JSON byte stamp. BSON otherwise stores undefined telemetry as null.
-					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
-				);
-			} else if (stateDecision === 'update') {
-				const updated = await updateAccountedThing(
-					things,
-					{
-						_id: existingState._id,
-						'crystal.revision': existingState.crystal.revision,
-						...(typeof existingState.crystal?.snapshotHash === 'string'
-							? { 'crystal.snapshotHash': existingState.crystal.snapshotHash }
-							: { 'crystal.snapshotHash': { $exists: false } })
-					} as any,
-					{
-						$set: {
-							'crystal.revision': revision,
-							'crystal.stateHash': stateHash,
-							'crystal.snapshotHash': snapshotHash,
-							'crystal.state': state,
-							'crystal.observedAt': now,
-							updatedAt: now
-						}
-					},
-					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
-				);
-				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
-			}
-			if (descriptorPatch) {
-				await updateAccountedThing(things,{shareId:deviceId,ownerId,thingtime:'device'} as any,{$set:{...Object.fromEntries(Object.entries(descriptorPatch).map(([key,value])=>[`crystal.${key}`,value])),updatedAt:now}},{...HOME_ACCOUNTING,session});
-			}
-			if (capabilities !== undefined) {
-				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,
-					{ $set: { 'crystal.capabilities': capabilities, updatedAt: now } }, { ...HOME_ACCOUNTING, session });
-			}
-			await deleteAccountedThings(
+	await withHomeMongoTransaction(async (session) => {
+		assertDeviceOperation(options);
+		if (stateDecision === 'insert') {
+			await insertAccountedThing(
 				things,
-				{
-					thingtime: 'device-connector',
+				newDeviceThing('device-state', {
 					ownerId,
 					targetId: deviceId,
-					'crystal.deviceConnectorKey': { $nin: connectorKeys }
-				} as any,
-				{ ...HOME_ACCOUNTING, session }
+					crystal: { deviceStateKey: stateKey, revision, stateHash, snapshotHash, state, observedAt: now }
+				}),
+				// Match the logical JSON byte stamp. BSON otherwise stores undefined telemetry as null.
+				{ ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session, ignoreUndefined: true }
 			);
-			for (const entry of connectorEntries) {
-				if (!entry.existing) {
-					await insertAccountedThing(
-						things,
-						newDeviceThing('device-connector', {
-							ownerId,
-							targetId: deviceId,
-							crystal: {
-								deviceConnectorKey: entry.key,
-								revision,
-								connectorHash: entry.hash,
-								connector: entry.connector
-							}
-						}),
-						{ ...HOME_ACCOUNTING, session }
-					);
-				} else {
-					await updateAccountedThing(
-						things,
-						{ _id: entry.existing._id } as any,
-						{ $set: { 'crystal.revision': revision, 'crystal.connectorHash': entry.hash, 'crystal.connector': entry.connector, updatedAt: now } },
-						{ ...HOME_ACCOUNTING, session }
-					);
-				}
-			}
-			await appendDeviceEvent(
+		} else if (stateDecision === 'update') {
+			const updated = await updateAccountedThing(
+				things,
 				{
-					ownerId,
-					deviceId,
-					eventType: 'device.state',
-					resourceId: existingState?.shareId ? String(existingState.shareId) : deviceId,
-					revision,
-					payload: { connectorIds: connectors.map((connector) => connector.id) },
-					idempotencyKey: `state:${revision}:${snapshotHash}`
+					_id: existingState._id,
+					'crystal.revision': existingState.crystal.revision,
+					...(typeof existingState.crystal?.snapshotHash === 'string'
+						? { 'crystal.snapshotHash': existingState.crystal.snapshotHash }
+						: { 'crystal.snapshotHash': { $exists: false } })
+				} as any,
+				{
+					$set: {
+						'crystal.revision': revision,
+						'crystal.stateHash': stateHash,
+						'crystal.snapshotHash': snapshotHash,
+						'crystal.state': state,
+						'crystal.observedAt': now,
+						updatedAt: now
+					}
 				},
-				session
+				{ ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session, ignoreUndefined: true }
 			);
-		});
-	} catch (error: any) {
-		if (error?.code === 11000 || error?.status === 409 || error?.message === 'device_snapshot_race') {
-			return updateDeviceState(ownerId, deviceId, input);
+			if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
 		}
-		throw error;
-	}
+		if (descriptorPatch) {
+			await updateAccountedThing(things,{shareId:deviceId,ownerId,thingtime:'device'} as any,{$set:{...Object.fromEntries(Object.entries(descriptorPatch).map(([key,value])=>[`crystal.${key}`,value])),updatedAt:now}},{...HOME_ACCOUNTING,...deviceMongoOptions(options),session});
+		}
+		if (capabilities !== undefined) {
+			await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,
+				{ $set: { 'crystal.capabilities': capabilities, updatedAt: now } }, { ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session });
+		}
+		await deleteAccountedThings(
+			things,
+			{
+				thingtime: 'device-connector',
+				ownerId,
+				targetId: deviceId,
+				'crystal.deviceConnectorKey': { $nin: connectorKeys }
+			} as any,
+			{ ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session }
+		);
+		for (const entry of connectorEntries) {
+			if (!entry.existing) {
+				await insertAccountedThing(
+					things,
+					newDeviceThing('device-connector', {
+						ownerId,
+						targetId: deviceId,
+						crystal: {
+							deviceConnectorKey: entry.key,
+							revision,
+							connectorHash: entry.hash,
+							connector: entry.connector
+						}
+					}),
+					{ ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session }
+				);
+			} else {
+				await updateAccountedThing(
+					things,
+					{ _id: entry.existing._id } as any,
+					{ $set: { 'crystal.revision': revision, 'crystal.connectorHash': entry.hash, 'crystal.connector': entry.connector, updatedAt: now } },
+					{ ...HOME_ACCOUNTING, ...deviceMongoOptions(options), session }
+				);
+			}
+		}
+		await appendDeviceEvent(
+			{
+				ownerId,
+				deviceId,
+				eventType: 'device.state',
+				resourceId: existingState?.shareId ? String(existingState.shareId) : deviceId,
+				revision,
+				payload: { connectorIds: connectors.map((connector) => connector.id) },
+				idempotencyKey: `state:${revision}:${snapshotHash}`
+			},
+			session
+		);
+		assertDeviceOperation(options);
+	});
 	return { ok: true, revision, applied: true, stale: false };
+};
+
+export const updateDeviceState = async (ownerId: string, deviceId: string, input: UpdateDeviceStateInput,
+	options: DeviceOperationOptions = {}) => {
+	const budget = { ...options, deadlineAt: options.deadlineAt ?? Date.now() + 25_000 };
+	return await retryDeviceSnapshot(() => writeDeviceState(ownerId, deviceId, input, budget), budget)
+		?? deviceFail(409, 'Device state changed concurrently. Retry the latest snapshot.');
 };
 
 export type PublicDeviceEvent = {
@@ -986,11 +991,13 @@ export const listDeviceEvents = async (
 	ownerId: string,
 	deviceId: unknown,
 	cursorValue: unknown,
-	limitValue: unknown
+	limitValue: unknown,
+	options: DeviceOperationOptions = {}
 ): Promise<DeviceFail | { ok: true; events: PublicDeviceEvent[]; nextCursor: string | null }> => {
+	assertDeviceOperation(options);
 	const id = typeof deviceId === 'string' ? deviceId.trim() : '';
 	if (!id) return deviceFail(400, 'deviceId is required');
-	if (!(await deviceOwnedBy(ownerId, id))) return deviceFail(404, 'Device not found');
+	if (!(await deviceOwnedBy(ownerId, id, undefined, options))) return deviceFail(404, 'Device not found');
 	const cursor = cursorValue ? decodeDeviceEventCursor(cursorValue) : null;
 	if (cursorValue && !cursor) return deviceFail(400, 'cursor is invalid');
 	const requestedLimit = Number(limitValue);
@@ -1008,7 +1015,7 @@ export const listDeviceEvents = async (
 	if (cursor) {
 		filter.$or = [{ createdAt: { $gt: cursor.at } }, { createdAt: cursor.at, shareId: { $gt: cursor.id } }];
 	}
-	const docs = await (await getHomeThingsCollection()).find(filter).sort({ createdAt: 1, shareId: 1 }).limit(limit).toArray();
+	const docs = await (await getHomeThingsCollection()).find(filter, deviceMongoOptions(options)).sort({ createdAt: 1, shareId: 1 }).limit(limit).toArray();
 	const events = docs.map(publicEvent);
 	return { ok: true, events, nextCursor: events.at(-1)?.cursor ?? (typeof cursorValue === 'string' ? cursorValue : null) };
 };
