@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep PR preview environment-gateway discovery and signed relay working under Vercel deployment protection; reject spoofed or reflected bypass headers. Bump `api.environment-gateway` to 1.1.1. **Codex (AI)**
+
 - 2026-10-28: Add Recovery's native AI Apps manager with local client discovery,
   targeted Thingtime MCP/skill installation, version pins, rollback and automatic
   maintenance through verified Recovery bundles. Add an isolated native debug
