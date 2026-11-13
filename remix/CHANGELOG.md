@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep PR preview environment-gateway discovery and signed relay working under Vercel deployment protection; reject spoofed or reflected bypass headers. Bump `api.environment-gateway` to 1.2.1. **Codex (AI)**
+
 - 2026-10-27: Add negotiated owner/origin/data-bound read-only task diagnostics
   and the existing Thingtime fields inspector for release preflight evidence.
   Missing worker/finalizer receipts remain unknown; no recovery or unlock behavior
