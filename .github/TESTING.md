@@ -1,5 +1,17 @@
 # Control-plane regression checklist
 
+## CodeQL quota diagnostics (2026-11-14)
+
+- Run `node --test .github/scripts/codeql-polling.test.mjs .github/scripts/codeql-quota-diagnostics.test.mjs`.
+  Invalid events, refs, repositories and scan selections must fail before a probe;
+  diagnostic-mode skipped checks must never use required product Analyze names.
+- After reviewed rollout, an explicitly owned quota-only dispatch must make one
+  bounded read using its built-in token. Verify allowlisted core/upload counters
+  and UTC observation, unknown missing fields, and no raw responses or credentials.
+  A new diagnostic job does not identify a historical failed token or the upload
+  request's authoritative quota headers. Check normal before/always-after snapshots
+  separately during the next authorized analysis; do not dispatch scans just for QA.
+
 ## Protected checks and reviewed preview retirement (2026-11-13)
 
 - Run the protected-deployment-fetch, preview-retirement-request, orphan-preview-

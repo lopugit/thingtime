@@ -1,7 +1,8 @@
 name: Lopu CodeQL all branches
 
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch'
+  ${{ inputs.quota_only && 'Lopu CodeQL quota diagnostics'
+      || github.event_name == 'workflow_dispatch'
       && inputs.pr_number != ''
       && format('Lopu CodeQL PR #{0} @ {1}', inputs.pr_number, inputs.expected_head_sha)
       || github.event_name == 'pull_request'
@@ -38,6 +39,11 @@ on:
     branches: [github-actions]
   workflow_dispatch:
     inputs:
+      quota_only:
+        description: "Read current built-in repository-token quota without selecting or running an analysis"
+        required: false
+        default: false
+        type: boolean
       pr_number:
         description: "Open PR to scan; leave blank to scan the selected branch"
         required: false
@@ -58,8 +64,65 @@ permissions:
   contents: read
 
 jobs:
+  quota-diagnostics:
+    name: Inspect built-in token quota
+    if: github.event_name == 'workflow_dispatch' && inputs.quota_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Validate quota-only dispatch boundary
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          SELECTED_REF: ${{ github.ref }}
+          QUOTA_ONLY: ${{ inputs.quota_only }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          BACKFILL_LISTENER_OWNED: ${{ inputs.backfill_listener_owned }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != workflow_dispatch ] || [ "$REPO" != lopugit/thingtime ] ||
+             [ "$SELECTED_REF" != refs/heads/github-actions ] || [ "$QUOTA_ONLY" != true ] ||
+             [ -n "$PR_NUMBER" ] || [ -n "$EXPECTED_HEAD_SHA" ] || [ "$BACKFILL_LISTENER_OWNED" != false ]; then
+            echo '::error::Quota-only dispatch requires the canonical controller ref and no analysis selection.'
+            exit 1
+          fi
+
+      - name: Snapshot quota without analysis
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # One primary-quota-exempt read (still subject to secondary limits). Keep the
+          # token in the job boundary and emit neither raw response nor request headers.
+          probe_ok=false
+          quota_json=""
+          if quota_json="$(timeout --signal=TERM 30s gh api rate_limit 2>/dev/null)"; then probe_ok=true; fi
+          observed_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$probe_ok" = true ] && snapshot="$(jq -ce --arg observedUtc "$observed_utc" '
+            def counter:
+              if type != "number" then null
+              elif . < 0 or . > 9007199254740991 then null
+              elif floor != . then null else . end;
+            def bucket($name): (.resources[$name] // {}) |
+              {limit: (.limit | counter), remaining: (.remaining | counter), reset: (.reset | counter)};
+            {observedUtc: $observedUtc, core: bucket("core"), code_scanning_upload: bucket("code_scanning_upload")}
+          ' <<<"$quota_json" 2>/dev/null)"; then
+            printf '%s\n' "$snapshot"
+          else
+            jq -cn --arg observedUtc "$observed_utc" '{observedUtc: $observedUtc,
+              core: {limit: null, remaining: null, reset: null},
+              code_scanning_upload: {limit: null, remaining: null, reset: null}}'
+            exit 1
+          fi
+
   scope:
-    name: Select one analysis owner
+    # A quota dispatch must never mint even a skipped product-required check.
+    name: ${{ inputs.quota_only && 'Quota-only dispatch (no analysis owner)' || 'Select one analysis owner' }}
+    if: ${{ !inputs.quota_only }}
     runs-on: ubuntu-latest
     # The push path now waits up to 150s for PR adoption to settle before it
     # decides, so the old 5-minute ceiling no longer leaves room for the
@@ -322,9 +385,11 @@ jobs:
           } >>"$GITHUB_OUTPUT"
 
   analyze:
-    name: Analyze (${{ matrix.language }})
+    # Skipped jobs also create check runs. Keep diagnostic-mode names disjoint
+    # from the required Analyze contexts, including on an invalid dispatch ref.
+    name: ${{ inputs.quota_only && format('Quota-only dispatch ({0})', matrix.language) || format('Analyze ({0})', matrix.language) }}
     needs: scope
-    if: needs.scope.outputs.analyze == 'true'
+    if: ${{ !inputs.quota_only && needs.scope.outputs.analyze == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -878,6 +943,37 @@ jobs:
       # empty, and an empty output is `!= 'false'` -- without this clause a
       # disowned push would sail past its own guard and upload the branch
       # snapshot it just declined to register.
+      - name: Snapshot quota before Analyze
+        if: steps.preinit.outputs.own != 'false' && (needs.scope.outputs.analysis_ref != '' || steps.ownership.outputs.upload != 'false')
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # One primary-quota-exempt read (still subject to secondary limits). Keep the
+          # token in the job boundary and emit neither raw response nor request headers.
+          probe_ok=false
+          quota_json=""
+          if quota_json="$(timeout --signal=TERM 30s gh api rate_limit 2>/dev/null)"; then probe_ok=true; fi
+          observed_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$probe_ok" = true ] && snapshot="$(jq -ce --arg observedUtc "$observed_utc" '
+            def counter:
+              if type != "number" then null
+              elif . < 0 or . > 9007199254740991 then null
+              elif floor != . then null else . end;
+            def bucket($name): (.resources[$name] // {}) |
+              {limit: (.limit | counter), remaining: (.remaining | counter), reset: (.reset | counter)};
+            {observedUtc: $observedUtc, core: bucket("core"), code_scanning_upload: bucket("code_scanning_upload")}
+          ' <<<"$quota_json" 2>/dev/null)"; then
+            printf '%s\n' "$snapshot"
+          else
+            jq -cn --arg observedUtc "$observed_utc" '{observedUtc: $observedUtc,
+              core: {limit: null, remaining: null, reset: null},
+              code_scanning_upload: {limit: null, remaining: null, reset: null}}'
+            exit 1
+          fi
+
       - name: Analyze the triggering revision
         if: needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && steps.ownership.outputs.upload != 'false'
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
@@ -891,3 +987,34 @@ jobs:
           category: /language:${{ matrix.language }}
           ref: ${{ needs.scope.outputs.analysis_ref }}
           sha: ${{ needs.scope.outputs.analysis_sha }}
+
+      - name: Snapshot quota after Analyze
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # One primary-quota-exempt read (still subject to secondary limits). Keep the
+          # token in the job boundary and emit neither raw response nor request headers.
+          probe_ok=false
+          quota_json=""
+          if quota_json="$(timeout --signal=TERM 30s gh api rate_limit 2>/dev/null)"; then probe_ok=true; fi
+          observed_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$probe_ok" = true ] && snapshot="$(jq -ce --arg observedUtc "$observed_utc" '
+            def counter:
+              if type != "number" then null
+              elif . < 0 or . > 9007199254740991 then null
+              elif floor != . then null else . end;
+            def bucket($name): (.resources[$name] // {}) |
+              {limit: (.limit | counter), remaining: (.remaining | counter), reset: (.reset | counter)};
+            {observedUtc: $observedUtc, core: bucket("core"), code_scanning_upload: bucket("code_scanning_upload")}
+          ' <<<"$quota_json" 2>/dev/null)"; then
+            printf '%s\n' "$snapshot"
+          else
+            jq -cn --arg observedUtc "$observed_utc" '{observedUtc: $observedUtc,
+              core: {limit: null, remaining: null, reset: null},
+              code_scanning_upload: {limit: null, remaining: null, reset: null}}'
+            exit 1
+          fi

@@ -48,7 +48,7 @@ jobs:
         run: node --test .github/scripts/admin-model-order.test.mjs
 
       - name: Validate quota-aware CodeQL ordering
-        run: node --test .github/scripts/codeql-polling.test.mjs
+        run: node --test .github/scripts/codeql-polling.test.mjs .github/scripts/codeql-quota-diagnostics.test.mjs
 
       - name: Validate JavaScript syntax
         run: |
