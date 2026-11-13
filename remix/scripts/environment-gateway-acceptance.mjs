@@ -39,17 +39,24 @@ const instrumentation = join(dir, 'mongo-command-trace.mjs');
 // Nitro bundles the driver, so instrument that exact generated module rather
 // than a separate node_modules copy. This changes no application source/output.
 const endpointBundle = join(cwd, '.output/server/_chunks/endpoint.mjs');
-const mongoImport = (await readFile(endpointBundle, 'utf8')).match(/modulePromise \?\?= import\("([^\"]+)"\)/);
+const endpointSource = await readFile(endpointBundle, 'utf8');
+const mongoImport = endpointSource.match(/modulePromise \?\?= import\("([^\"]+)"\)/);
 assert.ok(mongoImport, 'Locate the built driver factory before collecting command evidence.');
 const driverBundle = new URL(mongoImport[1], pathToFileURL(endpointBundle)).href;
+// Rolldown may share CommonJS code as a named require factory instead of a
+// default export. Follow the exact factory consumed by this built endpoint.
+const driverFactory = endpointSource.match(/modulePromise \?\?= import\([^\n]+__toESM\(n\.([\w$]+)\(\)\)/)?.[1];
 await writeFile(instrumentation, `import{appendFileSync}from'node:fs';
 const driverModule=await import(${JSON.stringify(driverBundle)});
-const driver=typeof driverModule.t==='function'?driverModule.t():driverModule.default??driverModule;
+const factory=${JSON.stringify(driverFactory || null)};
+const driver=factory?(typeof driverModule[factory]==='function'?driverModule[factory]():null):typeof driverModule.t==='function'?driverModule.t():driverModule.default??driverModule;
 if(typeof driver?.MongoClient!=='function'||typeof driver.MongoClient.prototype?.connect!=='function')throw new Error('Built MongoDB driver must expose MongoClient.connect');
 const {MongoClient}=driver;
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
-for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
+for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};
+const close=MongoClient.prototype.close;
+MongoClient.prototype.close=async function(...args){const result=await close.apply(this,args);appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event:'clientClosed'})+'\\n');return result};`);
 function start(executable, args, extra = {}) {
   const child = spawn('/usr/bin/sandbox-exec', ['-f', policy, executable, ...args], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     PATH: process.env.PATH, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', HOST: '127.0.0.1',
@@ -67,17 +74,29 @@ const startNitro = (key, extra = {}) => start(process.execPath, ['--import', ins
 async function indexTrace(key) {
   let lines;
   try { lines = (await readFile(join(dir, `${key}-index.jsonl`), 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse); }
-  catch (error) { if (error.code === 'ENOENT') return { creates: 0, drops: 0, peak: 0 }; throw error; }
-  const active = new Set(); let peak = 0, creates = 0, drops = 0;
+  catch (error) { if (error.code === 'ENOENT') return { creates: 0, drops: 0, peak: 0, clientsClosed: 0 }; throw error; }
+  const active = new Set(); let peak = 0, creates = 0, drops = 0, clientsClosed = 0;
   for (const event of lines) {
     if (event.event === 'commandStarted') { active.add(event.id); if (event.command === 'createIndexes') creates++; else drops++; peak = Math.max(peak, active.size); }
+    else if (event.event === 'clientClosed') clientsClosed++;
     else active.delete(event.id);
   }
-  return { creates, drops, peak };
+  return { creates, drops, peak, clientsClosed };
+}
+async function expectPoolDrain(key, previous) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const closed = (await indexTrace(key)).clientsClosed;
+    if (closed > previous) return closed;
+    await delay(50);
+  }
+  assert.fail(`${key} must finish closing its MongoDB client after demotion.`);
 }
 async function ready(server, key) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.child.exitCode !== null) throw new Error('Built gateway exited before readiness.');
+    if (server.child.exitCode !== null) {
+      const diagnostic = server.log().replaceAll(jwt, '[redacted]').replaceAll(relaySecret, '[redacted]');
+      throw new Error(`Built ${key} gateway exited before readiness (${server.child.exitCode}): ${diagnostic}`);
+    }
     try { if ((await fetch(origin(key) + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(500) })).ok) return; } catch {}
     await delay(150);
   }
@@ -116,7 +135,7 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.ok(capabilitySatisfies(manifest.features['api.environment-gateway']?.version || '', '1.2.1'), 'Built gateway must advertise compatible api.environment-gateway 1.2.1 or newer.');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.ok(capabilitySatisfies(manifest.features['api.environment-gateway']?.version || '', '1.2.3'), 'Built gateway must advertise compatible api.environment-gateway 1.2.3 or newer.');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',
@@ -158,6 +177,7 @@ try {
   const branchPostId = branchPost.data.post?.id || branchPost.data.thing?.id;
   assert.ok(branchPostId);
   const dedicatedShell = await fetch(origin('dedicated') + '/post/' + branchPostId);
+  assert.equal(dedicatedShell.status, 200, 'Build the client and sync:nitro-template before the Node server so the real shell is embedded.');
   assert.equal(dedicatedShell.headers.get('x-tt-shell'), 'social-meta');
   assert.match(await dedicatedShell.text(), /Dedicated branch acceptance/, 'Dedicated shell must resolve its own public post metadata.');
   const followerShell = await fetch(origin('follower') + '/post/' + branchPostId);
@@ -169,13 +189,15 @@ try {
   const successor = startNitro('successor'); await ready(successor, 'successor');
   routeTo = 'successor'; await delay(5_100);
   assert.equal((await api('owner', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
+  const ownerClientsClosed = await expectPoolDrain('owner', initialized.clientsClosed);
   await api('successor', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Unchanged cold plan' }, acl: ['tt:all'] } });
   const unchanged = await indexTrace('successor'); assert.equal(unchanged.creates, 0); assert.equal(unchanged.drops, 0);
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
+  const successorClientsClosed = await expectPoolDrain('successor', unchanged.clientsClosed);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
   console.log(JSON.stringify({ ok: true, transport: 'built-nitro', viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
-    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
+    ownerClientsClosed, successorClientsClosed, initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }

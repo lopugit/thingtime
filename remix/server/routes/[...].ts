@@ -5,7 +5,7 @@ import { useStorage } from 'nitro/storage';
 import { fallbackSocialMeta, injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
-import { gatewayAuthority, getMongoConnectionMode } from '../../app/api/utils/deployment/environmentGateway';
+import { withGatewayShellWork } from '../utils/environmentGateway';
 import { socialPreviewDesignFromUrl, socialPreviewDesignParams } from '../../app/utils/socialPreviewDesign';
 
 // The SPA shell for every non-API, non-static path. Nitro compiles this route
@@ -100,14 +100,12 @@ export default defineHandler(async (event) => {
 	try {
 		// Proxy followers keep their branch's shell and assets. Dynamic API/card/SEO
 		// reads go to the gateway; shell metadata remains safely generic here.
-		const authority = await gatewayAuthority.current();
-		if (authority && !authority.owner && getMongoConnectionMode() === 'proxy') return new Response(injectSocialMeta(html, renderSocialMetaHtml(fallbackSocialMeta(event.req))), {
-			headers: { ...frameDenyHeaders, 'Content-Type': 'text/html; charset=utf-8', 'X-TT-Shell': 'social-meta', 'Cache-Control': 'private, no-store' }
-		});
-		// same endpoint context as the API catch-all, so shell meta and the SPA's
-		// own follow-up API reads resolve against the same data plane
-		const mongoEndpoint = await getRequestMongoEndpoint(event.req);
-		const social = await runWithMongoEndpoint(mongoEndpoint, () => resolveSocialMeta(event.req));
+		const social = await withGatewayShellWork(async () => {
+			// Hold admission through metadata DB work, while keeping the static
+			// shell and its response lifetime independent from pool drainage.
+			const mongoEndpoint = await getRequestMongoEndpoint(event.req);
+			return runWithMongoEndpoint(mongoEndpoint, () => resolveSocialMeta(event.req));
+		}, () => fallbackSocialMeta(event.req));
 		body = injectSocialMeta(html, renderSocialMetaHtml(social));
 	} catch (error) {
 		// serve the untouched shell — but audibly, never silently

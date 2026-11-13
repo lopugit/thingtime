@@ -98,12 +98,15 @@ test('accepted inference survives caller cancellation and identical concurrent a
 		});
 	};
 	const abort = new AbortController();
-	const [a, b] = await Promise.all([startBackgroundTask(request('once', undefined, abort.signal), execute), startBackgroundTask(request(), execute)]);
-	assert.equal(a.status, 202);
-	assert.equal(b.status, 202);
-	abort.abort();
-	release!();
-	await Promise.all(pending);
+	try {
+		const [a, b] = await Promise.all([startBackgroundTask(request('once', undefined, abort.signal), execute), startBackgroundTask(request(), execute)]);
+		assert.equal(a.status, 202);
+		assert.equal(b.status, 202);
+		abort.abort();
+	} finally {
+		release!();
+		await Promise.all(pending);
+	}
 	assert.equal(calls, 1);
 	assert.equal(rows.length, 1);
 	const detail = await (await read(rows[0].shareId)).json();
@@ -244,13 +247,18 @@ test('two operation ids cannot concurrently execute against one existing chat', 
 		await gate;
 		return new Response('done');
 	};
-	const results = await Promise.all(
-		['first', 'second'].map((id) => startBackgroundTask(request(id, { chatId: 'owned-chat', text: 'hello', requestId: id }), execute))
-	);
-	assert.deepEqual(results.map((r) => r.status).sort(), [202, 409]);
+	try {
+		const results = await Promise.all(
+			['first', 'second'].map((id) => startBackgroundTask(request(id, { chatId: 'owned-chat', text: 'hello', requestId: id }), execute))
+		);
+		assert.deepEqual(results.map((r) => r.status).sort(), [202, 409]);
+	} finally {
+		release!();
+		await Promise.all(pending);
+	}
+	// Admission can return before the worker acquires its gateway lease. Count
+	// executions after draining the admitted work, rather than racing its start.
 	assert.equal(calls, 1);
-	release!();
-	await Promise.all(pending);
 });
 
 
