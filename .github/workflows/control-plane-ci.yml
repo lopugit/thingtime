@@ -47,6 +47,9 @@ jobs:
       - name: Verify exact configured AI model orders
         run: node --test .github/scripts/admin-model-order.test.mjs
 
+      - name: Validate quota-aware CodeQL ordering
+        run: node --test .github/scripts/codeql-polling.test.mjs
+
       - name: Validate JavaScript syntax
         run: |
           set -euo pipefail

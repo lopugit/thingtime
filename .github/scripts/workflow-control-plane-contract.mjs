@@ -806,7 +806,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     siblingStartBarrier,
-    /\[ "\$SECONDS" -ge "\$deadline" \]/u,
+    /while \[ "\$\(poll_now\)" -lt "\$deadline" \]/u,
     "the barrier is bounded, so a sibling that never gets a runner cannot strand this leg up to its own 60-minute job timeout",
   );
   assert.doesNotMatch(
@@ -891,12 +891,12 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     orderingHold,
-    /while \[ "\$SECONDS" -lt "\$deadline" \]/u,
+    /while \[ "\$\(poll_now\)" -lt "\$deadline" \]/u,
     "the hold is bounded, so a wedged sibling cannot strand the analyzer up to its own 60-minute job timeout",
   );
   assert.match(
     orderingHold,
-    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( SECONDS \+ sibling_grace \)\)/u,
+    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( \$\(poll_now\) \+ sibling_grace \)\)/u,
     "a sibling that succeeded without publishing — the adopted push where NEITHER leg uploads — releases on a grace window instead of idling out the whole hold",
   );
   assert.match(
