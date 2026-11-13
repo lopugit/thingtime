@@ -9,6 +9,14 @@ export const ENVIRONMENT_GATEWAY_VERSION = '1.0.0';
 export const GATEWAY_OWNERSHIP_TTL_MS = 5_000;
 export type GatewaySettings = { environment: string; origin: string; deploymentId: string; secret: string };
 export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
+export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass';
+/** Platform protection is separate from signed gateway authentication. Deliver
+ * its server-only secret solely to the configured, validated gateway origin. */
+export const gatewayProtectionHeaders = (settings: GatewaySettings): Record<string, string> => {
+  if (gatewayOrigin(settings.origin) !== settings.origin) throw new GatewayUnavailable();
+  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  return secret ? { [VERCEL_PROTECTION_BYPASS_HEADER]: secret } : {};
+};
 type GatewayManifest = {
   schemaVersion: number; origin: string; gateway?: GatewayDescriptor | null;
   features: Record<string, { version: string }>;
@@ -89,45 +97,59 @@ export const createGatewayAuthority = (options: {
 } = {}) => {
   const settings = options.settings || getGatewaySettings;
   const now = options.now || Date.now;
-  let cache: { key: string; expires: number; value: GatewayManifest } | null = null;
-  let pending: { key: string; promise: Promise<GatewayManifest> } | null = null;
+  let cache: { key: string; expires: number; value: GatewayManifest; etag: string | null } | null = null;
+  let pending: { key: string; promise: Promise<{ value: GatewayManifest; etag: string | null }> } | null = null;
   let wasOwner = false;
   const current = async (fresh = false) => {
     const selected = settings();
     if (!selected) return null;
     const key = createHash('sha256').update(JSON.stringify(selected)).digest('hex');
+    let active: typeof pending = null;
     try {
       if (!fresh && cache?.key === key && cache.expires > now()) return { settings: selected, manifest: cache.value, owner: cache.value.gateway!.deploymentId === selected.deploymentId };
       if (!pending || pending.key !== key) {
+        // Retain a verified body only for conditional revalidation. An expired
+        // value never grants authority without a fresh response from the alias.
+        const previous = cache?.key === key ? cache : null;
         const promise = (async () => {
           const response = await (options.fetch || globalThis.fetch)(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin), {
-            redirect: 'error', cache: 'no-store', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5_000)
+            redirect: 'error', cache: 'no-store', credentials: 'omit',
+            headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected), ...(previous?.etag ? { 'If-None-Match': previous.etag } : {}) },
+            signal: AbortSignal.timeout(5_000)
           });
-          const manifest = await readManifest(response);
+          if (response.url && response.url !== new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin).href) throw new GatewayUnavailable();
+          const manifest = response.status === 304 && previous?.etag ? previous.value : await readManifest(response);
           if (manifest.schemaVersion !== 1 || manifest.origin !== selected.origin ||
             manifest.gateway?.origin !== selected.origin || manifest.gateway.environment !== selected.environment ||
             typeof manifest.gateway.deploymentId !== 'string' || !manifest.gateway.deploymentId ||
             !capabilitySatisfies(manifest.features?.['api.environment-gateway']?.version, ENVIRONMENT_GATEWAY_VERSION) ||
             !Array.isArray(manifest.operations)) throw new GatewayUnavailable();
-          cache = { key, expires: now() + GATEWAY_OWNERSHIP_TTL_MS, value: manifest };
-          return manifest;
+          return { value: manifest, etag: response.status === 304 ? previous!.etag : response.headers.get('ETag') };
         })();
         pending = { key, promise };
       }
-      const active = pending;
-      let manifest: GatewayManifest;
-      try { manifest = await active.promise; }
-      finally { if (pending === active) pending = null; }
+      active = pending;
+      const result = await active.promise;
+      const manifest = result.value;
       // Never authorize an old selection after an asynchronous config change.
       if (JSON.stringify(settings()) !== JSON.stringify(selected)) throw new GatewayUnavailable();
+      if (pending === active) {
+        cache = { key, expires: now() + GATEWAY_OWNERSHIP_TTL_MS, value: manifest, etag: result.etag };
+        pending = null;
+      }
       const owner = manifest.gateway!.deploymentId === selected.deploymentId;
       if (wasOwner && !owner) options.demoted?.();
       wasOwner = owner;
       return { settings: selected, manifest, owner };
     } catch {
-      cache = null;
-      if (wasOwner) options.demoted?.();
-      wasOwner = false;
+      // A late failure for an old selection cannot evict or demote a newly
+      // verified selection, or disturb its in-flight discovery.
+      if (pending === active || (!pending && cache?.key === key)) {
+        cache = null;
+        if (pending?.key === key) pending = null;
+        if (wasOwner) options.demoted?.();
+        wasOwner = false;
+      }
       throw new GatewayUnavailable();
     }
   };

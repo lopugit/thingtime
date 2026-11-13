@@ -133,7 +133,7 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.1');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.2.2');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',

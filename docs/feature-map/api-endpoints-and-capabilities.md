@@ -243,7 +243,7 @@ Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
 `subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
 
 Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.1 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+1.2.2 and `/.well-known/thingtime-capabilities.json`. Server deployments use
 the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
 opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
 mode executes its own backend, advertises `gateway: null`, and refuses relay
@@ -792,6 +792,25 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+## Request cost controls
+
+`server/handlers/thingtime-capabilities.ts` hashes the complete exact-origin
+manifest for ETag/304 and supports HEAD/OPTIONS without caching alias ownership.
+`requireCapability.client.ts` deduplicates checks, revalidates after its freshness
+window and scopes retained manifests to origin/transport; active-API checks keep
+their independent authority. Both public and active manifests remain registered.
+`seo-robots` 1.1.1 serves each deployment's crawler policy locally, outside
+gateway data ingress; an older or unavailable gateway cannot turn its exclusion
+into a 409. API and data-backed sitemap requests retain normal admission.
+`marketingPublications.ts` and its public/admin routes return explicit stale or
+unavailable read results; a committed write is distinct from failed readback.
+`mongodb/requestBudget.ts` carries opt-in driver/transaction deadlines through
+existing collection access. Device event/command/state routes reuse it alongside
+`devicePolling.ts` cancellation and bounded collision retries. Authentication,
+rate limits, accounting and private projections stay on their existing paths.
+Run the capability, marketing, devices and collections suites; see the
+[manual cost-control checks](../../TESTING.md#request-cost-controls-13-november-2026).
+
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
@@ -804,6 +823,10 @@ handler retain local discovery/static serving while routing data operations.
 readiness without blocking read-only authentication. Existing admin migration
 status/run contracts and Lopu background-task contracts carry their deliberate
 compatible patch versions in both generated manifests.
+`collections.ts` gives shared connection/index initialization its own admitted
+gateway lifetime while `requestBudget.ts` cancels only each caller's wait.
+The crossed cancellation/demotion regressions live in
+`mongodb/indexCollectionsLifecycle.test.mts`.
 
 Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See

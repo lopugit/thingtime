@@ -1,4 +1,5 @@
 import { getSettingsCollection } from '../mongodb/collections';
+import { mongoRequestOptions } from '../mongodb/requestBudget';
 import { EMPTY_PUBLICATIONS, validatePublicationChanges, type MarketingPublications, type PublicationChange } from '~/marketing/publishing';
 import {
 	MARKETING_PUBLICATIONS_SETTINGS_KEY,
@@ -19,42 +20,52 @@ import {
 type StoredDoc = { items: unknown; updatedAt: unknown } | null;
 
 type StoreDependencies = {
-	readStored: () => Promise<StoredDoc>;
+	readStored: (options: { signal?: AbortSignal; timeoutMS?: number }) => Promise<StoredDoc>;
 	writeItems: (plan: PublicationWritePlan, meta: { at: Date; by: string | null }) => Promise<void>;
 };
+
+export type PublicationReadResult = { ok: true; publications: MarketingPublications; freshness: 'live' } | { ok: false; status: 503; error: string; freshness: 'stale' | 'unavailable'; publications?: MarketingPublications };
 
 export const createMarketingPublicationsStore = (dependencies: StoreDependencies) => {
 	let lastKnownGood: { items: StoredPublicationItem[]; updatedAt: unknown } | null = null;
 
-	const getPublications = async (options: { audit: boolean }): Promise<MarketingPublications> => {
+	const getReadResult = async (options: { audit: boolean }): Promise<PublicationReadResult> => {
 		try {
-			const doc = await dependencies.readStored();
+			const doc = await dependencies.readStored(mongoRequestOptions({ timeoutMS: 3000 }));
 			const items = normalizeStoredItems(doc?.items);
 			lastKnownGood = { items, updatedAt: doc?.updatedAt ?? null };
-			return projectPublications(items, doc?.updatedAt ?? null, options);
-		} catch (error: any) {
-			console.error('[marketing] publication read failed — serving last-known-good or nothing:', error?.message || error);
-			if (lastKnownGood) return projectPublications(lastKnownGood.items, lastKnownGood.updatedAt, options);
-			return options.audit ? { ...EMPTY_PUBLICATIONS, audit: {} } : { ...EMPTY_PUBLICATIONS };
+			return { ok: true, publications: projectPublications(items, doc?.updatedAt ?? null, options), freshness: 'live' };
+		} catch {
+			return {
+				ok: false, status: 503, error: 'Marketing publishing is temporarily unavailable',
+				freshness: lastKnownGood ? 'stale' : 'unavailable',
+				...(lastKnownGood ? { publications: projectPublications(lastKnownGood.items, lastKnownGood.updatedAt, options) } : {})
+			};
 		}
 	};
 
-	const applyChanges = async (raw: unknown, by: string | null): Promise<{ ok: true; publications: MarketingPublications; applied: number } | { ok: false; status: number; error: string }> => {
+	const getPublications = async (options: { audit: boolean }): Promise<MarketingPublications> => {
+		const result = await getReadResult(options);
+		return result.publications ?? (options.audit ? { ...EMPTY_PUBLICATIONS, audit: {} } : { ...EMPTY_PUBLICATIONS });
+	};
+
+	const applyChanges = async (raw: unknown, by: string | null): Promise<{ ok: true; publications?: MarketingPublications; applied: number; freshness: 'live' | 'stale' | 'unavailable' } | { ok: false; status: number; error: string }> => {
 		const validated = validatePublicationChanges(raw);
 		if (validated.ok === false) return { ok: false, status: 400, error: validated.error };
 		const changes: PublicationChange[] = validated.changes;
 		await dependencies.writeItems(planPublicationWrite(changes, { at: new Date(), by }), { at: new Date(), by });
-		return { ok: true, publications: await getPublications({ audit: true }), applied: changes.length };
+		const readback = await getReadResult({ audit: true });
+		return { ok: true, publications: readback.publications, freshness: readback.freshness, applied: changes.length };
 	};
 
-	return { getPublications, applyChanges };
+	return { getPublications, getReadResult, applyChanges };
 };
 
 const store = createMarketingPublicationsStore({
-	readStored: async () => {
+	readStored: async (options) => {
 		const doc = await (await getSettingsCollection()).findOne(
 			{ key: MARKETING_PUBLICATIONS_SETTINGS_KEY },
-			{ projection: { _id: 0, items: 1, updatedAt: 1 } }
+			{ ...options, maxTimeMS: Math.min(3000, options.timeoutMS ?? 3000), projection: { _id: 0, items: 1, updatedAt: 1 } }
 		);
 		return doc ? { items: doc.items, updatedAt: doc.updatedAt } : null;
 	},
@@ -91,3 +102,5 @@ const store = createMarketingPublicationsStore({
 
 export const getMarketingPublications = store.getPublications;
 export const applyMarketingPublicationChanges = store.applyChanges;
+
+export const getMarketingPublicationsResult = store.getReadResult;

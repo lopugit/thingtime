@@ -3,9 +3,10 @@ import test from 'node:test';
 import { H3 } from 'nitro/h3';
 
 import middleware from '../middleware/environment-gateway';
+import robotsHandler from '../handlers/robots';
 import { thingtimeCapabilityManifest } from '../../app/api/utils/capabilities/thingtimeCapabilities';
 import { createGatewayAuthority, gatewayAuthority, getGatewaySettings, registerGatewayDrain, requireGatewayDatabaseAccess } from '../../app/api/utils/deployment/environmentGateway';
-import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, proxyEnvironmentRequest, restoreGatewayRequest, withGatewayShellWork } from './environmentGateway';
+import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, isGatewayDataPath, proxyEnvironmentRequest, restoreGatewayRequest, withGatewayShellWork } from './environmentGateway';
 
 const origin = 'https://gateway.test';
 const follower = 'https://follower.test';
@@ -19,6 +20,26 @@ const fixture = async (run: () => Promise<void>) => {
   try { await run(); } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 };
 const aliasManifest = () => { const manifest = thingtimeCapabilityManifest(origin); manifest.gateway!.deploymentId = 'owner'; return manifest; };
+
+test('real middleware serves deployment-local crawler policy without contacting an unavailable gateway', async t => fixture(async () => {
+  const network = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Gateway unavailable'); });
+  const app = new H3().use(middleware).all('/robots.txt', robotsHandler);
+  assert.equal(isGatewayDataPath('/robots.txt'), false);
+  assert.equal(isGatewayDataPath('/api/v1/things'), true);
+  assert.equal(isGatewayDataPath('/sitemap.xml'), true);
+  for (const method of ['GET', 'HEAD']) {
+    const response = await app.fetch(new Request(follower + '/robots.txt', { method }));
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    if (method === 'GET') assert.match(body, /^Disallow: \/$/m);
+    else assert.equal(body, '');
+  }
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'production';
+  const production = await app.fetch(new Request(follower + '/robots.txt'));
+  assert.equal(production.status, 200);
+  assert.match(await production.text(), /^Allow: \/$/m);
+  assert.equal(network.mock.callCount(), 0);
+}));
 
 test('signed relay preserves authentication, original URL, cookies, transport hooks and manual redirects', async t => fixture(async () => {
   const settings = getGatewaySettings()!;
@@ -234,4 +255,42 @@ test('shell metadata holds owner admission, while follower shells use a database
     assert.equal(await withGatewayShellWork(async () => { reads++; return 'dedicated metadata'; }, () => 'generic metadata'), 'dedicated metadata');
     assert.equal(reads, 2, 'dedicated shells retain their own metadata lookup');
   } finally { finishMetadata(); removeDrain(); }
+}));
+
+test('platform protection bypass is server-selected, stripped on restore/response and never followed to a redirect', async t => fixture(async () => {
+  const previous = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = 'synthetic-platform-bypass';
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(aliasManifest()) }).current();
+    let sent = 0;
+    t.mock.method(globalThis, 'fetch', async (target, init) => {
+      sent++;
+      assert.equal(String(target), origin + '/api/v1/things');
+      assert.equal(init?.redirect, 'manual');
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('x-vercel-protection-bypass'), 'synthetic-platform-bypass');
+      assert.equal(Buffer.from(headers.get(GATEWAY_RELAY_HEADER)!, 'base64url').toString('utf8').includes('synthetic-platform-bypass'), false);
+      assert.equal(headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(new Request(target, init), settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return new Response(null, { status: 302, headers: {
+        Location: 'https://foreign.test/redirect', 'x-vercel-protection-bypass': 'synthetic-platform-bypass'
+      } });
+    });
+    const result = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(result.status, 302);
+    assert.equal(result.headers.get('Location'), 'https://foreign.test/redirect');
+    assert.equal(result.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(sent, 1, 'A foreign redirect must not receive the server-only header');
+    const refused = await proxyEnvironmentRequest(new Request('https://unrelated.test/api/v1/things'), authority!);
+    assert.equal(refused.status, 421);
+    assert.equal(sent, 1, 'An unrecognized source cannot relay a protected request');
+  } finally {
+    if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+  }
 }));

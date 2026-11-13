@@ -9,6 +9,14 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
+test('combined gateway budget and handover corrections retain the conditional manifest contract', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.2.2');
+  const feature = thingtimeCapabilityManifest('https://gateway.example').features['api.environment-gateway'];
+  assert.equal(feature.version, '1.2.2');
+  const endpoint = apiEndpointDocs.find(doc => doc.id === 'environment-gateway')!;
+  assert.deepEqual(endpoint.methods, ['GET', 'HEAD', 'OPTIONS']);
+});
+
 test('source-index pages publish the additive scoped contract on both manifests', () => {
     const feature = 'api.file-sync-transfer-admissions';
     assert.equal(createApiCapabilitiesManifest().features[feature], '1.8.0');
@@ -158,7 +166,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
 	assert.equal(manifest.features['api.things-import']?.version, '1.13.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.16.1');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.1');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.2');
 
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
@@ -348,7 +356,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.23.2');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
-    assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+    assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   }
 });
 
@@ -459,7 +467,7 @@ test('file finalization recovery requires the compatible upload-start correction
 
 test('crawler discovery endpoints publish their root paths and -docs twins on the origin manifest', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   const paths = (feature: string) => manifest.operations.filter((operation) => operation.feature === feature).map((operation) => operation.path).sort();
   assert.deepEqual(paths('api.seo-robots'), ['/robots.txt', '/robots.txt-docs']);
   assert.deepEqual(paths('api.seo-sitemap'), ['/sitemap.xml', '/sitemap.xml-docs']);
@@ -562,7 +570,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
     ['api.devices', '1.16.0', '1.10.0'],
-    ['api.devices-node-state', '1.15.1', '1.15.0'],
+    ['api.devices-node-state', '1.15.2', '1.15.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
@@ -576,7 +584,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
 test('host resource telemetry negotiates both additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://devices.test');
   for (const feature of ['api.devices', 'api.devices-node-state']) {
-    const current = feature === 'api.devices' ? '1.16.0' : '1.15.1';
+    const current = feature === 'api.devices' ? '1.16.0' : '1.15.2';
     assert.equal(manifest.features[feature]?.version, current);
     assert.equal(createApiCapabilitiesManifest().features[feature], current);
     for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));

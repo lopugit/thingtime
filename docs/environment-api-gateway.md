@@ -75,19 +75,26 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.1.1 and an optional `gateway` descriptor containing only environment, stable
+1.2.2 and an optional `gateway` descriptor containing only environment, stable
 origin and deployment identity. This metadata is private/no-store to prevent a
 CDN pinning the previous alias owner. Discovery itself neither authenticates an
 agent nor grants access to private Things.
 
 ## Requests, promotion and rollback
 
-Each worker resolves its configured alias with a credential-free, bounded,
-redirect-refusing manifest request. Only the matching deployment identity may
+Each worker resolves its configured alias with a bounded, redirect-refusing
+manifest request. A configured server-only platform protection header is sent
+only to that verified origin; it does not replace signed gateway authentication.
+Only the matching deployment identity may
 open its MongoDB client. Ownership caches for at most five seconds; errors,
 missing capabilities, different environments and changed origins fail closed.
 There is no stale-on-error database fallback. Requests also negotiate the
 specific semantic feature version and advertised path/method before forwarding.
+
+Shared connection and index initialization leaves only its initiating HTTP
+request's cancellation budget. It retains an independent gateway work lease
+until initialization settles, even if its last waiter disconnects. Demotion
+then closes clients and evicts readiness before rollback can admit new work.
 A branch with a newer or incompatible API must wait for its environment gateway
 to support that API; a preview therefore runs its own frontend against the
 canonical environment backend, not its branch-specific backend implementation.

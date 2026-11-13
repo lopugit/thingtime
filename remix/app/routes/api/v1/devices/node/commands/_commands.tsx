@@ -1,3 +1,4 @@
+import { withMongoRequestBudget } from '~/api/utils/mongodb/requestBudget';
 import { json, readJsonBody } from '~/api/http';
 import { resolveDeviceActor } from '~/api/utils/devices/deviceAuth';
 import {
@@ -10,7 +11,7 @@ import {
 import { updateDeviceScreenSession } from '~/api/utils/devices/deviceScreens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-export const action = async ({ request }: { request: Request }) => {
+export const action = async ({ request }: { request: Request }) => withMongoRequestBudget(request.signal, 25_000, async () => {
 	if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
 	const actor = await resolveDeviceActor(request);
 	if (!actor) return json({ ok: false, error: 'Unauthorized device credential' }, { status: 401 });
@@ -20,7 +21,7 @@ export const action = async ({ request }: { request: Request }) => {
 	let result;
 	switch (body?.op) {
 		case 'claim':
-			result = await claimNextDeviceCommand(actor.userId, actor.deviceId, body.waitMs);
+			result = await claimNextDeviceCommand(actor.userId, actor.deviceId, body.waitMs, { signal: request.signal });
 			break;
 		case 'heartbeat':
 			result = await heartbeatDeviceCommand(actor.userId, actor.deviceId, body);
@@ -41,4 +42,4 @@ export const action = async ({ request }: { request: Request }) => {
 			return json({ ok: false, error: 'Unknown node command operation' }, { status: 400 });
 	}
 	return result.ok ? json(result, { headers: { 'Cache-Control': 'private, no-store' } }) : json(result, { status: result.status, headers: { 'Cache-Control': 'private, no-store' } });
-};
+});

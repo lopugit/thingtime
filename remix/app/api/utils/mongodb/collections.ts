@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { awaitMongoSharedWork, budgetMongoArguments, mongoRequestOptions, mongoTransactionBudget, startMongoSharedWork } from './requestBudget';
 import { randomUUID } from 'node:crypto';
-import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { requireGatewayDatabaseAccess, registerGatewayDrain, withGatewayWork } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
 import { mongoConnectionTracker } from './connectionTracker';
@@ -142,9 +143,12 @@ const runMongoTransaction = async <T>(client: any, work: (session: any) => Promi
 	try {
 		await session.withTransaction(
 			async () => {
+				mongoRequestOptions();
 				result = await work(session);
+				mongoRequestOptions();
 			},
 			{
+				...mongoTransactionBudget(),
 				readConcern: { level: 'snapshot' },
 				writeConcern: { w: 'majority' },
 				readPreference: 'primary'
@@ -194,9 +198,12 @@ export const getAdoptionIssues = () => [...adoptionIssues];
 // migration folds the residue forward instead. Rename failures are recorded,
 // never thrown — a degraded adoption must not take the whole API down.
 const adoptVersionedCollections = async (db: any) => {
-  const names = new Set<string>((await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name));
+  const deadline = Date.now() + 5000;
+  const signal = AbortSignal.timeout(5000);
+  const names = new Set<string>((await db.listCollections({}, { nameOnly: true, timeoutMS: 5000, signal }).toArray()).map((entry: any) => entry.name));
   const issues: string[] = [];
   for (const logical of COLLECTIONS) {
+    signal.throwIfAborted();
     const physical = physicalCollectionName(logical);
     if (!names.has(logical)) continue;
     if (names.has(physical)) {
@@ -204,8 +211,9 @@ const adoptVersionedCollections = async (db: any) => {
       continue;
     }
     try {
-      await db.renameCollection(logical, physical);
+      await db.renameCollection(logical, physical, { timeoutMS: Math.max(1, deadline - Date.now()), signal });
     } catch (err: any) {
+      signal.throwIfAborted();
       // 48 NamespaceExists / 26 NamespaceNotFound: another instance won the
       // rename race — either way the destination is in place
       if (err?.code === 48 || err?.code === 26) continue;
@@ -225,23 +233,32 @@ const adoptVersionedCollections = async (db: any) => {
 let homeDbPromise: Promise<any> | null = null;
 let homeDbClient: any = null;
 
+// A cancelled waiter may leave shared initialization running. Acquire its own
+// gateway lease synchronously while the initiating request is still admitted;
+// only the request budget is removed, not the initializer's drain lifetime.
+const startSharedGatewayWork = <T>(work: () => Promise<T>): Promise<T> =>
+  startMongoSharedWork(() => withGatewayWork(work));
+
 const getRawHomeThingtimeDb = async () => {
-  await requireGatewayDatabaseAccess();
+  mongoRequestOptions();
+  await awaitMongoSharedWork(requireGatewayDatabaseAccess());
+  mongoRequestOptions();
   if (!homeDbPromise) {
-    homeDbPromise = (async () => {
+    homeDbPromise = startSharedGatewayWork(async () => {
       const client = await getClientCachedFor(getMongoUri(), true);
       const db = client.db('thingtime');
       homeDbClient = client;
       await adoptVersionedCollections(db);
       return db;
-    })().catch((err) => {
+    }).catch((err) => {
       // don't cache a failed connection/adoption — let the next call retry
       homeDbPromise = null;
       homeDbClient = null;
       throw err;
     });
   }
-  const db = await homeDbPromise;
+  const db = await awaitMongoSharedWork(homeDbPromise);
+  mongoRequestOptions();
   // A warm database handle bypasses getClientCachedFor. Attribute its use at
   // this canonical access boundary too; the request context deduplicates it.
   if (homeDbClient) mongoConnectionTracker.recordAccess(homeDbClient);
@@ -279,10 +296,11 @@ export const getHomeThingtimeDb = async () => {
       return new Proxy(collection, { get(col, method) {
         const value = col[method];
         if (GUARDED_MUTATIONS.has(String(method))) return async (...parameters: any[]) => {
-          await requireHomeIndexWriteReadiness();
-          return value.apply(col, parameters);
+          mongoRequestOptions();
+          await awaitMongoSharedWork(requireHomeIndexWriteReadiness());
+          return value.apply(col, budgetMongoArguments(String(method), parameters));
         };
-        return typeof value === 'function' ? value.bind(col) : value;
+        return typeof value === 'function' ? (...parameters: any[]) => value.apply(col, budgetMongoArguments(String(method), parameters)) : value;
       } });
     };
     const value = target[property];
@@ -1716,7 +1734,7 @@ export const invalidateHomeIndexReadiness = async () => {
   await invalidateDurableIndexPlan(db.collection(physicalCollectionName('settings')));
 };
 
-export const ensureIndexes = async ({ force = false, ...execution }: IndexExecutionOptions & { force?: boolean } = {}) => {
+const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecutionOptions & { force?: boolean } = {}) => {
   const policy = indexExecutionPolicy(execution);
   if (isHomeIndexRecoveryActive() && !force) return;
   if (force) {
@@ -1773,6 +1791,13 @@ export const ensureIndexes = async ({ force = false, ...execution }: IndexExecut
     indexesEnsured = run;
   }
   return indexesEnsured;
+};
+
+// Each caller owns only its wait. The cached index initializer must not
+// inherit the deadline/cancellation of the request that happened to start it.
+export const ensureIndexes = (options: IndexExecutionOptions & { force?: boolean } = {}) => {
+  mongoRequestOptions();
+  return awaitMongoSharedWork(startSharedGatewayWork(() => ensureIndexesShared(options)));
 };
 
 // Ownership can return to this warm worker after a drain. Closed clients and

@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Preserve independent gateway leases for shared MongoDB connect/index
+  initialization after its HTTP waiter cancels. Combine handover drains with
+  request budgets, conditional discovery and origin-fenced platform protection;
+  publish gateway contract 1.2.2. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
+
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
 - 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
@@ -725,6 +730,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   conflict, recovery, progress and priority controls to the installed app.
   Private leased requests preserve device-owned execution and account boundaries.
   [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+### Deployment request cost controls
+
+- 2026-11-13: Add server-only automation support for protected preview gateways,
+  conditional exact-origin capability discovery, bounded publication reads with
+  visible degraded/retry state, and cancellable device polling/state retries.
+  Preserve signed gateway admission, account isolation and committed-write
+  reconciliation. Deployment-protection activation remains a separate live
+  rollout gate; no hosting migration. See [PR 1502 validation](../PRs/1502-codex-vercel-cost-reduction-reduce-preview-request-costs.md)
+  and the [cost-control checks](../TESTING.md#request-cost-controls-13-november-2026).
+  **Codex (AI)**
 
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 

@@ -15,7 +15,11 @@ reads, cancellation, social metadata work and detached saves retain the correct
 lease scope. Rollback waits for client close and cache eviction before reopening.
 
 Idle-enabled MongoDB clients also attach to Vercel's supported Fluid pool helper.
-The negotiated `api.environment-gateway` contract is `1.1.1`. This preserves
+The negotiated `api.environment-gateway` contract is `1.2.2`, retaining main's
+conditional ETag, GET/HEAD/OPTIONS and origin-fenced platform protection support.
+Shared connect/index initialization has its own gateway lease while cancelled
+HTTP callers stop only their wait; demotion cannot evict its cache or permit
+rollback while initialization remains active. This preserves
 normal request authorization, signed origin-bound forwarding and environment
 isolation. It does not introduce raw database RPC or a boot-time leader election.
 
