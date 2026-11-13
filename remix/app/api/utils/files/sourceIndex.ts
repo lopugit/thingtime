@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { createHash } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { insertAccountedThing, updateAccountedThing, deleteAccountedThings } from '../storage/accountedThings';
@@ -140,8 +141,8 @@ const owned = (doc: any, scope: SourceIndexScope, kind: string) =>
 	doc.appId == null &&
 	doc.sandbox == null &&
 	doc.sandboxSpace == null &&
-	doc.acl?.length === 1 &&
-	doc.acl[0] === 'tt:user';
+	!hasRelationalAclEntries(doc) && Array.isArray(doc.acl) && rootAcl(doc).length === 1 &&
+	rootAcl(doc)[0] === 'tt:user';
 export async function writeSourceIndex(things: any, session: any, scope: SourceIndexScope, page: SourceIndexPage) {
 	const id = sourceIndexId(scope, page.epoch),
 		fingerprint = hash(page),
@@ -322,8 +323,8 @@ export async function readSourceIndex(things: any, session: any, scope: SourceIn
 			attachment = attachments.find((a: any) => a.shareId === file.crystal.content.attachmentId);
 		const provenance = attachment?.attachmentFileSyncOrigin,
 			grant = attachment?.fileSyncSourceGrant;
-		return file.acl?.length === 1 &&
-			file.acl[0] === 'tt:user' &&
+		return !hasRelationalAclEntries(file) && Array.isArray(file.acl) && rootAcl(file).length === 1 &&
+			rootAcl(file)[0] === 'tt:user' &&
 			attachment?.attachmentState === 'ready' &&
 			attachment.targetId === file.shareId &&
 			attachment.objectKey &&

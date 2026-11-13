@@ -1,9 +1,9 @@
 import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
-import { json, readJsonBody } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getUserMongoEndpoints } from '~/api/utils/auth/users';
+import { getUserMongoEndpoint } from '~/api/utils/auth/users';
 import { PublicError } from '~/api/utils/errors/safeError';
 import { getMongoUri, sanitiseMongoHost } from '~/api/utils/mongodb/config';
 import type { MongoEndpointSelection } from '~/api/utils/mongodb/endpoint';
@@ -18,7 +18,7 @@ import {
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { Submit } from '~/components/API/Submit';
 
-const MAX_BODY_BYTES = 16 * 1024;
+
 
 // Credentials-stripped host of the home deployment DB (null when unconfigured).
 const getDefaultHost = (): string | null => {
@@ -64,7 +64,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   }
 
-  const body = request.method === 'DELETE' ? {} : await readJsonBody(request, MAX_BODY_BYTES);
+  const body = request.method === 'DELETE' ? {} : await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 
   // Reset is exempt from the rate limit ON PURPOSE: it probes nothing (no
   // outbound connect), and bailing back to the home DB must always work —
@@ -103,7 +103,7 @@ export const action = async ({ request }: { request: Request }) => {
     if (!user) {
       return json({ ok: false, error: 'Sign in to use saved endpoints' }, { status: 401 });
     }
-    const saved = (await getUserMongoEndpoints(user.id)).find((entry) => entry.id === body.savedId);
+    const saved = await getUserMongoEndpoint(user.id, body.savedId);
     if (!saved) {
       return json({ ok: false, error: 'Saved endpoint not found' }, { status: 404 });
     }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { aclAllows, aclCapabilityFor, sanitizeAcl, visibilityFromAcl } from './registry.ts';
+import { aclAllows, aclCapabilityFor, getThingtimeSchema, sanitizeAcl, visibilityFromAcl } from './registry.ts';
 
 // The acl grammar itself — who may VIEW (aclAllows, most-specific-wins) and,
 // on tt:custom things, HOW MUCH they may do (aclCapabilityFor: write ⊃ comment
@@ -190,11 +190,17 @@ test('a capability word is still a usable username', () => {
 	assert.equal(aclCapabilityFor(groupAcl, member, OWNER), 'read');
 });
 
-test('sanitizeAcl: shape, dedup, and the entry cap still hold', () => {
+test('sanitizeAcl: shape and dedup hold without an audience cardinality ceiling', () => {
 	assert.equal(rejected(sanitizeAcl('tt:all')).status, 400);
 	assert.equal(rejected(sanitizeAcl([])).status, 400);
 	assert.equal(rejected(sanitizeAcl(['not-a-tt-entry'])).status, 400);
 	assert.deepEqual(entries(sanitizeAcl(['tt:all', 'tt:all'])), ['tt:all']);
-	const tooMany = Array.from({ length: 65 }, (_, index) => `tt:user/person${index}`);
-	assert.match(rejected(sanitizeAcl(tooMany)).error, /at most 64 entries/);
+	const audience = Array.from({ length: 10_000 }, (_, index) => `tt:user/person${index}`);
+	assert.equal(entries(sanitizeAcl(audience)).length, audience.length);
+	assert.deepEqual(entries(sanitizeAcl([`tt:group/${'x'.repeat(100)}/write`])), [`tt:group/${'x'.repeat(100)}/write`]);
+});
+
+test('the public root schema does not advertise a hidden ACL item ceiling', () => {
+  const field = getThingtimeSchema('thing')!.fields.find(field => field.name === 'acl')!;
+  assert.equal(field.max, undefined);
 });

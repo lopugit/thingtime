@@ -8,9 +8,19 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
 
 ## Where the code lives
 
+Growing ACL subject entries are protected relational `acl-entry` Things.
+`things/relationalAcl.ts` owns selective authorization lookups, list candidate
+joins and transactional generations; `aclBaseline` stores the finite logical
+audience while `acl` protects older readers. Legacy API projections still return
+complete ACL arrays. The
+owner-only `/api/v1/things/acl` route pages and atomically adds/removes grants
+under `api.things-acl` 1.0.0. See [relational access](../relational-access.md)
+for migration, concurrency, reporting recovery and verification.
+
 | Concern | Path |
 | --- | --- |
 | ACL evaluation (`canView`, `canViewInherited`, `aclAllows`, inherit chains) | `app/api/utils/things/things.ts` |
+| Database-enforced legacy writer fence and operational timestamp floor | `app/api/utils/mongodb/aclWriteFence.ts`, `thingMutationTimestamp.ts`, `collections.ts` |
 | Viewer shape and enrichment (`viewerOf`, `withFriendIds`, `withLinkKeys`, `withThingLink`) | `app/api/utils/things/things.ts` |
 | Hidden-post discovery receipts (anonymous browser identity) | `app/api/utils/things/foundPosts.ts`, `foundPostRequest.ts`, `app/hooks/foundPostIdentity.client.ts` |
 | ACL grammar, constants, `visibilityFromAcl`, `aclFromVisibility` | `app/schemas/registry.ts` |
@@ -56,6 +66,9 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
 - `npm --prefix remix run test:acl` (inherit chains), `test:feed`
   (`hiddenLinkContract.test.ts`, audience stacking), `test:actions`
   (shared compositions), `test:things`.
+- `npm --prefix remix run test:acl:relational` includes validator readiness,
+  monotonic timestamps, generation races and protected metadata checks. The
+  isolated mixed-runtime HTTP checks are in `scripts/agent-reporting-acceptance.mjs`.
 - `TESTING.md`: "Post interactions & inherit chains", "Things page" (share
   dialog), sharing sections under the attachments and webpages checklists.
 

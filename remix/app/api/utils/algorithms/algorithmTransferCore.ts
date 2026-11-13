@@ -11,14 +11,14 @@ export type AlgorithmTransferContent = {
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' &&
   !Array.isArray(value) && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 
-/** A portable interest profile is bounded data, never training events to run.
+/** A portable interest profile is validated data, never training events to run.
  * Reject instead of truncating, so a successful import preserves every weight. */
 export const parseAlgorithmTransfer = (value: unknown): AlgorithmTransferContent => {
   if (!record(value) || Object.keys(value).some(key => !['name', 'emoji', 'weights', 'eventCount', 'lastTrainedAt'].includes(key))) {
     throw new Error('An algorithm transfer contains only name, emoji, weights and training statistics');
   }
   const { name, emoji, weights, eventCount, lastTrainedAt } = value;
-  if (typeof name !== 'string' || !name.trim() || name !== name.trim() || name.length > 60 ||
+  if (typeof name !== 'string' || !name.trim() || name !== name.trim() ||
     typeof emoji !== 'string' || !emoji.trim() || emoji !== emoji.trim() || [...emoji].length > 3) {
     throw new Error('Invalid algorithm name or emoji');
   }
@@ -30,7 +30,7 @@ export const parseAlgorithmTransfer = (value: unknown): AlgorithmTransferContent
   const result: AlgorithmWeights = { types: {}, tags: {}, authors: {} };
   for (const bucket of ['types', 'tags', 'authors'] as const) {
     const values = weights[bucket];
-    if (!record(values) || Object.keys(values).length > 10_000) throw new Error('An algorithm weight bucket may contain at most 10000 entries');
+    if (!record(values)) throw new Error('An algorithm weight bucket must be an object');
     for (const [key, weight] of Object.entries(values)) {
       if (!key || key.length > 512 || ['__proto__', 'prototype', 'constructor'].includes(key) || [...key].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ||
         typeof weight !== 'number' || !Number.isFinite(weight) || Math.abs(weight) > 50) {

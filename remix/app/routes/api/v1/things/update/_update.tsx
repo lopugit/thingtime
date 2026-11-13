@@ -47,11 +47,14 @@ export const action = async ({ request }: { request: Request }) => {
       visibility: body?.visibility,
       tags: body?.tags,
       tokenAcl: body?.tokenAcl,
+      tokenAclRevision: body?.tokenAclRevision,
+      expectedTokenAclRevision: body?.expectedTokenAclRevision,
       // folderId only when present — undefined means "leave it filed where it is"
       ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
     },
     {
       replaceCrystal: body?.replaceCrystal === true,
+      expectedAclRevision: body?.expectedAclRevision,
       expectedUpdatedAt: body?.expectedUpdatedAt
     },
     app

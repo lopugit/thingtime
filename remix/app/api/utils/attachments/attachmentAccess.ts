@@ -6,12 +6,16 @@ import { ObjectId } from 'mongodb';
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
-import { withThingLink, canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
+import { withThingLink, withFriendIds, canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
 export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
 
 type AttachmentTargetAclDoc = {
+  aclGeneration?: string;
+  aclBaseline?: string[];
+  aclBaselineVersion?: number;
+  aclRevision?: string;
 	shareId: string;
 	ownerId: string;
 	thingtime?: unknown;
@@ -107,14 +111,14 @@ const canViewCommentAttachment = async (
 ): Promise<boolean> => {
 	if (!attachment.targetId) return false;
 	const lookup = async (id: string): Promise<ThingDoc | null> => (await things.findOne({ shareId: id } as any, {
-		projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1, 'crystal.linkKeyDigest': 1 }
+		projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1, 'crystal.linkKeyDigest': 1 }
 	})) as ThingDoc | null;
 	const target = await lookup(attachment.targetId);
 	if (!target || target.ownerId !== attachment.ownerId ||
 		!(exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']))) return false;
 	// Comments can target media as well as posts/replies. Follow the canonical
 	// inheritance chain through either kind, preserving cycle and audience gates.
-	return canViewInherited(target, withThingLink(viewer, target.shareId), lookup);
+	return canViewInherited(target, withThingLink(viewer, target.shareId), lookup, things);
 };
 
 const canViewMessageAttachment = async (
@@ -275,10 +279,16 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 		const target = (await things.findOne(
 			{ shareId: targetId, thingtime: { $in: ['post', 'webpage'] }, targetId: null } as any,
 			{
-				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
+				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
 			}
 		)) as AttachmentTargetAclDoc | null;
-		if (!target || attachmentTargetAclAllows(target, viewer)) return !!target;
+		if (!target) return false;
+    if (target.aclGeneration) {
+      if ((!exactThingtime(target.thingtime, ['post']) && !exactThingtime(target.thingtime, ['webpage'])) || target.targetId != null) return false;
+      const lookup = async (shareId: string) => await things.findOne({ shareId } as any) as ThingDoc | null;
+      return canViewInherited(target as ThingDoc, withThingLink(await withFriendIds(viewer), target.shareId), lookup, things);
+    }
+    if (attachmentTargetAclAllows(target, viewer)) return true;
     return attachmentTargetAclAllows(target, await withFoundPostGrant(target as ThingDoc, viewer, async (shareId) => await things.findOne({ shareId } as any) as ThingDoc | null));
 	};
 };

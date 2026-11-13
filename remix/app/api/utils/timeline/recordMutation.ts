@@ -1,3 +1,4 @@
+import { readAllThingAclEntries } from '../things/relationalAcl';
 import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { recordPageComponentBindings } from './componentBindings';
 import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
@@ -16,11 +17,18 @@ import { folderPlacementSnapshot } from '../../../timeline/folderPlacement.ts';
  * tokens, hidden-link keys, grants and platform ledger state are not revisions.
  * Dedicated protected families must supply their own approved snapshot adapter. */
 export function thingContentSnapshotValue(doc: any) {
+	if (doc.aclGeneration) throw new Error('Relational audiences must be materialized before content snapshots');
 	return {
 		thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
 		tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
 		geo: doc.geo ?? null
 	};
+}
+/** Trusted serialization projection only. Preserve the caller's raw document
+ * for authorization; this independent copy carries complete authored ACL data. */
+export async function materializeThingContentSnapshotDocument(things: any, doc: any, session?: any) {
+	if (!doc || !doc.aclGeneration) return doc;
+	return { ...doc, acl: await readAllThingAclEntries(things, doc, session), aclGeneration: undefined };
 }
 export function thingContentSnapshot(doc: any): TimelineSnapshot | null {
 	if (!doc) return null;
@@ -92,7 +100,9 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
  * append/accounting error rolls back the content and head as one operation. */
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
 	await recordCreationContentEpoch(things, before, after, session);
-	const prepared = prepareThingMutation(before, after, capture);
+	const prepared = prepareThingMutation(
+		await materializeThingContentSnapshotDocument(things, before, session),
+		await materializeThingContentSnapshotDocument(things, after, session), capture);
 	if (!prepared) return null;
 	const { parts } = prepared;
 	const event = await recordPageComponentBindings(things, session, before, after, prepared.event);

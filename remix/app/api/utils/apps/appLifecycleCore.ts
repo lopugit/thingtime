@@ -41,6 +41,7 @@ export const deleteAppLifecycleInSession = async (input: {
 	revokedAt: Date;
 	session: any;
 	canManage: (ownerId: string, appDoc: any, session: any) => Promise<boolean>;
+	cleanupApp?: (appDoc: any, session: any) => Promise<void>;
 }): Promise<DeleteAppLifecycleResult> => {
 	const match = appControlThingMatch(input.clientId);
 	const app = await input.things.findOne(match, { session: input.session });
@@ -58,6 +59,7 @@ export const deleteAppLifecycleInSession = async (input: {
 			// never revoke sessions while leaving the app control row live.
 			throw new Error('Registered app changed while it was being deleted');
 		}
+		await input.cleanupApp?.(app, input.session);
 	}
 
 	const revoked = await input.sessions.updateMany(

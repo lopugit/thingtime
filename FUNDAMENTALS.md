@@ -76,6 +76,15 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 System-kind rules (never bypass):
 
+- `acl-entry` Things are protected authorization relations linked to one
+  owned target and ACL generation. Generic CRUD must never mint or alter
+  them. The canonical Thing transaction writes grants/revocations and root
+  revision changes together; exact access checks query matching subjects.
+  Root ACLs retain finite audience primitives, while legacy wire/snapshot
+  serialization preserves the complete audience. These control rows are
+  reconstructed from logical content in backup/restore, not exported as
+  independently writable grants. See `docs/relational-access.md`.
+
 - `mongodb-connection-snapshot` is server-minted home control telemetry with
   `storageClass: "control"`, a system owner and no general read ACL. Only the
   dedicated current-admin inventory endpoint projects it. Generic CRUD rejects
@@ -567,3 +576,11 @@ commit the vault update and receipt together, fencing the approving session
 and current administrator record against concurrent revocation/demotion.
 General Things endpoints never read or write this control state. See
 [agent credential workflows](docs/agent-credential-workflows.md).
+
+
+Account configuration uses protected home-pinned `account-config-entry` rows
+with owner-bound encrypted payloads; session selected-resource permissions use
+protected `session-resource-grant` rows and the session expiry. Subspace
+rules/flairs/removal reasons use billable `subspace-definition` child rows,
+with atomic accounting, ownership transfer and deletion. None is an ordinary
+user-writable kind. See `docs/relational-access.md` for migration boundaries.

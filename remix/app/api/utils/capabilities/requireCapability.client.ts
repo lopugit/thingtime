@@ -60,6 +60,7 @@ export const createThingtimeCapabilityChecker = (options: { source?: 'origin' | 
     // Same-origin web requests retain the browser's platform-protection cookie;
     // the manifest itself contains no account data. Active API discovery still
     // uses its fixed endpoint and refuses redirects in either case.
+
     const omitCredentials = Boolean(transport) || expectedOrigin !== window.location.origin;
     const scoped = activeApi || omitCredentials;
     const load = () => {
@@ -74,6 +75,7 @@ export const createThingtimeCapabilityChecker = (options: { source?: 'origin' | 
       };
       return (transport?.fetch ?? fetch)(scoped ? new URL(manifestPath, origin).href : manifestPath, {
         headers: { Accept: 'application/json', ...(!activeApi && previousManifest && previousEtag ? { 'If-None-Match': previousEtag } : {}) },
+
         credentials: omitCredentials ? 'omit' : 'same-origin',
         ...(scoped ? { redirect: 'error' as const } : {}),
         // A retry after deployment must not replay the browser's older manifest.

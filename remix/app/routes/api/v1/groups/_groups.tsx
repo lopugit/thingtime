@@ -1,10 +1,8 @@
-import { json, readJsonBody } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { createGroup, deleteGroup, listGroups, updateGroup } from '~/api/utils/groups/groups';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-
-const MAX_BODY_BYTES = 64 * 1024;
 
 // Audience groups — the reusable "share with these people" lists behind the
 // custom-visibility picker. Full session only (groups configure your
@@ -36,7 +34,9 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'You’re doing that too fast — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const body = await readJsonBody(request, MAX_BODY_BYTES);
+  const invalidContentType = requireJsonContentType(request);
+  if (invalidContentType) return invalidContentType;
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 
   if (method === 'POST') {
     const result = await createGroup(user.id, { name: body?.name, memberIds: body?.memberIds });

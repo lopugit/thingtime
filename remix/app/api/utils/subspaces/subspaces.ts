@@ -1,3 +1,5 @@
+import { readPinnedFirstPage } from './pinPaging';
+import { DEFINITION_FIELDS, hydrateSubspaceDefinitions, replaceSubspaceDefinitions, deleteSubspaceDefinitions, transferSubspaceDefinitions } from './definitions';
 import { deleteSubspaceMessaging, ensureSubspaceMessaging, ensureSubspaceMessagingMember, subspaceMessagingIds } from '../messenger/subspaceMessages';
 // Subspaces — Reddit-style communities as things (see subspaceSchema and
 // friends in schemas/registry.ts). A subspace thing owns its branding, rules,
@@ -25,9 +27,7 @@ import { findUserByUsername } from '../auth/users';
 import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
 import {
 	COLLECTION_SCHEMA_VERSIONS,
-	MAX_SUBSPACE_MEMBERSHIPS_PER_USER,
 	MAX_SUBSPACE_REPORT_REPORTERS_LISTED,
-	MAX_SUBSPACES_PER_USER,
 	SUBSPACE_ROLES,
 	subspaceNotificationPreview,
 	type SubspaceAccessMode,
@@ -59,12 +59,13 @@ import {
 	type ThingDoc,
 	type Viewer
 } from '../things/things';
+import { relationalAclCandidateStages, prepareRelationalAcls } from '../things/relationalAcl';
 import { updownTalliesFor } from '../things/updown';
 import {
 	accessOf,
 	canModerate,
-	findSubspace,
-	findSubspaceById,
+	findSubspace as findSubspaceMetadata,
+	findSubspaceById as findSubspaceMetadataById,
 	findSubspaceMemberDoc,
 	flairsOf,
 	isActiveMember,
@@ -140,7 +141,6 @@ const THINGS_SCHEMA_VERSION = COLLECTION_SCHEMA_VERSIONS.things;
 const DEFAULT_PAGE = 20;
 const MAX_PAGE = 50;
 const MAX_MODERATORS_LISTED = 50;
-const MAX_PINNED = 5;
 // Ranked sorts score the newest N posts of the subspace, then page within that
 // window by offset — deterministic for a fixed dataset + timestamp (the ranked
 // home-feed pattern; keeps votes relational, no denormalized score field)
@@ -477,16 +477,6 @@ const resolveOpenReports = async (things: any, subspaceId: string, postId: strin
 
 const livePostMatch = async (subspaceId: string) => withMatch(await postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
 
-const ownedSubspaceCount = async (userId: string, session?: any): Promise<number> => {
-	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'subspace-member', ownerId: userId, 'crystal.role': 'owner', 'crystal.left': { $ne: true } } as any, session ? { session } : {});
-};
-
-const membershipCount = async (userId: string): Promise<number> => {
-	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'subspace-member', ownerId: userId, 'crystal.left': { $ne: true } } as any);
-};
-
 const isDuplicateKey = (err: unknown): boolean => (err as { code?: number } | null)?.code === 11000;
 
 const requireViewer = (viewerInput: string | Viewer): Fail | { ok: true; viewer: NonNullable<Viewer> } => {
@@ -496,6 +486,15 @@ const requireViewer = (viewerInput: string | Viewer): Fail | { ok: true; viewer:
 };
 
 type SubspaceRef = { id?: unknown; slug?: unknown };
+
+const findSubspaceById = async (id: unknown) => {
+  const doc = await findSubspaceMetadataById(id);
+  return doc ? (await hydrateSubspaceDefinitions(await getThingsCollection(),[doc]))[0] : null;
+};
+const findSubspace = async (ref: SubspaceRef) => {
+  const doc = await findSubspaceMetadata(ref);
+  return doc ? (await hydrateSubspaceDefinitions(await getThingsCollection(),[doc]))[0] : null;
+};
 
 const resolveSubspace = async (ref: SubspaceRef): Promise<Fail | { ok: true; subspace: any }> => {
 	if ((typeof ref.id !== 'string' || !ref.id.trim()) && (typeof ref.slug !== 'string' || !ref.slug.trim())) {
@@ -620,12 +619,6 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 	const branding = sanitizeBranding(input.branding);
 	if (isFail(branding)) return branding;
 
-	if ((await ownedSubspaceCount(ownerId)) >= MAX_SUBSPACES_PER_USER) {
-		return fail(400, `You already run ${MAX_SUBSPACES_PER_USER} subspaces — that is a lot of subspaces 🪐`);
-	}
-	if ((await membershipCount(ownerId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
-		return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
-	}
 	const things = await getThingsCollection();
 	// a recently deleted subspace still holds its slug: only its last owner may
 	// re-found it before the hold lapses (the tombstone is consumed below, in
@@ -656,7 +649,10 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 	try {
 		await withAccountedThingsTransaction(async (session) => {
 			if (tombstone) await things.deleteOne({ _id: tombstone._id } as any, { session });
-			await insertAccountedThing(things, subspace as any, { session });
+      const definition = await replaceSubspaceDefinitions(things, subspace, {}, session);
+      const stored: any = {...subspace,...definition.set,crystal:{...subspace.crystal}};
+      for (const field of DEFINITION_FIELDS) delete stored.crystal[field];
+      await insertAccountedThing(things, stored as any, { session });
 			await things.insertOne(owner as any, { session });
 				await ensureSubspaceMessaging(subspace, session);
 				await ensureSubspaceMessagingMember(subspace, owner, session);
@@ -744,7 +740,7 @@ export const listSubspaces = async (
 		const { ids, nextCursor } = sliceRankedPage(ranked, query.cursor, limit);
 		const pageDocs = ids.length ? ((await things.find({ thingtime: 'subspace', shareId: { $in: ids } } as any).toArray()) as any[]) : [];
 		const docsById = new Map(pageDocs.map((doc) => [String(doc.shareId), doc]));
-		const page = ids.map((id) => docsById.get(id)).filter(Boolean);
+		const page = await hydrateSubspaceDefinitions(things,ids.map((id) => docsById.get(id)).filter(Boolean));
 		return { ok: true, subspaces: project(page, counts, recent), nextCursor, sort };
 	}
 
@@ -759,7 +755,8 @@ export const listSubspaces = async (
 	const last = page[page.length - 1];
 	const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
 	const counts = await memberCountsFor(page.map((doc) => String(doc.shareId)));
-	return { ok: true, subspaces: project(page, counts, null), nextCursor, sort };
+	const hydratedPage = await hydrateSubspaceDefinitions(things,page);
+	return { ok: true, subspaces: project(hydratedPage, counts, null), nextCursor, sort };
 };
 
 export type SubspaceDetail = {
@@ -975,7 +972,13 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
         });
         Object.assign(write, mediaSet, { 'crystal.branding': branding });
       }
-      await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: write }, { session });
+      const definition = !current.definitionGeneration || DEFINITION_FIELDS.some(field => Object.prototype.hasOwnProperty.call(write,`crystal.${field}`))
+        ? await replaceSubspaceDefinitions(things,current,write,session) : null;
+      if (definition) {
+        for (const field of DEFINITION_FIELDS) delete write[`crystal.${field}`];
+        Object.assign(write,definition.set);
+      }
+      await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: write,...(definition?{$unset:definition.unset}:{}) }, { session });
     });
   } catch (error) {
     if (isDuplicateKey(error)) return fail(409, 'That subspace slug is taken or held — pick another slug');
@@ -1064,9 +1067,6 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 	// their stale row is not an invitation either.
 	if (accessOf(subspace) === 'private') {
 		if (isPending) return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false, pending: true };
-		if ((await membershipCount(userId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
-			return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
-		}
 		if (existing) {
 			// a re-request restarts the row's clock so the queue lists it as
 			// new — and starts from a clean slate: a request is never an
@@ -1096,9 +1096,6 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 		}
 		await notifyModsOfRequest(id, slug, auth.viewer, 'wants to join 🙋');
 		return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false, pending: true };
-	}
-	if ((await membershipCount(userId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
-		return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
 	}
 	if (existing) {
 		// rejoining after leaving (or a request left over from when the
@@ -1534,8 +1531,6 @@ export const transferSubspace = async (
 	const target = targetDoc ? membershipOfDoc(targetDoc) : null;
 	if (target?.banned) return fail(403, `A banned user can’t take over s/${slug} — lift the ban first`);
 	if (!isActiveMember(target)) return fail(404, `The new owner has to be an active member of s/${slug} first`);
-	const ownerCapMessage = `They already run ${MAX_SUBSPACES_PER_USER} subspaces — the cap applies to owners too`;
-	if ((await ownedSubspaceCount(targetUserId)) >= MAX_SUBSPACES_PER_USER) return fail(400, ownerCapMessage);
 
 	const things = await getThingsCollection();
 	const now = new Date();
@@ -1545,10 +1540,10 @@ export const transferSubspace = async (
 			// racing from the same owner (double-submit, two tabs, two API clients)
 			// commit at most once: the loser matches nothing and the whole
 			// transaction aborts — never two owner rows, never an ownerId that
-			// disagrees with the roster. The cap is re-read under the session too.
-			if ((await ownedSubspaceCount(targetUserId, session)) >= MAX_SUBSPACES_PER_USER) throw new LifecycleConflict(ownerCapMessage);
+			// disagrees with the roster.
 			const handedOver = await updateAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId, subspaceMediaDeleting: { $ne: true } }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
 			if (!Number(handedOver?.matchedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were transferring it — reload and try again`);
+			await transferSubspaceDefinitions(things,id,actorId,targetUserId,session);
 			const crowned = await things.updateOne(
 				// still an active member: not left, and not banned (an expired
 				// temporary ban is healed lazily, so it reads as not banned here too)
@@ -1694,6 +1689,7 @@ export const deleteSubspace = async (viewerInput: string | Viewer, input: Delete
 	const now = new Date();
 	try {
 		await withAccountedThingsTransaction(async (session) => {
+      await deleteSubspaceDefinitions(things,id,actorId,session);
 			const dropped = await deleteAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId }, { session });
 			if (!Number(dropped?.deletedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were deleting it — reload and try again`);
 			await things.insertOne(newSubspaceTombstoneDoc(id, slug, actorId, now) as any, { session });
@@ -1809,8 +1805,6 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 			unset['subspaceMod.ruleIndex'] = '';
 			break;
 		case 'pin': {
-			const pinned = await things.countDocuments({ ...await livePostMatch(subspaceId), 'subspaceMod.pinned': true } as any);
-			if (!current.pinned && pinned >= MAX_PINNED) return fail(400, `A subspace can pin at most ${MAX_PINNED} posts`);
 			set['subspaceMod.pinned'] = true;
 			break;
 		}
@@ -2092,6 +2086,7 @@ export const listReports = async (viewerInput: string | Viewer, query: ListRepor
 	// a post that left the subspace (or was deleted) is no longer this queue's
 	// business as content — the group stays listed with post null so the mods
 	// can dismiss it
+	await prepareRelationalAcls(things, postDocs as ThingDoc[], viewer);
 	const visibleDocs = (postDocs as ThingDoc[]).filter((doc) => subspaceIdOfDoc(doc) === id && canView(doc, viewer));
 	const projected = await toPublicPosts(visibleDocs, viewer);
 	const postsById = new Map(projected.map((post) => [post.id, post]));
@@ -2242,31 +2237,24 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 
 	const audience = visibilityQueryFor(viewer, []);
 	if (!audience) return { ok: true, subspace: publicSubspace, posts: [], nextCursor: null, sort };
-	const base = withMatch(await postMatch(), { 'crystal.subspaceId': id }, audience, includeRemoved ? {} : { 'subspaceMod.status': { $ne: 'removed' } });
+	const base = withMatch(await postMatch(), { 'crystal.subspaceId': id }, includeRemoved ? {} : { 'subspaceMod.status': { $ne: 'removed' } });
+	const visibleStages = (extra: Record<string, any> = {}): any[] => [
+		{ $match: withMatch(base, extra) },
+		...relationalAclCandidateStages(things.collectionName, viewer),
+		{ $match: audience }, { $unset: '_aclCandidate' }
+	];
 
 	if (sort === 'new') {
-		const cursor = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
-		// pinned posts lead the first page, newest-first below them
-		const pinnedDocs = cursor
-			? []
-			: ((await things
-					.find(withMatch(base, { 'subspaceMod.pinned': true }) as any)
-					.sort({ createdAt: -1, shareId: 1 })
-					.limit(MAX_PINNED)
-					.toArray()) as any as ThingDoc[]);
-		const pinnedIds = pinnedDocs.map((doc) => doc.shareId);
-		const pageMatch = withMatch(base, cursor ? chronoCursorClause(cursor) : {}, pinnedIds.length ? { shareId: { $nin: pinnedIds } } : {});
-		const docs = (await things
-			.find(pageMatch as any)
-			.sort({ createdAt: -1, shareId: 1 })
-			.limit(limit + 1)
-			.toArray()) as any as ThingDoc[];
-		const page = docs.slice(0, limit);
-		const last = page[page.length - 1];
-		const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-		const visible = [...pinnedDocs, ...page].filter((doc) => canView(doc, viewer));
-		return { ok: true, subspace: publicSubspace, posts: await toPublicPosts(visible, viewer), nextCursor, sort };
-	}
+    const result = await readPinnedFirstPage<ThingDoc,{createdAt:Date;id:string}>(async (pinned,cursor,count) =>
+      things.aggregate([...visibleStages(withMatch({'subspaceMod.pinned':pinned?true:{$ne:true}},cursor?chronoCursorClause(cursor):{})),
+        {$sort:{createdAt:-1,shareId:1}},{$limit:count}]).toArray() as Promise<ThingDoc[]>,
+      parseChronoCursor,typeof query.cursor==='string'?query.cursor:'',limit);
+    if (!result) return fail(400,'Invalid subspace feed cursor');
+    const {page,nextCursor}=result;
+    await prepareRelationalAcls(things,page,viewer);
+    const visible = page.filter(doc=>canView(doc,viewer));
+    return {ok:true,subspace:publicSubspace,posts:await toPublicPosts(visible,viewer),nextCursor,sort};
+  }
 
 	// ranked sorts: lean candidate window → one batched vote tally → pure
 	// ranking → offset paging → full docs for the page slice only
@@ -2274,10 +2262,7 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 	const since = sort === 'top' || sort === 'controversial' ? topRangeSince(sanitizeTopRange(query.range), nowMs) : sort === 'rising' ? topRangeSince('day', nowMs) : null;
 	const windowMatch = since ? withMatch(base, { createdAt: { $gte: since } }) : base;
 	const candidates = (await things
-		.find(windowMatch as any)
-		.sort({ createdAt: -1, shareId: 1 })
-		.limit(RANKED_WINDOW)
-		.project({ shareId: 1, createdAt: 1, 'subspaceMod.pinned': 1 })
+		.aggregate([...visibleStages(windowMatch), { $sort: { createdAt: -1, shareId: 1 } }, { $limit: RANKED_WINDOW }, { $project: { shareId: 1, createdAt: 1, 'subspaceMod.pinned': 1 } }])
 		.toArray()) as any[];
 	const tallies = await updownTalliesFor(
 		candidates.map((doc) => String(doc.shareId)),
@@ -2301,6 +2286,7 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 	const pageDocs = pageIds.length ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, await postMatch()) as any).toArray()) as any as ThingDoc[]) : [];
 	const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
 	const page = pageIds.map((pageId) => docsById.get(pageId)).filter(Boolean) as ThingDoc[];
+	await prepareRelationalAcls(things, page, viewer);
 	const visible = page.filter((doc) => canView(doc, viewer));
 	const nextCursor = offset + limit < ranked.length ? String(offset + limit) : null;
 	return { ok: true, subspace: publicSubspace, posts: await toPublicPosts(visible, viewer), nextCursor, sort };
