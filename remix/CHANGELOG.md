@@ -176,7 +176,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   device-event view, with safe native diagnostics, offline delivery, capture
   controls and snapshot-based history clearing. Restore discarded Photos
   metadata from acknowledged queues without re-uploading backed-up originals.
-  See [private diagnostics](../docs/private-device-diagnostics.md). **Codex (AI)**
+  See [PR #1498](../PRs/1498-codex-private-device-debug-20261112-add-private-device-diagnostics-and-recover-photos-metadata-checkpoints.md) and [private diagnostics](../docs/private-device-diagnostics.md). **Codex (AI)**
 
 - 2026-11-12: Reuse prepared Photos originals across concurrent uploads to avoid repeated full-original export and hashing between parts; retain source validation and large-file support. See [PR #1491](../PRs/1491-codex-device-sync-app-start-start-saved-device-sync-across-app-routes.md).
 

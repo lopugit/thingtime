@@ -89,7 +89,7 @@ final class MobileDeviceDiagnosticsInstalledTests: XCTestCase {
         while Date() < deadline {
             let read = try await api("/api/v1/devices/diagnostics?deviceId=" + device)
             found = (read["events"] as? [[String: Any]] ?? []).filter { row in
-                guard let event = row["event"] as? [String: Any], let id = event["eventId"] as? String else { return false }
+                guard let id = row["eventId"] as? String else { return false }
                 return sent.contains { $0.eventId == id }
             }
             if found.count == sent.count && !sent.isEmpty { break }
@@ -98,15 +98,24 @@ final class MobileDeviceDiagnosticsInstalledTests: XCTestCase {
         XCTAssertFalse(sent.isEmpty)
         XCTAssertEqual(found.count, sent.count)
         for event in sent {
-            let row = try XCTUnwrap(found.first { ($0["event"] as? [String: Any])?["eventId"] as? String == event.eventId })
+            let row = try XCTUnwrap(found.first { $0["eventId"] as? String == event.eventId })
             XCTAssertEqual(row["deviceId"] as? String, device)
-            let saved = try JSONDecoder().decode(MobileDeviceDiagnosticEvent.self, from: JSONSerialization.data(withJSONObject: try XCTUnwrap(row["event"] as? [String: Any])))
+            let thing = try await api("/api/v1/things?id=" + (try XCTUnwrap(row["id"] as? String)))
+            let crystal = try XCTUnwrap((thing["thing"] as? [String: Any])?["crystal"] as? [String: Any])
+            let saved = try JSONDecoder().decode(MobileDeviceDiagnosticEvent.self, from: JSONSerialization.data(withJSONObject: try XCTUnwrap(crystal["event"] as? [String: Any])))
             XCTAssertEqual(saved, event)
         }
         var lifecycleEvents: [[String: Any]] = []
+        var observedApplicationStates: [Int] = []
         if env["THINGTIME_DEVICE_DIAGNOSTICS_LIFECYCLE_TEST"] == "1" {
+            let observers = [UIApplication.didEnterBackgroundNotification, UIApplication.didBecomeActiveNotification].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                    MainActor.assumeIsolated { observedApplicationStates.append(UIApplication.shared.applicationState.rawValue) }
+                }
+            }
+            defer { observers.forEach(NotificationCenter.default.removeObserver) }
             let before = try await api("/api/v1/devices/diagnostics?deviceId=" + device)
-            let prior = Set((before["events"] as? [[String: Any]] ?? []).compactMap { ($0["event"] as? [String: Any])?["eventId"] as? String })
+            let prior = Set((before["events"] as? [[String: Any]] ?? []).compactMap { $0["eventId"] as? String })
             let ready = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("native-device-diagnostics-lifecycle-ready.json")
             try JSONSerialization.data(withJSONObject: ["origin": base, "ownerId": owner, "deviceId": device]).write(to: ready, options: .atomic)
@@ -116,22 +125,30 @@ final class MobileDeviceDiagnosticsInstalledTests: XCTestCase {
                 await diagnostics.flushAndWait()
                 let read = try await api("/api/v1/devices/diagnostics?deviceId=" + device)
                 lifecycleEvents = (read["events"] as? [[String: Any]] ?? []).filter { row in
-                    guard row["deviceId"] as? String == device, let event = row["event"] as? [String: Any],
-                          let id = event["eventId"] as? String, !prior.contains(id) else { return false }
-                    return ["app.background", "app.foreground"].contains(event["code"] as? String ?? "")
+                    guard row["deviceId"] as? String == device,
+                          let id = row["eventId"] as? String, !prior.contains(id) else { return false }
+                    return ["app.background", "app.foreground"].contains(row["code"] as? String ?? "")
                 }
-                if Set(lifecycleEvents.compactMap { ($0["event"] as? [String: Any])?["code"] as? String }) == ["app.background", "app.foreground"] { break }
+                if Set(lifecycleEvents.compactMap { $0["code"] as? String }) == ["app.background", "app.foreground"] { break }
                 try await Task.sleep(for: .milliseconds(250))
             }
-            XCTAssertEqual(Set(lifecycleEvents.compactMap { ($0["event"] as? [String: Any])?["code"] as? String }), ["app.background", "app.foreground"])
+            XCTAssertEqual(Set(lifecycleEvents.compactMap { $0["code"] as? String }), ["app.background", "app.foreground"])
+            XCTAssertTrue(observedApplicationStates.contains(UIApplication.State.background.rawValue))
+            XCTAssertTrue(observedApplicationStates.contains(UIApplication.State.active.rawValue))
         }
         let output: [String: Any] = ["origin": base, "ownerId": owner, "deviceId": device, "eventIds": sent.map(\.eventId),
             "outcomes": sent.compactMap { $0.background?.outcome?.rawValue }, "exactPayloads": found.count == sent.count,
             "lifecycleEvents": lifecycleEvents,
+            "observedApplicationStates": observedApplicationStates,
             "systemErrors": sent.compactMap { $0.systemError }.map { ["domain": $0.domain.rawValue, "code": $0.code] as [String: Any] }]
         let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("native-device-diagnostics-acceptance.json")
         try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
         guard found.count == sent.count, !sent.isEmpty else { return }
+        if env["THINGTIME_DEVICE_DIAGNOSTICS_LIFECYCLE_TEST"] == "1" {
+            guard Set(lifecycleEvents.compactMap { $0["code"] as? String }) == ["app.background", "app.foreground"],
+                  observedApplicationStates.contains(UIApplication.State.background.rawValue),
+                  observedApplicationStates.contains(UIApplication.State.active.rawValue) else { return }
+        }
         print("IOS_DEVICE_DIAGNOSTICS_PASS: normal native status, \(sent.count) exact paired outcomes independently owner-read")
     }
 }

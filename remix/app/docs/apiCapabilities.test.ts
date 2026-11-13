@@ -884,7 +884,7 @@ test('cursor discussion clients require the additive 1.27 contract while media k
 
 
   for (const old of [undefined, '1.24.0', '1.25.0', '1.26.0', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.27.0'), false);
-  for (const current of ['1.27.0', '1.27.1', '1.30.0']) assert.equal(capabilitySatisfies(current, '1.27.0'), true);
+  for (const current of ['1.27.0', '1.27.1', '1.29.0']) assert.equal(capabilitySatisfies(current, '1.27.0'), true);
   assert.equal(capabilitySatisfies('1.24.0', '1.24.0'), true, 'the prior gallery contract remains independently compatible');
 });
 
@@ -898,14 +898,14 @@ test('CSSOM clients require the asynchronous stylesheet receiver contract', () =
 
 test('Layout clients require the scoped layout and listener contract', () => {
  const version = createApiCapabilitiesManifest().features['api.actions-run'];
- assert.equal(capabilitySatisfies(version, '1.30.0'), true);
- for (const prior of [undefined, '1.28.0', '1.28.9', '2.0.0']) assert.equal(capabilitySatisfies(prior, '1.30.0'), false);
+ assert.equal(capabilitySatisfies(version, '1.29.0'), true);
+ for (const prior of [undefined, '1.28.0', '1.28.9', '2.0.0']) assert.equal(capabilitySatisfies(prior, '1.29.0'), false);
 });
 
 
 test('observer catalogue programs require the additive actions-run 1.30 contract', () => {
  for (const version of ['1.30.0', '1.30.1', '1.31.0']) assert.equal(capabilitySatisfies(version, '1.30.0'), true);
- for (const version of [undefined, '1.30.0', '1.29.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.30.0'), false);
+ for (const version of [undefined, '1.29.0', '1.29.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.30.0'), false);
 });
 
 
