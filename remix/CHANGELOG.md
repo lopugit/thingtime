@@ -160,6 +160,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
   MCP Apps bridge, advertise a fresh versioned UI resource, and preserve results
   with one inline error on host failures. Correlate bounded requests and prevent
