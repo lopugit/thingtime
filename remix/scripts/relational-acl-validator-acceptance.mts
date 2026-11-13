@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { MongoClient } from 'mongodb';
 import { installThingAclWriteFence, isThingAclWriteFenceReady, THING_ACL_WRITE_FENCE } from '../app/api/utils/mongodb/aclWriteFence';
+import { classifyThingCollModAuthority } from '../app/api/utils/mongodb/aclWriteFenceAuthority';
 
 const dir = await mkdtemp('/private/tmp/tt-acl-validator-');
 const evidence = process.env.AGENT_REPORTING_EVIDENCE_DIR;
@@ -41,6 +42,11 @@ try {
   await bootstrap.close();
   const admin = await connect('acceptanceAdmin', adminPassword);
   const db = admin.db('acl_fence_acceptance');
+  const authority = async (client: MongoClient) => classifyThingCollModAuthority(
+    await client.db(db.databaseName).command({ connectionStatus: 1, showPrivileges: true }), db.databaseName, 'empty_validator_fixture');
+  assert.equal(await authority(admin), 'granted');
+  assert.equal(classifyThingCollModAuthority({ ok: 1, authInfo: { authenticatedUsers: [], authenticatedUserRoles: [], authenticatedUserPrivileges: [] } }, db.databaseName, 'empty_validator_fixture'), 'unknown');
+  checks.push('authenticated root effective privileges grant collMod and unauthenticated metadata cannot establish absence');
   await installThingAclWriteFence(db, 'new_empty_validator_fixture');
   assert.equal(await isThingAclWriteFenceReady(db, 'new_empty_validator_fixture'), true);
   assert.equal(await db.collection('new_empty_validator_fixture').countDocuments(), 0);
@@ -98,6 +104,7 @@ try {
   await admin.db('admin').command({ createUser: 'noFencePermissions', pwd: noListPassword, roles: [] });
   await db.command({ collMod: name, validationLevel: 'moderate', validationAction: 'warn' });
   const read = await connect('readFence', readPassword);
+  assert.equal(await authority(read), 'absent');
   assert.equal(await isThingAclWriteFenceReady(read.db(db.databaseName), name), false);
   await assert.rejects(() => installThingAclWriteFence(read.db(db.databaseName), name), (error: any) => error?.category === 'unauthorized' && error.mongoCode === 13 && error.driver === 'server' && error.mongoCodeName === 'Unauthorized');
   assert.equal((await options()).validationLevel, 'moderate');

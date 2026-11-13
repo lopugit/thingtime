@@ -9,6 +9,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   ensureHomeThingsIndexPlan,
   inspectHomeThingAclWriteFence,
+  inspectHomeThingCollModAuthority,
   provisionHomeThingAclWriteFence,
   withHomeIndexMaintenance,
   isHomeIndexRecoveryActive,
@@ -166,6 +167,7 @@ export type MigrationReport = {
   created: number;
   skipped: number;
   notes: string[];
+  collModAuthority?: 'granted' | 'absent' | 'unknown';
 };
 
 export type Migration = {
@@ -3291,7 +3293,7 @@ const consolidateSyncAttachmentBlobs: Migration = {
 };
 
 export const migrations: Migration[] = [
-  createAclWriteFenceMigration({ customPlane: isCustomMongoEndpointActive, inspect: inspectHomeThingAclWriteFence, provision: provisionHomeThingAclWriteFence }),
+  createAclWriteFenceMigration({ customPlane: isCustomMongoEndpointActive, inspect: inspectHomeThingAclWriteFence, inspectAuthority: inspectHomeThingCollModAuthority, provision: provisionHomeThingAclWriteFence }),
   subspaceMessagingMigration,
 	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical

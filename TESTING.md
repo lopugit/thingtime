@@ -5554,6 +5554,12 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] For `provision-relational-acl-validator`, confirm admin Dry run shows only
+      `granted`/`absent`/`unknown` effective home Things `collMod` authority, does
+      no DDL and discloses no principal, role, resource, command or raw error.
+      An authenticated root fixture grants, a read-only fixture lacks authority,
+      and unauthenticated/malformed/denied responses stay unknown. Installed
+      validator readiness must remain ready even when authority is absent.
 - [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
       call `/api/v1/health/nitro`: it reports `degraded` with
       `storageAccounting.state: "migration-required"` while any current user

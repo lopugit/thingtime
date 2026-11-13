@@ -160,6 +160,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-14: Show a closed, read-only effective `collMod` authority result in
+  the ACL-validator admin Dry run, separate from installed readiness; incomplete
+  or unauthenticated privilege data remains unknown. — Codex (AI)
+
 - 2026-11-14: Preserve bounded numeric MongoDB error codes and enumerated driver
   labels for ACL-validator provisioning failures; keep raw messages, causes,
   command contents and arbitrary names discarded. Combine incremental group
