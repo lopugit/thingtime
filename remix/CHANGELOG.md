@@ -162,6 +162,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
+- 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
+  MCP Apps bridge, advertise a fresh versioned UI resource, and preserve results
+  with one inline error on host failures. Correlate bounded requests and prevent
+  uncertain or stale Apply responses from retrying or changing a newer card.
+  Keep historical resource callers and legacy hosts compatible, and supply
+  complete demo review-page metadata so its confirmation controls render.
+  **Codex (AI)**
+
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
   cached results during explicitly permitted filter changes while clearing

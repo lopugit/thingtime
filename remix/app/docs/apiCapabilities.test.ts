@@ -106,8 +106,8 @@ test('connector protection preferences are registered and negotiated independent
   });
   for (const compatible of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(compatible, '1.0.0'), true);
   for (const incompatible of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, '1.0.0'), false);
-  assert.equal(route.features['api.chatgpt-mcp'], '2.2.0');
-  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.2.0');
+  assert.equal(route.features['api.chatgpt-mcp'], '2.2.1');
+  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.2.1');
 });
 
 test('exact Things counts and visible offset windows negotiate the additive contract', () => {
@@ -151,12 +151,12 @@ test('private agent reporting is registered in both manifests with an independen
   assert.equal(legacy.features['api.agent-reporting'], '1.1.0');
   assert.equal(manifest.origin, 'https://reporting.example');
   assert.equal(manifest.features['api.agent-reporting'].version, '1.1.0');
-  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.2.0');
+  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.2.1');
   assert.equal(legacy.features['api.tokens'], '1.1.0');
   assert.equal(manifest.features['api.tokens'].version, '1.1.0');
   assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.3.0');
   assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.3.0');
-  for (const [id, version, old] of [['agent-reporting', '1.1.0', '1.0.0'], ['chatgpt-mcp', '2.2.0', '2.1.0'], ['chatgpt-oauth-authorize', '1.3.0', '1.2.0'], ['chatgpt-oauth-token', '1.1.0', '1.0.0'], ['chatgpt-oauth-register', '1.1.0', '1.0.0']]) {
+  for (const [id, version, old] of [['agent-reporting', '1.1.0', '1.0.0'], ['chatgpt-mcp', '2.2.1', '2.1.0'], ['chatgpt-oauth-authorize', '1.3.0', '1.2.0'], ['chatgpt-oauth-token', '1.1.0', '1.0.0'], ['chatgpt-oauth-register', '1.1.0', '1.0.0']]) {
     const feature = `api.${id}`;
     assert.equal(legacy.features[feature], version);
     assert.equal(manifest.features[feature].version, version);
