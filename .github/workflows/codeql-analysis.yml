@@ -391,7 +391,7 @@ jobs:
     needs: scope
     if: ${{ !inputs.quota_only && needs.scope.outputs.analyze == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       actions: read
       contents: read
@@ -443,6 +443,125 @@ jobs:
           ref: ${{ needs.scope.outputs.checkout_ref || github.sha }}
           fetch-depth: 2
           persist-credentials: false
+
+      - name: Stage trusted SARIF recovery helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codeql-sarif/raw" "$RUNNER_TEMP/codeql-sarif/processed"
+          cat > "$RUNNER_TEMP/codeql-upload-recovery.mjs" <<'CODEQL_RECOVERY'
+          import { readFileSync, writeFileSync, readdirSync, lstatSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { join } from 'node:path';
+          import { setTimeout as sleep } from 'node:timers/promises';
+
+          // This program is materialized from the trusted reusable workflow, never
+          // imported or executed from the analyzed (possibly fork-owned) checkout.
+          const mode = process.argv[2];
+          const directory = join(process.env.RUNNER_TEMP, 'codeql-sarif');
+          const deadlinePath = join(directory, 'deadline');
+          const now = () => Date.now();
+          const fail = message => { throw new Error(message); };
+          const integer = value => Number.isSafeInteger(value) && value >= 0;
+          let deadline;
+          let interval = 15000;
+          let blockedUntil = 0;
+          const request = async endpoint => {
+            const remaining = deadline - now();
+            if (remaining <= 0) fail('SARIF recovery deadline elapsed; retained evidence is not upload success.');
+            try {
+              const response = await fetch(`https://api.github.com/${endpoint}`, {
+                headers: { authorization: `Bearer ${process.env.GH_TOKEN}`, accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+                redirect: 'error', signal: AbortSignal.timeout(Math.min(30000, remaining))
+              });
+              // Only allowlisted rate metadata is interpreted; bodies and headers are
+              // never logged. A generic 403 is an authorization failure, not a retry.
+              const reset = Number(response.headers.get('x-ratelimit-reset'));
+              if (response.headers.get('x-ratelimit-remaining') === '0' && integer(reset)) blockedUntil = Math.max(blockedUntil, reset * 1000 + 5000);
+              const retry = response.headers.get('retry-after');
+              if (retry !== null) {
+                const until = /^\d+$/.test(retry) ? now() + Number(retry) * 1000 : Date.parse(retry);
+                if (Number.isFinite(until)) blockedUntil = Math.max(blockedUntil, until);
+              }
+              if (response.status === 429 || (response.status === 403 && blockedUntil > now()) || response.status >= 500) return null;
+              if (!response.ok) fail(`GitHub SARIF recovery read refused (HTTP ${response.status}).`);
+              try { return await response.json(); } catch { return null; }
+            } catch (error) {
+              if (error.message.startsWith('GitHub SARIF')) throw error;
+              // Reads alone are safe to retry after uncertain transport. This helper
+              // never submits a SARIF or repeats an upload without a receipt.
+              return null;
+            }
+          };
+          const wait = async () => {
+            const delay = Math.min(deadline - now(), Math.max(interval, blockedUntil - now()));
+            if (delay <= 0) fail('SARIF recovery deadline elapsed; retained evidence is not upload success.');
+            console.log(`Waiting ${Math.ceil(delay / 1000)}s for SARIF quota or processing.`);
+            await sleep(delay);
+            interval = Math.min(60000, interval * 2);
+          };
+
+          if (mode === 'evidence') {
+            const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+            if (!/^[0-9a-f]{40,64}$/.test(sha) || sha !== process.env.ANALYSIS_SHA) fail('Analyzed checkout does not match the selected immutable SHA.');
+            const files = [];
+            for (const sub of ['raw', 'processed']) {
+              for (const name of readdirSync(join(directory, sub))) {
+                if (!name.endsWith('.sarif')) continue;
+                const path = join(directory, sub, name);
+                if (!lstatSync(path).isFile()) fail('SARIF evidence must be regular files.');
+                const bytes = readFileSync(path);
+                const sarif = JSON.parse(bytes);
+                if (!Array.isArray(sarif.runs) || !sarif.runs.length) fail('SARIF evidence has no analysis runs.');
+                files.push({ path: `${sub}/${name}`, sha256: createHash('sha256').update(bytes).digest('hex') });
+              }
+            }
+            if (!files.some(file => file.path.startsWith('raw/')) || !files.some(file => file.path.startsWith('processed/'))) fail('Both raw and processed SARIF evidence are required.');
+            writeFileSync(join(directory, 'source.json'), JSON.stringify({ repository: process.env.GITHUB_REPOSITORY,
+              ref: process.env.ANALYSIS_REF, sha, category: process.env.CATEGORY, runId: process.env.GITHUB_RUN_ID,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT, files }, null, 2));
+          } else {
+            if (process.env.GITHUB_REPOSITORY !== 'lopugit/thingtime' || !process.env.GH_TOKEN) fail('SARIF recovery requires the canonical repository and built-in job token.');
+            if (mode === 'quota') {
+              deadline = now() + 65 * 60 * 1000;
+              writeFileSync(deadlinePath, String(deadline));
+            } else if (mode === 'processing') {
+              deadline = Number(readFileSync(deadlinePath, 'utf8'));
+              if (!integer(deadline) || deadline > now() + 65 * 60 * 1000) fail('Invalid shared SARIF recovery deadline.');
+              if (!/^[A-Za-z0-9_-]+$/.test(process.env.SARIF_ID || '')) fail('Upload returned no valid SARIF receipt; cannot claim success.');
+              writeFileSync(join(directory, 'receipt.json'), JSON.stringify({ sarifId: process.env.SARIF_ID, status: 'accepted' }));
+            } else fail('Unknown SARIF recovery mode.');
+
+            while (now() < deadline) {
+              if (blockedUntil > now()) { await wait(); continue; }
+              if (mode === 'quota') {
+                const quota = await request('rate_limit');
+                const core = quota?.resources?.core;
+                const upload = quota?.resources?.code_scanning_upload;
+                if ([core, upload].every(bucket => bucket && integer(bucket.remaining) && integer(bucket.reset))) {
+                  // Leave room for the action's metadata/status requests. This is a
+                  // dispatch threshold, not a claim that the shared quota is reserved.
+                  if (core.remaining >= 100 && upload.remaining >= 1 && blockedUntil <= now()) break;
+                  for (const bucket of [core, upload]) {
+                    if (bucket.remaining < (bucket === core ? 100 : 1)) blockedUntil = Math.max(blockedUntil, bucket.reset * 1000 + 5000);
+                  }
+                }
+              } else {
+                const result = await request(`repos/lopugit/thingtime/code-scanning/sarifs/${process.env.SARIF_ID}`);
+                if (result?.processing_status === 'complete') {
+                  writeFileSync(join(directory, 'receipt.json'), JSON.stringify({ sarifId: process.env.SARIF_ID, status: 'complete' }));
+                  console.log('The accepted SARIF receipt has completed processing.');
+                  break;
+                }
+                if (result?.processing_status === 'failed') fail('GitHub failed SARIF processing; consult the retained receipt.');
+                if (result && result.processing_status !== 'pending') fail('Invalid SARIF processing response.');
+              }
+              await wait();
+            }
+            if (now() >= deadline) fail('SARIF recovery deadline elapsed; retained evidence is not upload success.');
+          }
+          CODEQL_RECOVERY
 
       # Last harmless moment to disown a push. `codeql-action/init` is the
       # point of no return: it registers this leg as a CodeQL configuration
@@ -976,17 +1095,85 @@ jobs:
 
       - name: Analyze the triggering revision
         if: needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && steps.ownership.outputs.upload != 'false'
+        id: analyze_trigger
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}
+          upload: never
+          upload-database: false
+          output: ${{ runner.temp }}/codeql-sarif/raw
+          post-processed-sarif-path: ${{ runner.temp }}/codeql-sarif/processed
 
       - name: Analyze the exact centrally dispatched PR head
         if: needs.scope.outputs.analysis_ref != ''
+        id: analyze_exact
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}
+          upload: never
+          upload-database: false
+          output: ${{ runner.temp }}/codeql-sarif/raw
+          post-processed-sarif-path: ${{ runner.temp }}/codeql-sarif/processed
           ref: ${{ needs.scope.outputs.analysis_ref }}
           sha: ${{ needs.scope.outputs.analysis_sha }}
+
+      # Preserve query output before any subsequent quota, upload or processing
+      # failure. Archive-only is never a successful Analyze check.
+      - name: Bind retained SARIF to the exact analyzed source
+        if: always() && (steps.analyze_trigger.outcome == 'success' || steps.analyze_trigger.outcome == 'failure' || steps.analyze_exact.outcome == 'success' || steps.analyze_exact.outcome == 'failure')
+        shell: bash
+        env:
+          ANALYSIS_REF: ${{ needs.scope.outputs.analysis_ref || github.ref }}
+          ANALYSIS_SHA: ${{ needs.scope.outputs.analysis_sha || github.sha }}
+          CATEGORY: /language:${{ matrix.language }}
+        run: node "$RUNNER_TEMP/codeql-upload-recovery.mjs" evidence
+
+      - name: Retain completed SARIF evidence
+        if: always() && (steps.analyze_trigger.outcome == 'success' || steps.analyze_trigger.outcome == 'failure' || steps.analyze_exact.outcome == 'success' || steps.analyze_exact.outcome == 'failure')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-sarif-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.language }}
+          path: ${{ runner.temp }}/codeql-sarif/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Wait for live SARIF upload quota
+        if: steps.analyze_trigger.outcome == 'success' || steps.analyze_exact.outcome == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/codeql-upload-recovery.mjs" quota
+
+      # Exactly one official upload preserves the pinned action's metadata,
+      # built-in-token and fork/ref rules. Do not clear its category sentinel or
+      # replay an uncertain upload. Its native transport owns upload retries.
+      - name: Upload retained SARIF once
+        id: sarif_upload
+        if: steps.analyze_trigger.outcome == 'success' || steps.analyze_exact.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          sarif_file: ${{ runner.temp }}/codeql-sarif/processed/upload.sarif
+          category: /language:${{ matrix.language }}
+          ref: ${{ needs.scope.outputs.analysis_ref || github.ref }}
+          sha: ${{ needs.scope.outputs.analysis_sha || github.sha }}
+          wait-for-processing: false
+
+      - name: Require completed SARIF processing receipt
+        if: steps.sarif_upload.outcome == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.sarif_upload.outputs.sarif-id }}
+        run: node "$RUNNER_TEMP/codeql-upload-recovery.mjs" processing
+
+      - name: Retain SARIF upload receipt
+        if: always() && steps.sarif_upload.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-receipt-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.language }}
+          path: ${{ runner.temp }}/codeql-sarif/receipt.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Snapshot quota after Analyze
         if: always()

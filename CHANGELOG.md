@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-11-14 — Retain CodeQL results through SARIF quota exhaustion
+
+- Separate query execution from the pinned official SARIF upload, retaining
+  exact-source raw/processed results and hashes before bounded quota waiting.
+- Wait for live core/upload quota with the built-in token, then require the
+  accepted upload receipt to complete processing before Analyze can pass.
+- Keep official ref, SHA, category, fork and native transport behavior. Failed
+  or ambiguous uploads remain failed with retained evidence; no blind replay.
+
 ## 2026-11-13 — Preserve native-provider guards during preview admission
 
 - Accept the existing native-home provider assertions around the required
