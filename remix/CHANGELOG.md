@@ -162,7 +162,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-14: Preserve bounded numeric MongoDB error codes and enumerated driver
   labels for ACL-validator provisioning failures; keep raw messages, causes,
-  command contents and arbitrary names discarded. — Codex (AI)
+  command contents and arbitrary names discarded. Combine incremental group
+  membership add/remove, client batching and exact storage accounting; existing
+  groups require accounting backfill before production writes. See
+  [PR 1520 release notes](../PRs/1520-codex-acl-validator-command-diagnostics-and-group-membership-batches.md). — Codex (AI)
 
 - 2026-11-14: Add authenticated home-only ACL-validator provisioning through the
   existing migration API, read-only inspection and safe stage/category failures;
