@@ -1,0 +1,417 @@
+# Build the wildcard `all` branch: develop + main + every open, same-repo pull
+# request (stacked branch → branch PRs included) merged into one generated
+# branch, so all in-progress work can be tried — and Vercel-previewed — in one
+# place.
+#
+# The rebuild logic lives in .github/scripts/build-all-branch.mjs (full design
+# notes in its header): deterministic from-scratch rebuilds, stack-aware merge
+# order, `-X theirs` newest-wins conflict policy with a matching theirs-biased
+# fallback, per-PR skip-instead-of-fail, a committed ALL_BRANCH.md manifest,
+# manifest-tree push dedup, and `.github` pinned to develop's copy so the
+# default GITHUB_TOKEN can force-push the result (workflow files never execute
+# on `all`).
+#
+# Build doctor: textually-clean merges can still collide semantically — two
+# PRs each adding the same helper compiles into duplicate declarations that no
+# git conflict ever flagged (the union then fails to build even though every
+# PR is individually green, and even develop would break the same way when the
+# second PR lands). The individual PRs keep getting healed one-by-one by the
+# existing AI conflict resolver as they merge; this doctor heals only the
+# union. After each rebuild whose inputs changed, the union build runs
+# (install, then the full Vercel-parity remix build); on failure, up to three
+# edit-files-only Claude rounds (same action pin, model waterfall, and
+# security posture as resolve-pr-conflicts.yml) repair the working tree, a
+# deterministic step guards + commits the edits (out-of-scope paths reverted,
+# raw/base64 credential scan), and the build is re-verified mechanically.
+# Doctor commits ride on `all` itself and are cherry-pick-replayed onto the
+# next rebuild; a fixup that stops applying (the source PRs healed) is dropped
+# silently. Unchanged inputs skip the build check and every model round.
+# `anthropics/claude-code-action` rejects push events, including a reusable
+# workflow called by a push listener. Push-triggered calls therefore dispatch
+# one bot-authored workflow_dispatch worker on the protected github-actions
+# ref; only that supported-event worker may enter the rebuild/doctor path.
+#
+# Security model (matches the resolver): the model has NO shell and NO git —
+# it only edits files; both checkouts use persist-credentials: false, so no
+# token exists in .git/config for it to read; pushes authenticate through an
+# ephemeral credential helper reading GH_TOKEN only in the final push step.
+# Fork PR content never enters the union, and the doctor never touches source
+# PRs — it commits to the regenerated `all` branch only.
+#
+# Token notes: the default GITHUB_TOKEN is enough. Its pushes intentionally
+# trigger no workflows, and Vercel still builds `all` because its GitHub App
+# watches branch pushes regardless of the pushing token. ANTHROPIC_API_KEY or
+# CLAUDE_CODE_OAUTH_TOKEN (the resolver's credential) enables the doctor;
+# without one the union is pushed unhealed, exactly as before.
+
+name: Build all branch
+
+on:
+  push:
+    branches: [github-actions]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+# Standalone dispatches on the github-actions ref dedupe against themselves;
+# called runs dedupe through the caller listener's identical group.
+concurrency:
+  # Keep the tiny push handoff separate from the worker it dispatches so the
+  # worker cannot cancel its own caller before the caller reports success.
+  group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
+  cancel-in-progress: true
+
+jobs:
+  handoff:
+    name: Hand off push rebuild to the github-actions control plane
+    if: github.repository == 'lopugit/thingtime' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch supported-event rebuild
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          jq -n '{ref:"github-actions"}' \
+            | gh api --method POST \
+                "repos/$REPO/actions/workflows/all-branch.yml/dispatches" \
+                --input -
+
+  rebuild:
+    if: github.repository == 'lopugit/thingtime' && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # The `secrets` context is not available in step `if:` expressions;
+      # step conditions read this job-level flag instead (same pattern as the
+      # resolver's HAS_AI_CREDENTIAL gate).
+      HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    steps:
+      - name: Check out develop working tree
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out protected build controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          path: control-plane
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Rebuild the all branch
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs build
+
+      - uses: pnpm/action-setup@v4
+        if: steps.build.outputs.proceed == 'true'
+        with:
+          package_json_file: remix/package.json
+
+      - uses: actions/setup-node@v4
+        if: steps.build.outputs.proceed == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+
+      - name: Union build check
+        id: check1
+        if: steps.build.outputs.proceed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs check
+
+      # The doctor reuses the resolver's admin-configured model waterfall (one
+      # dial governs both automations), validated against the same closed
+      # allowlist so a compromised response can never inject CLI flags.
+      - name: Load the build-doctor model waterfall
+        id: models
+        if: >-
+          steps.build.outputs.proceed == 'true'
+          && steps.check1.outputs.build_ok != 'true'
+          && steps.check1.outputs.ai_eligible == 'true'
+          && env.HAS_AI_CREDENTIAL == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"
+          response_file="$RUNNER_TEMP/all-doctor-model-waterfall.json"
+
+          waterfall='["default"]'
+          source="built-in default"
+
+          if curl --fail --silent --show-error \
+            --proto '=https' \
+            --tlsv1.2 \
+            --connect-timeout 5 \
+            --max-time 12 \
+            --retry 2 \
+            --retry-delay 1 \
+            --retry-max-time 30 \
+            --max-filesize 65536 \
+            --output "$response_file" \
+            "$endpoint"; then
+            if configured="$(jq -cse '
+              select(length == 1)
+              | .[0]
+              | select(type == "object")
+              | select(.ok == true)
+              | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
+              | .waterfall
+              | select(type == "array")
+              | select(length >= 1 and length <= 3)
+              | select(all(.[]; type == "string"))
+              | select(all(.[];
+                  . == "default"
+                  or . == "claude-fable-5"
+                  or . == "claude-opus-5"))
+              | select(length == (unique | length))
+            ' "$response_file" 2>/dev/null)"; then
+              waterfall="$configured"
+              source="Thingtime admin setting"
+              if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
+                waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
+              fi
+            else
+              echo "::warning::Thingtime returned a malformed model waterfall; using [default]."
+            fi
+          else
+            echo "::warning::Thingtime model waterfall is unavailable; using [default]."
+          fi
+
+          # Never interpolate API strings into claude_args. Rebuild the chain
+          # from fixed literals after validation.
+          mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
+          models=()
+          for id in "${configured_ids[@]}"; do
+            case "$id" in
+              default) models+=("default") ;;
+              claude-fable-5) models+=("claude-fable-5") ;;
+              claude-opus-5) models+=("claude-opus-5") ;;
+              *)
+                echo "::warning::Validated waterfall mapping failed closed; using [default]."
+                models=("default")
+                source="built-in default"
+                break
+                ;;
+            esac
+          done
+
+          primary="${models[0]}"
+          model_args="--model $primary"
+          if [ "${#models[@]}" -gt 1 ]; then
+            fallbacks="$(IFS=,; echo "${models[*]:1}")"
+            model_args="$model_args --fallback-model $fallbacks"
+          fi
+
+          echo "Model waterfall source: $source"
+          echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}")"
+          echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
+
+      - name: Build doctor round 1
+        id: doctor1
+        if: steps.models.outcome == 'success'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          allowed_bots: "github-actions"
+          prompt: |
+            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            EDITING FILES ONLY. You have NO shell and NO git access — that is
+            intentional. A later deterministic step verifies the build, commits, and
+            pushes whatever you leave in the working tree.
+
+            Context: `all` is a throwaway union branch — develop + main + every open
+            PR merged together, with the newer side winning textual conflicts.
+            Merges that are textually clean can still collide semantically: two PRs
+            declaring the same helper (duplicate identifier), duplicate
+            imports/exports, the same JSX attribute twice, a renamed symbol with
+            stale call sites, and similar.
+
+            The failed build command and its full output are in
+            `.all-doctor/build.log` — Read that file first.
+
+            Method:
+            1. Read `.all-doctor/build.log` and identify each failing file and the
+               root cause.
+            2. Fix each failure with the smallest edit that preserves BOTH sides'
+               intent: dedupe repeated declarations and imports (keep the most
+               complete variant, folding in any real differences), reconcile call
+               sites with renamed or moved symbols, and remove exact-duplicate
+               blocks. Union semantics: keep every feature working; only when two
+               sides are genuinely mutually exclusive, prefer the variant the rest
+               of the file already uses.
+            3. Re-scan each file you edit for the SAME collision pattern — a file
+               that duplicated one helper usually duplicated several.
+
+            Rules:
+            - Never touch .github/**, control-plane/**, graphify-out/**,
+              ALL_BRANCH.md, AGENTS.md, CLAUDE.md, any .gitattributes, or any
+              pnpm-lock.yaml / package-lock.json (lockfile trouble is repaired
+              mechanically before you run). Out-of-scope edits are reverted
+              mechanically afterwards.
+            - Do not create, rename, or delete files unless the error itself
+              demands it.
+            - Fix ONLY what the build error implicates (plus identical collisions
+              in those same files). This branch is regenerated from scratch on
+              every rebuild — broad refactors are wasted work and get dropped.
+            - If the failure cannot be fixed by editing app source (infrastructure,
+              network, dependency installation), make NO edits at all.
+          claude_args: |
+            ${{ steps.models.outputs.model_args }}
+            --effort max
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Edit,Write"
+            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
+
+      - name: Commit doctor round 1
+        id: commit1
+        if: steps.models.outcome == 'success'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 1
+
+      - name: Re-check after round 1
+        id: check2
+        if: steps.commit1.outputs.committed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs check
+
+      - name: Build doctor round 2
+        id: doctor2
+        if: >-
+          steps.models.outcome == 'success'
+          && steps.commit1.outputs.scrubbed != 'true'
+          && steps.check2.outputs.build_ok != 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          allowed_bots: "github-actions"
+          prompt: |
+            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
+            an earlier round either did not finish or did not fix the build (later
+            build stages often reveal new collisions once earlier ones are fixed).
+            The current failure's output is in `.all-doctor/build.log` — Read it
+            first; it reflects the tree as it stands now, including earlier fixes.
+
+            Fix each failing file with the smallest edit that preserves both sides'
+            intent (dedupe repeated declarations/imports keeping the most complete
+            variant, reconcile renamed symbols, drop exact-duplicate blocks), then
+            re-scan each edited file for the same collision pattern.
+
+            Rules (violations are reverted mechanically): never touch .github/**,
+            control-plane/**, graphify-out/**, ALL_BRANCH.md, AGENTS.md, CLAUDE.md,
+            any .gitattributes, or any lockfile; no new/renamed/deleted files unless
+            the error demands it; fix only what the log implicates; if it is not
+            fixable by editing app source, make NO edits.
+          claude_args: |
+            ${{ steps.models.outputs.model_args }}
+            --effort max
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Edit,Write"
+            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
+
+      - name: Commit doctor round 2
+        id: commit2
+        if: steps.doctor2.outcome == 'success' || steps.doctor2.outcome == 'failure'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 2
+
+      - name: Re-check after round 2
+        id: check3
+        if: steps.commit2.outputs.committed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs check
+
+      - name: Build doctor round 3
+        id: doctor3
+        if: >-
+          steps.models.outcome == 'success'
+          && steps.commit1.outputs.scrubbed != 'true'
+          && steps.commit2.outputs.scrubbed != 'true'
+          && steps.check2.outputs.build_ok != 'true'
+          && steps.check3.outputs.build_ok != 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          allowed_bots: "github-actions"
+          prompt: |
+            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
+            an earlier round either did not finish or did not fix the build (later
+            build stages often reveal new collisions once earlier ones are fixed).
+            The current failure's output is in `.all-doctor/build.log` — Read it
+            first; it reflects the tree as it stands now, including earlier fixes.
+
+            Fix each failing file with the smallest edit that preserves both sides'
+            intent (dedupe repeated declarations/imports keeping the most complete
+            variant, reconcile renamed symbols, drop exact-duplicate blocks), then
+            re-scan each edited file for the same collision pattern.
+
+            Rules (violations are reverted mechanically): never touch .github/**,
+            control-plane/**, graphify-out/**, ALL_BRANCH.md, AGENTS.md, CLAUDE.md,
+            any .gitattributes, or any lockfile; no new/renamed/deleted files unless
+            the error demands it; fix only what the log implicates; if it is not
+            fixable by editing app source, make NO edits.
+          claude_args: |
+            ${{ steps.models.outputs.model_args }}
+            --effort max
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Edit,Write"
+            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
+
+      - name: Commit doctor round 3
+        id: commit3
+        if: steps.doctor3.outcome == 'success' || steps.doctor3.outcome == 'failure'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 3
+
+      - name: Re-check after round 3
+        id: check4
+        if: steps.commit3.outputs.committed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs check
+
+      - name: Record the doctor outcome
+        if: steps.build.outputs.proceed == 'true'
+        env:
+          ALL_DOCTOR_SKIP_REASON: >-
+            ${{ steps.check1.outputs.build_ok != 'true'
+                && steps.check1.outputs.ai_eligible == 'true'
+                && env.HAS_AI_CREDENTIAL != 'true'
+                && 'no ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN secret — union pushed unhealed'
+                || '' }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-record
+
+      - name: Push the all branch
+        if: steps.build.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs push
