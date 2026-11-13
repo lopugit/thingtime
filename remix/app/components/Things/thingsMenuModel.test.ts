@@ -69,3 +69,16 @@ test('protected archived metadata exposes restoration without unsupported conten
   const thing: ThingsThing = { ...component, thingtime: ['chat-message'], libraryArchived: true, libraryArchiveEligible: true, libraryArchivePresentation: 'metadata', crystal: { name: 'Archived message' } };
   assert.deepEqual(commands({ thing, actCount: 1, clipboardCount: 0, ownerId: 'owner', libraryAction: 'restore' }), ['restore']);
 });
+
+test('pin verbs are shared across ordinary, timeline and archived metadata menus', () => {
+  const base = { thing: component, actCount: 1, clipboardCount: 0, ownerId: 'owner', pinState: { pinned: false } };
+  for (const thing of [component, { ...component, id: 'timeline-folder-a' }, { ...component, libraryArchivePresentation: 'metadata' as const }]) {
+    const unpinned = commands({ ...base, thing });
+    assert.ok(unpinned.includes('pin'));
+    assert.ok(unpinned.includes('reorder-pins'));
+    assert.ok(!unpinned.includes('unpin'));
+    const pinned = commands({ ...base, thing, pinState: { pinned: true } });
+    assert.ok(pinned.includes('unpin'));
+    assert.ok(!pinned.includes('pin'));
+  }
+});

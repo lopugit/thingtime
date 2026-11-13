@@ -4291,6 +4291,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-s
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'thing-browser-pin', 'thing-browser-pin-scope',
   'sync-source-index', 'sync-source-observation',
   THING_METADATA_KIND,
   THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
