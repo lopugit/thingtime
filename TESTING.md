@@ -87,6 +87,19 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Exercise iconized Thing links and shared persisted-Thing menus outside the library. Confirm the authenticated viewer, rather than cached ownership or a Builder marker alone, determines the default editor link.
 - [ ] At desktop and narrow mobile widths, open menus near viewport edges, use keyboard focus/Enter/Escape and touch overflow controls, scroll top to bottom, and verify no clipping, horizontal overflow or obstructed menu actions. Edit, save and reload one representative Builder Thing through the opened editor.
 
+## Thing browser pins (2026-11-13)
+
+- [ ] Pin and unpin Things from both right-click and touch overflow menus. Verify private personal placement leaves the underlying Thing, its ACL and other users unchanged; include apps, folders, data, files and paired device cards.
+- [ ] Pin the same Thing in Things and Builder and under distinct parent paths. Reorder each independently and reload. Switching grid/list/columns, kind, search, group and sort must not create a new pin scope or reset saved order.
+- [ ] With an empty browser cache, load a path whose pins were saved independently through the API. The first mount must read and render them without a UI write, including React effect restart/cancellation; a cancelled read must not suppress its replacement.
+- [ ] Enter **Reorder pins** from an item and the background menu. Drag with mouse and touch, including moving the first pin to the end; use arrow keys/Home/End and Move earlier/later controls. Finish with **Done** and verify ordinary opening, selection and folder moves still work.
+- [ ] Verify each visible column reads and edits its own parent path. Filtered reorders preserve a hidden middle pin's slot; an older pinned item outside the first content page still appears after reload. Navigate to an otherwise empty parent with a pin already cached from another parent, then reload: the pin must appear both times. Pins remain ahead of ordinary sorted content without duplicates.
+- [ ] Select all and Shift-select across pinned and ordinary entries, including a filter where every visible entry is pinned. Compact columns retain readable labels and usable reorder controls.
+- [ ] Pin an owned archived protected item. Its safe metadata card survives pagination and reload without revealing source bodies, participants or media. Active protected items and another owner's archive are refused; restoring the item removes an ineligible protected pin from reads.
+- [ ] In two sessions, make conflicting pin changes. Verify revision fencing, refresh/retry, no lost pins and no duplicate records. Switch account/origin/data plane during delayed reads and saves; no prior identity's pin state may appear or be written.
+- [ ] Refuse anonymous or wrong-account pin reads/writes and private/deleted targets. Verify paginated reads and capability negotiation, including missing/breaking feature versions, without changing the target Thing's access.
+- [ ] At desktop and narrow mobile widths, open edge menus and reorder controls, scroll top to bottom, and verify no clipping, horizontal overflow, accidental navigation or scrolling blocked outside the drag handle. Preserve usable content during refresh and show one inline failure/retry state.
+
 ## Builder app browser (2026-10-28)
 
 - [ ] At `/builder`, verify All apps is the default and app folders can be created and edited with name, description, upload-first icon and structured metadata. Reload and compare with exact Thing reads.
@@ -1815,6 +1828,18 @@ is fixed, and cite the checklist you ran in the PR description.
       inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
       select multiple rows, expand details, and verify Apply stays disabled
       until the explicit confirmation checkbox is checked.
+- [ ] Open a real batch-read result card in the connected ChatGPT/Codex host.
+      Verify the versioned resource initializes with `ui/initialize`, sends
+      `ui/notifications/initialized` only after its correlated compatible reply,
+      and renders results received before or after initialization. Review-page
+      and Apply buttons use host `tools/call` without requiring `window.openai`.
+      Initialization/tool failures show one inline error and preserve results.
+      Wrong-source/wrong-ID/late replies cannot complete requests; a timed-out
+      Apply remains locked for that receipt until history is reconciled in chat,
+      with no automatic retry or switch to the legacy bridge. A newer result
+      cannot be overwritten or locked by the older request. Verify explicit
+      confirmation escalation still works when returned as an MCP tool error.
+      `test:chatgpt` executes the shipped module for these bridge regressions.
 - [ ] Preview a create/update/delete plan with least-privilege scopes. Change
       one target after preview and verify apply returns 409 without performing
       any operation; with fresh preconditions, verify serial apply, honest
@@ -1841,7 +1866,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
       row, expand Full details, and scroll to the bottom. The read-only morning
       mission must not show an Apply control. Write-composing missions must keep
-      Apply disabled until the confirmation checkbox is selected, then fail
+      Apply disabled until the confirmation checkbox is selected; each demo
+      preview includes its page identity, cursor, end marker and total, so no
+      NaN range or phantom Next page appears. Then fail
       closed with the host-only message rather than mutating data.
 - [ ] Load the page with MCP discovery unavailable. The release contract and
       workflow cards remain immediately usable, the page shows the quiet
@@ -5877,6 +5904,51 @@ halves.
 - [ ] Drawer *preferences* still sync in the same session: change the width and
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)
+
+## Request cost controls (13 November 2026)
+
+- [ ] A preview must return its local `robots.txt` exclusion with GET and a
+  body-free HEAD even when its configured gateway is older or unavailable.
+  The middleware must make no gateway request for crawler policy; production
+  keeps `Allow: /`, while data-backed sitemap and API routes remain admitted.
+- [ ] Run `test:marketing`, `test:api-capabilities`, `test:devices`,
+  `test:collections` and `test:environment-gateway` from `remix`; retain the
+  tested source revision. Unit/mocked checks do not establish live protection.
+- [ ] On desktop and narrow mobile, open the drawer and Admin → Marketing with
+  real publication data. Compare published/hidden entries with an independent
+  authorized API read. Exercise cold load, cached refresh, HTTP 503 with stale
+  data, unavailable cold data, Retry and a stalled response body. Keep usable
+  links/content visible with one inline status; stale data must not appear live
+  or become an empty success. Scroll both surfaces to the bottom and check
+  wrapping, focus, clipping and the opened drawer. Verify the read's underlying
+  driver deadline and the client's body-inclusive timeout, rather than merely
+  racing a still-running operation.
+- [ ] Change account/Character during a pending publication read and write;
+  audit data clears immediately and old completions cannot restore it. An
+  acknowledged write whose readback fails keeps useful optimistic content,
+  reports degraded verification and reconciles without replaying the write.
+- [ ] Read the exact-origin capability manifest, then send its ETag using
+  `If-None-Match`: expect bodyless 304, working HEAD/OPTIONS and no CDN/browser
+  ownership cache. Repeated client checks within the freshness window share a
+  request; expiry revalidates. Change alias ownership, origin, transport and
+  feature versions independently: tags/cache must not cross those boundaries.
+  Cancel during body consumption and verify a fresh retry; missing/breaking or
+  malformed manifests still refuse dependent actions, including active-API
+  checks behind a newer frontend.
+- [ ] With an isolated paired device, disconnect real HTTP event/command waits
+  and verify the server stops polling and issues no late command claim or
+  state write. Exercise deadline expiry, repeated snapshot collisions and
+  cancellation during state/accounting work; retries terminate, ownership and
+  transaction fences hold, and an independent caller remains usable. Retain
+  existing event cursors, lease semantics and authorization refusals.
+- [ ] Before enabling Vercel deployment protection, verify server-only automation
+  bootstrap against the intended protected gateway: manifest plus signed relay
+  work, forged incoming bypass headers are stripped, secrets never reach
+  responses/client bundles, and redirects cannot forward them elsewhere.
+  Then verify unauthenticated preview blocking, authorized access, production
+  public routes, and required cron/webhook automation on the live selected
+  scope. Record actual activation separately from source support. Restore the
+  previous protection scope on refusal and verify rollback without data reset.
 
 ## Environment gateway and index lifecycle
 
@@ -16387,3 +16459,11 @@ never print the file-download JSON, encryption metadata or signed URL.
   Buffered old stdout/exit/error events must not settle or fail replacement requests; Rust search failures must
   preserve deterministic local search. Verify the installed signed daemon stays healthy and serves real searches
   after recovery, with bounded worker restarts and preserved settings. See `Commander/docs/TESTING.md`.
+
+
+## Protected Branch health diagnostics — 13 November 2026
+
+- [ ] On public production, select Branch in the Status footer; confirm its actual branch target is retained and normally reachable while protection is off.
+- [ ] With a controlled exact-platform branch 401/403, verify Frontend, Nitro, MongoDB and Vercel show authentication required without cookies or an automation credential crossing the proxy; unrelated targets remain unavailable.
+- [ ] Reject redirect responses, never follow a login redirect, and stop stalled response bodies plus legacy fallback within one 3.5-second deadline. Run `test:api-capabilities`.
+- [ ] Inspect status labels and refresh controls at desktop/mobile widths, scroll top to bottom, and confirm no clipping or overflow.

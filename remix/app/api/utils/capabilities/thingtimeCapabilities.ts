@@ -13,7 +13,6 @@ export const ROOT_DOCS_TWIN_IDS: ReadonlySet<string> = new Set(['apple-app-assoc
 export const thingtimeCapabilityManifest = (origin: string) => {
   const normalizedOrigin = new URL(origin).origin;
   const features: Record<string, { version: string }> = Object.fromEntries([
-    ['api.capabilities', { version: '1.0.0' }],
     ...Object.entries(apiSharedFeatureVersions).map(([feature, version]) => [feature, { version }]),
     ...apiEndpointDocs.map((doc) => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])
   ]);
@@ -23,7 +22,7 @@ export const thingtimeCapabilityManifest = (origin: string) => {
   const operations = [
     {
       feature: 'api.capabilities',
-      methods: ['GET'],
+      methods: ['GET', 'HEAD', 'OPTIONS'],
       path: THINGTIME_CAPABILITY_MANIFEST_PATH
     },
     ...apiEndpointDocs.flatMap((doc) => [

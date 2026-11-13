@@ -1,5 +1,16 @@
 # UI shell, menus and design system
 
+## Publication visibility status
+
+`Marketing/marketingPublicationsStore.tsx` preserves origin-local public
+publication data during failed refreshes, clears session audit on identity
+changes and fences old completions. `MarketingPublicationStatus.tsx` supplies
+one inline refresh/degraded indicator with Retry in `Nav/Drawer/DrawerContent`
+and `Admin/MarketingPublishingTab`; cached links and controls remain usable.
+A committed publish with unavailable readback retains optimistic state while
+reconciling. Run `test:marketing` and the desktop/mobile drawer/admin checklist
+in [request cost controls](../../TESTING.md#request-cost-controls-13-november-2026).
+
 ## Shared persisted Thing actions
 
 `schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore
