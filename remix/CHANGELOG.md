@@ -160,6 +160,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-13: Tighten the Things folder tree, place selection beside the trailing
   actions, and reveal full names on hover, keyboard focus and touch hold. Extend
   the isolated browser acceptance runner with tree interaction checks and a
