@@ -360,6 +360,16 @@ Stored map source Actions are discovered through shared composition
 
 ## Adding or changing an endpoint (all steps, in order)
 
+Scoped stateless AI text is `POST /api/v1/ai/respond` (`api.ai-respond` 1.0.0).
+It accepts a personal token with the independent `ai.complete` scope, one
+bounded prompt, and returns one text response. `things`, `agents.report`, and
+`lopu.chat` do not imply this scope. The handler uses server-managed OpenAI,
+the owner's Lopu credit gate and usage ledger, and the token's expiry and
+atomic use budget; it reads no chat history, Things or personal connections.
+`GET /api/v1/tokens/self` inspects token owner, scopes and remaining uses
+without spending a use. Settings → Token minter offers this permission
+separately; its Things master control does not select AI access.
+
 1. **Route file** `app/routes/api/v1/<group>/<name>/_<name>.tsx` exporting
    `loader` (GET/HEAD) and/or `action` (everything else). Return `json(...)`
    with `{ ok: true, ... } | { ok: false, error }`; use `readJsonBody` with a

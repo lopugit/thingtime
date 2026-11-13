@@ -19,6 +19,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { PAT_SCOPE_CATALOG, PAT_VISIBILITY_CATALOG } from '~/api/utils/auth/patScopes';
+import { mintSelectedPatScopes } from './tokenScopesCore';
 import type { PatVisibilityMode } from '~/api/utils/auth/patScopes';
 
 // Settings → Token minter: mint scoped, revocable API tokens to hand to an AI
@@ -121,7 +122,7 @@ const USES_PRESETS: Array<{ label: string; uses: number | null }> = [
 ];
 
 const SCOPES_BY_ID = new Map(PAT_SCOPE_CATALOG.map((scope) => [scope.id, scope]));
-const LEAF_SCOPES = PAT_SCOPE_CATALOG.filter((scope) => scope.id !== 'things');
+const LEAF_SCOPES = PAT_SCOPE_CATALOG.filter((scope) => scope.id.startsWith('things.'));
 const VISIBILITY_BY_ID = new Map(PAT_VISIBILITY_CATALOG.map((mode) => [mode.id, mode]));
 
 // list-row badge for restricted tokens ('all' shows nothing — it's the default)
@@ -132,7 +133,7 @@ const summarizeVisibility = (visibility: PatVisibilityMode | undefined): string 
 };
 
 const summarizeScopes = (scopes: string[]): string => {
-  if (scopes.includes('things')) return '🗝️ full things access';
+  if (scopes.includes('things')) return ['🗝️ full things access', ...scopes.filter((id) => id !== 'things').map((id) => SCOPES_BY_ID.get(id)?.title.toLowerCase() ?? id)].join(' · ');
   return scopes
     .map((id) => {
       const scope = SCOPES_BY_ID.get(id);
@@ -217,15 +218,15 @@ export const TokenMinter = (props: { userId: string }) => {
   // --- scope selection: the 'things' chip is the master switch; unticking a
   // leaf while it's on converts to "every leaf except that one".
   const fullAccess = selectedScopes.includes('things');
-  const scopeActive = (id: string) => fullAccess || selectedScopes.includes(id);
+  const scopeActive = (id: string) => (id.startsWith('things.') && fullAccess) || selectedScopes.includes(id);
 
   const toggleScope = (id: string) => {
     if (id === 'things') {
-      setSelectedScopes(fullAccess ? [] : ['things']);
+      setSelectedScopes((previous) => fullAccess ? previous.filter((scope) => scope !== 'things') : [...previous.filter((scope) => !scope.startsWith('things.')), 'things']);
       return;
     }
-    if (fullAccess) {
-      setSelectedScopes(LEAF_SCOPES.map((scope) => scope.id).filter((leaf) => leaf !== id));
+    if (fullAccess && id.startsWith('things.')) {
+      setSelectedScopes((previous) => [...previous.filter((scope) => scope !== 'things'), ...LEAF_SCOPES.map((scope) => scope.id).filter((leaf) => leaf !== id)]);
       return;
     }
     setSelectedScopes((prev) => (prev.includes(id) ? prev.filter((scope) => scope !== id) : [...prev, id]));
@@ -267,7 +268,7 @@ export const TokenMinter = (props: { userId: string }) => {
     expiresInMs === null ? 'This token never expires ∞' : `Expires ${new Date(Date.now() + expiresInMs).toLocaleString()}`;
 
   const handleMint = async () => {
-    const scopes = fullAccess ? ['things'] : selectedScopes;
+    const scopes = mintSelectedPatScopes(selectedScopes);
     if (!scopes.length) {
       lopu({
         title: 'Pick at least one permission 🔐',
@@ -355,7 +356,7 @@ export const TokenMinter = (props: { userId: string }) => {
         <Flex alignItems="center">
           <FieldLabel>Permissions 🔐</FieldLabel>
           <Flex marginLeft="auto" columnGap={1}>
-            <Button size="xs" variant="ghost" onClick={() => setSelectedScopes(['things'])}>
+            <Button size="xs" variant="ghost" onClick={() => setSelectedScopes(PAT_SCOPE_CATALOG.map((scope) => scope.id).filter((id) => id === 'things' || !id.startsWith('things.')))}>
               Select all ✅
             </Button>
             <Button size="xs" variant="ghost" onClick={() => setSelectedScopes([])}>
@@ -369,7 +370,7 @@ export const TokenMinter = (props: { userId: string }) => {
               key={scope.id}
               size="xs"
               variant={chipVariant(scopeActive(scope.id))}
-              opacity={scope.id !== 'things' && fullAccess ? 0.75 : 1}
+              opacity={scope.id.startsWith('things.') && fullAccess ? 0.75 : 1}
               title={scope.description}
               onClick={() => toggleScope(scope.id)}
             >
@@ -379,7 +380,7 @@ export const TokenMinter = (props: { userId: string }) => {
         </Flex>
         <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
           {fullAccess
-            ? 'Full access — the token can do everything with your things. Untick a permission to narrow it.'
+            ? `Full Things access. ${selectedScopes.includes('ai.complete') ? 'AI text completion is also enabled.' : 'AI text completion remains separate.'}`
             : selectedScopes.length
               ? `This token can: ${summarizeScopes(selectedScopes)}`
               : 'Pick at least one permission.'}
