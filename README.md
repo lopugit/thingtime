@@ -819,6 +819,19 @@ execute only the reviewed exact IDs. The protected job retains its existing
 credentials and rechecks policy, project/PR ownership, grace, aliases and active
 roles. Adding listener inputs performs no cleanup or protection change.
 
+### Reviewed retained-preview maintenance
+
+The same thin listener accepts three optional manual inputs:
+`maintenance_artifact_commit`, `maintenance_manifest_path` and
+`maintenance_manifest_sha256`. The protected controller must support them before
+this listener is deployed. All three default empty; normal previews still build
+the exact current PR head. Maintenance binds a reviewed frozen artifact merged
+into canonical `main`, the exact incumbent deployment, current PR head/ref and
+reconstructed source tree. It cannot select an arbitrary old revision or URL.
+See [artifact provenance and dispatch](ops/preview-maintenance/README.md).
+Publishing a maintenance preview does not merge the feature or mark its current
+head deployed, and adding these inputs does not enable Vercel protection.
+
 ### CodeQL coverage for every PR target and branch
 
 Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
