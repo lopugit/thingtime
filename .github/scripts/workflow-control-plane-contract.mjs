@@ -1302,7 +1302,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady, maintenance: config\.maintenance \}\)/u,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: !config\.maintenanceCandidate, pullRequest, expectedReady, maintenance: config\.maintenance \}\)/u,
     "develop preview publishes its expected URL and estimate before releasing the build plan",
   );
   assert.match(

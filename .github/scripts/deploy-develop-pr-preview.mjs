@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
-import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
+import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
 import { promotePreviewAlias } from './preview-alias-promotion.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { previewRetirementRequest, redactedProviderEndpoint } from './preview-retirement-request.mjs';
@@ -1293,6 +1293,8 @@ const runSelfTest = async () => {
 	let maintenanceCleanup = false;
 	equal(await prepareDeployment(maintainedConfig, base, { list: async () => [maintained], cleanup: async () => { maintenanceCleanup = true; } }), null);
 	equal(maintenanceCleanup, false);
+	equal(await prepareDeployment({ ...maintainedConfig, maintenanceCandidate: maintained }, base, { list: async () => [maintained], cleanup: async () => { maintenanceCleanup = true; } }), maintained);
+	equal(maintenanceCleanup, false);
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
 
@@ -1578,6 +1580,13 @@ const findGithubDeployment = async (repository, pullRequest) => {
 	);
 };
 
+const findGithubMaintenanceDeployment = async (repository, intent) => {
+	const params = new URLSearchParams({ environment: `develop-pr-${intent.prNumber}-maintenance`, ref: intent.retainedSourceSha });
+	const deployments = await completeInventory(githubRequest, `/repos/${repository}/deployments?${params}`, null, { github: true });
+	if (!Array.isArray(deployments)) throw new Error('Invalid maintenance deployment inventory');
+	return deployments.find(deployment => maintenanceGithubDeploymentMatches(deployment, intent)) ?? null;
+};
+
 const createGithubDeployment = async (repository, pullRequest, config = {}) => {
 	const body = {
 		ref: sourceSha(config, pullRequest),
@@ -1594,6 +1603,10 @@ const createGithubDeployment = async (repository, pullRequest, config = {}) => {
 			...(config.maintenance ? { role: 'maintenance', authorizationHead: pullRequest.head.sha, ...maintenanceMetadata(config.maintenance) } : {})
 		}
 	};
+	if (config.maintenance) return getOrCreateMaintenanceDeployment(config.maintenance, {
+		read: () => findGithubMaintenanceDeployment(repository, config.maintenance),
+		create: () => githubRequest(`/repos/${repository}/deployments`, { method: 'POST', accept: [201], retries: 0, body })
+	});
 	try {
 		return await githubRequest(`/repos/${repository}/deployments`, {
 			method: 'POST',
@@ -1602,7 +1615,7 @@ const createGithubDeployment = async (repository, pullRequest, config = {}) => {
 			body
 		});
 	} catch (error) {
-		const reconciled = config.maintenance ? null : await findGithubDeployment(repository, pullRequest);
+		const reconciled = await findGithubDeployment(repository, pullRequest);
 		if (reconciled) return reconciled;
 		throw error;
 	}
@@ -2015,11 +2028,29 @@ const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}
 	}
 };
 
+const admitMaintenanceRecovery = async (config, pullRequest) => {
+	const intent = config.maintenance;
+	const binding = await getAliasBinding(config, pullRequest.number);
+	const state = maintenanceBindingState(intent, binding);
+	const candidates = state === 'published' ? [binding.deployment] : await listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: intent.retainedSourceSha });
+	const matching = candidates.filter(candidate => !maintenanceMetadataIssue(candidate, intent));
+	if (matching.some(candidate => ACTIVE_STATES.has(candidate.readyState))) throw new Error('Matching maintenance upload is still active; preserve it before retrying');
+	const candidate = matching.filter(candidate => candidate.readyState === 'READY').sort((left,right) => Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))[0] ?? null;
+	if (candidate) {
+		const issue = deploymentIdentityIssue(candidate, config, { prNumber: pullRequest.number, expectedSha: intent.expectedHeadSha, expectedRef: intent.headRef });
+		if (issue) throw new Error(`Maintenance recovery candidate refused (${issue})`);
+		await assertNoProtectedAlias(config, candidate);
+		await verifyPublishedAlias(deploymentUrl(candidate));
+		if (state === 'published') await verifyPublishedAlias(`https://${binding.alias}`);
+	}
+	return { ...config, maintenanceCandidate: candidate };
+};
+
 const prepareDeployment = async (config, pullRequest, {
 	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
 } = {}) => {
+	if (config.maintenance) return config.maintenanceCandidate ?? null;
 	const deployments = await list(config, { prNumber: pullRequest.number });
-	if (config.maintenance) return null;
 	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
 	if (reusable) await guard(config, reusable);
 	const keepIds = reusable ? new Set([reusable.id]) : new Set();
@@ -2527,8 +2558,8 @@ const deploy = async (config, pullRequest) => {
 	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive PR preview publication skipped'); return; }
 	if (config.maintenance) {
 		assertMaintenanceHead(config.maintenance, pullRequest);
-		assertMaintenanceIncumbent(config.maintenance, await getAliasBinding(config, pullRequest.number));
-		assertMaintenanceReceipt(JSON.parse(await readFile(requiredEnv('PREVIEW_MAINTENANCE_RECEIPT_PATH'), 'utf8')), config.maintenance);
+		maintenanceBindingState(config.maintenance, await getAliasBinding(config, pullRequest.number));
+		if (!config.maintenanceCandidate) assertMaintenanceReceipt(JSON.parse(await readFile(requiredEnv('PREVIEW_MAINTENANCE_RECEIPT_PATH'), 'utf8')), config.maintenance);
 	} else await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
@@ -2543,7 +2574,7 @@ const deploy = async (config, pullRequest) => {
 	const estimatedReady = expectedReadyForRun();
 	try {
 		githubDeployment = await createGithubDeployment(config.repository, pullRequest, config);
-		await publishDevelopStatus(config, pullRequest, {
+		if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				expectedReady: estimatedReady
@@ -2551,12 +2582,12 @@ const deploy = async (config, pullRequest) => {
 		vercelDeployment = await createVercelDeployment(config, pullRequest, reusable);
 		const immutableUrl = deploymentUrl(vercelDeployment);
 		const dashboard = dashboardUrl(vercelDeployment.id, config);
-		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'in_progress', {
+		if (!config.maintenanceCandidate) await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'in_progress', {
 			environmentUrl: immutableUrl,
 			logUrl: dashboard,
 				description: config.maintenance ? 'Deploying reviewed retained baseline plus protection patch; not current PR head' : 'Deploying exact SHA with custom-develop credentials and Preview gateway'
 		});
-		await publishDevelopStatus(config, pullRequest, {
+		if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
@@ -2576,13 +2607,15 @@ const deploy = async (config, pullRequest) => {
 				await assertCurrentPullRequest(config, snapshot, config.actor);
 				if (config.maintenance) {
 					const binding = await getAliasBinding(config, pullRequest.number);
-					if (binding?.deployment.id !== ready.id) assertMaintenanceIncumbent(config.maintenance, binding);
+					if (binding?.deployment.id !== ready.id) maintenanceBindingState(config.maintenance, binding);
 				}
 			}
 		});
 		published = true;
 
-		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
+		const priorStatuses = config.maintenanceCandidate ? await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`) : null;
+		if (priorStatuses && !Array.isArray(priorStatuses)) throw new Error('Invalid maintenance deployment status inventory');
+		if (!priorStatuses || priorStatuses[0]?.state !== 'success' || priorStatuses[0]?.environment_url !== aliasUrl) await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
 			environmentUrl: aliasUrl,
 			logUrl: dashboard,
 			description: config.maintenance ? 'Reviewed retained-source maintenance ready; current PR head was not deployed' : 'PR preview is ready at the exact current SHA'
@@ -2662,7 +2695,7 @@ const prepareBuildPlan = async () => {
 		await assertTrustedPrincipal(config, config.actor, 'maintenance-actor');
 		config = { ...config, maintenance: await loadMaintenance(maintenancePin, { github: githubRequest, repository: config.repository, prNumber }) };
 		assertMaintenanceHead(config.maintenance, pullRequest);
-		assertMaintenanceIncumbent(config.maintenance, await getAliasBinding(config, prNumber));
+		config = await admitMaintenanceRecovery(config, pullRequest);
 	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {
@@ -2683,12 +2716,12 @@ const prepareBuildPlan = async () => {
 	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { await writePrepareOutputs({ shouldBuild: false }); return; }
 	if (!config.maintenance) await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const expectedReady = expectedReadyAt();
-	await publishDevelopStatus(config, pullRequest, {
+	if (!config.maintenanceCandidate) await publishDevelopStatus(config, pullRequest, {
 			state: 'deploying',
 			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 			expectedReady
 		}, { bestEffort: true });
-	await writePrepareOutputs({ shouldBuild: true, pullRequest, expectedReady, maintenance: config.maintenance });
+	await writePrepareOutputs({ shouldBuild: !config.maintenanceCandidate, pullRequest, expectedReady, maintenance: config.maintenance });
 	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
 };
 
@@ -2750,7 +2783,7 @@ const main = async () => {
 		await assertTrustedPrincipal(config, config.actor, 'maintenance-actor');
 		config = { ...config, maintenance: await loadMaintenance(maintenancePin, { github: githubRequest, repository: config.repository, prNumber }) };
 		assertMaintenanceHead(config.maintenance, pullRequest);
-		assertMaintenanceIncumbent(config.maintenance, await getAliasBinding(config, prNumber));
+		config = await admitMaintenanceRecovery(config, pullRequest);
 	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {

@@ -156,6 +156,7 @@ jobs:
           # phase may use Lopu's existing repository automation PAT; the
           # separate untrusted build job still receives no secrets.
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          VERCEL_API_TOKEN: ${{ inputs.maintenance_artifact_commit != '' && secrets.VERCEL_DEVELOP_DEPLOY_TOKEN || '' }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare

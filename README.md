@@ -838,3 +838,9 @@ Scheduled reconciliation preserves its active alias until a healthy ordinary
 publication replaces it; canonical closed-PR/inactivity retention still applies.
 Unknown provenance is preserved for review. Do not dispatch before the matching
 main caller/artifact PR has merged.
+
+Retrying the exact maintenance intent reconciles an already-published matching
+READY alias or a verified matching candidate without a new build/upload. GitHub
+deployment records are read back by exact maintenance environment/source/intent
+before creation and after an uncertain response; already-successful statuses
+are left intact. A concurrent successor or a different intent is never adopted.

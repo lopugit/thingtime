@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { maintenanceRequest, parseMaintenanceManifest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, reconstructMaintenance, maintenanceReceipt, assertMaintenanceReceipt, sha256 } from './preview-maintenance.mjs';
+import { maintenanceRequest, parseMaintenanceManifest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, reconstructMaintenance, maintenanceReceipt, assertMaintenanceReceipt, sha256 } from './preview-maintenance.mjs';
+import { promotePreviewAlias } from './preview-alias-promotion.mjs';
 import { gatewaySourcePaths } from './preview-gateway-source.mjs';
 const run = promisify(execFile), a = 'a'.repeat(40), b = 'b'.repeat(40), c = 'c'.repeat(40);
 const manifest = () => ({ schemaVersion:1,purpose:'preview-protection',repository:'lopugit/thingtime',prNumber:123,expectedHeadSha:a,headRef:'codex/example',retainedDeploymentId:'dpl_old',retainedSourceSha:b,sourceTree:c,patchPath:'ops/preview-maintenance/example/protection.patch',patchSha256:sha256('patch'),implementationCommit:b });
@@ -93,4 +94,34 @@ test('reconciliation preserves honest maintained aliases across newer heads and 
  assert.equal(preserveMaintenanceAlias({deployment:{meta:{}}},pr(),intent),false);
  assert.throws(()=>preserveMaintenanceAlias({deployment:{meta:{...binding.deployment.meta,thingtimeMaintenanceTree:a}}},pr(),intent),/provenance/);
  assert.throws(()=>preserveMaintenanceAlias(binding,{...pr(),head:{...pr().head,ref:'other'}},intent),/provenance/);
+});
+
+test('committed promotion followed by reporting failure recovers same intent without another alias upload',async()=>{
+ const {intent}=setup();const old={id:intent.retainedDeploymentId,readyState:'READY',meta:{githubCommitSha:b,githubCommitRef:intent.headRef}};
+ const candidate={id:'dpl_new',readyState:'READY',meta:{githubCommitSha:b,githubCommitRef:intent.headRef,...maintenanceMetadata(intent)}};
+ let binding={deploymentId:old.id},writes=0;
+ assert.equal(maintenanceBindingState(intent,{deployment:old}),'retained');
+ const promote=()=>promotePreviewAlias({alias:'123.preview.example',deploymentId:candidate.id,read:async()=>binding,assign:async(_name,id)=>{writes++;binding={deploymentId:id};},remove:async()=>{throw new Error('unexpected removal');},verifyCandidate:async()=>{},verifyAlias:async()=>{},assertCurrent:async()=>assertMaintenanceHead(intent,pr())});
+ await promote();assert.equal(writes,1);
+ // GitHub reporting is outside alias promotion; a subsequent failed status write
+ // leaves the healthy exact intent already published. Recovery must reuse it.
+ await assert.rejects(Promise.reject(new Error('status write unavailable')),/unavailable/);
+ assert.equal(maintenanceBindingState(intent,{deployment:candidate}),'published');
+ await promote();assert.equal(writes,1);
+ assert.throws(()=>maintenanceBindingState({...intent,sourceTree:a},{deployment:candidate}),/incumbent/);
+ assert.throws(()=>maintenanceBindingState(intent,{deployment:{...candidate,id:'dpl_successor',meta:{...candidate.meta,thingtimeMaintenanceDigest:'0'.repeat(64)}}}),/incumbent/);
+});
+test('uncertain GitHub maintenance record write reconciles only the exact environment/ref/payload tuple',()=>{
+ const {intent}=setup();const record={environment:'develop-pr-123-maintenance',ref:b,sha:b,payload:{kind:'thingtimeDevelopPrPreview',role:'maintenance',pullRequest:123,sha:b,authorizationHead:a,...maintenanceMetadata(intent)}};
+ assert.equal(maintenanceGithubDeploymentMatches(record,intent),true);
+ for(const changed of [{...record,environment:'develop-pr-123'},{...record,sha:a},{...record,ref:a},{...record,payload:{...record.payload,role:'ordinary'}},{...record,payload:{...record.payload,thingtimeMaintenanceTree:a}},{...record,payload:{...record.payload,authorizationHead:b}}])assert.equal(maintenanceGithubDeploymentMatches(changed,intent),false);
+});
+
+test('uncertain committed GitHub POST is read back once and later retry does not create another record',async()=>{
+ const {intent}=setup();const record={id:7,environment:'develop-pr-123-maintenance',ref:b,sha:b,payload:{kind:'thingtimeDevelopPrPreview',role:'maintenance',pullRequest:123,sha:b,authorizationHead:a,...maintenanceMetadata(intent)}};
+ let stored=null,posts=0,reads=0;
+ const callbacks={read:async()=>{reads++;return stored;},create:async()=>{posts++;stored=record;throw new Error('response lost after commit');}};
+ assert.equal((await getOrCreateMaintenanceDeployment(intent,callbacks)).id,7);assert.equal(posts,1);assert.equal(reads,2);
+ assert.equal((await getOrCreateMaintenanceDeployment(intent,callbacks)).id,7);assert.equal(posts,1);
+ await assert.rejects(getOrCreateMaintenanceDeployment({...intent,sourceTree:a},callbacks),/github-deployment-identity/);assert.equal(posts,1);
 });

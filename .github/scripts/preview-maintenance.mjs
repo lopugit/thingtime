@@ -55,6 +55,30 @@ export function assertMaintenanceHead(intent, pullRequest) {
 export function assertMaintenanceIncumbent(intent, binding) {
   if (!binding || binding.deployment?.id !== intent.retainedDeploymentId || binding.deployment.readyState !== 'READY' || binding.deployment.meta?.githubCommitSha !== intent.retainedSourceSha || binding.deployment.meta?.githubCommitRef !== intent.headRef) fail('incumbent');
 }
+export function maintenanceBindingState(intent, binding) {
+  if (binding?.deployment?.readyState === 'READY' && !maintenanceMetadataIssue(binding.deployment, intent) && binding.deployment.meta?.githubCommitRef === intent.headRef) return 'published';
+  assertMaintenanceIncumbent(intent, binding);
+  return 'retained';
+}
+export function maintenanceGithubDeploymentMatches(deployment, intent) {
+  return deployment?.environment === `develop-pr-${intent.prNumber}-maintenance` && deployment.ref === intent.retainedSourceSha && deployment.sha === intent.retainedSourceSha && deployment.payload?.kind === 'thingtimeDevelopPrPreview' && deployment.payload?.role === 'maintenance' && deployment.payload?.authorizationHead === intent.expectedHeadSha && deployment.payload?.sha === intent.retainedSourceSha && Number(deployment.payload?.pullRequest) === intent.prNumber && Object.entries(maintenanceMetadata(intent)).every(([key,value]) => deployment.payload[key] === value);
+}
+export async function getOrCreateMaintenanceDeployment(intent, { read, create }) {
+  const existing = await read();
+  if (existing) {
+    if (!maintenanceGithubDeploymentMatches(existing, intent)) fail('github-deployment-identity');
+    return existing;
+  }
+  try {
+    const created = await create();
+    if (!maintenanceGithubDeploymentMatches(created, intent)) fail('github-deployment-identity');
+    return created;
+  } catch (error) {
+    const reconciled = await read();
+    if (reconciled && maintenanceGithubDeploymentMatches(reconciled, intent)) return reconciled;
+    throw error;
+  }
+}
 export function maintenanceMetadata(intent) {
   return { thingtimePreviewRole: 'maintenance', thingtimeMaintenanceCommit: intent.artifact.commit, thingtimeMaintenancePath: intent.artifact.path,
     thingtimeMaintenanceDigest: intent.artifact.digest, thingtimeMaintenanceTree: intent.sourceTree, thingtimeMaintenancePatch: intent.patchSha256,

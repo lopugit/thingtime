@@ -456,3 +456,8 @@ Verify no deployment secret reaches build, metadata distinguishes authorization
 head from retained baseline/overlay tree, and no ordinary current-head status is
 greened. Reconciliation must preserve a maintained alias and leave replacement
 to the same immutable candidate checks/conditional rollback as normal publishing.
+
+Simulate committed promotion followed by failed/uncertain GitHub status reporting:
+retry must recognize the same verified source/artifact/authorization tuple, reuse
+the existing READY deployment and exact GitHub maintenance record, skip rebuild
+and upload, and retain a concurrent successor or conflicting intent unchanged.
