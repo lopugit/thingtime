@@ -36,15 +36,16 @@ export const rootAcl = (doc: Pick<ThingDoc, 'acl' | 'visibility' | 'aclGeneratio
   if (doc.aclGeneration !== undefined) return validBaseline(doc as ThingDoc) ? [...doc.aclBaseline!] : ['-tt:all'];
   return Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || ['tt:user'];
 };
-/** Indexed coarse candidates only. The prepared evaluator validates the full
- * protected baseline and its fence before granting any nonowner authority. */
+/** Indexed coarse candidates only. Hints lose sign, so the protected baseline
+ * must also contain the exact logical marker. The prepared evaluator still
+ * validates the full baseline and fence before granting nonowner authority. */
 export const aclMarkerClause = (...markers: string[]): any => ({ $or: [
   { aclGeneration: { $exists: false }, acl: { $in: markers } },
-  { aclGeneration: { $exists: true }, aclBaselineVersion: ACL_BASELINE_VERSION, acl: { $in: markers.map(entry => `-${entry.replace(/^-/, '')}`) } }
+  { aclGeneration: { $exists: true }, aclBaselineVersion: ACL_BASELINE_VERSION, acl: { $in: markers.map(entry => `-${entry.replace(/^-/, '')}`) }, aclBaseline: { $in: markers } }
 ] });
 export const aclWithoutMarkersClause = (...markers: string[]): any => ({ $or: [
   { aclGeneration: { $exists: false }, acl: { $exists: true, $nin: markers } },
-  { aclGeneration: { $exists: true }, aclBaselineVersion: ACL_BASELINE_VERSION, acl: { $nin: markers.map(entry => `-${entry.replace(/^-/, '')}`) } }
+  { aclGeneration: { $exists: true }, aclBaselineVersion: ACL_BASELINE_VERSION, aclBaseline: { $exists: true, $nin: markers } }
 ] });
 export const aclEntryPrefix = (targetId: string, revision: string, family: GrantFamily = 'audience'): string => `acl-entry:${Buffer.byteLength(targetId, 'utf8')}:${targetId}:${family === 'token' ? 'token:' : ''}${revision}:`;
 export const aclEntryId = (targetId: string, revision: string, entry: string, family: GrantFamily = 'audience'): string => `${aclEntryPrefix(targetId, revision, family)}${entry}`;

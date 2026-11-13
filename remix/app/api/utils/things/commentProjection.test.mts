@@ -19,6 +19,8 @@ const matches = (row: any, query: any): boolean => Object.entries(query).every((
     if (op === '$ne') return !equal(actual, test);
     if (op === '$lt') return actual < test;
     if (op === '$gt') return actual > test;
+    if (op === '$regex') return (test instanceof RegExp ? test : new RegExp(test, expected.$options || '')).test(String(actual ?? ''));
+    if (op === '$options') return true;
     throw new Error(`Unexpected query operator ${op}`);
   });
   return equal(actual, expected);
@@ -61,7 +63,33 @@ const collection = {
   countDocuments: async (query: any) => { reads.push({ query, count: true }); return rows.filter(row => matches(row, query)).length; },
   aggregate: (pipeline: any[]) => {
     aggregates.push(pipeline);
-    throw new Error('Discussion pages must not aggregate attachment bodies');
+    // Search candidates now join only ACL control rows before pagination. The
+    // discussion paths above must still avoid aggregation/body hydration.
+    let result = rows.map(row => ({ ...row }));
+    for (const stage of pipeline) {
+      if (stage.$match) result = result.filter(row => matches(row, stage.$match));
+      else if (stage.$set) {
+        assert.deepEqual(Object.keys(stage.$set), ['_aclCandidateIds'], 'Only the canonical ACL candidate set is allowed');
+      } else if (stage.$lookup) {
+        assert.equal(stage.$lookup.as, '_aclCandidate', 'Attachment/body lookups remain forbidden');
+        assert.equal(stage.$lookup.localField, '_aclCandidateIds');
+        assert.equal(stage.$lookup.foreignField, 'shareId');
+        assert.equal(stage.$lookup.pipeline.length, 3, 'The candidate lookup has no nested hydration stages');
+        assert.equal(stage.$lookup.pipeline[0].$match.thingtime, 'acl-entry');
+        assert.deepEqual(stage.$lookup.pipeline[1], { $limit: 1 });
+        assert.deepEqual(stage.$lookup.pipeline.at(-1), { $project: { _id: 1 } });
+        assert(result.every(row => row.aclGeneration === undefined), 'This fixture models legacy ACL roots only');
+        result = result.map(row => ({ ...row, _aclCandidate: [] }));
+      } else if (stage.$unset) {
+        const keys = Array.isArray(stage.$unset) ? stage.$unset : [stage.$unset];
+        result = result.map(row => { const clean = { ...row }; for (const key of keys) delete clean[key]; return clean; });
+      } else if (stage.$sort) result = sortRows(result, stage.$sort);
+      else if (stage.$skip !== undefined) result = result.slice(stage.$skip);
+      else if (stage.$limit !== undefined) result = result.slice(0, stage.$limit);
+      else if (stage.$count) result = result.length ? [{ [stage.$count]: result.length }] : [];
+      else throw new Error('Unexpected aggregate purpose in discussion fixture');
+    }
+    return { toArray: async () => result };
   }
 };
 mock.module('../mongodb/collections', { namedExports: { getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, getUsersCollection: async () => collection, withMongoTransaction: async () => { throw new Error('No writes'); } } });

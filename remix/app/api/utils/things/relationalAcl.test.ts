@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aclAllows, aclCapabilityFor, sanitizeAcl } from '../../../schemas/registry';
-import { ACL_ENTRY_KIND, aclEntryId, aclEntryPrefix, aclMarkerClause, candidateEntriesFor, evaluatedAcl, hasRelationalAclEntries, legacyAclFence, partitionAcl, prepareRelationalAcls, readAllThingAclEntries, relationalAclCandidateStages, replaceRelationalAcl, rootAcl, tokenGrantAllows } from './relationalAcl';
+import { ACL_ENTRY_KIND, aclEntryId, aclEntryPrefix, aclMarkerClause, aclWithoutMarkersClause, candidateEntriesFor, evaluatedAcl, hasRelationalAclEntries, legacyAclFence, partitionAcl, prepareRelationalAcls, readAllThingAclEntries, relationalAclCandidateStages, replaceRelationalAcl, rootAcl, tokenGrantAllows } from './relationalAcl';
 import type { ThingDoc } from './things';
 
 const root = (patch: Partial<ThingDoc> = {}): ThingDoc => ({ shareId: 'private-root', ownerId: 'owner', acl: ['tt:user', 'tt:custom'],
@@ -91,8 +91,14 @@ test('genuine broad exclusions are retained and legacy inline drift cannot reuse
 test('relational audience candidates use the existing indexed negative hints', () => {
   assert.deepEqual(aclMarkerClause('tt:all', 'tt:hidden'), { $or: [
     { aclGeneration: { $exists: false }, acl: { $in: ['tt:all', 'tt:hidden'] } },
-    { aclGeneration: { $exists: true }, aclBaselineVersion: 1, acl: { $in: ['-tt:all', '-tt:hidden'] } }
+    { aclGeneration: { $exists: true }, aclBaselineVersion: 1, acl: { $in: ['-tt:all', '-tt:hidden'] }, aclBaseline: { $in: ['tt:all', 'tt:hidden'] } }
   ] });
+  assert.deepEqual(aclMarkerClause('-tt:all').$or[1], {
+    aclGeneration: { $exists: true }, aclBaselineVersion: 1, acl: { $in: ['-tt:all'] }, aclBaseline: { $in: ['-tt:all'] }
+  });
+  assert.deepEqual(aclWithoutMarkersClause('tt:all').$or[1], {
+    aclGeneration: { $exists: true }, aclBaselineVersion: 1, aclBaseline: { $exists: true, $nin: ['tt:all'] }
+  });
 });
 
 test('authorization queries only the viewer’s subject variants, preserving capability and exclusions', async () => {

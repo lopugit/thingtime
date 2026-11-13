@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { canView, profilePostsAudienceQuery, patVisibilityBlocksAcl, patVisibilityMatchClause, patVisibilityOf, viewerOf } from './things.ts';
+import { aclMarkerClause, aclWithoutMarkersClause, legacyAclFence } from './relationalAcl.ts';
 
 // The token visibility fence (Settings → Token minter: public-only /
 // private-only personal access tokens) is decided by ONE expression,
@@ -113,6 +114,23 @@ const matches = (clause: any, doc: Record<string, any>): boolean => Object.entri
     throw new Error(`unsupported operator: ${operator}`);
   });
   return Array.isArray(actual) ? actual.includes(expected) : actual === expected;
+});
+
+test('relational baseline signs preserve private PAT candidates and exact owner visibility', () => {
+  for (const baseline of [['tt:user', '-tt:all'], ['tt:user', '-tt:all', 'tt:userFriends'], ['tt:user', 'tt:all']]) {
+    const isPublic = baseline.includes('tt:all');
+    const doc = { shareId: 'relational-post', ownerId: user.id, thingtime: ['data'],
+      acl: legacyAclFence(baseline), aclBaseline: baseline, aclBaselineVersion: 1, aclGeneration: 'g' } as any;
+    assert.equal(matches(aclMarkerClause('tt:all'), doc), isPublic);
+    assert.equal(matches(aclWithoutMarkersClause('tt:all'), doc), !isPublic);
+    assert.equal(matches(aclMarkerClause('-tt:all'), doc), baseline.includes('-tt:all'));
+    for (const mode of ['public', 'private'] as const) {
+      const expected = mode === 'public' ? isPublic : !isPublic;
+      assert.equal(matches(patVisibilityMatchClause(fenced(mode)), doc), expected, `${mode} / ${baseline}`);
+      assert.equal(canView(doc, fenced(mode)), expected, `exact owner ${mode} / ${baseline}`);
+      assert.equal(canView({ ...doc, acl: ['tt:all'] }, fenced(mode)), false, 'inline drift still fails closed');
+    }
+  }
 });
 
 test('the coarse DB clause is a superset of what the exact check admits', () => {

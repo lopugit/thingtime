@@ -510,6 +510,24 @@ try {
       assert(publicRead.acl.includes('tt:all') && publicRead.acl.includes(excluded));
       await readAudience(publicThing.id); await readAudience(publicThing.id, { cookie: stranger.cookie, status: 404 });
       await readAudience(publicThing.id, { cookie: allowedPublicReader.cookie });
+      const privateExcluded = await createAudience(['tt:user', '-tt:all']);
+      await request('/api/v1/things/acl', { cookie: owner.cookie,
+        body: { id: privateExcluded.id, operation: 'add', entries: ['tt:user/synthetic-private-reader'] } });
+      const mintVisibilityToken = async visibility => (await request('/api/v1/tokens', {
+        cookie: owner.cookie, status: 201, body: { name: `Synthetic ${visibility} ACL query`,
+          scopes: ['things.read'], visibility, onlyCreatedThings: false, allowGet: true }
+      })).data.token;
+      const privateToken = await mintVisibilityToken('private');
+      const publicToken = await mintVisibilityToken('public');
+      assert(privateToken && publicToken, 'Disposable visibility tokens were issued');
+      await readAudience(privateExcluded.id, { token: privateToken });
+      const privateList = (await request('/api/v1/things?thingtime=data&limit=50', { token: privateToken })).data.things;
+      assert(privateList.some(thing => thing.id === privateExcluded.id), 'Negative public marker remains discoverable with a private-only token');
+      assert(!privateList.some(thing => thing.id === publicThing.id), 'Private-only token excludes a positive public audience');
+      const publicList = (await request('/api/v1/things?thingtime=data&limit=50', { token: publicToken })).data.things;
+      assert(publicList.some(thing => thing.id === publicThing.id), 'Public-only token retains a positive public audience');
+      assert(!publicList.some(thing => thing.id === privateExcluded.id), 'Public-only token excludes the negative-only public marker');
+      checks.push('built HTTP visibility-filtered tokens distinguish signed relational baseline markers in exact reads and database listings');
       const hidden = await createAudience(['tt:hidden']); assert(hidden.linkKey);
       await request('/api/v1/things/acl', { cookie: owner.cookie,
         body: { id: hidden.id, operation: 'add', entries: ['tt:user/synthetic-hidden-reader'] } });
