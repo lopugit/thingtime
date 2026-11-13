@@ -36,6 +36,12 @@ contain the protection behavior and remain intact; distinct original regression
 tests are preserved. PDF write gates coexist with pin APIs and their tests.
 The same actual-media/PDF browser fixture was rerun against this integrated tree.
 
+Main subsequently advanced through retained-preview maintenance PR 1513
+(`b3c82023a`). Its trusted caller inputs, immutable maintenance artifacts and
+acceptance-script corrections are preserved. This merge changes no application
+media/PDF, API or UI implementation, so the passing integrated runtime evidence
+above remains applicable; its workflow caller contract is checked separately.
+
 ## Verification
 
 - Final integrated Things suite: 378 tests plus 35 projection tests passed.

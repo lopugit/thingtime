@@ -14956,6 +14956,17 @@ separate from deterministic discovery/lease tests.
   scheduled/PR events must preserve existing behavior. Confirm the obsolete
   standalone product promotion workflow stays absent while the protected Lopu
   manager retains its promotion component.
+- Retained-preview maintenance: run the caller contract and protected controller
+  maintenance tests. Require all three optional inputs empty for ordinary events;
+  reject partial inputs, unmerged artifact provenance, changed manifest/patch,
+  stale PR head/ref, replaced incumbent and a mismatched reconstructed tree.
+  Reconstruct the frozen patch with an isolated Git index and compare its tree
+  independently. Before alias mutation, verify the immutable candidate's shell,
+  origin-scoped manifest, root data and signed relay. Verify maintenance metadata
+  distinguishes the authorization head from retained source/tree, scheduled
+  reconcile preserves the accepted incumbent, and a healthy ordinary replacement
+  still passes atomic promotion. Finally exercise protected browser bootstrap
+  at desktop/mobile widths; passing transport alone is insufficient.
 - Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
   active current-head protection, opt-in inactive open-PR expiry, failed policy
   reads and stable/production/gateway/alias protection. Real Vercel deletion is
@@ -16491,3 +16502,9 @@ never print the file-download JSON, encryption metadata or signed URL.
 - [ ] With a controlled exact-platform branch 401/403, verify Frontend, Nitro, MongoDB and Vercel show authentication required without cookies or an automation credential crossing the proxy; unrelated targets remain unavailable.
 - [ ] Reject redirect responses, never follow a login redirect, and stop stalled response bodies plus legacy fallback within one 3.5-second deadline. Run `test:api-capabilities`.
 - [ ] Inspect status labels and refresh controls at desktop/mobile widths, scroll top to bottom, and confirm no clipping or overflow.
+
+
+## Built gateway harness compatibility — 13 November 2026
+
+- [ ] Build both client and server before `test:environment-gateway:acceptance`. Confirm instrumentation resolves the MongoClient exported by the actual Nitro driver bundle (factory, default or namespace), with a callable connect method; never substitute a separate driver copy for command evidence.
+- [ ] The manifest check must accept compatible `api.environment-gateway` updates from1.2.1 while rejecting older or breaking-major versions. Preserve actual API registration/cookie/write/promotion/rollback checks and the zero follower Mongo dial assertion.
