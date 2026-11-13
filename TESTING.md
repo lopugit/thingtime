@@ -6015,6 +6015,18 @@ halves.
 
 ## Environment gateway and index lifecycle
 
+- [ ] Keep static and follower responses open during promotion; verify old
+  owner pools drain when the last admitted database stream/job finishes.
+  Expired async scopes cannot admit new work, and rollback waits for close.
+- [ ] Abort the sole budgeted HTTP waiter during shared connection and index
+  initialization, then demote. The initializer must retain independent gateway
+  admission until it settles; only then may clients/cache drain and rollback
+  admit a fresh connection. Keep ETag revalidation and platform-header origin
+  fencing covered alongside this lifetime regression.
+- [ ] Verify the installed Vercel pool adapter registers `waitUntil` through
+  the configured idle timeout; distinguish this local adapter test from actual
+  Fluid suspension and Atlas monitoring-socket observations.
+
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.

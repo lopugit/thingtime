@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { awaitMongoSharedWork, budgetMongoArguments, mongoRequestOptions, mongoTransactionBudget, startMongoSharedWork } from './requestBudget';
 import { randomUUID } from 'node:crypto';
-import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { requireGatewayDatabaseAccess, registerGatewayDrain, withGatewayWork } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
 import { mongoConnectionTracker } from './connectionTracker';
@@ -289,12 +289,18 @@ const adoptVersionedCollections = async (db: any) => {
 let homeDbPromise: Promise<any> | null = null;
 let homeDbClient: any = null;
 
+// A cancelled waiter may leave shared initialization running. Acquire its own
+// gateway lease synchronously while the initiating request is still admitted;
+// only the request budget is removed, not the initializer's drain lifetime.
+const startSharedGatewayWork = <T>(work: () => Promise<T>): Promise<T> =>
+  startMongoSharedWork(() => withGatewayWork(work));
+
 const getRawHomeThingtimeDb = async () => {
   mongoRequestOptions();
   await awaitMongoSharedWork(requireGatewayDatabaseAccess());
   mongoRequestOptions();
   if (!homeDbPromise) {
-    homeDbPromise = startMongoSharedWork(async () => {
+    homeDbPromise = startSharedGatewayWork(async () => {
       const client = await getClientCachedFor(getMongoUri(), true);
       const db = client.db('thingtime');
       homeDbClient = client;
@@ -1852,7 +1858,7 @@ const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecuti
 // inherit the deadline/cancellation of the request that happened to start it.
 export const ensureIndexes = (options: IndexExecutionOptions & { force?: boolean } = {}) => {
   mongoRequestOptions();
-  return awaitMongoSharedWork(startMongoSharedWork(() => ensureIndexesShared(options)));
+  return awaitMongoSharedWork(startSharedGatewayWork(() => ensureIndexesShared(options)));
 };
 
 // Ownership can return to this warm worker after a drain. Closed clients and

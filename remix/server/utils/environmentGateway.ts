@@ -5,7 +5,7 @@ import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { ROBOTS_PATH } from '../../app/api/utils/seo/sitemapCore';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, withGatewayWork, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -156,4 +156,12 @@ export const environmentGatewayIngress = async (request: Request): Promise<Respo
     if (authority.owner || getMongoConnectionMode() === 'dedicated') return null;
     return proxyEnvironmentRequest(request, authority);
   } catch { return gatewayFailure(); }
+};
+
+/** SPA shells remain local. Only their owner-side public metadata lookup holds
+ * a database lease; proxy followers render generic metadata without a DB dial. */
+export const withGatewayShellWork = async <T>(work: () => Promise<T>, fallback: () => T): Promise<T> => {
+  const authority = await gatewayAuthority.current();
+  if (authority && !authority.owner && getMongoConnectionMode() === 'proxy') return fallback();
+  return withGatewayWork(work);
 };

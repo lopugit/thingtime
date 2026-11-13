@@ -9,6 +9,14 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
+test('combined gateway budget and handover corrections retain the conditional manifest contract', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.2.3');
+  const feature = thingtimeCapabilityManifest('https://gateway.example').features['api.environment-gateway'];
+  assert.equal(feature.version, '1.2.3');
+  const endpoint = apiEndpointDocs.find(doc => doc.id === 'environment-gateway')!;
+  assert.deepEqual(endpoint.methods, ['GET', 'HEAD', 'OPTIONS']);
+});
+
 test('source-index pages publish the additive scoped contract on both manifests', () => {
     const feature = 'api.file-sync-transfer-admissions';
     assert.equal(createApiCapabilitiesManifest().features[feature], '1.8.0');

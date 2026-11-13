@@ -265,12 +265,16 @@ Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
 `subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
 
 Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+1.2.2 and `/.well-known/thingtime-capabilities.json`. Server deployments use
 the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
 opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
 mode executes its own backend, advertises `gateway: null`, and refuses relay
 traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
-for the audited environment mapping and pending activation evidence.
+for the audited environment mapping and observed activation evidence. Admitted
+work leases in `deployment/environmentGateway.ts` fence demotion and preserve
+inflight streams/background saves; static and follower traffic cannot delay
+pool drain. `mongodb/mongodb.ts` attaches idle-enabled clients to Vercel's
+suspension helper. Run gateway, collections and built transport acceptance.
 
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
@@ -851,6 +855,10 @@ handler retain local discovery/static serving while routing data operations.
 readiness without blocking read-only authentication. Existing admin migration
 status/run contracts and Lopu background-task contracts carry their deliberate
 compatible patch versions in both generated manifests.
+`collections.ts` gives shared connection/index initialization its own admitted
+gateway lifetime while `requestBudget.ts` cancels only each caller's wait.
+The crossed cancellation/demotion regressions live in
+`mongodb/indexCollectionsLifecycle.test.mts`.
 
 Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See

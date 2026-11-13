@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { mock, test } from 'node:test';
+import { createGatewayWorkLifecycle } from '../deployment/environmentGateway';
+import { withMongoRequestBudget } from './requestBudget';
 
 let custom = false;
 let selectedUri = 'mongodb://test-custom';
@@ -10,6 +12,9 @@ let builds = 0;
 let drain: (() => void) | undefined;
 let connections = 0;
 let markerReads = 0;
+let gatewayLifecycle: ReturnType<typeof createGatewayWorkLifecycle> | undefined;
+let pausedConnect: { started: () => void; wait: Promise<void> } | undefined;
+let pausedIndex: { started: () => void; wait: Promise<void> } | undefined;
 const databases = new Map<string, any>();
 const getDb = (uri: string, databaseName: string) => {
   const key = `${uri}/${databaseName}`;
@@ -21,7 +26,12 @@ const getDb = (uri: string, databaseName: string) => {
       collection: (name: string) => {
         state.collections.push(name);
         return {
-          async createIndex() { state.creates++; if (state.fail) throw new Error('required unique build failed'); return 'index'; },
+          async createIndex() {
+            state.creates++;
+            if (state.fail) throw new Error('required unique build failed');
+            if (pausedIndex) { pausedIndex.started(); await pausedIndex.wait; }
+            return 'index';
+          },
           async dropIndex() {}, async indexes() { return []; },
           async updateMany() { return { modifiedCount: 0 }; },
           async insertOne() { state.writes++; return { insertedId: 'synthetic' }; },
@@ -58,7 +68,10 @@ const getDb = (uri: string, databaseName: string) => {
 class Client extends EventEmitter {
   readonly uri: string;
   constructor(uri: string) { super(); this.uri = uri; }
-  async connect() { connections++; }
+  async connect() {
+    connections++;
+    if (pausedConnect) { pausedConnect.started(); await pausedConnect.wait; }
+  }
   async close() {}
   db(name: string) { return getDb(this.uri, name); }
 }
@@ -68,9 +81,19 @@ mock.module('./endpoint', { namedExports: {
   isCustomMongoEndpointActive: () => custom, getActiveMongoUri: () => selectedUri, getActiveMongoDbName: () => selectedDb
 } });
 mock.module('../deployment/environmentGateway', { namedExports: {
-  requireGatewayDatabaseAccess: async () => {}, registerGatewayDrain: (callback: () => void) => { drain = callback; }
+  requireGatewayDatabaseAccess: async () => {
+    if (gatewayLifecycle && !gatewayLifecycle.isAdmitted()) await gatewayLifecycle.withWork(async () => {});
+  },
+  withGatewayWork: <T>(work: () => Promise<T>) => gatewayLifecycle ? gatewayLifecycle.withWork(work) : work(),
+  registerGatewayDrain: (callback: () => void) => { drain = callback; }
 } });
 const collections = await import('./collections');
+
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+};
 
 test('auth reads remain available after unique-build failure; ordinary writes require ready indexes', async () => {
   const db = getDb('mongodb://test-home', 'thingtime');
@@ -165,3 +188,54 @@ test('warm home handles still attribute each API feature without creating anothe
   }
   assert.equal(connections, beforeConnections, 'attribution reuses the existing client');
 });
+
+for (const phase of ['connect', 'indexes'] as const) {
+  test(`cancelled shared ${phase} keeps its gateway lease until initialization and cache eviction finish`, { timeout: 5000 }, async () => {
+    await drain?.();
+    custom = false;
+    marker = null;
+    getDb('mongodb://test-home', 'thingtime').state.fail = false;
+    let owner = true, drains = 0, rollbackAdmitted = false;
+    const lifecycle = createGatewayWorkLifecycle(async () => {
+      if (!owner) throw new Error('retired owner');
+    });
+    gatewayLifecycle = lifecycle;
+    lifecycle.registerDrain(async () => { drains++; await drain?.(); });
+    const started = deferred(), finish = deferred();
+    const pause = { started: started.resolve, wait: finish.promise };
+    if (phase === 'connect') pausedConnect = pause;
+    else pausedIndex = pause;
+    const controller = new AbortController();
+    const parent = await lifecycle.admit();
+    const waiter = parent.run(() => withMongoRequestBudget(controller.signal, 10_000, () =>
+      phase === 'connect' ? collections.getHomeThingtimeDb() : collections.ensureIndexes()));
+    const rejected = assert.rejects(waiter, { name: 'AbortError' });
+    let rollback: ReturnType<typeof lifecycle.admit> | undefined;
+    try {
+      await started.promise;
+      controller.abort();
+      await rejected;
+      parent.end();
+      owner = false;
+      lifecycle.demote();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(drains, 0, 'the sole HTTP waiter ended, but initialization is still admitted');
+      owner = true;
+      rollback = lifecycle.admit().then(lease => { rollbackAdmitted = true; return lease; });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(rollbackAdmitted, false, 'rollback waits for the shared initializer and cache eviction');
+      finish.resolve();
+      const lease = await rollback;
+      assert.equal(drains, 1);
+      const before = connections;
+      await lease.run(() => collections.getHomeThingtimeDb());
+      assert.equal(connections, before + 1, 'late initialization cannot restore the retired cached client after drain');
+      lease.end();
+    } finally {
+      finish.resolve(); controller.abort(); parent.end();
+      await waiter.catch(() => {});
+      (await rollback)?.end();
+      pausedConnect = undefined; pausedIndex = undefined; gatewayLifecycle = undefined;
+    }
+  });
+}

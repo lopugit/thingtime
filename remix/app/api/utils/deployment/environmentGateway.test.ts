@@ -89,6 +89,59 @@ test('Vercel uses the bundled default and cannot silently fall through missing o
   assert.throws(() => getGatewaySettings({ ...env, THINGTIME_GATEWAY_SECRET: '' }));
 });
 
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+};
+
+test('demotion drains only admitted lifetimes and rollback waits for pool close', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const childStarted = deferred(), childDone = deferred(), closeStarted = deferred(), closeDone = deferred();
+  const lifecycle = createGatewayWorkLifecycle(async () => {});
+  let closes = 0;
+  lifecycle.registerDrain(async () => { closes++; closeStarted.resolve(); await closeDone.promise; });
+  const request = await lifecycle.admit();
+  const child = request.run(() => lifecycle.withWork(async () => {
+    childStarted.resolve(); await childDone.promise;
+    assert.equal(lifecycle.isAdmitted(), true, 'detached job retains its own admission');
+  }));
+  await childStarted.promise;
+  lifecycle.demote();
+  request.end(); request.end();
+  assert.equal(closes, 0, 'inflight detached save must finish before closing');
+  let readmitted = false;
+  const rollback = lifecycle.admit().then(lease => { readmitted = true; return lease; });
+  childDone.resolve(); await child;
+  await closeStarted.promise;
+  assert.equal(readmitted, false, 'rollback cannot reopen while pool close is pending');
+  closeDone.resolve();
+  (await rollback).end();
+  assert.equal(closes, 1);
+});
+
+test('demotion synchronously fences admission awaiting authority', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const checking = deferred(), checked = deferred();
+  const lifecycle = createGatewayWorkLifecycle(async () => { checking.resolve(); await checked.promise; });
+  const incoming = lifecycle.admit();
+  await checking.promise;
+  lifecycle.demote();
+  checked.resolve();
+  await assert.rejects(incoming, /environment API gateway/);
+});
+
+test('expired asynchronous scopes cannot borrow an old owner admission', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const continueWork = deferred();
+  let owner = true;
+  const lifecycle = createGatewayWorkLifecycle(async () => { if (!owner) throw new Error('not owner'); });
+  const request = await lifecycle.admit();
+  const late = request.run(async () => { await continueWork.promise; return lifecycle.withWork(async () => {}); });
+  request.end(); owner = false; lifecycle.demote(); continueWork.resolve();
+  await assert.rejects(late, /not owner/);
+});
+
 test('gateway discovery uses the server-only protection credential at the validated origin', async () => {
   const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   const secret = 'synthetic-platform-bypass';
