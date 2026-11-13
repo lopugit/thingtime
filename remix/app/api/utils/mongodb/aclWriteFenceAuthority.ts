@@ -27,8 +27,13 @@ export function classifyThingCollModAuthority(value: unknown, database: string, 
     // Time-series bucket resource patterns cannot cover ordinary Things.
     else if (keys.length === 2 && typeof scope.db === 'string' && typeof scope.system_buckets === 'string') covers = false;
     else if (keys.length === 1 && typeof scope.system_buckets === 'string') covers = false;
-    else if (keys.length === 2 && typeof scope.db === 'string' && typeof scope.collection === 'string')
-      covers = (scope.db === database || scope.db === '') && (scope.collection === collection || scope.collection === '');
+    else if (keys.length === 2 && typeof scope.db === 'string' && typeof scope.collection === 'string') {
+      const isSystemCollection = collection.startsWith('system.');
+      covers = (scope.db === database && scope.collection === collection) ||
+        (scope.db === '' && scope.collection === collection) ||
+        (scope.db === database && scope.collection === '' && !isSystemCollection) ||
+        (scope.db === '' && scope.collection === '' && database !== 'local' && database !== 'config' && !isSystemCollection);
+    }
     else return 'unknown';
     if (covers && (actions.includes('collMod') || actions.includes('anyAction'))) granted = true;
   }

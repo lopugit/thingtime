@@ -15,6 +15,13 @@ test('effective collection, database, and documented wildcard authority', () => 
   assert.equal(classify(response([privilege({ cluster: true }, ['anyAction'])]), db, collection), 'absent');
   assert.equal(classify(response([privilege({ db, system_buckets: '' }, ['anyAction'])]), db, collection), 'absent');
   assert.equal(classify(response([privilege({ db: 'other', collection: '' }, ['collMod'])]), db, collection), 'absent');
+  assert.equal(classify(response([privilege({ db: '', collection }, ['collMod'])]), db, collection), 'granted');
+  assert.equal(classify(response([privilege({ db: '', collection: 'other' }, ['collMod'])]), db, collection), 'absent');
+  for (const targetDb of ['local', 'config'])
+    assert.equal(classify(response([privilege({ db: '', collection: '' }, ['collMod'])]), targetDb, collection), 'absent');
+  for (const resource of [{ db, collection: '' }, { db: '', collection: '' }])
+    assert.equal(classify(response([privilege(resource, ['collMod'])]), db, 'system.profile'), 'absent');
+  assert.equal(classify(response([privilege({ db, collection: 'system.profile' }, ['collMod'])]), db, 'system.profile'), 'granted');
   assert.equal(classify(response([privilege({ db, collection }, ['find'])]), db, collection), 'absent');
 });
 
