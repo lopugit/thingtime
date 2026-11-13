@@ -7,6 +7,9 @@ manifest for ETag/304 and supports HEAD/OPTIONS without caching alias ownership.
 `requireCapability.client.ts` deduplicates checks, revalidates after its freshness
 window and scopes retained manifests to origin/transport; active-API checks keep
 their independent authority. Both public and active manifests remain registered.
+`seo-robots` 1.1.1 serves each deployment's crawler policy locally, outside
+gateway data ingress; an older or unavailable gateway cannot turn its exclusion
+into a 409. API and data-backed sitemap requests retain normal admission.
 `marketingPublications.ts` and its public/admin routes return explicit stale or
 unavailable read results; a committed write is distinct from failed readback.
 `mongodb/requestBudget.ts` carries opt-in driver/transaction deadlines through

@@ -348,7 +348,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.23.2');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.0' : '1.0.0', feature);
+    assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   }
 });
 
@@ -459,7 +459,7 @@ test('file finalization recovery requires the compatible upload-start correction
 
 test('crawler discovery endpoints publish their root paths and -docs twins on the origin manifest', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.0' : '1.0.0', feature);
+  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, feature === 'api.seo-robots' ? '1.1.1' : '1.0.0', feature);
   const paths = (feature: string) => manifest.operations.filter((operation) => operation.feature === feature).map((operation) => operation.path).sort();
   assert.deepEqual(paths('api.seo-robots'), ['/robots.txt', '/robots.txt-docs']);
   assert.deepEqual(paths('api.seo-sitemap'), ['/sitemap.xml', '/sitemap.xml-docs']);

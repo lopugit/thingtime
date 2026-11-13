@@ -3,9 +3,10 @@ import test from 'node:test';
 import { H3 } from 'nitro/h3';
 
 import middleware from '../middleware/environment-gateway';
+import robotsHandler from '../handlers/robots';
 import { thingtimeCapabilityManifest } from '../../app/api/utils/capabilities/thingtimeCapabilities';
 import { createGatewayAuthority, getGatewaySettings, requireGatewayDatabaseAccess } from '../../app/api/utils/deployment/environmentGateway';
-import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, proxyEnvironmentRequest, restoreGatewayRequest } from './environmentGateway';
+import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, isGatewayDataPath, proxyEnvironmentRequest, restoreGatewayRequest } from './environmentGateway';
 
 const origin = 'https://gateway.test';
 const follower = 'https://follower.test';
@@ -19,6 +20,26 @@ const fixture = async (run: () => Promise<void>) => {
   try { await run(); } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 };
 const aliasManifest = () => { const manifest = thingtimeCapabilityManifest(origin); manifest.gateway!.deploymentId = 'owner'; return manifest; };
+
+test('real middleware serves deployment-local crawler policy without contacting an unavailable gateway', async t => fixture(async () => {
+  const network = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Gateway unavailable'); });
+  const app = new H3().use(middleware).all('/robots.txt', robotsHandler);
+  assert.equal(isGatewayDataPath('/robots.txt'), false);
+  assert.equal(isGatewayDataPath('/api/v1/things'), true);
+  assert.equal(isGatewayDataPath('/sitemap.xml'), true);
+  for (const method of ['GET', 'HEAD']) {
+    const response = await app.fetch(new Request(follower + '/robots.txt', { method }));
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    if (method === 'GET') assert.match(body, /^Disallow: \/$/m);
+    else assert.equal(body, '');
+  }
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'production';
+  const production = await app.fetch(new Request(follower + '/robots.txt'));
+  assert.equal(production.status, 200);
+  assert.match(await production.text(), /^Allow: \/$/m);
+  assert.equal(network.mock.callCount(), 0);
+}));
 
 test('signed relay preserves authentication, original URL, cookies, transport hooks and manual redirects', async t => fixture(async () => {
   const settings = getGatewaySettings()!;

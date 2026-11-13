@@ -30,6 +30,12 @@ active-API discovery retains the browser's protection cookie; foreign and custom
 scoped transports continue to omit cookies. Preview robots disallow cooperative
 crawling while production stays indexable.
 
+Live preview acceptance found that the shared ingress classified `robots.txt`
+as data-backed and rejected its newer contract against an older gateway. Crawler
+policy is now served locally without gateway discovery. A real H3 middleware
+regression covers preview GET/HEAD and production policy with networking refused;
+data-backed API and sitemap paths keep their gateway admission.
+
 This PR does not activate project protection or delete deployments. The separate
 controller release provides authenticated deployment checks and an explicit,
 policy-checked retirement batch. Protection activation must preserve public

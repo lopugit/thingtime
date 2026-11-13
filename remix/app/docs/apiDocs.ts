@@ -804,7 +804,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
   }),
   endpoint({
-    id: 'environment-gateway', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'deployment',
+    id: 'environment-gateway', contractVersion: '1.2.1', featureVersion: '1.2.1', group: 'deployment',
     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
     detail: 'Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. No secrets or database configuration are published.',
@@ -10745,12 +10745,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'seo-robots',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     group: 'social',
     title: 'robots.txt',
     endpoint: '/robots.txt',
     summary: 'Production crawler policy and nonproduction crawl exclusion.',
+    notes: ['Version 1.1.1 serves deployment-local crawler policy without contacting the environment gateway, including when its API is older or unavailable.'],
     detail:
       'Version 1.1 disallows cooperative crawling on configured nonproduction deployments; production keeps its existing crawler policy. Platform authentication independently enforces preview access. Plain text (text/plain; charset=utf-8). On production, `User-agent: *` / `Allow: /` welcomes every crawler; well-known AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended and others) are also named explicitly with Allow: /, by the owner’s decision to keep the site open to AI indexing. The final `Sitemap:` line points at this origin’s own /sitemap.xml. No account data or configuration is involved.',
     auth: { mode: 'none', description: 'Crawlers fetch this publicly.' },

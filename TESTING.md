@@ -5880,6 +5880,10 @@ halves.
 
 ## Request cost controls (13 November 2026)
 
+- [ ] A preview must return its local `robots.txt` exclusion with GET and a
+  body-free HEAD even when its configured gateway is older or unavailable.
+  The middleware must make no gateway request for crawler policy; production
+  keeps `Allow: /`, while data-backed sitemap and API routes remain admitted.
 - [ ] Run `test:marketing`, `test:api-capabilities`, `test:devices`,
   `test:collections` and `test:environment-gateway` from `remix`; retain the
   tested source revision. Unit/mocked checks do not establish live protection.
