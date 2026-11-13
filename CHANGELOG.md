@@ -9,6 +9,8 @@
   open/unknown PRs and saved grace. Default automatic retention is unchanged.
 - Align the admin preparation credential contract with its existing signed-policy
   read while retaining strict secret-free builds and negative credential checks.
+- Stage the protected-fetch dependency in every storage-gate sparse checkout and
+  initialize runner-local report paths inside a runner step, with regressions.
 - This source change enables neither project protection nor preview deletion;
   the thin listener input rollout and live acceptance remain separate.
 

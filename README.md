@@ -307,7 +307,7 @@ project that has Deployment Protection enabled. The shared
 credential through the existing Vercel API token, verifies each destination's
 project identity, and sends the scoped bypass header only to that HTTPS origin.
 Credential and destination lookups expire after 30 seconds. Redirects refuse;
-caller-supplied bypass/cookie headers and Host overrides are removed. No token,
+caller-supplied bypass and bypass-cookie headers and Host overrides are removed. No token,
 bypass value, account cookie, or raw provider error belongs in inputs, artifacts
 or logs. This controller support does not turn on project protection.
 

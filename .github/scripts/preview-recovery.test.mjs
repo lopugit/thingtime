@@ -92,7 +92,7 @@ test('protected receipt path initializes on the runner before publisher steps wi
     });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '', 'the initialization must not log environment values');
-    assert.equal(readFileSync(environmentFile, 'utf8'), `VERCEL_PREVIEW_RECEIPT_PATH=${directory}/pr-preview-upload-receipt.json\n`);
+    assert.equal(readFileSync(environmentFile, 'utf8'), `VERCEL_PREVIEW_RECEIPT_PATH=${directory}/pr-preview-upload-receipt.json\nPREVIEW_RETIREMENT_REPORT_PATH=${directory}/preview-retirement-report.json\n`);
     assert.match(steps, /path: \$\{\{ runner\.temp \}\}\/pr-preview-upload-receipt\.json/);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

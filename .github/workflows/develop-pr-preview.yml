@@ -111,7 +111,6 @@ jobs:
     env:
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
-      PREVIEW_RETIREMENT_REPORT_PATH: ${{ runner.temp }}/preview-retirement-report.json
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -221,7 +220,6 @@ jobs:
     env:
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
-      PREVIEW_RETIREMENT_REPORT_PATH: ${{ runner.temp }}/preview-retirement-report.json
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -236,7 +234,7 @@ jobs:
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Initialize protected Preview upload receipt path
-        run: printf '%s\n' "VERCEL_PREVIEW_RECEIPT_PATH=$RUNNER_TEMP/pr-preview-upload-receipt.json" >> "$GITHUB_ENV"
+        run: printf '%s\n' "VERCEL_PREVIEW_RECEIPT_PATH=$RUNNER_TEMP/pr-preview-upload-receipt.json" "PREVIEW_RETIREMENT_REPORT_PATH=$RUNNER_TEMP/preview-retirement-report.json" >> "$GITHUB_ENV"
 
       - name: Check out protected deployment controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

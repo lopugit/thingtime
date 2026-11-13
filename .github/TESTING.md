@@ -18,6 +18,9 @@
 - Expected provider 403s must identify only the provider, redacted endpoint and
   status. Policy admission may receive the existing repository PAT and exact
   CI-router HMAC; unrelated/Vercel secrets and all untrusted-build secrets fail.
+- Import the storage gate from each actual workflow sparse tree to catch missing
+  transitive modules. Run the receipt/report initializer with spaced runner paths;
+  keep runner context out of job-level environment expressions.
 - Local fixtures do not establish hosted authentication or retirement acceptance.
   Do not enable protection, move aliases or dispatch deletion solely to run tests.
 

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import { checkRuntimeLogs, checkStorageManifest, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageManifest, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
@@ -173,4 +177,27 @@ test('required API-suite job runs real storage integration when present without 
   assert.match(step, /THINGTIME_TEST_MONGO_RUNTIME: docker/);
   assert.match(step, /run: pnpm run test:storage-recovery:integration/);
   assert.doesNotMatch(step, /continue-on-error|\|\| true|secrets\./);
+});
+
+// Exercise the module boundary in the same sparse tree the Actions jobs stage.
+test('every storage gate sparse checkout carries its executable import closure', () => {
+  let checked = 0;
+  for (const name of ['web-ci.yml', 'storage-release-monitor.yml']) {
+    const workflow = readFileSync(new URL(`../workflows/${name}`, import.meta.url), 'utf8');
+    for (const match of workflow.matchAll(/^([ ]+)sparse-checkout: ([^\n]+)(?:\n((?:[ ]{12,}[^\n]*\n)*))?/gm)) {
+      const files = (match[2] === '|' ? match[3] : match[2]).trim().split(/\s+/);
+      if (!files.includes('.github/scripts/storage-release-gate.mjs')) continue;
+      const staged = mkdtempSync(join(tmpdir(), 'thingtime-storage-gate-'));
+      try {
+        for (const file of files) {
+          const target = join(staged, file);
+          mkdirSync(dirname(target), { recursive: true });
+          copyFileSync(new URL(`../../${file}`, import.meta.url), target);
+        }
+        execFileSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(join(staged, '.github/scripts/storage-release-gate.mjs')).href)})`], { stdio: 'pipe' });
+        checked++;
+      } finally { rmSync(staged, { recursive: true, force: true }); }
+    }
+  }
+  assert.equal(checked, 3, 'both premerge jobs and the production monitor must stage a runnable gate');
 });
