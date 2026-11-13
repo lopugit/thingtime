@@ -802,3 +802,15 @@ verifies that executable exists. Tests use disposable fixture databases rather
 than an installed app helper. This runs before signing credential access; the
 contract check enforces the ordering. A product entry-point compile correction
 ships separately on `main`.
+
+### Verified PR alias promotion
+
+The protected preview publisher checks the immutable candidate's shell and
+`/api/root-data` before replacing a working PR alias, then repeats verification
+at the alias with a fresh PR/head fence. A failed post-assignment check restores
+the captured predecessor only while the alias still belongs to that attempt;
+a concurrent successor is preserved. Uncertain publication or rollback keeps
+the upload receipt/candidate for inspection. Scheduled reconciliation uses the
+same promotion path. A shell or unrelated API canary alone is not application
+bootstrap acceptance. Run `node --test .github/scripts/preview-alias-promotion.test.mjs`
+and the existing publisher `--self-test` before publishing controller changes.
