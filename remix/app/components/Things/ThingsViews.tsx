@@ -1,3 +1,5 @@
+import { ThingFilePreview } from './ThingFilePreview';
+import { fileMediaReference } from './fileMediaPresentation';
 import React from 'react';
 import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 
@@ -79,6 +81,7 @@ const ThingPreviewBox = ({
   schemaRender?: Record<string, unknown> | null;
 }) => {
   if (isFolder(thing) || thing.libraryArchivePresentation === 'metadata') return <>{fallback}</>;
+  if (fileMediaReference(thing)) return <ThingFilePreview thing={thing} thumbnail fallback={fallback} />;
   let body: React.ReactNode;
   if (schemaRender) {
     body = <SchemaTemplateRender crystal={thing.crystal || {}} template={schemaRender} />;
@@ -370,6 +373,7 @@ export const ThingsGridView = ({
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
       const iconBlock = <ThingIconDisplay thing={thing} />;
+      const thumbnail = fileMediaReference(thing) ? <ThingFilePreview thing={thing} thumbnail fallback={iconBlock} /> : iconBlock;
       return (
         <Flex
           key={thing.id}
@@ -406,7 +410,7 @@ export const ThingsGridView = ({
 							<ThingPreviewBox fallback={iconBlock} maxHeight="150px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
             </Box>
           ) : (
-            iconBlock
+            thumbnail
           )}
           <TitleLink fontSize="13px" fontWeight={600} handlers={handlers} noOfLines={2} textAlign="center" thing={thing} wordBreak="break-word" />
           {isBuilderApp(thing) && typeof thing.crystal.description === 'string' && thing.crystal.description ?

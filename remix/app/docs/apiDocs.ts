@@ -9742,8 +9742,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.64.0',
-    contractVersion: '1.64.0',
+    featureVersion: '1.65.0',
+    contractVersion: '1.65.0',
 
 
     group: 'things',
@@ -9753,6 +9753,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.65 accepts optional tt-pdf document and tt-pdf-page canvas element blocks with individually editable child controls. Canonical src media references use existing dependency/ACL/copy traversal; PDF scripts and annotations do not execute. ' +
       'Version 1.64 preserves closed v5 folder-backup uploadPolicy with byte-rate and rolling-hour ceilings. Hosts must negotiate independent upload-policy support. ' +
       'Version 1.63 expands owner-library Archive to eligible user-facing Things, including dedicated message and community content. Protected-content Archived rows carry libraryArchivePresentation:metadata and only a static title, kind and canonical identity; ordinary content retains inherited audience checks. ' +
       'Version 1.62 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
@@ -11870,14 +11871,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.28.0',
-    contractVersion: '1.28.0',
+    featureVersion: '1.29.0',
+    contractVersion: '1.29.0',
 
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.29 accepts the same editable tt-pdf / tt-pdf-page element blocks under ordinary CAS, media dependency and ACL validation.', 'Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
       'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +

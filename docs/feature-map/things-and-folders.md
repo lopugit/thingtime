@@ -1223,3 +1223,12 @@ Device location / LiDAR sections of `TESTING.md` for acceptance requirements.
 
 Rendered regression entry points: `remix/scripts/device-details.browser.mjs`
 and `remix/scripts/lidar-scan.browser.mjs` (isolated synthetic fixtures).
+
+### Canonical file previews — 2026-11-13
+
+`fileMediaPresentation.ts` validates `crystal.content` and the exact attachment
+binding; `ThingFilePreview.tsx` uses authorized metadata and an explicit embedded
+Component for legacy files without a saved `renderComponent`. Grid thumbnails
+are independent of the Names/Previews preference; detail and quick look display
+real media instead of the content-reference data tree. Tests live in
+`fileMediaPresentation.test.ts` and `scripts/file-media.browser.mjs`.
