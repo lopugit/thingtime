@@ -162,6 +162,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
+- 2026-11-13: Extend the agent overview read adapter with task activity, open
+  questions and reversible archive filtering. Preserve Builder controls and
+  cached results during explicitly permitted filter changes while clearing
+  them when the selected task or access context changes. Board layouts remain
+  private saved Things; deployed page acceptance is a separate delivery check.
+  **Codex (AI)**
+
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and
   cloud saves; collapse device sections by default, page location history ten
   at a time, and move secondary navigation into context menus. Device setup

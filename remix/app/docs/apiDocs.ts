@@ -824,12 +824,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'The independent permission or private workspace access is missing.', body: { ok: false, error: 'Agent reporting authorization is required.' } }]
   }),
   endpoint({
-    id: 'agent-overview', contractVersion: '2.1.0', featureVersion: '2.1.0', group: 'things',
+    id: 'agent-overview', contractVersion: '2.2.0', featureVersion: '2.2.0', group: 'things',
     title: 'Agent project overview', endpoint: '/api/v1/agent-overview',
     summary: 'Reads authorized project, task and agent Things as a live Builder data source.',
-    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional statuses, projectIds and taskLevels accept JSON arrays of strings, repeated keys or comma-separated lists. Each filter matches any selected value and combines with the other filters. Task levels are top-level and subtasks. Passing an empty taskLevels or all selects both levels. Omitting taskLevels preserves the full hierarchy including project and agent rows. Explicit plural statuses and projectIds take precedence over legacy scalar status and projectId, and empty lists clear those filters. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification. Filters and classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
+    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional statuses, projectIds and taskLevels accept JSON arrays of strings, repeated keys or comma-separated lists. Each filter matches any selected value and combines with the other filters. Task levels are top-level and subtasks. Passing an empty taskLevels or all selects both levels. Omitting taskLevels preserves the full hierarchy including project and agent rows. Explicit plural statuses and projectIds take precedence over legacy scalar status and projectId, and empty lists clear those filters. Optional archive=active|archived|all defaults to active; a task data crystal archived boolean hides its descendant tasks from active board results without changing them. An exact taskId still returns its selected detail. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification. Filters and classifications are included in the cursor context. Task rows include semantic statusGroup, allowlisted openQuestions, openQuestionCount, and lastActivityAt derived only from valid task, progress and question source timestamps. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
     auth: { mode: 'session-or-bearer', description: 'Authenticated viewer with things.read; private/no-store.' },
-    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.1.0 to use multi-select filters.', 'Read the selected schema-scoped work graph or connect its live stream.'],
+    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.2.0 to use archive filtering and task-card activity fields.', 'Read the selected schema-scoped work graph or connect its live stream.'],
     requestExamples: [{ name: 'Overview', description: 'Read top-level tasks in either selected status.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy', taskLevels: 'top-level', statuses: 'active,blocked' } }],
     responseExamples: [{ status: 200, description: 'Authorized overview snapshot or text/event-stream.' }, { status: 401, description: 'Authentication required.' }]
   }),
@@ -9742,8 +9742,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.64.0',
-    contractVersion: '1.64.0',
+    featureVersion: '1.65.0',
+    contractVersion: '1.65.0',
 
 
     group: 'things',
@@ -9753,6 +9753,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.65 accepts saved Component/Webpage source retainOnInputChange for explicitly listed non-ID input names; source authority and input identity remain fenced. ' +
       'Version 1.64 preserves closed v5 folder-backup uploadPolicy with byte-rate and rolling-hour ceilings. Hosts must negotiate independent upload-policy support. ' +
       'Version 1.63 expands owner-library Archive to eligible user-facing Things, including dedicated message and community content. Protected-content Archived rows carry libraryArchivePresentation:metadata and only a static title, kind and canonical identity; ordinary content retains inherited audience checks. ' +
       'Version 1.62 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
@@ -11880,14 +11881,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.28.0',
-    contractVersion: '1.28.0',
+    featureVersion: '1.29.0',
+    contractVersion: '1.29.0',
 
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.29.0 validates and preserves saved Component/Webpage source retainOnInputChange for existing non-ID input names.', 'Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
       'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
@@ -13769,14 +13770,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.19.0',
-    featureVersion: '1.19.0',
+    contractVersion: '1.20.0',
+    featureVersion: '1.20.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
-    notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.20 preserves saved source retainOnInputChange through authorized Webpage/Component resolution.', "Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.20 preserves source retainOnInputChange for explicitly listed non-ID filter inputs without changing source authority. ' +
       'Version 1.19 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
       'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +

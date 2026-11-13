@@ -1,8 +1,8 @@
 # PR 1494 — Thing browser parent-path pins
 
-Date: 2026-11-13  
-PR: https://github.com/lopugit/thingtime/pull/1494  
-Base: `main`  
+Date: 2026-11-13
+PR: https://github.com/lopugit/thingtime/pull/1494
+Base: `main`
 Initial published source: `fdbd80cd`; subsequent fixes and this note remain subject
 to the final PR-head checks.
 

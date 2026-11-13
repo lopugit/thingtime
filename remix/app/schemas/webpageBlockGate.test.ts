@@ -209,6 +209,16 @@ test('source inputs accept only scalar values and explicit ttArg paths', () => {
 	]) assert.equal(page([block({ selected })]).ok, false);
 });
 
+test('source retention opts in only existing non-ID input names and survives saved block validation', () => {
+	const source = { action: 'read-overview', inputs: { statuses: { ttArg: 'query.statuses' }, projectIds: { ttArg: 'query.projectIds' }, taskId: { ttArg: 'query.taskId' } },
+		retainOnInputChange: ['statuses', 'projectIds'] };
+	const valid = okBlocks(page([{ id: 'board', type: 'element', tag: 'section', source }]));
+	assert.deepEqual(valid[0].source.retainOnInputChange, ['statuses', 'projectIds']);
+	for (const retained of [['taskId'], ['missing'], ['statuses', 'statuses'], ['__proto__'], ['statuses.bad'], [1], 'statuses']) {
+		assert.equal(page([{ id: 'bad', type: 'element', tag: 'section', source: { ...source, retainOnInputChange: retained } }]).ok, false);
+	}
+});
+
 
 test('live sources preserve registered adapter contracts and reject arbitrary authenticated destinations', () => {
   const stream = { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' };
