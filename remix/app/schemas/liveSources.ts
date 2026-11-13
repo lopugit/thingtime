@@ -2,7 +2,8 @@
 export type LiveSource = { path: string; feature: string; minimumVersion: string };
 export const LIVE_SOURCES: readonly LiveSource[] = [
   { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' },
-  { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.1.0' }
+  { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.1.0' },
+  { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.2.0' }
 ];
 export function validateLiveSource(value: unknown): LiveSource | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
