@@ -1,3 +1,4 @@
+import './ensure-pdf-assets.mjs';
 /** Actual PDF.js + React; synthetic authorized API fixture, not production acceptance. */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';

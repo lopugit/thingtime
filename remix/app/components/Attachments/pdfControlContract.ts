@@ -11,4 +11,3 @@ export function usesPdfBlocks(value: unknown): boolean {
   }
   return false;
 }
-

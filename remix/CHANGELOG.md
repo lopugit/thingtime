@@ -159,7 +159,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
-- 2026-11-13: Restore synced-file thumbnails in Names/Previews and real media in detail/quick look. Add an in-app PDF reader with page, zoom, text and download controls using authorized exact-version ranges and self-hosted PDF.js assets. **Codex (AI)**
+- 2026-11-13: Restore synced-file thumbnails in Names/Previews and real media in detail/quick look. Add an in-app PDF reader with page, zoom, text and download controls using authorized exact-version ranges and self-hosted PDF.js assets. See [PR 1496 validation and boundaries](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 
 
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and
