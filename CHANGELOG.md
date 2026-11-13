@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-11-14 — Accept optional CodeQL upload quota metadata
+
+- Keep core quota mandatory while accepting a rate-limit response that omits
+  the optional upload family, following GitHub's published contract. Real job
+  diagnostics exposed the earlier unsupported assumption about this family.
+- Continue enforcing valid advertised upload counters and authoritative reset
+  headers. Missing metadata is not invented capacity; the official action still
+  enforces upload authorization and quota, and processing must complete.
+
 ## 2026-11-14 — Retain CodeQL results through SARIF quota exhaustion
 
 - Separate query execution from the pinned official SARIF upload, retaining

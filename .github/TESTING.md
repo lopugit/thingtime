@@ -12,8 +12,18 @@
   inline trusted workflow code, never imported from the analyzed checkout.
 - The 65-minute shared quota/processing window fits inside a 120-minute job.
   Quota reads are safe to retry and wait for the actual reset; 100 core units
-  and one upload unit are admission thresholds, not reservations. Other jobs
-  can still consume the shared installation budget before the upload.
+  and one advertised upload unit are admission thresholds, not reservations.
+  Core counters are required. An omitted optional `code_scanning_upload` family
+  is explicitly unadvertised; the official action enforces its applicable quota.
+  An advertised null/malformed bucket still fails closed. Cover the actual
+  compatibility fixture using run 43444483944 attempt 2 core values: 5000/4187,
+  reset 1794586145, and the documented optional-family omission. The run's
+  projected null upload counters alone cannot prove raw omission versus malformed
+  data. Verify the helper's explicit unadvertised notice during hosted acceptance.
+  Also cover exhausted core without that optional family and authoritative
+  zero-remaining response headers. Other jobs can still consume shared capacity.
+  GitHub's [rate-limit response example](https://docs.github.com/en/rest/rate-limit/rate-limit#get-rate-limit-status-for-the-authenticated-user)
+  omits this family; request-specific response headers remain authoritative.
 - Exactly one official `upload-sarif` invocation preserves the action's built-in
   token, ref/SHA, category, fork and native transient transport behavior. Do not
   replay an ambiguous upload, clear its uniqueness sentinel or change credentials
