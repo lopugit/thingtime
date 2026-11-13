@@ -301,6 +301,17 @@ production/develop/staging publication does not depend on policy API availabilit
 Explicit admin removal of a selected environment remains a separately requested
 operation; retention policy does not grant permission to delete stable services.
 
+PR-scoped retention still paginates the complete project summary inventory for
+keeper discovery, but skips detail reads when every summary for an ID carries a
+valid explicit different PR number. Matching, missing or malformed metadata takes
+the existing fresh-detail path; summaries never authorize deletion. An inconsistent
+summary may defer cleanup to global reconciliation, which remains unchanged.
+All policy, identity, live-PR, current-head, alias and cancel/delete fences stay
+fresh and serial. If provider summaries omit PR metadata, this optimization saves
+no detail requests. Verify with `node --test
+.github/scripts/orphan-preview-cleanup.test.mjs`: cover read counts, duplicate and
+unknown metadata, summary/detail disagreement, pagination and mutation races.
+
 Rollout order: deploy the product settings endpoint/capability first and verify
 its signed read in CI, then merge this controller into `github-actions`. The
 existing default-branch listener already supplies close events and the six-hour

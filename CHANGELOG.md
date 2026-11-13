@@ -1,5 +1,11 @@
 # Control-plane changelog
 
+## 2026-11-14 — Avoid unrelated PR preview detail reads
+
+- PR-scoped retention skips only valid explicitly different PR summaries, keeping
+  unknown metadata, complete pagination, keeper discovery and fresh mutation
+  fences. Global reconciliation is unchanged; live timing remains to be measured.
+
 ## 2026-11-14 — Accept optional CodeQL upload quota metadata
 
 - Keep core quota mandatory while accepting a rate-limit response that omits

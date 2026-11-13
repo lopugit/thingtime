@@ -39,6 +39,85 @@ function fixture({ detail = deployment(), open = [], aliases = [], domains = [],
   return { github, vercel, mutations };
 }
 
+function summaryInventory(f, summaries) {
+  const detailReads = [], inventoryReads = [], read = f.vercel;
+  return { ...f, detailReads, inventoryReads, vercel: async (path, options = {}) => {
+    if (path.startsWith('/v7/deployments?')) {
+      inventoryReads.push(path);
+      return { deployments: summaries, pagination: { next: null } };
+    }
+    if (!options.method && path.startsWith('/v13/deployments/')) detailReads.push(path.split('/')[3].split('?')[0]);
+    return read(path, options);
+  } };
+}
+
+test('scoped cleanup skips detail reads only for positively different PR summaries', async () => {
+  for (const number of ['99', 99]) {
+    const f = summaryInventory(fixture(), [{ uid: 'dpl_test', meta: { githubPrId: number } }]);
+    const report = await reconcileWithReport(config, { ...f, prNumber: 12 });
+    assert.deepEqual(f.detailReads, []); assert.deepEqual(f.mutations, []);
+    assert.deepEqual(report.removedIds, []); assert.deepEqual(report.retainedIds, []);
+  }
+});
+
+test('matching, unknown and malformed summary PR metadata still gets fresh details', async () => {
+  for (const number of ['12', 12, undefined, null, '', '0', 0, -1, '01', '99.0', 'bad', Number.MAX_SAFE_INTEGER + 1, '9007199254740992', ['99'], { number: 99 }, true]) {
+    const f = summaryInventory(fixture(), [{ uid: 'dpl_test', meta: { githubPrId: number } }]);
+    assert.deepEqual((await reconcileWithReport(config, { ...f, prNumber: 12 })).removedIds, ['dpl_test']);
+    assert.ok(f.detailReads.length >= 3, `fresh planning/fence/absence reads for ${JSON.stringify(number)}`);
+    assert.deepEqual(f.mutations, [['/v13/deployments/dpl_test', 'DELETE']]);
+  }
+  const f = summaryInventory(fixture(), [{ uid: 'dpl_test' }]);
+  assert.deepEqual((await reconcileWithReport(config, { ...f, prNumber: 12 })).removedIds, ['dpl_test']);
+});
+
+test('summary/detail PR disagreement can defer cleanup but never authorize deletion', async () => {
+  const other = deployment(); other.meta.githubPrId = '99';
+  const f = summaryInventory(fixture({ detail: other }), [{ uid: other.id, meta: { githubPrId: '12' } }]);
+  assert.deepEqual((await reconcileWithReport(config, { ...f, prNumber: 12 })).removedIds, []);
+  assert.deepEqual(f.detailReads, [other.id]); assert.deepEqual(f.mutations, []);
+  const g = summaryInventory(fixture(), [{ uid: 'dpl_test', meta: { githubPrId: '99' } }]);
+  assert.deepEqual((await reconcileWithReport(config, { ...g, prNumber: 12 })).removedIds, []);
+  assert.deepEqual(g.detailReads, []); assert.deepEqual(g.mutations, []);
+});
+
+test('matching or unknown duplicate summaries require details and global cleanup remains authoritative', async () => {
+  for (const number of ['12', undefined, 'bad']) {
+    const f = summaryInventory(fixture(), [{ uid: 'dpl_test', meta: { githubPrId: '99' } }, { uid: 'dpl_test', meta: { githubPrId: number } }]);
+    assert.deepEqual((await reconcileWithReport(config, { ...f, prNumber: 12 })).removedIds, ['dpl_test']);
+    assert.ok(f.detailReads.length >= 3);
+  }
+  const f = summaryInventory(fixture(), [{ uid: 'dpl_test', meta: { githubPrId: '99' } }]);
+  assert.deepEqual((await reconcileWithReport(config, f)).removedIds, ['dpl_test']);
+  assert.ok(f.detailReads.length >= 3);
+});
+
+test('scoped summary filtering preserves complete pagination and later matching candidates', async () => {
+  const f = fixture(), read = f.vercel, paths = [];
+  const vercel = async (path, options = {}) => {
+    paths.push(path);
+    if (path.startsWith('/v7/deployments?')) return path.includes('until=123')
+      ? { deployments: [{ uid: 'dpl_test', meta: { githubPrId: '12' } }], pagination: { next: null } }
+      : { deployments: [{ uid: 'dpl_other', meta: { githubPrId: '99' } }], pagination: { next: 123 } };
+    assert.ok(!path.startsWith('/v13/deployments/dpl_other'));
+    return read(path, options);
+  };
+  assert.deepEqual((await reconcileWithReport(config, { ...f, vercel, prNumber: 12 })).removedIds, ['dpl_test']);
+  assert.equal(paths.filter(path => path.startsWith('/v7/deployments?')).length, 2);
+});
+
+test('summary-excluded IDs remain available for independently verified current-head keepers', async () => {
+  const now = Date.now(), old = { ...deployment(), createdAt: now - 72 * 3_600_000 };
+  old.meta.githubCommitSha = 'b'.repeat(40);
+  const keeper = { ...deployment(), id: 'dpl_keeper', createdAt: now - 30 * 3_600_000 };
+  const configured = { ...config, retentionPolicy: { ...config.retentionPolicy, pruneSupersededOpenPr: true } };
+  const f = summaryInventory(fixture({ detail: old, others: [keeper], state: 'open', open: [pr('open')] }),
+    [old, { ...keeper, meta: { ...keeper.meta, githubPrId: '99' } }]);
+  assert.deepEqual((await reconcileWithReport(configured, { ...f, prNumber: 12, now: () => now })).removedIds, ['dpl_test']);
+  assert.ok(f.detailReads.includes('dpl_keeper'));
+  assert.deepEqual(f.mutations, [['/v13/deployments/dpl_test', 'DELETE']]);
+});
+
 test('deletes exact closed-PR deployment and immutable URL, idempotently accepting absent objects', async () => {
   const f = fixture({ aliases: [{ alias: 'pr-12.previews.dev.example.com' }] });
   assert.deepEqual(await reconcileOrphanPreviews(config, f), ['dpl_test']);
