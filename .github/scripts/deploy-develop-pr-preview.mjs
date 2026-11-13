@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { timePublicationStage } from './preview-publication-timing.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
 import { promotePreviewAlias } from './preview-alias-promotion.mjs';
@@ -1267,7 +1268,7 @@ const runSelfTest = async () => {
 	// and custom-develop rows cannot satisfy it. No secret values enter argv.
 	const source = await readFile(new URL(import.meta.url), 'utf8');
 	const upload = source.slice(source.lastIndexOf('const deployPrebuiltOutput = async')).split('const createVercelDeployment')[0];
-	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf('await execute('));
+	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf('() => execute('));
 	truthy(!source.slice(source.lastIndexOf('const main = async')).includes('reconcileStableDevelopAlias('));
 	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
 	truthy(deployHandler.includes('if (!config.maintenance && !error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
@@ -1555,14 +1556,14 @@ const upsertComment = (repository, number, body) => upsertPreviewComment({
 });
 
 const publishDevelopStatus = (config, pullRequest, fields, { bestEffort = false } = {}) =>
-	config.maintenance ? upsertComment(config.repository, pullRequest.number, `### Retained-source preview maintenance: ${fields.state}\n\n- Authorization head (not deployed): \`${pullRequest.head.sha}\`\n- Source baseline: \`${config.maintenance.retainedSourceSha}\`\n- Patched tree: \`${config.maintenance.sourceTree}\`\n- Reviewed manifest: \`${config.maintenance.artifact.commit}:${config.maintenance.artifact.path}\`\n- Preview: https://${fields.alias}\n\n${fields.note || ''}`) : publishPreviewNotifications([
+	timePublicationStage('github-comment', () => config.maintenance ? upsertComment(config.repository, pullRequest.number, `### Retained-source preview maintenance: ${fields.state}\n\n- Authorization head (not deployed): \`${pullRequest.head.sha}\`\n- Source baseline: \`${config.maintenance.retainedSourceSha}\`\n- Patched tree: \`${config.maintenance.sourceTree}\`\n- Reviewed manifest: \`${config.maintenance.artifact.commit}:${config.maintenance.artifact.path}\`\n- Preview: https://${fields.alias}\n\n${fields.note || ''}`) : publishPreviewNotifications([
 		() => publishPreviewSummary({ request: githubRequest, repository: config.repository, number: pullRequest.number,
 			sha: pullRequest.head.sha, summary: deploymentComment({ pullRequest, ...fields }) }),
 		() => upsertComment(config.repository, pullRequest.number, deploymentComment({ pullRequest, ...fields })),
 		() => syncPreviewLabels({ request: githubRequest, repository: config.repository, number: pullRequest.number,
 			sha: pullRequest.head.sha, status: fields.state === 'deploying' ? 'building' : fields.state,
 			...(fields.builtAt ? { builtAt: fields.builtAt } : {}) })
-	], { bestEffort });
+	], { bestEffort }));
 
 const findGithubDeployment = async (repository, pullRequest) => {
 	const environment = `develop-pr-${pullRequest.number}`;
@@ -1587,7 +1588,7 @@ const findGithubMaintenanceDeployment = async (repository, intent) => {
 	return deployments.find(deployment => maintenanceGithubDeploymentMatches(deployment, intent)) ?? null;
 };
 
-const createGithubDeployment = async (repository, pullRequest, config = {}) => {
+const createGithubDeployment = async (repository, pullRequest, config = {}) => timePublicationStage('github-deployment-record', async () => {
 	const body = {
 		ref: sourceSha(config, pullRequest),
 		environment: `develop-pr-${pullRequest.number}${config.maintenance ? '-maintenance' : ''}`,
@@ -1619,10 +1620,10 @@ const createGithubDeployment = async (repository, pullRequest, config = {}) => {
 		if (reconciled) return reconciled;
 		throw error;
 	}
-};
+});
 
 const setGithubDeploymentStatus = async (repository, deploymentId, state, { environmentUrl, logUrl, description } = {}) =>
-	githubRequest(`/repos/${repository}/deployments/${deploymentId}/statuses`, {
+	timePublicationStage('github-status', () => githubRequest(`/repos/${repository}/deployments/${deploymentId}/statuses`, {
 		method: 'POST',
 		accept: [201],
 		retries: 0,
@@ -1633,7 +1634,7 @@ const setGithubDeploymentStatus = async (repository, deploymentId, state, { envi
 			...(logUrl ? { log_url: logUrl } : {}),
 			...(description ? { description: description.slice(0, 140) } : {})
 		}
-	});
+	}));
 
 const markGithubEnvironmentInactive = async (repository, prNumber, keepId = null) => {
 	const environment = `develop-pr-${boundedInteger(prNumber, 'PR number')}`;
@@ -1670,7 +1671,7 @@ const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard
 	}\n\nThis PR deployment uses master.previews.thingtime.com and development data. The URL namespace is retained for compatibility; cleanup owns only current-policy PR deployments.`;
 };
 
-const verifyCors = async (origin, probeUrl) => {
+const verifyCors = async (origin, probeUrl) => timePublicationStage('cors-smoke', async () => {
 	const response = await fetch(probeUrl, {
 		method: 'OPTIONS',
 		redirect: 'manual',
@@ -1687,7 +1688,7 @@ const verifyCors = async (origin, probeUrl) => {
 	if (!response.ok || allowedOrigin !== origin || !allowedMethods.includes('PUT') || !allowedHeaders.includes('x-amz-checksum-sha256')) {
 		throw new Error('Develop S3 CORS preflight did not authorize the PR origin');
 	}
-};
+});
 
 // Only the protected stable publisher owns the preview master. This controller
 // reads its main-source/preview-target provenance and live runtime; it never
@@ -1699,7 +1700,7 @@ const verifyPreviewMasterRuntime = async (name, policy, deploymentId, { verifyMa
 	await response.json();
 });
 
-const assertPreviewMaster = async (config, { readGithub = githubRequest, readVercel = vercelRequest, verify = verifyPreviewMasterRuntime } = {}) => {
+const assertPreviewMaster = async (config, { readGithub = githubRequest, readVercel = vercelRequest, verify = verifyPreviewMasterRuntime } = {}) => timePublicationStage('master-readiness', async () => {
 	const reference = await readGithub(`/repos/${config.repository}/git/ref/heads/main`);
 	if (reference?.ref !== 'refs/heads/main' || reference.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object?.sha || '')) throw new Error('Preview master main source ref was invalid');
 	const policy = gatewayPolicy({ branch: 'main', target: PR_PREVIEW_TARGET, owner: true });
@@ -1710,7 +1711,7 @@ const assertPreviewMaster = async (config, { readGithub = githubRequest, readVer
 	const issue = stablePublisherDeploymentIssue(deployment, { sha: reference.object.sha, branch: 'main', target: PR_PREVIEW_TARGET, projectId: config.projectId });
 	if (issue || deployment.id !== alias.deploymentId || deployment.readyState !== 'READY') throw new Error(`Controlled preview master is not ready (${issue || 'deployment-state'})`);
 	await verify(name, policy, deployment.id);
-};
+});
 
 const assertCustomDevelopEnvironment = async (config, request = vercelRequest) => {
 	const customEnvironment = await request(
@@ -1729,7 +1730,7 @@ const assertCustomDevelopEnvironment = async (config, request = vercelRequest) =
 	}
 };
 
-const assertVercelConfiguration = async (config) => {
+const assertVercelConfiguration = async (config) => timePublicationStage('configuration', async () => {
 	const project = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}`);
 	if (project?.id !== config.projectId || project?.name !== config.projectName) {
 		throw new Error('Vercel project identity did not match the configured exact project');
@@ -1779,7 +1780,7 @@ const assertVercelConfiguration = async (config) => {
 			throw new Error(`${policy.label} wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
 		}
 	}
-};
+});
 
 const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch, missingBuildPage = false }) => {
 	const hostname = `controller-fallback-probe.${suffix}`;
@@ -1912,10 +1913,10 @@ const refreshOwnedDeployment = async (deploymentId, config, prNumber) => {
 };
 
 
-const cleanupDeployments = async (_deployments, config, prNumber, _keepIds = new Set()) => {
+const cleanupDeployments = async (_deployments, config, prNumber, _keepIds = new Set()) => timePublicationStage('retention', async () => {
 	const report = await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest, prNumber });
 	return report.removedIds.length;
-};
+});
 
 const getOwnedAlias = async (config, alias) => {
 	const params = new URLSearchParams({ projectId: config.projectId });
@@ -1967,7 +1968,7 @@ const getAliasBinding = async (config, prNumber, { readAlias = getOwnedAlias, re
 };
 
 
-const assignAliasVerified = async (config, deployment, prNumber, { assertCurrent } = {}) => {
+const assignAliasVerified = async (config, deployment, prNumber, { assertCurrent } = {}) => timePublicationStage('alias-and-smoke', async () => {
 	if (typeof assertCurrent !== 'function') throw new Error('Preview publication requires a current-head guard');
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
 	const issue = deploymentIdentityIssue(deployment, config, { prNumber });
@@ -2000,7 +2001,7 @@ const assignAliasVerified = async (config, deployment, prNumber, { assertCurrent
 			await vercelRequest(`/v2/aliases/${encodeURIComponent(current.uid)}`, { method: 'DELETE', retries: 0, accept: [200, 204, 404] });
 		}
 	});
-};
+});
 
 const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
 	await assertVercelConfiguration(config);
@@ -2048,7 +2049,7 @@ const admitMaintenanceRecovery = async (config, pullRequest) => {
 
 const prepareDeployment = async (config, pullRequest, {
 	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
-} = {}) => {
+} = {}) => timePublicationStage('deployment-preparation', async () => {
 	if (config.maintenance) return config.maintenanceCandidate ?? null;
 	const deployments = await list(config, { prNumber: pullRequest.number });
 	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
@@ -2056,7 +2057,7 @@ const prepareDeployment = async (config, pullRequest, {
 	const keepIds = reusable ? new Set([reusable.id]) : new Set();
 	await cleanup(deployments, config, pullRequest.number, keepIds);
 	return reusable;
-};
+});
 
 const assertPrebuiltOutput = async (directory) => {
 	const outputDirectory = resolve(directory, '.vercel/output');
@@ -2217,7 +2218,7 @@ const guardPreviewUpload = async (config, pullRequest, upload, {
 	remove = async (name) => { const alias = await getOwnedAlias(config, name); if (alias) await vercelRequest(`/v2/aliases/${encodeURIComponent(alias.uid)}`, { method: 'DELETE', accept: [200, 204, 404] }); },
 	inventory = () => listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: sourceSha(config, pullRequest) }),
 	receipt = savePreviewUploadReceipt
-} = {}) => {
+} = {}) => timePublicationStage('upload-guard', async () => {
 	const expected = { prNumber: pullRequest.number, expectedSha: pullRequest.head.sha, expectedRef: pullRequest.head.ref, expectedAttempt: config.deploymentAttempt };
 	const before = new Map(await Promise.all((await names(config, pullRequest)).map(async (name) => [name, await read(name)])));
 	const record = { attempt: config.deploymentAttempt, prNumber: pullRequest.number, sha: sourceSha(config, pullRequest), authorizationHead: pullRequest.head.sha, ...(config.maintenance ? { maintenance: maintenanceMetadata(config.maintenance) } : {}), ref: pullRequest.head.ref,
@@ -2231,7 +2232,7 @@ const guardPreviewUpload = async (config, pullRequest, upload, {
 		if (issue) throw new Error(`Uploaded Preview attempt identity mismatch (${issue})`);
 	} catch (error) {
 		let candidates;
-		try { candidates = (await inventory()).filter((candidate) => candidate.meta?.thingtimePrPreviewAttempt === config.deploymentAttempt); }
+		try { candidates = (await timePublicationStage('upload-reconciliation', inventory)).filter((candidate) => candidate.meta?.thingtimePrPreviewAttempt === config.deploymentAttempt); }
 		catch (recoveryError) { await receipt({ ...record, state: 'upload-uncertain' }); throw recoveryError; }
 		if (candidates.length !== 1 || deploymentIdentityIssue(candidates[0], config, expected)) {
 			await receipt({ ...record, state: 'upload-uncertain' });
@@ -2257,12 +2258,12 @@ const guardPreviewUpload = async (config, pullRequest, upload, {
 		error.preservePreviewAttempt = true;
 		throw error;
 	}
-};
+});
 
 const deployPrebuiltOutput = async (config, pullRequest, {
 	directory = requiredEnv('VERCEL_PREBUILT_DIR'), prepare = preparePrebuiltDirectory,
 	readVariables = vercelRequest, execute = execFileAsync
-} = {}) => {
+} = {}) => timePublicationStage('prebuilt-upload', async () => {
 	const prebuiltDirectory = resolve(directory);
 	await prepare(config, prebuiltDirectory);
 	const gatewaySecret = await readPreviewGatewaySecret(config, readVariables);
@@ -2271,11 +2272,11 @@ const deployPrebuiltOutput = async (config, pullRequest, {
 	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
 	return guardPreviewUpload(config, pullRequest, async () => {
-	const { stdout } = await execute(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
+	const { stdout } = await timePublicationStage('vercel-cli-upload', () => execute(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
 		env: prebuiltUploadEnvironment(config, pullRequest.head.ref, gatewaySecret, requiredEnv('VERCEL_API_TOKEN')),
 		maxBuffer: 4 * 1024 * 1024,
 		timeout: 10 * 60 * 1000
-	});
+	}));
 	const candidateUrl = stdout
 		.trim()
 		.split(/\r?\n/)
@@ -2293,7 +2294,7 @@ const deployPrebuiltOutput = async (config, pullRequest, {
 	if (!deploymentHostname.endsWith('.vercel.app')) throw new Error('Prebuilt deployment URL was outside vercel.app');
 	return deploymentDetail(deploymentHostname);
 	});
-};
+});
 
 const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 	if (reusable) {
@@ -2310,7 +2311,7 @@ const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 	return created;
 };
 
-const waitForDeployment = async (config, pullRequest, deployment) => {
+const waitForDeployment = async (config, pullRequest, deployment) => timePublicationStage('deployment-readiness', async () => {
 	const timeoutAt = Date.now() + 30 * 60 * 1000;
 	let current = deployment;
 	while (ACTIVE_STATES.has(current.readyState) && Date.now() < timeoutAt) {
@@ -2328,7 +2329,7 @@ const waitForDeployment = async (config, pullRequest, deployment) => {
 		throw new Error(`Vercel deployment ended in ${current.readyState}`);
 	}
 	throw new Error('Vercel deployment did not become ready within 30 minutes');
-};
+});
 
 const cleanupPrResources = async (config, prNumber) => {
 	const current = await getPullRequest(config.repository, prNumber);
