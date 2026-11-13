@@ -1824,6 +1824,18 @@ is fixed, and cite the checklist you ran in the PR description.
       inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
       select multiple rows, expand details, and verify Apply stays disabled
       until the explicit confirmation checkbox is checked.
+- [ ] Open a real batch-read result card in the connected ChatGPT/Codex host.
+      Verify the versioned resource initializes with `ui/initialize`, sends
+      `ui/notifications/initialized` only after its correlated compatible reply,
+      and renders results received before or after initialization. Review-page
+      and Apply buttons use host `tools/call` without requiring `window.openai`.
+      Initialization/tool failures show one inline error and preserve results.
+      Wrong-source/wrong-ID/late replies cannot complete requests; a timed-out
+      Apply remains locked for that receipt until history is reconciled in chat,
+      with no automatic retry or switch to the legacy bridge. A newer result
+      cannot be overwritten or locked by the older request. Verify explicit
+      confirmation escalation still works when returned as an MCP tool error.
+      `test:chatgpt` executes the shipped module for these bridge regressions.
 - [ ] Preview a create/update/delete plan with least-privilege scopes. Change
       one target after preview and verify apply returns 409 without performing
       any operation; with fresh preconditions, verify serial apply, honest
@@ -1850,7 +1862,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
       row, expand Full details, and scroll to the bottom. The read-only morning
       mission must not show an Apply control. Write-composing missions must keep
-      Apply disabled until the confirmation checkbox is selected, then fail
+      Apply disabled until the confirmation checkbox is selected; each demo
+      preview includes its page identity, cursor, end marker and total, so no
+      NaN range or phantom Next page appears. Then fail
       closed with the host-only message rather than mutating data.
 - [ ] Load the page with MCP discovery unavailable. The release contract and
       workflow cards remain immediately usable, the page shows the quiet

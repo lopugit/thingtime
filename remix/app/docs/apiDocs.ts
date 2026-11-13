@@ -1451,7 +1451,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-mcp', contractVersion: '2.2.0', featureVersion: '2.2.0',
+    id: 'chatgpt-mcp', contractVersion: '2.2.1', featureVersion: '2.2.1',
     group: 'integrations',
     title: 'ChatGPT MCP gateway',
     endpoint: CHATGPT_MCP_PATH,
@@ -1463,6 +1463,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
       'POST JSON-RPC initialize, tools/list, prompts/list, resources/list, resources/read, and tools/call requests to this endpoint.',
+      'Review cards use the versioned UI resource and the MCP Apps ui/initialize handshake before ui/notifications/initialized and host tools/call; the old resource URI remains readable for historical callers.',
       'Use get_thingtime_thing or get_thingtime_things for known IDs and list_thingtime_comments for a known target; reserve list/search for discovery.',
       'Read the selected account confirmation preferences. For composed writes, preview the complete plan, review its diff, obtain confirmation when the effective policy requires it, then apply the exact signed receipt. Host approval requirements remain independent.'
     ],
