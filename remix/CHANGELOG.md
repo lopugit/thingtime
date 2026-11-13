@@ -168,7 +168,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   token grants as relational Things with paged management and resumable private
   reporting. Remove count ceilings for relational groups, social edges,
   memberships, reactions, and authored schemas/Components. See
-  [relational access](../docs/relational-access.md).
+  [relational access](../docs/relational-access.md) and
+  [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
   **Codex (AI)**
 
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and

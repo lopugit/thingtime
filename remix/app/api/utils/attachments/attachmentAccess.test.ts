@@ -51,7 +51,10 @@ test('narrow attachment target ACL check handles owners, public grants, exclusio
 });
 
 test('home attachment reads apply relational subject grants and exclusions from the home collection', async () => {
-  const target = post({ acl: legacyAclFence(['tt:all', 'tt:custom']), aclBaseline: ['tt:all', 'tt:custom'], aclBaselineVersion: 1, aclGeneration: 'generation-1', aclRevision: 'revision-1' });
+  const target = {
+    ...post({ acl: legacyAclFence(['tt:all', 'tt:custom']), aclBaselineVersion: 1, aclGeneration: 'generation-1', aclRevision: 'revision-1' }),
+    aclBaseline: ['tt:all', 'tt:custom']
+  };
   const viewer = { id: 'bob-id', username: 'bob', friendIds: new Set<string>(), groupIds: new Set<string>(),
     subspaceRoles: new Map(), extAccountIds: new Set<string>() };
   const grant = (entry: string) => ({ shareId: aclEntryId(target.shareId, 'generation-1', entry), targetId: target.shareId,
