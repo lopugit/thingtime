@@ -156,6 +156,13 @@ are distinct, and an actual request's rate-limit headers remain authoritative
 if they disagree with the snapshot. `GET /rate_limit` is primary-quota-exempt,
 not secondary-limit-exempt; each snapshot makes one bounded read.
 
+The same analysis job also waits for at least 100 reported core units before
+the pinned official Analyze step, including its SARIF fingerprinting. The
+20-minute admission deadline fails the required job when core stays unavailable
+or exhausted; it does not count an optional upload-family bucket as core
+capacity. A separate 65-minute quota and processing window begins after Analyze.
+Admission does not reserve the shared token's capacity against concurrent jobs.
+
 For current repository-token measurement without a scan, explicitly dispatch
 `codeql-analysis.yml` on `github-actions` with `quota_only=true` and leave PR,
 head and backfill inputs unset. This mode is refused on other refs/repositories
