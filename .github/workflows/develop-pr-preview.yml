@@ -16,6 +16,16 @@ on:
         description: Existing open same-repository PR (any base branch) to preview in the develop environment
         required: true
         type: number
+      refresh_deployment_id:
+        description: Exact incumbent to freshly publish with current runtime environment
+        required: false
+        default: ''
+        type: string
+      refresh_artifact_run_id:
+        description: Original successful controller run with bundle and receipt; empty rebuilds exact source
+        required: false
+        default: ''
+        type: string
       maintenance_artifact_commit:
         description: Merged main commit containing a reviewed immutable preview-maintenance artifact
         required: false
@@ -60,6 +70,8 @@ jobs:
       # workflow_dispatch values arrive as strings, while workflow_call enforces
       # the reusable workflow's declared number type before creating any jobs.
       pr_number: ${{ fromJSON(inputs.pr_number || '0') }}
+      refresh_deployment_id: ${{ inputs.refresh_deployment_id || '' }}
+      refresh_artifact_run_id: ${{ inputs.refresh_artifact_run_id || '' }}
       maintenance_artifact_commit: ${{ inputs.maintenance_artifact_commit || '' }}
       maintenance_manifest_path: ${{ inputs.maintenance_manifest_path || '' }}
       maintenance_manifest_sha256: ${{ inputs.maintenance_manifest_sha256 || '' }}
