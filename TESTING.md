@@ -16602,3 +16602,10 @@ including loading/retry, selection preservation and bottom-of-page controls.
       codes, messages, nested causes and command bodies must never reach public
       migration failures or saved diagnostics. Preserve actual origin/account and
       inspect readiness before retrying any uncertain provisioning attempt.
+
+
+### Protected frontend SSO diagnostics (2026-11-14)
+
+- [ ] With status-origin overrides absent, check current custom preview aliases and remote selected targets: a bound Vercel SSO 302 must show authentication required while remaining not ready; do not forward cookies or bypass credentials.
+- [ ] Compare with a public frontend shell (ready), an outage (unavailable), and actual Nitro storage readiness (preserve its independent degraded state).
+- [ ] Refuse foreign/duplicate/unbound SSO locations and all other redirects without following or consuming them. Preserve the 3.5-second header/body/fallback deadline.

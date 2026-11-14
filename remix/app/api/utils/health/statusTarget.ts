@@ -139,6 +139,33 @@ export const isPlatformGeneratedStatusOrigin = (origin: string) => {
       .map(normaliseOrigin).some(configured => configured === origin);
 };
 
+// Inspect only the challenge headers, never the sign-in destination or its body.
+// URL parsing alone normalizes whitespace, default ports and userinfo, so first
+// require the literal Vercel endpoint and refuse ambiguous query parameters.
+const isBoundVercelSsoChallenge = (url: string, response: Response) => {
+  const origin = new URL(url).origin;
+  // Reuse the resolver's first-party/custom-origin policy. Its broad vercel.app
+  // admission is intentionally insufficient to identify a protected deployment.
+  const configured = configuredOrigins().includes(origin);
+  const customTarget = !new URL(origin).hostname.endsWith('.vercel.app') && isAllowedStatusOrigin(origin, '');
+  if (response.status !== 302 || (!configured && !customTarget)) return false;
+  const location = response.headers.get('location');
+  if (!location || !location.startsWith('https://vercel.com/sso-api?') || location.includes('#') || /[\s\u0000-\u001f\u007f]/.test(location)) return false;
+  try {
+    const challenge = new URL(location);
+    const target = new URL(url);
+    const parameters = challenge.searchParams;
+    const nonce = parameters.get('nonce');
+    return !challenge.hash && !target.hash &&
+      parameters.size === 2 && parameters.getAll('url').length === 1 &&
+      parameters.getAll('nonce').length === 1 && Boolean(nonce) &&
+      !/[\s\u0000-\u001f\u007f]/.test(nonce || '') &&
+      parameters.get('url') === target.href;
+  } catch {
+    return false;
+  }
+};
+
 export const fetchWithTimeout = async <T = undefined>(url: string, init: RequestInit = {}, deadlineAt = Date.now() + REQUEST_TIMEOUT_MS,
   consume?: (response: Response) => Promise<T>) => {
   const remaining = deadlineAt - Date.now();
@@ -150,14 +177,22 @@ export const fetchWithTimeout = async <T = undefined>(url: string, init: Request
   try {
     const response = await fetch(url, {
       ...init,
-      redirect: 'error',
+      redirect: 'manual',
       cache: 'no-store',
       signal: controller.signal
     });
 
-    if ((response.status === 401 || response.status === 403) && isPlatformGeneratedStatusOrigin(new URL(url).origin)) {
+    if (((response.status === 401 || response.status === 403) && isPlatformGeneratedStatusOrigin(new URL(url).origin)) ||
+      isBoundVercelSsoChallenge(url, response)) {
       await response.body?.cancel().catch(() => undefined);
       throw new ProtectedStatusTargetError();
+    }
+
+    // Manual mode exposes protection headers without following any redirect.
+    // Preserve the previous refusal for every other redirect before consuming it.
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new PublicError('Remote status redirect refused');
     }
 
     // Keep the one deadline active through response consumption. Headers may

@@ -195,9 +195,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.2.0');
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
-  assert.equal(manifest.features['api.health-nitro']?.version, '1.3.1');
+  assert.equal(manifest.features['api.health-nitro']?.version, '1.3.2');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.6.0');
-  assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.3');
+  assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.4');
   for (const feature of ['api.mongodb-status', 'api.mongodb-status-data']) {
     assert.equal(manifest.features[feature]?.version, '1.0.1');
   }
