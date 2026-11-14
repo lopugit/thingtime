@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher, refreshRetentionCanBeSkipped, reconcilePublicationRetention } from './preview-environment-refresh.mjs';
 const env = { PREVIEW_REFRESH_DEPLOYMENT_ID:'dpl_old', PREVIEW_REFRESH_RUN_ID:'12' };
@@ -81,4 +82,24 @@ test('only a proven no-op avoids sweep; normal publication, policy/PR transition
  await reconcilePublicationRetention({...options,readCurrent:async()=>({...current,policy:{...current.policy,pruneSupersededOpenPr:true}})});assert.equal(sweeps,2);
  await reconcilePublicationRetention({...options,readCurrent:async()=>({...current,pullRequest:{...current.pullRequest,state:'closed'}})});assert.equal(sweeps,3);
  await reconcilePublicationRetention({...options,readCurrent:async()=>{throw Error('current head/draft/fork identity changed');}});assert.equal(sweeps,4);
+});
+
+
+test('cross-run refresh downloads share protected metadata authority and preserve the same-run download',()=>{
+ const workflow=readFileSync(new URL('../workflows/develop-pr-preview.yml',import.meta.url),'utf8');
+ const controller=workflow.slice(workflow.indexOf('      - name: Check out protected deployment controller'));
+ const steps=controller.split(/\n      - name: /);
+ const names=['Download exact original GitHub bundle for environment refresh','Download protected original upload receipt'];
+ for(const name of names){
+  const step=steps.find(value=>value.startsWith(name+'\n'));assert.ok(step,name);
+  assert.match(step,/if: needs\.prepare\.outputs\.should_refresh == 'true'/);
+  assert.match(step,/uses: actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093/);
+  assert.match(step,/run-id: \$\{\{ inputs\.refresh_artifact_run_id \}\}/);
+  assert.match(step,/github-token: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/);
+  assert.doesNotMatch(step,/run:|env:/);
+ }
+ assert.match(steps.find(value=>value.startsWith(names[0]+'\n')),/name: develop-preview-\$\{\{ inputs\.refresh_artifact_run_id \}\}-\$\{\{ needs\.prepare\.outputs\.pr_number \}\}/);
+ assert.match(steps.find(value=>value.startsWith(names[1]+'\n')),/name: pr-preview-receipt-\$\{\{ inputs\.refresh_artifact_run_id \}\}-\$\{\{ needs\.prepare\.outputs\.refresh_run_attempt \}\}/);
+ const sameRun=steps.find(value=>value.startsWith('Download GitHub-built preview bundle\n'));
+ assert.doesNotMatch(sameRun,/github-token|CONFLICT_RESOLVER_PAT/);
 });

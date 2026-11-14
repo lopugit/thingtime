@@ -1,3 +1,10 @@
+## 2026-11-14 — Align retained artifact download authority
+
+- Use the existing protected-controller credential, with the existing built-in
+  token fallback, for both cross-run refresh artifact downloads and metadata
+  verification. Keep exact artifact, receipt, current-source and alias fences.
+- Cover the pinned download action, credential scope and unchanged same-run path.
+
 ## 2026-11-14 — Bound refresh receipt compatibility and retention work
 
 - Accept pre-maintenance ordinary receipts only when the absent authorization
