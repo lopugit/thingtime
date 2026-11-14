@@ -971,3 +971,7 @@ applies the narrow PDF context to each block while preserving Builder selection
 and editing. `api.things` 1.66 / update 1.30 negotiate the additive saved grammar.
 PDF documents load on viewport approach; ComponentMedia no longer rejects a
 valid attachment list merely because it exceeds 50 items.
+
+### Production PDF worker initialization — 2026-11-14
+
+`pdfRuntime.client.getPdfRuntime()` sets the self-hosted worker on the executed loading path. Keep this inside the called initializer: the app’s `sideEffects: false` package contract allows production bundlers to drop setup beside re-exports. `build:client` verifies emitted worker initialization; `test:file-media:production-build` renders a synthetic PDF from the emitted Vite chunks under production CSP with a real worker. The reusable synthetic bytes live in `scripts/pdf-fixture.mjs`; existing desktop/mobile media fixtures use the same document.

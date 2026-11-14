@@ -160,6 +160,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-14: Initialize the PDF worker on the executed loading path so production tree shaking retains it. Build verification and a real-worker browser regression now cover emitted Vite chunks under production CSP. **Codex (AI)**
+
 - 2026-11-14: Integrate private diagnostics with current production relational ACLs and gateway lifecycle/cache fixes; publish combined Things 1.68.0 above the production ACL/PDF contracts. **Codex (AI)**
 - 2026-11-14: Integrate relational ACL changes with the media/PDF viewer; publish Things 1.67.0 for PDF blocks above the ACL contract and verify desktop/mobile rendering and compiled discovery. See [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 - 2026-11-14: Classify exact URL-bound Vercel SSO challenges in frontend and
