@@ -4,6 +4,7 @@ import { ProcessesWindow } from './components/ProcessesWindow.js';
 import { Launcher } from './components/Launcher.js';
 import { Settings } from './components/Settings.js';
 import { useCommander } from './hooks/useCommander.js';
+import { useAccountCredential } from './hooks/useAccountCredential.js';
 import { nativeRequest } from './lib/nativeBridge.js';
 
 const EmojiPicker = lazy(async () => {
@@ -32,19 +33,11 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     );
   }, [state.bootstrap]);
 
-  useEffect(() => {
-    const id = state.bootstrap?.settings.activeAccountId;
-    if (!id) return;
-    void nativeRequest('credential.unlock', {
-      accountId: id,
-      issuer: state.bootstrap?.settings.thingtimeBaseUrl,
-      clientId: state.bootstrap?.settings.thingtimeClientId,
-    }).catch(() => undefined);
-  }, [
-    state.bootstrap?.settings.activeAccountId,
-    state.bootstrap?.settings.thingtimeBaseUrl,
-    state.bootstrap?.settings.thingtimeClientId,
-  ]);
+  useAccountCredential(
+    state.bootstrap?.accounts.find((account) => account.id === state.bootstrap?.settings.activeAccountId),
+    state.refresh,
+    state.reportError,
+  );
 
   useEffect(() => {
     const settings = state.bootstrap?.settings;
