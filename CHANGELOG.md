@@ -1,3 +1,12 @@
+## 2026-11-14 — Bound refresh receipt compatibility and retention work
+
+- Accept pre-maintenance ordinary receipts only when the absent authorization
+  head is independently equal to the exact source; preserve explicit and
+  maintenance head requirements.
+- Avoid a redundant retention sweep only for a freshly verified open refresh
+  whose complete current policy preserves all open versions. Changed or
+  uncertain policy, head, draft/fork or liveness uses the full cleanup path.
+
 ## 2026-11-14 — Fresh preview runtime environment publication
 
 - Add an explicit incumbent-bound manual refresh that reuses an exact successful

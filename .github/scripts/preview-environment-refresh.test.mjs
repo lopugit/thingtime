@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher } from './preview-environment-refresh.mjs';
+import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher, refreshRetentionCanBeSkipped, reconcilePublicationRetention } from './preview-environment-refresh.mjs';
 const env = { PREVIEW_REFRESH_DEPLOYMENT_ID:'dpl_old', PREVIEW_REFRESH_RUN_ID:'12' };
 const scope = { eventName:'workflow_dispatch',ref:'refs/heads/main',prNumber:7 };
 const config = {projectId:'prj_expected',repository:'lopugit/thingtime'};
@@ -59,4 +59,26 @@ test('publisher delivers replacement only in child env and redacts credential-be
  await assert.rejects(executeRefreshPublisher({...params,execute:async()=>{throw Object.assign(new Error('provider leaked '+credential),{stdout:credential,stderr:credential,cmd:credential});}}),error=>{
   assert.equal(error.message,'Vercel fresh publication failed; protected diagnostics withheld');assert.ok(!JSON.stringify(error).includes(credential));assert.equal(error.cause,undefined);assert.equal(error.stdout,undefined);assert.equal(error.stderr,undefined);return true;
  });
+});
+
+test('legacy ordinary receipts infer only the absent same-source authorization head',()=>{
+ const i=intent(),receipt={deploymentId:i.deploymentId,state:'aliases-restored',attempt:i.attempt,prNumber:i.prNumber,sha:i.sha,ref:i.ref};
+ validateRefreshReceipt(i,receipt);
+ for(const changed of [{authorizationHead:null},{authorizationHead:'b'.repeat(40)},{sha:'b'.repeat(40)},{deploymentId:'dpl_other'}]) assert.throws(()=>validateRefreshReceipt(i,{...receipt,...changed}));
+ assert.throws(()=>validateRefreshReceipt({...i,maintenance:{tree:'canonical'}},receipt));
+ assert.throws(()=>validateRefreshReceipt({...i,authorizationHead:'b'.repeat(40)},receipt));
+});
+test('retention no-op requires fresh complete policy and canonical current open non-draft same-repository liveness',()=>{
+ const current={refresh:intent(),repository:config.repository,currentHeadVerified:true,pullRequest:{...pr,draft:false},policy:{enabled:true,pruneSupersededOpenPr:false,inactivePullRequestDays:null}};
+ assert.equal(refreshRetentionCanBeSkipped(current),true);
+ for(const change of [{refresh:null},{currentHeadVerified:false},{currentHeadVerified:undefined},{policy:undefined},{policy:{...current.policy,enabled:false}},{policy:{...current.policy,pruneSupersededOpenPr:true}},{policy:{...current.policy,pruneSupersededOpenPr:undefined}},{policy:{...current.policy,inactivePullRequestDays:undefined}},{policy:{...current.policy,inactivePullRequestDays:1}},{pullRequest:{...current.pullRequest,state:'closed'}},{pullRequest:{...current.pullRequest,draft:true}},{pullRequest:{...current.pullRequest,draft:undefined}},{pullRequest:{...current.pullRequest,head:{...pr.head,repo:{full_name:'fork/repo'}}}}]) assert.equal(refreshRetentionCanBeSkipped({...current,...change}),false);
+});
+test('only a proven no-op avoids sweep; normal publication, policy/PR transitions and uncertain reads run full cleanup',async()=>{
+ const current={currentHeadVerified:true,pullRequest:{...pr,draft:false},policy:{enabled:true,pruneSupersededOpenPr:false,inactivePullRequestDays:null}};let sweeps=0,reads=0;
+ const options={refresh:intent(),repository:config.repository,readCurrent:async()=>{reads++;return current;},cleanup:async()=>{sweeps++;}};
+ assert.deepEqual(await reconcilePublicationRetention(options),{skipped:true});assert.equal(reads,1);assert.equal(sweeps,0);
+ await reconcilePublicationRetention({...options,refresh:null});assert.equal(reads,1);assert.equal(sweeps,1);
+ await reconcilePublicationRetention({...options,readCurrent:async()=>({...current,policy:{...current.policy,pruneSupersededOpenPr:true}})});assert.equal(sweeps,2);
+ await reconcilePublicationRetention({...options,readCurrent:async()=>({...current,pullRequest:{...current.pullRequest,state:'closed'}})});assert.equal(sweeps,3);
+ await reconcilePublicationRetention({...options,readCurrent:async()=>{throw Error('current head/draft/fork identity changed');}});assert.equal(sweeps,4);
 });

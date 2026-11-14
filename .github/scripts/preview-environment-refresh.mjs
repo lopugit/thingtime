@@ -1,3 +1,4 @@
+import { pullRequestIsLive } from './preview-retention-policy.mjs';
 import { maintenanceMetadata, maintenanceMetadataIssue } from './preview-maintenance.mjs';
 // Explicit fresh publication reuses a verified GitHub bundle, never Vercel's
 // redeploy operation (which preserves a prebuilt deployment's old environment).
@@ -28,7 +29,11 @@ export function validateRefreshArtifacts(intent, run, artifacts, repository) {
   return intent;
 }
 export function validateRefreshReceipt(intent, receipt) {
-  if (receipt.deploymentId !== intent.deploymentId || receipt.state !== 'aliases-restored' || receipt.attempt !== intent.attempt || receipt.prNumber !== intent.prNumber || receipt.sha !== intent.sha || receipt.authorizationHead !== intent.authorizationHead || receipt.ref !== intent.ref) fail('receipt');
+  // Ordinary receipts before retained-source maintenance had one source/head.
+  // Infer only an absent field, never a null/wrong value or a maintenance head.
+  const authorizationHead = Object.hasOwn(receipt, 'authorizationHead') ? receipt.authorizationHead
+    : !intent.maintenance && receipt.sha === intent.authorizationHead ? receipt.sha : null;
+  if (receipt.deploymentId !== intent.deploymentId || receipt.state !== 'aliases-restored' || receipt.attempt !== intent.attempt || receipt.prNumber !== intent.prNumber || receipt.sha !== intent.sha || authorizationHead !== intent.authorizationHead || receipt.ref !== intent.ref) fail('receipt');
   if (intent.maintenance ? Object.entries(intent.maintenance).some(([key,value]) => receipt.maintenance?.[key] !== value) : !!receipt.maintenance) fail('receipt-maintenance');
 }
 export function refreshAutomationCredential(project, projectId) {
@@ -44,4 +49,21 @@ export async function executeRefreshPublisher({ execute, command, args, options,
       ...options, env: { ...options.env, VERCEL_AUTOMATION_BYPASS_SECRET: credential }
     });
   } catch { throw new Error('Vercel fresh publication failed; protected diagnostics withheld'); }
+}
+
+export function refreshRetentionCanBeSkipped({ refresh, policy, pullRequest, currentHeadVerified, repository }) {
+  return !!refresh && currentHeadVerified === true && policy?.enabled === true &&
+    policy.pruneSupersededOpenPr === false && policy.inactivePullRequestDays === null &&
+    pullRequest?.draft === false && typeof repository === 'string' && repository.length > 0 &&
+    pullRequest.head?.repo?.full_name === repository && pullRequest.base?.repo?.full_name === repository &&
+    pullRequestIsLive(pullRequest, policy);
+}
+export async function reconcilePublicationRetention({ refresh, repository, readCurrent, cleanup }) {
+  if (refresh) {
+    let current;
+    try { current = await readCurrent(); } catch { /* uncertain state uses the canonical sweep */ }
+    if (refreshRetentionCanBeSkipped({ refresh, repository, ...current })) return { skipped: true };
+  }
+  await cleanup();
+  return { skipped: false };
 }
