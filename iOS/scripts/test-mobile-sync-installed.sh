@@ -94,6 +94,7 @@ source=max(products.glob('Thingtime_iphonesimulator*.xctestrun'),key=lambda p:p.
 data=plistlib.load(source.open('rb'))
 data['ThingtimeTests'].setdefault('EnvironmentVariables',{}).update({
  'THINGTIME_PHOTO_NEW_INDEX_TEST':os.environ.get('THINGTIME_PHOTO_NEW_INDEX_TEST','0'),
+ 'THINGTIME_PHOTO_INDEX_REBUILD_TEST':os.environ.get('THINGTIME_PHOTO_INDEX_REBUILD_TEST','0'),
  'THINGTIME_PHOTO_INDEX_TEST':os.environ.get('THINGTIME_PHOTO_INDEX_TEST','0'),
  'THINGTIME_PHOTO_UI_AUTOMATION':os.environ.get('THINGTIME_PHOTO_UI_AUTOMATION','0'),
  'THINGTIME_PHOTO_DEFERRED_TEST':os.environ.get('THINGTIME_PHOTO_DEFERRED_TEST','0'),

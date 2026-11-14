@@ -160,6 +160,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-14: Integrate private diagnostics with current production relational ACLs and gateway lifecycle/cache fixes; publish combined Things 1.68.0 above the production ACL/PDF contracts. **Codex (AI)**
 - 2026-11-14: Integrate relational ACL changes with the media/PDF viewer; publish Things 1.67.0 for PDF blocks above the ACL contract and verify desktop/mobile rendering and compiled discovery. See [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 - 2026-11-14: Classify exact URL-bound Vercel SSO challenges in frontend and
   remote service health as authentication required, including custom preview
@@ -218,6 +219,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
 - 2026-11-13: Initialize the shared Thingtime MCP result card with the standard
   MCP Apps bridge, advertise a fresh versioned UI resource, and preserve results
   with one inline error on host failures. Correlate bounded requests and prevent
@@ -239,6 +243,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   cloud saves; collapse device sections by default, page location history ten
   at a time, and move secondary navigation into context menus. Device setup
   sits with its device and disappears after pairing. **Codex (AI)**
+
+- 2026-11-12: Add the private, normally hidden `/things/debug` folder and editable
+  device-event view, with safe native diagnostics, offline delivery, capture
+  controls and snapshot-based history clearing. Restore discarded Photos
+  metadata from acknowledged queues without re-uploading backed-up originals.
+  See [PR #1498](../PRs/1498-codex-private-device-debug-20261112-add-private-device-diagnostics-and-recover-photos-metadata-checkpoints.md) and [private diagnostics](../docs/private-device-diagnostics.md). **Codex (AI)**
 
 - 2026-11-12: Reuse prepared Photos originals across concurrent uploads to avoid repeated full-original export and hashing between parts; retain source validation and large-file support. See [PR #1491](../PRs/1491-codex-device-sync-app-start-start-saved-device-sync-across-app-routes.md).
 

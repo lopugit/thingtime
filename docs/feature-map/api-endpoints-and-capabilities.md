@@ -12,6 +12,14 @@ privilege or business-data changes. Test `test:migrations`,
 
 # API endpoints and capabilities
 
+Private diagnostics use `api.devices-diagnostics` and
+`api.devices-node-diagnostics` 1.0.0: home-only, private owner management and
+narrow paired safe-event append. The service owns live-session/pairing fences,
+default provisioning, immutable IDs, accounting and watermarked clear. Both
+manifests derive registered routes. `api.auth-me` 1.3 adds non-failing provisioning;
+Things 1.68/Things-update 1.30 retain private managed-folder boundaries. See
+[the contract](../private-device-diagnostics.md); run diagnostic, schema, owner
+query, capability suites and the built API diagnostics fixture.
 Relational access uses `api.things-acl` 1.0.0 at
 `/api/v1/things/acl` (owner GET pages; POST add/remove). `api.things` 1.65.0
 and `api.things-update` 1.29.0 add ACL revision metadata and optional

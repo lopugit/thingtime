@@ -1,3 +1,5 @@
+import { DEVICE_DIAGNOSTIC_REQUIREMENTS } from '~/devices/deviceDiagnostics';
+import { DeviceDebugScopeError } from '~/utils/deviceDebugScope';
 import { usesPdfBlocks, PDF_BUILDER_REQUIREMENTS } from '../components/Attachments/pdfControlContract';
 import { requireAuthoredCollectionCapability, usesExpandedAuthoredCollections } from '~/utils/authoredCollectionCapabilities';
 import { requireAccountCollectionCapability, requireSubspaceCollectionCapability } from '~/utils/relationalCollectionsCapabilities';
@@ -2126,7 +2128,24 @@ export function useApi() {
     backupWorkspaceRequest({ ...query, view: 'review' }, null, options), [backupWorkspaceRequest]);
   const sendBackupWorkspaceCommand = useCallback((command: BackupWorkspaceCommand, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
     backupWorkspaceRequest(null, command, options), [backupWorkspaceRequest]);
-  const ret = { v1, getBackupWorkspaceCatalog, getBackupWorkspaceEntries, getBackupWorkspaceJob, getBackupWorkspaceReview, sendBackupWorkspaceCommand };
+  // Diagnostics remain owner-private and home-pinned, including a desktop
+  // renderer whose selected authenticated API is a different origin.
+  const deviceDiagnosticsRequest = useCallback(async (query: Record<string, string> | null, command: Record<string, unknown> | null, options: ThingRequestOptions) => {
+    const identity = rootIdentity.read(), actor = actionActor.current, origin = options.expectedApiOrigin;
+    const check = () => {
+      options.signal?.throwIfAborted();
+      if (!actor || options.expectedActor !== actor || actionActor.current !== actor || character || options.expectedDataPlane !== 'home' || planeRef.current !== 'home' ||
+        !origin || new URL(origin).origin !== origin || identity.pending || rootIdentity.read().generation !== identity.generation) throw new DeviceDebugScopeError();
+    };
+    check();
+    try {
+      await requireActiveThingtimeCapability('api.devices-diagnostics', DEVICE_DIAGNOSTIC_REQUIREMENTS['api.devices-diagnostics'], origin);
+      check();
+      return command ? await asyncFetcher.submit(command, { ...options, action: '/api/v1/devices/diagnostics', errorContext: 'manage private device activity' }) :
+        await getJson('/api/v1/devices/diagnostics' + toQuery(query || {}), options);
+    } finally { check(); }
+  }, [asyncFetcher, getJson, character]);
+  const ret = { v1, getBackupWorkspaceCatalog, getBackupWorkspaceEntries, getBackupWorkspaceJob, getBackupWorkspaceReview, sendBackupWorkspaceCommand, deviceDiagnosticsRequest };
 
   return ret;
 }
