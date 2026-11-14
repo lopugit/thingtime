@@ -124,6 +124,7 @@ export const CustomAudienceModal = (props: {
   });
   const [groupName, setGroupName] = React.useState('');
   const [savingGroup, setSavingGroup] = React.useState(false);
+  const [groupSaveError, setGroupSaveError] = React.useState<{ message: string; groupId?: string; memberIds: string[] } | null>(null);
 
   // (re)seed from the incoming acl each open
   React.useEffect(() => {
@@ -134,6 +135,7 @@ export const CustomAudienceModal = (props: {
     setGroups(parsed.groups.map((entry) => ({ id: entry.id, name: entry.id, cap: entry.cap })));
     setQuery('');
     setResults([]);
+    setGroupSaveError(null);
     api.v1.groups
       .audienceSources()
       .then((resp: any) => {
@@ -249,16 +251,45 @@ export const CustomAudienceModal = (props: {
     }
     const memberIds = resolved.map((entry) => entry.id);
     setSavingGroup(true);
+    setGroupSaveError(null);
     try {
-      const resp = await api.v1.groups.create({ name, memberIds });
+      const resp = await api.v1.groups.createWithMembers({ name, memberIds });
       if (resp?.group) {
-        setSources((prev) => ({ ...prev, groups: [resp.group, ...prev.groups] }));
-        addGroup(resp.group);
+        const group = { ...resp.group, members: resolved };
+        setSources((prev) => ({ ...prev, groups: [group, ...prev.groups] }));
+        addGroup(group);
         setGroupName('');
-        lopu({ title: `Group “${resp.group.name}” saved 👥`, description: 'Reuse it on any thing — edits to the group follow everywhere.', status: 'success' });
+        lopu({ title: `Group “${group.name}” saved 👥`, description: 'Reuse it on any thing — edits to the group follow everywhere.', status: 'success' });
       }
     } catch (err: any) {
-      lopu({ title: err?.error || 'Could not create that group 😔', status: 'error' });
+      setGroupSaveError({
+        message: err?.groupId
+          ? `Group “${name || 'Your group'}” was preserved, but its membership is uncertain. Check the group, then choose Retry membership if you still want these people included.`
+          : err?.name === 'AbortError'
+            ? 'The account or storage selection changed. Check groups in the original account before trying again.'
+          : err?.outcome === 'unknown'
+            ? 'Group creation may have completed. Refresh groups before creating another.'
+            : err?.error || err?.message || 'Could not create that group.',
+        groupId: err?.groupId,
+        memberIds
+      });
+    } finally {
+      setSavingGroup(false);
+    }
+  };
+
+  const recoverGroup = async () => {
+    if (!groupSaveError) return;
+    setSavingGroup(true);
+    try {
+      if (groupSaveError.groupId) await api.v1.groups.updateMembers({ id: groupSaveError.groupId, addMemberIds: groupSaveError.memberIds });
+      const current = await api.v1.groups.list();
+      const recovered = current?.groups?.find((group: MiniGroup) => group.id === groupSaveError.groupId);
+      if (current?.groups) setSources((prev) => ({ ...prev, groups: current.groups }));
+      if (recovered) addGroup(recovered);
+      setGroupSaveError(null);
+    } catch (err: any) {
+      setGroupSaveError((previous) => previous && { ...previous, message: err?.error || err?.message || 'Could not verify the group. Try again in the original account.' });
     } finally {
       setSavingGroup(false);
     }
@@ -346,6 +377,14 @@ export const CustomAudienceModal = (props: {
                   Save selection as group ➕
                 </Button>
               </Flex>
+              {groupSaveError && (
+                <Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" marginTop={2}>
+                  <Text role="alert" fontSize="xs" color="red.500" overflowWrap="anywhere" flex="1 1 220px">{groupSaveError.message}</Text>
+                  <Button size="xs" variant="outline" onClick={recoverGroup} isDisabled={savingGroup}>
+                    {groupSaveError.groupId ? 'Retry membership' : 'Refresh groups'}
+                  </Button>
+                </Flex>
+              )}
             </Box>
 
             {/* the selection, with per-entry capabilities */}

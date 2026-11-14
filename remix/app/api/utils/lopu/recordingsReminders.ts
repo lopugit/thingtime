@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { randomUUID } from 'node:crypto';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { updateThing } from '../things/things';
@@ -60,7 +61,7 @@ export const sendRecordingReminders = async () => {
 				await things.deleteOne({ _id: reminder._id, lease });
 				continue;
 			}
-			if (todo.crystal?.completed === true || todo.appId || !Array.isArray(todo.acl) || todo.acl.length !== 1 || todo.acl[0] !== 'tt:user') continue;
+			if (todo.crystal?.completed === true || hasRelationalAclEntries(todo) || todo.appId || !Array.isArray(todo.acl) || rootAcl(todo).length !== 1 || rootAcl(todo)[0] !== 'tt:user') continue;
 			const emitted = await emitSystemNotificationOnce(
 				{
 					recipientId: reminder.ownerId,
@@ -83,7 +84,9 @@ export const sendRecordingReminders = async () => {
 							_id: todo._id,
 							ownerId: reminder.ownerId,
 							'crystal.completed': { $ne: true },
-							acl: ['tt:user'],
+							acl: todo.acl,
+							aclGeneration: todo.aclGeneration ?? { $exists: false },
+							aclRevision: todo.aclRevision ?? { $exists: false },
 							updatedAt: todo.updatedAt
 						},
 						{ $inc: { recordingWriteFence: 1 } },

@@ -24,6 +24,7 @@ test('foreign public component media keeps its own audience without trusting pag
 	const media = { shareId: 'authored-image', ownerId: component.ownerId, targetId: 'other-post', thingtime: ['attachment'], attachmentPurpose: 'post' as const };
 	assert.deepEqual([...compositionMediaIds(composition)], ['authored-image']);
 	assert.equal(await read(viewer, media, root.shareId), true);
+	assert.equal(await read(viewer, { ...media, acl: ['tt:user', '-tt:user'], aclGeneration: 'child-generation', aclBaseline: ['tt:user'], aclBaselineVersion: 1, aclEntryCount: 0 } as any, root.shareId), true, 'Contextual inheritance replaces a relational standalone baseline without retaining its fence');
 	assert.equal(await read(viewer, { ...media, shareId: 'bound', targetId: nested.shareId }, root.shareId), true);
 	assert.equal(await read(viewer, { ...media, shareId: 'guessed-foreign-private' }, root.shareId), false);
 	assert.equal(await read(viewer, { ...media, ownerId: root.ownerId }, root.shareId), false);

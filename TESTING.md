@@ -1,3 +1,61 @@
+## Relational access and growing authorization collections
+
+- Prepare more than 64 task Characters against the same private workspace,
+  including overlapping preparation requests. Read all bindings back; no
+  earlier grant may disappear and no replacement Character may be created.
+- Interrupt preparation and resume the same task/workspace. Remove a completed
+  grant and verify resume refuses to restore it. Distinguish incomplete setup
+  from deliberately revoked access.
+- Race concurrent task preparation with a reference read while another grant
+  updates the ACL revision. A transient snapshot conflict must retry the read
+  against the same task; stable denial must stay denied.
+- Create a large custom ACL with grants, exclusions and read/comment/write
+  capabilities. Check direct reads, search/feed pagination and attachments as
+  owner, each permitted viewer, an excluded viewer, stranger and anonymous.
+  Concurrently replace/revoke while reading; stale generations must fail closed.
+- Page ACL entries while changing the ACL in another session; stale cursors
+  and expected revisions must conflict. Confirm ordinary content edits preserve
+  every grant and old clients still receive complete ACL arrays.
+- Round-trip large ACLs through Timeline, version restoration, copies and
+  backups. Protected authorization rows cannot be forged or independently
+  restored through generic Things CRUD.
+- Read a migrated public/custom Thing through an older runtime: nonowners must
+  be denied by its legacy audience fence, while the new runtime evaluates the
+  original grants and exclusions. Confirm old ordinary content edits retain
+  the fence; old explicit ACL replacements and stale sandbox writes must be
+  rejected by the database without changing any grant.
+- Hold an old runtime's write after its read, migrate through the new runtime,
+  then release it. Cover same-millisecond writes, a lagging clock and old
+  full-document conversion. Migration must strictly advance the timestamp;
+  no writer may restore the captured version or remove the relational fence.
+- Start with no installed validator, then exercise a saved Action that creates
+  a relational audience. Verify strict/error collection validation, preservation
+  of any existing validator and idempotent readiness. Denied `collMod` or failed
+  readback must refuse migration before content changes. An outer transaction
+  must preflight protection, never issue DDL inside that transaction.
+- Verify the timestamp floor cannot be authored through generic writes or
+  restored through backups, copies or Timeline. It must not appear in public
+  content; a same-name field inside the user's crystal remains ordinary data.
+- Create a relational root with the earlier pre-floor preview runtime. After
+  protection is installed, its content edits and dedicated touches must remain
+  usable; current ordinary edits add the floor atomically without losing grants
+  or changing logical-byte accounting. Absent legacy floors are accepted, but
+  null/invalid floors and raw ACL overwrites remain refused before and after
+  the upgrade.
+- Exceed former group/member, social and subspace-membership ceilings. Confirm
+  late memberships and bans participate in authorization and no list is silently
+  truncated. Preserve duplicate prevention and friend-request approval.
+- Exceed former owned-subspace and custom flair counts through create, transfer,
+  moderator editing and member selection. Reload the complete collections and
+  preserve authorization, ownership and storage accounting.
+- Issue an app session with more than 100 explicitly selected Things. Page the
+  consent picker and granted list, revoke/delete resources and revoke/expire
+  the session. Exact-resource reads and stranger sessions must remain fenced.
+
+Automated entry points and isolated HTTP acceptance are documented in
+[relational access](docs/relational-access.md). Production acceptance uses the
+same previously failed reporting task identity after the compatible deployment.
+
 ## Unified folder sync configs and deduplication
 
 - [ ] Retain an attention version-1 Two-way setup with pending folder validation and no executed work; save only its direction as deletion-disabled Backup. On natural reload with idle and occupied native lanes, confirm fresh private approval, the same job ID/cadence, and atomic non-executable history of the full old job. No Retry or cloud save may be replayed. Refuse changed destination/source/owner, stale revision, Pause and any current/archived/orphaned run, capture, review, receipt or activity. Race Pause/revision changes and force an IDB history constraint failure; both admission and history must abort together. Run `folderSetupRecovery.test.ts`, `syncEnrollmentRecoveryBusy.test.ts` and `syncJobJournal.test.ts`; verify the retained installed configuration separately.
@@ -4161,7 +4219,7 @@ email whose link points at the attacker.
 - [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
       with emoji/label/color/mods-only, ids minted on save, ≤50; switches
       "Members pick their own flair" (default on) and "Members may type their
-      own text" (default off; ≤40 chars)); any moderator may save it. On
+      own text" (default off; no product text-length cap)); any moderator may save it. On
       `/s/<slug>` an active member sees the sidebar **Your flair** card:
       template pills (mod-only ones 🎩 only for mods; the active one shows ✓
       and clicking it again takes it off), a custom-text input when allowed,
@@ -4178,7 +4236,12 @@ email whose link points at the attacker.
       `member.ban` / `member.role` mod-log detail reads
       `userFlairCleared: true`). Renaming a template updates every wearer's
       chip — on the post page AND on a comment's own `/post/<commentId>`
-      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      drill-down; deleting one keeps their snapshot.
+      A custom flair longer than 700 characters saves and reloads in both the
+      member and moderator controls. On desktop and mobile, Feed, comments and
+      sidebar chips retain their full accessible text while showing one line
+      with an ellipsis; the page's pre-wrap descendants must not override the
+      chip's nowrap rule or make it taller than one line. Mod page → Members →
       **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
       ones / Custom text… + emoji / No flair; a worn template the mods
       deleted since opens as editable custom text with a "removed" hint;
@@ -4189,7 +4252,7 @@ email whose link points at the attacker.
       someone ELSE writes a `member.userFlair` mod-log entry. API walls:
       anonymous 401, a non-member setting their own 403, someone else's
       without a mod hat 403, unknown template 400, mod-only template as a
-      member 403, custom text while it is off 403 / over 40 chars 400,
+      member 403, custom text while it is off 403,
       self-assign off → a member's pick 403 but clearing still 200, a mod
       dressing a non-member 404 / a banned user 400. The fresh comment
       `POST /api/v1/things/comment` answers with already carries
@@ -5491,6 +5554,12 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] For `provision-relational-acl-validator`, confirm admin Dry run shows only
+      `granted`/`absent`/`unknown` effective home Things `collMod` authority, does
+      no DDL and discloses no principal, role, resource, command or raw error.
+      An authenticated root fixture grants, a read-only fixture lacks authority,
+      and unauthenticated/malformed/denied responses stay unknown. Installed
+      validator readiness must remain ready even when authority is absent.
 - [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
       call `/api/v1/health/nitro`: it reports `degraded` with
       `storageAccounting.state: "migration-required"` while any current user
@@ -5952,6 +6021,18 @@ halves.
 
 ## Environment gateway and index lifecycle
 
+- [ ] Keep static and follower responses open during promotion; verify old
+  owner pools drain when the last admitted database stream/job finishes.
+  Expired async scopes cannot admit new work, and rollback waits for close.
+- [ ] Abort the sole budgeted HTTP waiter during shared connection and index
+  initialization, then demote. The initializer must retain independent gateway
+  admission until it settles; only then may clients/cache drain and rollback
+  admit a fresh connection. Keep ETag revalidation and platform-header origin
+  fencing covered alongside this lifetime regression.
+- [ ] Verify the installed Vercel pool adapter registers `waitUntil` through
+  the configured idle timeout; distinguish this local adapter test from actual
+  Fluid suspension and Atlas monitoring-socket observations.
+
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
@@ -6400,6 +6481,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       clause); hidden baseline mints a linkKey (key = read only). Groups are
       protected kinds managed solely via /api/v1/groups (+ audience-sources).
       Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Audience groups with large membership: create an empty group, add members through successive `/api/v1/groups` delta PATCH batches until the combined IDs exceed one former 64 KiB request, replay a batch, remove a batch, and verify exact member count and complete GET readback. Check that an independently signed-in account cannot edit or read the group, mixed replacement/delta is rejected, and concurrent add/remove/delete operations leave no duplicate or orphan membership. The custom audience picker must save a large selected group without truncation; reload and verify its grant and revocation on a referenced Thing.
+- [ ] Check owner storage usage through `/api/v1/auth/me` before group create, after member batches, after removals, after delete, and after a finite-quota 507 refusal. A refused add must roll back the root timestamp, membership and ledger. Create an older unstamped group through the prior built API in a disposable replica set; verify finite-quota growth fails closed, run `backfill-user-storage-accounting` through the admin API, then verify growth and exact refund. Production must complete and verify that migration before existing-group edits are accepted.
+- [ ] Interrupt one group batch after the server commits but before the client receives the response; the picker must read the original group's membership and confirm when it matches. If it differs, do not auto-replay: another tab may have made an opposing change. Show the preserved group ID and an explicit retry control inside the modal. Switch accounts or data planes during a pending batch; no later request or readback may run under the new identity. If readback is unavailable, preserve the partial group. Never delete an uncertain newly created group automatically.
 - [ ] Unified Thing sharing: `/things` Share, Builder page settings,
       component-card Save version, and component-detail Save version all offer
       Public / Friends / Family / Private / Anyone with the link / Custom from
@@ -7932,6 +8016,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       silently changed. Selecting folders reveals the "Also apply to
       everything inside" checkbox (off by default) — applying with it on
       updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Relational ACL candidate lists: an owned Thing with a signed-negative
+      logical `-tt:all` marker remains discoverable to its authorized owner
+      through a private-visibility PAT and eligible circle query. Anonymous
+      and public-visibility PAT reads remain denied; the negative marker must
+      never become a positive public grant. Verify exact reads and lists after
+      a grant revision changes, including the legacy-reader fence.
 - [ ] Right-click context menus (the design-system Thing Context Menu):
       right-clicking a thing selects it (Finder semantics) and opens
       Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
@@ -16433,6 +16523,18 @@ never print the file-download JSON, encryption metadata or signed URL.
   fixture. Simulator/build evidence does not establish physical background work.
 
 
+### Relational collection scale acceptance — 2026-11-12
+
+Save more than 100 selected app Things,
+20 database endpoints, 10 deployment links and 50 path rules through the real
+API with isolated identities. Check secret redaction, duplicate refusal,
+authoritative empty migration, unavailable vault key, revocation and rollback.
+Create subspace definitions above the old limits, edit individual fields,
+reload all four families and verify byte accounting/ownership/deletion. Pin
+more than five posts and exhaust feed cursors without duplicates or omissions.
+Inspect consent paging and subspace moderator forms at desktop/mobile widths,
+including loading/retry, selection preservation and bottom-of-page controls.
+
 ### Compact devices and explicit scan library saves — 2026-11-12
 
 - At desktop/mobile widths, confirm Things breadcrumbs have no LiDAR panel,
@@ -16508,3 +16610,26 @@ never print the file-download JSON, encryption metadata or signed URL.
 
 - [ ] Build both client and server before `test:environment-gateway:acceptance`. Confirm instrumentation resolves the MongoClient exported by the actual Nitro driver bundle (factory, default or namespace), with a callable connect method; never substitute a separate driver copy for command evidence.
 - [ ] The manifest check must accept compatible `api.environment-gateway` updates from1.2.1 while rejecting older or breaking-major versions. Preserve actual API registration/cookie/write/promotion/rollback checks and the zero follower Mongo dial assertion.
+
+- [ ] ACL validator provisioning: on an isolated replica with an API-created
+      administrator, run `agent-reporting-acceptance.mjs --acl-provisioning`.
+      Anonymous/non-admin calls fail, repeated Dry run leaves missing protection
+      pending, Run provisions and repeated Run is idempotent. A custom data plane
+      fails before lease/provisioning. Grant/read/revoke works through the real
+      API afterward. Run authenticated DDL lifecycle acceptance separately to
+      verify independent validators survive and denied metadata/DDL access returns
+      only closed stage/category diagnostics, with no false readiness or secrets.
+
+- [ ] ACL provisioning diagnostics: authenticated DDL refusal retains numeric
+      MongoDB code 13 and only server/Unauthorized labels. Unknown server codes
+      stay unclassified; arbitrary names, string/negative/non-integer/out-of-range
+      codes, messages, nested causes and command bodies must never reach public
+      migration failures or saved diagnostics. Preserve actual origin/account and
+      inspect readiness before retrying any uncertain provisioning attempt.
+
+
+### Protected frontend SSO diagnostics (2026-11-14)
+
+- [ ] With status-origin overrides absent, check current custom preview aliases and remote selected targets: a bound Vercel SSO 302 must show authentication required while remaining not ready; do not forward cookies or bypass credentials.
+- [ ] Compare with a public frontend shell (ready), an outage (unavailable), and actual Nitro storage readiness (preserve its independent degraded state).
+- [ ] Refuse foreign/duplicate/unbound SSO locations and all other redirects without following or consuming them. Preserve the 3.5-second header/body/fallback deadline.

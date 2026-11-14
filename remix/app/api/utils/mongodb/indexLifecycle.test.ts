@@ -111,13 +111,19 @@ test('explicit invalidation fences a running completion and forces an unchanged 
   assert.equal(builds, 2);
 });
 
-test('long work renews its lease', async () => {
+test('long work renews its lease', async t => {
+  // Exercise renewal across an actual lease period without depending on the
+  // host scheduling a 30 ms timer while parallel builds consume CPU.
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 1_000 });
   const settings = settingsFixture();
   await runDurableIndexPlan({ settings, fingerprint: 'v1', leaseMs: 90, commandSafetyMs: 0, run: async assertLease => {
-    await new Promise(resolve => setTimeout(resolve, 105));
+    for (let elapsed = 0; elapsed < 120; elapsed += 30) {
+      t.mock.timers.tick(30);
+      await tick();
+    }
+    assert.ok(settings.renewals >= 4);
     await assertLease();
   } });
-  assert.ok(settings.renewals >= 2);
 });
 
 test('55 index commands use two global slots and one serial lane per collection', async () => {

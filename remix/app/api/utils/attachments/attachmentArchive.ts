@@ -129,7 +129,7 @@ export const ARCHIVE_CHILD_PROJECTION = {
 	ownerId: 1,
 	thingtime: 1,
 	crystal: 1,
-	acl: 1,
+	acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1,
 	visibility: 1,
 	targetId: 1,
 	folderId: 1,
@@ -141,7 +141,7 @@ export const ARCHIVE_CHILD_PROJECTION = {
 
 // A media root judged through a page composition needs its attachment fields
 // AND its Thing envelope (kinds, acl) in one document.
-export const ARCHIVE_SHARED_ROOT_PROJECTION = { ...ARCHIVE_ATTACHMENT_PROJECTION, thingtime: 1, acl: 1, visibility: 1 } as const;
+export const ARCHIVE_SHARED_ROOT_PROJECTION = { ...ARCHIVE_ATTACHMENT_PROJECTION, thingtime: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, visibility: 1 } as const;
 
 const kindsOf = (doc: Pick<ThingDoc, 'thingtime'>): string[] => (Array.isArray(doc.thingtime) ? doc.thingtime : []);
 

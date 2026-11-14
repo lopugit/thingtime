@@ -62,7 +62,7 @@ export const loader = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
   }
 
-  if (redirect ? !appAllowsDesktopRedirect(app, redirect) : !appAllowsOrigin(app, origin!)) {
+  if (redirect ? !(await appAllowsDesktopRedirect(app, redirect)) : !(await appAllowsOrigin(app, origin!))) {
     return json({ ok: false, error: redirect ? 'This desktop callback is not registered on the app' : 'This origin is not on the app’s allowlist' }, { status: 403 });
   }
 

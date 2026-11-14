@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createGatewayAuthority, gatewayDescriptor, gatewayProtectionHeaders, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
+import { gatewayProtectionHeaders, createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
 import { mongoConnectionPolicy } from './mongoConnectionPolicy';
 
 const selected = { environment: 'preview', origin: 'https://preview.test', deploymentId: 'deployment-new', secret: 's'.repeat(32) };
@@ -89,6 +89,85 @@ test('Vercel uses the bundled default and cannot silently fall through missing o
   assert.throws(() => getGatewaySettings({ ...env, THINGTIME_GATEWAY_SECRET: '' }));
 });
 
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+};
+
+test('demotion drains only admitted lifetimes and rollback waits for pool close', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const childStarted = deferred(), childDone = deferred(), closeStarted = deferred(), closeDone = deferred();
+  const lifecycle = createGatewayWorkLifecycle(async () => {});
+  let closes = 0;
+  lifecycle.registerDrain(async () => { closes++; closeStarted.resolve(); await closeDone.promise; });
+  const request = await lifecycle.admit();
+  const child = request.run(() => lifecycle.withWork(async () => {
+    childStarted.resolve(); await childDone.promise;
+    assert.equal(lifecycle.isAdmitted(), true, 'detached job retains its own admission');
+  }));
+  await childStarted.promise;
+  lifecycle.demote();
+  request.end(); request.end();
+  assert.equal(closes, 0, 'inflight detached save must finish before closing');
+  let readmitted = false;
+  const rollback = lifecycle.admit().then(lease => { readmitted = true; return lease; });
+  childDone.resolve(); await child;
+  await closeStarted.promise;
+  assert.equal(readmitted, false, 'rollback cannot reopen while pool close is pending');
+  closeDone.resolve();
+  (await rollback).end();
+  assert.equal(closes, 1);
+});
+
+test('demotion synchronously fences admission awaiting authority', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const checking = deferred(), checked = deferred();
+  const lifecycle = createGatewayWorkLifecycle(async () => { checking.resolve(); await checked.promise; });
+  const incoming = lifecycle.admit();
+  await checking.promise;
+  lifecycle.demote();
+  checked.resolve();
+  await assert.rejects(incoming, /environment API gateway/);
+});
+
+test('expired asynchronous scopes cannot borrow an old owner admission', async () => {
+  const { createGatewayWorkLifecycle } = await import('./environmentGateway');
+  const continueWork = deferred();
+  let owner = true;
+  const lifecycle = createGatewayWorkLifecycle(async () => { if (!owner) throw new Error('not owner'); });
+  const request = await lifecycle.admit();
+  const late = request.run(async () => { await continueWork.promise; return lifecycle.withWork(async () => {}); });
+  request.end(); owner = false; lifecycle.demote(); continueWork.resolve();
+  await assert.rejects(late, /not owner/);
+});
+
+test('gateway discovery uses the server-only protection credential at the validated origin', async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  try {
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    assert.deepEqual(gatewayProtectionHeaders(selected), {});
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+    assert.throws(() => gatewayProtectionHeaders({ ...selected, origin: 'https://other.test/path' }));
+    let calls = 0;
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, selected.origin);
+      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.credentials, 'omit');
+      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), secret);
+      return Response.json(manifest());
+    } });
+    await authority.current();
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(manifest()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
+});
+
 test('ownership revalidates at the same five-second bound without retransmitting unchanged manifests', async () => {
   let time = 1, calls = 0;
   const authority = createGatewayAuthority({ settings: () => selected, now: () => time, fetch: async (_url, init) => {
@@ -162,6 +241,7 @@ test('server-only Vercel protection bypass is limited to the configured discover
   } finally {
     if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
     else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+
   }
 });
 

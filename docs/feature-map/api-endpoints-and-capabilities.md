@@ -1,4 +1,28 @@
+Admin migration status 1.5.0 and run 1.7.0 register
+`provision-relational-acl-validator`. `migrations/aclWriteFence.ts` composes the
+canonical MongoDB validator installer; `requireAdmin` remains the auth boundary.
+Dry run inspects home collection metadata and closed effective collMod authority
+without DDL; real run preserves independent
+constraints and verifies strict/error readback. Custom plane requests fail before
+the lease. Version 1.6.1 adds only safe numeric error codes and closed
+driver/code-name labels; raw driver messages and causes are discarded. No
+privilege or business-data changes. Test `test:migrations`,
+`test:api-capabilities`, ACL fence tests and
+`agent-reporting-acceptance.mjs --acl-provisioning` against the built server.
+
 # API endpoints and capabilities
+
+Relational access uses `api.things-acl` 1.0.0 at
+`/api/v1/things/acl` (owner GET pages; POST add/remove). `api.things` 1.65.0
+and `api.things-update` 1.29.0 add ACL revision metadata and optional
+replacement fencing while preserving complete legacy ACL projections.
+Search 1.8.0 and bulk 1.10.0 preserve relational access across list/copy paths.
+Private reporting 1.2.0 resumes incomplete preparation with atomic grants and
+the same Character; it never restores explicitly revoked access. Group
+contracts 1.1.0 remove total group/member ceilings. Follow/friend 1.1.0,
+subspaces 1.8.0 and join 1.5.0 remove relational membership admission ceilings.
+Run `test:acl:relational`, `test:agent-reporting`, `test:api-capabilities` and
+the built HTTP acceptance described in [relational access](../relational-access.md).
 
 `api.things-pins` 1.0.0 registers the private session-only GET/POST
 `/api/v1/things/pins` contract. Pins use owner/origin/data-plane/parent-path
@@ -17,6 +41,7 @@ selected only after initialization is unsupported or times out, never after a
 tool dispatch. The read-only MCP Lab hosts the same handshake and refuses tool
 execution. Run `test:chatgpt`, `test:api-capabilities` and `test:mcp-demo`, then
 complete the connected-host and desktop/mobile checklist in `TESTING.md`.
+
 
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
@@ -243,12 +268,16 @@ Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
 `subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
 
 Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+1.2.2 and `/.well-known/thingtime-capabilities.json`. Server deployments use
 the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
 opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
 mode executes its own backend, advertises `gateway: null`, and refuses relay
 traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
-for the audited environment mapping and pending activation evidence.
+for the audited environment mapping and observed activation evidence. Admitted
+work leases in `deployment/environmentGateway.ts` fence demotion and preserve
+inflight streams/background saves; static and follower traffic cannot delay
+pool drain. `mongodb/mongodb.ts` attaches idle-enabled clients to Vercel's
+suspension helper. Run gateway, collections and built transport acceptance.
 
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
@@ -790,11 +819,16 @@ OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
 ### Branch health diagnostics
 
-Health frontend 1.0.1, MongoDB 1.0.3, Nitro 1.3.1 and Vercel 1.0.1 preserve
+Health frontend 1.0.2, MongoDB 1.0.4, Nitro 1.3.2 and Vercel 1.0.2 preserve
 the selected Branch target. `health/statusTarget.ts` checks anonymously, rejects
 redirects and bounds headers, bodies and legacy fallback by one 3.5s deadline.
-Only an observed 401/403 from the exact platform-generated branch/deployment
-origin gets the redacted authentication-required label. No bypass credential is
+An observed 401/403 from the exact platform-generated branch/deployment
+origin gets the redacted authentication-required label. An HTTP 302 to the literal
+`https://vercel.com/sso-api` with exactly one full matching `url` and one nonempty
+`nonce` also qualifies on a resolver-allowed first-party or configured target.
+This covers custom preview aliases without status-origin overrides. Unconfigured
+arbitrary vercel.app targets, foreign endpoints, extra/duplicate parameters and
+unbound URLs remain unavailable. The challenge is never followed or returned. No bypass credential is
 sent, so public diagnostics cannot grant access to protected previews.
 Run `test:api-capabilities` and verify the footer at desktop/mobile widths.
 
@@ -829,6 +863,10 @@ handler retain local discovery/static serving while routing data operations.
 readiness without blocking read-only authentication. Existing admin migration
 status/run contracts and Lopu background-task contracts carry their deliberate
 compatible patch versions in both generated manifests.
+`collections.ts` gives shared connection/index initialization its own admitted
+gateway lifetime while `requestBudget.ts` cancels only each caller's wait.
+The crossed cancellation/demotion regressions live in
+`mongodb/indexCollectionsLifecycle.test.mts`.
 
 Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
@@ -1101,10 +1139,18 @@ Things permission is delegated. See [source index](../sync-source-index.md).
 
 ### Editable PDF media controls — 2026-11-13
 
-`api.things` 1.66.0 and `api.things-update` 1.30.0 add compatible optional
+`api.things` 1.67.0 and `api.things-update` 1.30.0 add compatible optional
 `tt-pdf` / `tt-pdf-page` element blocks to canonical Webpage validation. The
 client gates only writes containing these blocks through
 `PDF_BUILDER_REQUIREMENTS`. Both manifest generators derive these versions
 from `apiDocs.ts`; capability tests assert the published versions and refusal
 of missing/breaking features. `src` remains an ordinary canonical attachment
 media dependency, with existing sharing, copy and ACL traversal.
+
+The relational collection release updates app/OAuth/FedCM, algorithm transfer
+and training, saved database/deployment settings, community invites and
+subspace definitions/feed contracts. Use the current explicit feature versions
+in `apiDocs.ts`; client requirements stay limited to the operations they use.
+New local tests are grouped under `test:acl:relational`. Real five-family
+acceptance uses `agent-reporting-acceptance.mjs` with scale flags described in
+[relational access](../relational-access.md).

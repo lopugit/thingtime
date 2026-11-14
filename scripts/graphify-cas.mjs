@@ -616,7 +616,7 @@ function graphifyVersion() {
   return (result.stdout || result.stderr || "unknown").trim()
 }
 
-function prepareWorkingOutput(root, sourceFingerprint) {
+export function prepareWorkingOutput(root, sourceFingerprint) {
   const workRoot = path.join(
     graphifyRoot(root),
     ".work",
@@ -647,7 +647,7 @@ function prepareWorkingOutput(root, sourceFingerprint) {
   const sharedAst = path.join(graphifyRoot(root), "cache", "ast")
   mkdirSync(sharedAst, { recursive: true })
   symlinkSync(
-    path.relative(workCache, sharedAst),
+    sharedAst,
     path.join(workCache, "ast"),
     "dir",
   )
@@ -813,9 +813,9 @@ function hydratePackedGraph(root, snapshot) {
     sha256Parts([readFileSync(target)]) === snapshot.metadata.graph_sha256) return
 
   const decoded = readPackedGraph(snapshot)
-  const work = path.join(graphifyRoot(root), ".work")
-  mkdirSync(work, { recursive: true })
-  const temporary = path.join(work, `.hydrate-${randomUUID()}`)
+  // A linked work directory may live on another volume; keep the atomic
+  // rename within the snapshot's own volume.
+  const temporary = path.join(snapshot.path, `.hydrate-${randomUUID()}`)
   try {
     writeFileSync(temporary, decoded, { mode: 0o400, flag: "wx" })
     renameSync(temporary, target)

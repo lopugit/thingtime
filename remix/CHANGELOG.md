@@ -160,6 +160,51 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-14: Integrate relational ACL changes with the media/PDF viewer; publish Things 1.67.0 for PDF blocks above the ACL contract and verify desktop/mobile rendering and compiled discovery. See [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
+- 2026-11-14: Classify exact URL-bound Vercel SSO challenges in frontend and
+  remote service health as authentication required, including custom preview
+  aliases, without following redirects or forwarding credentials. **Codex (AI)**
+
+
+- 2026-11-14: Show a closed, read-only effective `collMod` authority result in
+  the ACL-validator admin Dry run, separate from installed readiness; incomplete
+  or unauthenticated privilege data remains unknown. See
+  [PR 1524 release notes](../PRs/1524-codex-acl-validator-privilege-diagnostic.md). — Codex (AI)
+
+- 2026-11-14: Preserve bounded numeric MongoDB error codes and enumerated driver
+  labels for ACL-validator provisioning failures; keep raw messages, causes,
+  command contents and arbitrary names discarded. Combine incremental group
+  membership add/remove, client batching and exact storage accounting; existing
+  groups require accounting backfill before production writes. See
+  [PR 1520 release notes](../PRs/1520-codex-acl-validator-command-diagnostics-and-group-membership-batches.md). — Codex (AI)
+
+- 2026-11-14: Add authenticated home-only ACL-validator provisioning through the
+  existing migration API, read-only inspection and safe stage/category failures;
+  retain canonical strict/error validation and independent constraints. — Codex (AI)
+
+- 2026-11-13: Preserve independent gateway leases for shared MongoDB connect/index
+  initialization after its HTTP waiter cancels. Combine handover drains with
+  request budgets, conditional discovery and origin-fenced platform protection;
+  publish gateway contract 1.2.3 after main used 1.2.2 for protection handling. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
+- 2026-11-13: Enforce migrated ACL compatibility in MongoDB before relational
+  writes. Preserve existing validators and reject stale legacy ACL overwrites;
+  protect the migration timestamp against clock regression and old conversion
+  races. See the provisioning and verification requirements in
+  [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+
+- 2026-11-12: Move selected app grants, registered origins/callbacks, encrypted
+  endpoint/deployment settings, subspace definitions and learned algorithm
+  weights into protected child Things. Remove associated total count caps and
+  silent truncation; preserve transactional accounting, authorization, existing
+  vault configuration and legacy read/migration contracts. Store audience and
+  token grants as relational Things with paged management and resumable private
+  reporting. Remove count ceilings for relational groups, social edges,
+  memberships, reactions, and authored schemas/Components. See
+  [relational access](../docs/relational-access.md) and
+  [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
+
 - 2026-11-14: Verify the media/PDF viewer after integrating parent-path pins, gateway protection and bounded capability revalidation. Preserve both contracts and regression suites; see [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 
 - 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
@@ -169,6 +214,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   protection maintenance through the trusted manual controller path. Preserve
   exact-current-head ordinary builds and distinguish retained source/tree from
   the authorizing PR head. [Artifact runbook](../ops/preview-maintenance/README.md). **Codex (AI)**
+
 
 - 2026-11-13: Add standard Pin/Unpin and Reorder pins controls to the Thing browser, with private parent-path placement and independent Things/Builder ordering. Preserve filtered pins and provide touch, keyboard and move-button reordering. See [PR 1494 validation and remaining acceptance](../PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md). **Codex (AI)**
 
@@ -180,11 +226,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   complete demo review-page metadata so its confirmation controls render.
   **Codex (AI)**
 
+
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
   cached results during explicitly permitted filter changes while clearing
   them when the selected task or access context changes. Board layouts remain
   private saved Things; deployed page acceptance is a separate delivery check.
+
   **Codex (AI)**
 
 - 2026-11-12: Move LiDAR to its own Things library with explicit device-only and
@@ -360,6 +408,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   model catalog, preventing unsupported High effort on Claude Haiku 4.5 while
   preserving supported tuning, the selected key and BYO billing. Advertise reply
   PATCH 1.23.1 and require it for personal-provider chat clients. **Codex (AI)**
+
+- 2026-11-11: Drain retired gateway MongoDB pools after admitted requests and
+  background jobs finish, independently of static/follower traffic; expire
+  request admission scopes and fence rollback until close completes. Attach
+  idle-enabled MongoDB clients to Vercel's supported suspension helper and
+  publish gateway contract 1.1.1. See [PR1462 validation](../PRs/1462-codex-mongodb-leader-handover-drain-retired-gateway-connections.md). **Codex (AI)**
 
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
   settings. Add the explicit canonical background-file transfer contract,

@@ -11,7 +11,7 @@ PDF attachments now open inside Thingtime with page navigation, zoom, fit width,
 ## Boundaries and review fixes
 
 - Preserve explicit authored renderers, archived metadata-only rows, authorization, selected Character, identity teardown and shared-media access.
-- Ordinary Builder elements own each PDF control. `api.things` 1.66.0 and `api.things-update` 1.30.0 advertise the additive element grammar; both manifests and client negotiation agree.
+- Ordinary Builder elements own each PDF control. `api.things` 1.67.0 and `api.things-update` 1.30.0 advertise the additive element grammar; both manifests and client negotiation agree.
 - A canonical local `src` is the sole PDF byte identity. Dependency discovery and private copying rewrite that same source; stale metadata IDs cannot override it. Missing/external/ambiguous sources are refused, and independently composed viewers have unique block IDs.
 - Regression checks caught and fixed array bindings that produced blank full previews, filtered-out toolbar attributes, missing Character headers, stale page errors and a Vite-specific worker import rejected by Nitro.
 - Original user files and attachment bytes are unchanged. No native app or sync implementation changes are included.
@@ -56,3 +56,10 @@ The first merged server build hit `ENOSPC` while writing a Workflow bundle. A ve
 Private lifecycle reporting could not initialize: the workspace ACL reached its 64-entry limit and the partial binding then refused Character access. No alternate public reporting identity or duplicate task was created.
 
 Before main integration, Graphify semantic extraction was attempted through the local proxy but expanded to 120 chunks for the existing large documentation. It was stopped as a slow indexing step; structural graph, report, manifest and HTML outputs are refreshed after integration. Changed Markdown semantic coverage is not claimed.
+
+### Main integration — 14 November 2026
+
+- Preserved incoming relational ACL, collection and gateway changes when merging main. PDF Builder creation now negotiates Things 1.67.0, a separate additive minor above main’s ACL 1.66.0; update remains 1.30.0.
+- Regenerated structural Graphify output after integration. Semantic documentation extraction remains incomplete; no semantic-indexing acceptance is claimed.
+
+- Integrated validation: 211 capability tests, 416 Things/projection tests, 31 gateway tests and 53 component tests passed; raw TypeScript reported zero errors. Client build and node-middleware server build passed, and compiled HTTP discovery/docs agreed on Things 1.67.0 and update 1.30.0. Actual PDF.js desktop/mobile fixture passed with 25/23 authorized reads. Evidence lives outside git in `~/Library/Caches/thingtime-file-media-pdf/`; this synthetic fixture is separate from real-account production acceptance.

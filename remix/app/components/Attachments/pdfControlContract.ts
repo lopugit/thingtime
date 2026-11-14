@@ -1,4 +1,4 @@
-export const PDF_BUILDER_REQUIREMENTS = { 'api.things': '1.66.0', 'api.things-update': '1.30.0' } as const;
+export const PDF_BUILDER_REQUIREMENTS = { 'api.things': '1.67.0', 'api.things-update': '1.30.0' } as const;
 export function usesPdfBlocks(value: unknown): boolean {
   const pending = [value], seen = new Set<object>();
   while (pending.length) {

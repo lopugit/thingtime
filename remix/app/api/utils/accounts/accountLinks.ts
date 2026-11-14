@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { getThingsCollection, getHomeThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Account-ownership links (FUNDAMENTALS.md §3: appended/child data is
@@ -75,7 +75,7 @@ export const createAccountLink = async (input: {
   }
 
   const now = new Date();
-  const things = await (input.linkKind === 'character' ? getHomeThingsCollection() : getThingsCollection());
+  const things = await getHomeThingsCollection();
   const options = input.session ? { session: input.session } : {};
   try {
     await things.updateOne(
@@ -110,7 +110,7 @@ export const createAccountLink = async (input: {
 };
 
 export const removeAccountLink = async (linkKind: AccountLinkKind, userId: string, targetId: string): Promise<{ ok: true; removed: boolean }> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const res = await things.deleteOne(linkMatch(linkKind, userId, targetId));
   return { ok: true, removed: res.deletedCount > 0 };
 };
@@ -118,7 +118,7 @@ export const removeAccountLink = async (linkKind: AccountLinkKind, userId: strin
 // All links a user holds (ownerId = the managing user, so this rides the
 // (thingtime, ownerId, createdAt) index).
 export const listAccountLinksForUser = async (userId: string, linkKind?: AccountLinkKind): Promise<AccountLink[]> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const docs = await things
     .find({ thingtime: LINK_KIND, ownerId: userId, ...(linkKind ? { 'crystal.linkKind': linkKind } : {}) })
     .sort({ createdAt: 1 })
@@ -129,7 +129,7 @@ export const listAccountLinksForUser = async (userId: string, linkKind?: Account
 // Everyone linked to a target (admin "who owns this?" view + co-manager
 // resolution) — served by the (thingtime, crystal.targetId) index.
 export const listAccountLinksForTarget = async (targetId: string, linkKind?: AccountLinkKind): Promise<AccountLink[]> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const docs = await things
     .find({ thingtime: LINK_KIND, 'crystal.targetId': targetId, ...(linkKind ? { 'crystal.linkKind': linkKind } : {}) })
     .sort({ createdAt: 1 })
@@ -140,7 +140,7 @@ export const listAccountLinksForTarget = async (targetId: string, linkKind?: Acc
 // Does this user hold an 'account' link to that account? (The assume
 // endpoint's authorization check.)
 export const userOwnsLinkedAccount = async (userId: string, accountId: string): Promise<boolean> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const doc = await things.findOne(linkMatch('account', userId, accountId), { projection: { _id: 1 } });
   return !!doc;
 };
@@ -159,10 +159,16 @@ export const userCanManageApp = async (userId: string, appDoc: any, session?: an
   if (String(appDoc.ownerId) === userId) return true;
   const clientId = appDoc?.crystal?.clientId;
   if (typeof clientId !== 'string' || !clientId) return false;
-  const things = await getThingsCollection();
-	const doc = await things.findOne(linkMatch('app', userId, clientId), {
-		projection: { _id: 1 },
-		...(session ? { session } : {})
-	});
-  return !!doc;
+  const things = await getHomeThingsCollection();
+	const match = linkMatch('app', userId, clientId);
+  const doc = await things.findOne(match, { projection: { _id: 1 }, ...(session ? { session } : {}) });
+  if (!doc) return false;
+  if (session) {
+    // A transaction snapshot alone does not conflict with concurrent unlink.
+    // Touch the exact authority row so removal either wins or forces a fresh
+    // authorization on transaction retry, before any app change can commit.
+    const held = await things.updateOne({ ...match, _id: doc._id }, { $set: { authorizationFence: randomUUID() } }, { session });
+    if (!held.matchedCount) return false;
+  }
+  return true;
 };

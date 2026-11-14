@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { awaitMongoSharedWork, budgetMongoArguments, mongoRequestOptions, mongoTransactionBudget, startMongoSharedWork } from './requestBudget';
 import { randomUUID } from 'node:crypto';
-import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { requireGatewayDatabaseAccess, registerGatewayDrain, withGatewayWork } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
 import { mongoConnectionTracker } from './connectionTracker';
@@ -12,6 +12,10 @@ import { EPHEMERAL_CONTROL_THINGTIMES } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
 import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
+import { AclWriteFenceError, aclWriteFenceError, installThingAclWriteFence, isThingAclWriteFenceReady } from './aclWriteFence';
+import { classifyThingCollModAuthority, type CollModAuthority } from './aclWriteFenceAuthority';
+import { StorageMutationError } from '../storage/storageCore';
+import { monotonicThingMutationParameters, withMonotonicThingTimestamps } from './thingMutationTimestamp';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -160,14 +164,74 @@ const runMongoTransaction = async <T>(client: any, work: (session: any) => Promi
 	}
 };
 
-export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
-	runMongoTransaction(
-		await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)),
-		work
-	);
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>, options: { requiresAclWriteFence?: boolean } = {}): Promise<T> => {
+  // Composed callers declare relational writes at their outermost boundary;
+  // installation must precede any snapshot read or write in the transaction.
+  if (options.requiresAclWriteFence) await ensureThingAclWriteFence();
+  return runMongoTransaction(
+    await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)), work
+  );
+};
 
-export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
-	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
+// Collection DDL is deliberately outside content transactions. Provision only
+// when relational grant writes need it, leaving unrelated reads/legacy writes
+// available to installations whose database role cannot install the fence.
+// Read-only inspection intentionally avoids adoption, indexes and readiness caches.
+// It is safe for the admin dry run even when no collection exists yet.
+export const inspectHomeThingAclWriteFence = async (): Promise<boolean> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    return await isThingAclWriteFenceReady(client.db('thingtime'), physicalCollectionName('things'));
+  } catch (error) { throw aclWriteFenceError(error, 'connect'); }
+};
+export const inspectHomeThingCollModAuthority = async (): Promise<CollModAuthority> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    const response = await client.db('thingtime').command({ connectionStatus: 1, showPrivileges: true }, { timeoutMS: 5000 });
+    return classifyThingCollModAuthority(response, 'thingtime', physicalCollectionName('things'));
+  } catch { return 'unknown'; }
+};
+export const provisionHomeThingAclWriteFence = async (): Promise<void> => {
+  try {
+    const client = await getClientCachedFor(getMongoUri(), true);
+    await installThingAclWriteFence(client.db('thingtime'), physicalCollectionName('things'));
+  } catch (error) { throw aclWriteFenceError(error, 'connect'); }
+};
+const aclWriteFenceReady = new WeakMap<object, Map<string, Promise<void>>>();
+export const ensureThingAclWriteFence = async (transactionActive = false, plane: 'active' | 'home' = 'active'): Promise<void> => {
+  const custom = plane === 'active' && isCustomMongoEndpointActive();
+  let client: any, dbName: string;
+  try {
+    client = await getClientCachedFor(custom ? getActiveMongoUri() : getMongoUri(), !custom);
+    dbName = custom ? getActiveMongoDbName() : 'thingtime';
+  } catch (error) { throw new StorageMutationError(503, 'storage_invariant', aclWriteFenceError(error, 'connect').message); }
+  let databases = aclWriteFenceReady.get(client);
+  if (!databases) aclWriteFenceReady.set(client, databases = new Map());
+  let ready = databases.get(dbName);
+  if (!ready) {
+    ready = (async () => {
+      try {
+        if (!custom) {
+          try { await getRawHomeThingtimeDb(); } catch (error) { throw aclWriteFenceError(error, 'adoption'); }
+        }
+        const db = client.db(dbName), name = physicalCollectionName('things');
+        if (transactionActive) {
+          if (!await isThingAclWriteFenceReady(db, name)) throw new AclWriteFenceError('verify', 'not-ready');
+        } else await installThingAclWriteFence(db, name);
+      } catch (error) {
+        databases!.delete(dbName);
+        throw new StorageMutationError(503, 'storage_invariant', aclWriteFenceError(error, 'connect').message);
+      }
+    })();
+    databases.set(dbName, ready);
+  }
+  await ready;
+};
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>, options: { requiresAclWriteFence?: boolean } = {}): Promise<T> => {
+  if (options.requiresAclWriteFence) await ensureThingAclWriteFence(false, 'home');
+  return runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
+};
 
 /** Read-only worker boundary. Snapshot sessions pin every paged read to the
  * first server-selected cluster timestamp without holding a write transaction.
@@ -233,12 +297,18 @@ const adoptVersionedCollections = async (db: any) => {
 let homeDbPromise: Promise<any> | null = null;
 let homeDbClient: any = null;
 
+// A cancelled waiter may leave shared initialization running. Acquire its own
+// gateway lease synchronously while the initiating request is still admitted;
+// only the request budget is removed, not the initializer's drain lifetime.
+const startSharedGatewayWork = <T>(work: () => Promise<T>): Promise<T> =>
+  startMongoSharedWork(() => withGatewayWork(work));
+
 const getRawHomeThingtimeDb = async () => {
   mongoRequestOptions();
   await awaitMongoSharedWork(requireGatewayDatabaseAccess());
   mongoRequestOptions();
   if (!homeDbPromise) {
-    homeDbPromise = startMongoSharedWork(async () => {
+    homeDbPromise = startSharedGatewayWork(async () => {
       const client = await getClientCachedFor(getMongoUri(), true);
       const db = client.db('thingtime');
       homeDbClient = client;
@@ -292,7 +362,9 @@ export const getHomeThingtimeDb = async () => {
         if (GUARDED_MUTATIONS.has(String(method))) return async (...parameters: any[]) => {
           mongoRequestOptions();
           await awaitMongoSharedWork(requireHomeIndexWriteReadiness());
-          return value.apply(col, budgetMongoArguments(String(method), parameters));
+          const mutation = args[0] === physicalCollectionName('things') ? monotonicThingMutationParameters(String(method), parameters) : parameters;
+          return value.apply(col, budgetMongoArguments(String(method), mutation));
+
         };
         return typeof value === 'function' ? (...parameters: any[]) => value.apply(col, budgetMongoArguments(String(method), parameters)) : value;
       } });
@@ -375,7 +447,10 @@ export const warnIfTransactionsUnsupported = async (): Promise<void> => {
 // by accident. getCollection follows the request's ACTIVE endpoint (the open
 // data plane); getHomeCollection is pinned to the home deployment and is what
 // every identity / auth / control-plane getter uses.
-export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
+export const getCollection = async (logical: string) => {
+  const collection = (await getThingtimeDb()).collection(physicalCollectionName(logical));
+  return logical === 'things' && isCustomMongoEndpointActive() ? withMonotonicThingTimestamps(collection) : collection;
+};
 export const getHomeCollection = async (logical: string) => (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
 
 export const getUsersCollection = async () => getHomeCollection('users');
@@ -1791,7 +1866,7 @@ const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecuti
 // inherit the deadline/cancellation of the request that happened to start it.
 export const ensureIndexes = (options: IndexExecutionOptions & { force?: boolean } = {}) => {
   mongoRequestOptions();
-  return awaitMongoSharedWork(startMongoSharedWork(() => ensureIndexesShared(options)));
+  return awaitMongoSharedWork(startSharedGatewayWork(() => ensureIndexesShared(options)));
 };
 
 // Ownership can return to this warm worker after a drain. Closed clients and

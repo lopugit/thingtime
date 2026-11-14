@@ -47,3 +47,17 @@ export const fetchCappedTotal = async (
     return { total: null, totalCapped: false };
   }
 };
+
+// Joined authorization candidates need the same bounded total semantics as
+// ordinary filters; countDocuments cannot evaluate relational ACL grants.
+export const fetchCappedAggregateTotal = async (
+  collection: { aggregate: (pipeline: any[], options?: any) => { toArray: () => Promise<any[]> } },
+  stages: any[], cursor: unknown
+): Promise<{ total: number | null; totalCapped: boolean }> => {
+  if (cursor) return { total: null, totalCapped: false };
+  try {
+    const rows = await collection.aggregate([...stages, { $limit: COUNT_LIMIT + 1 }, { $count: 'total' }], { maxTimeMS: COUNT_MAX_TIME_MS }).toArray();
+    const count = rows[0]?.total || 0;
+    return { total: Math.min(count, COUNT_LIMIT), totalCapped: count > COUNT_LIMIT };
+  } catch { return { total: null, totalCapped: false }; }
+};

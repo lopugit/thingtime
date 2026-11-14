@@ -804,17 +804,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
   }),
   endpoint({
-    id: 'environment-gateway', contractVersion: '1.2.1', featureVersion: '1.2.1', group: 'deployment',
+    id: 'environment-gateway', contractVersion: '1.2.3', featureVersion: '1.2.3', group: 'deployment',
     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
-    detail: 'Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. No secrets or database configuration are published.',
+    detail: 'Version 1.2.3 drains admitted database work, including shared initialization after its HTTP waiter cancels, and fences expired request scopes. Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. No secrets or database configuration are published.',
     auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET', 'HEAD', 'OPTIONS'],
+
     steps: ['Configure one stable alias and separate relay secret for each intended environment.', 'Negotiate api.environment-gateway 1.0.0 and the semantic operation being forwarded.', 'Compare the alias deploymentId with the local deployment identity before database access.'],
     requestExamples: [{ name: 'Discover gateway', description: 'Credential-free origin-scoped discovery.', method: 'GET' }],
     responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
   }),
   endpoint({
-    id: 'agent-reporting', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things',
+    id: 'agent-reporting', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'things',
     title: 'Private agent task reporting', endpoint: '/api/v1/agents/reporting',
     summary: 'Delegate a distinct task Character to an existing private saved workspace and report through its saved Actions.',
     detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. As of 1.1.0, repeating the same coordinate requestId and immutable payload can reconcile an existing post after text moderation releases it. Reconciliation verifies the exact post and private audience without repeating the post write. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
@@ -1948,6 +1949,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-apps',
+    featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'admin',
     title: 'Admin apps overview',
     endpoint: '/api/v1/admin/apps',
@@ -2001,6 +2003,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-apps-revoke',
+    featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'admin',
     title: 'Suspend / restore an app',
     endpoint: '/api/v1/admin/apps/revoke',
@@ -2247,6 +2250,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-links',
+    featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'admin',
     title: 'Account & app ownership links',
     endpoint: '/api/v1/admin/links',
@@ -2305,8 +2309,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-owned',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Owned accounts',
     endpoint: '/api/v1/auth/accounts/owned',
@@ -2336,8 +2340,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-assume',
-    featureVersion: '1.1.1',
-    contractVersion: '1.1.1',
+    featureVersion: '1.1.2',
+    contractVersion: '1.1.2',
     group: 'auth',
     title: 'Assume an owned account',
     endpoint: '/api/v1/auth/accounts/assume',
@@ -2579,6 +2583,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'fedcm-assertion',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'auth',
     title: 'FedCM assertion',
     endpoint: '/api/v1/fedcm/assertion',
@@ -4596,8 +4601,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-frontend',
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    featureVersion: '1.0.2',
+    contractVersion: '1.0.2',
     group: 'health',
     title: 'Frontend health',
     endpoint: '/api/v1/health/frontend',
@@ -4609,7 +4614,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
+      'Remote checks never follow redirects and share a single 3.5-second deadline through body consumption and legacy fallback. An exact HTTP 302 Vercel SSO challenge bound to the complete requested URL on an allowed first-party or configured target reports authentication required without fetching the challenge; arbitrary vercel.app targets do not qualify. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters to check the current origin.',
       'Pass target or origin query parameters when checking another Thingtime environment.',
       'Read ok, state, statusCode, responseMs, and shellDetected for diagnostics.',
@@ -4632,8 +4637,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-mongodb',
-    contractVersion: '1.0.3',
-    featureVersion: '1.0.3',
+    contractVersion: '1.0.4',
+    featureVersion: '1.0.4',
     group: 'health',
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
@@ -4645,7 +4650,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
+      'Remote checks never follow redirects and share a single 3.5-second deadline through body consumption and legacy fallback. An exact HTTP 302 Vercel SSO challenge bound to the complete requested URL on an allowed first-party or configured target reports authentication required without fetching the challenge; arbitrary vercel.app targets do not qualify. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime MongoDB health.',
       'Pass target or origin query parameters to compare another deployment when supported.',
       'Read connected, host, dbName, custom, pingMs, collections, replicaSet, checkedAt, and error.',
@@ -4673,8 +4678,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
-    contractVersion: '1.3.1',
-    featureVersion: '1.3.1',
+    contractVersion: '1.3.2',
+    featureVersion: '1.3.2',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
@@ -4687,7 +4692,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
+      'Remote checks never follow redirects and share a single 3.5-second deadline through body consumption and legacy fallback. An exact HTTP 302 Vercel SSO challenge bound to the complete requested URL on an allowed first-party or configured target reports authentication required without fetching the challenge; arbitrary vercel.app targets do not qualify. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
       'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
@@ -4735,8 +4740,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-vercel',
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    featureVersion: '1.0.2',
+    contractVersion: '1.0.2',
     group: 'health',
     title: 'Vercel health',
     endpoint: '/api/v1/health/vercel',
@@ -4748,7 +4753,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'Remote checks reject redirects and share a single 3.5-second deadline through body consumption and legacy fallback. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
+      'Remote checks never follow redirects and share a single 3.5-second deadline through body consumption and legacy fallback. An exact HTTP 302 Vercel SSO challenge bound to the complete requested URL on an allowed first-party or configured target reports authentication required without fetching the challenge; arbitrary vercel.app targets do not qualify. A 401/403 from this deployment\'s exact platform-generated branch or deployment origin returns a redacted authentication-required status; no credential bypass is sent, and other targets remain ordinary unavailable results.',
       'Call without query parameters for current Vercel deployment status.',
       'Pass target or origin query parameters for remote environment checks when supported.',
       'Read configured, state, label, hasError, and error for UI diagnostics.',
@@ -5518,12 +5523,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'deployment-links',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'deployments',
     title: 'Linked deployments',
     endpoint: '/api/v1/deployment-links',
     summary: 'Lists, creates, updates, and removes links to the caller’s accounts on other Thingtime deployments.',
     detail:
-      'A deployment link stores a bearer token for the caller’s account on another Thingtime deployment so the two can sync. The remote token lives only in the user thing’s encrypted secure blob (meta.deploymentLinks) and is never projected onto the wire — every response returns the sanitized link shape. POST accepts either a token pasted from the other deployment’s /api/v1/deployment-links/token, or a remote username + password (which may answer { requiresOtp, challenge } for an email-2FA account, completed by re-POSTing { challenge, code }). A password link is upgraded to a non-expiring deployment-link token when the remote supports it, and the login-derived session is then revoked. Base URLs are fenced against SSRF: https only (http for localhost), origin only — no path, query, or credentials — and IP literals plus internal-only names are refused. Link/unlink/mint ride the fail-closed deployments.link limit, because they dial a caller-supplied host; PATCH dials nothing and rides the roomier deployments.update limit so retuning a link never spends the linking budget.',
+      'A deployment link stores a bearer token for the caller’s account on another Thingtime deployment so the two can sync. The remote token lives only in owner-bound encrypted account-config-entry Things on the home database and is never projected onto the wire — every response returns the sanitized link shape. POST accepts either a token pasted from the other deployment’s /api/v1/deployment-links/token, or a remote username + password (which may answer { requiresOtp, challenge } for an email-2FA account, completed by re-POSTing { challenge, code }). A password link is upgraded to a non-expiring deployment-link token when the remote supports it, and the login-derived session is then revoked. Base URLs are fenced against SSRF: https only (http for localhost), origin only — no path, query, or credentials — and IP literals plus internal-only names are refused. Link/unlink/mint ride the fail-closed deployments.link limit, because they dial a caller-supplied host; PATCH dials nothing and rides the roomier deployments.update limit so retuning a link never spends the linking budget.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token. Links are always scoped to the calling user.'
@@ -5581,11 +5587,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Remote tokens never leave api/utils — routes project links through toPublicLink before responding.',
-      'At most 10 links per account, and at most 50 path rules per link.'
+      'Links and ordered path rules are separate protected encrypted records without a total count cap. Saves require the existing user vault key; legacy settings migrate atomically on the first successful mutation.'
     ]
   }),
   endpoint({
     id: 'deployment-links-sync',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'deployments',
     title: 'Sync a linked deployment',
     endpoint: '/api/v1/deployment-links/sync',
@@ -5653,7 +5660,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-endpoint',
-    contractVersion: '1.1.0', featureVersion: '1.1.0',
+    contractVersion: '1.2.0', featureVersion: '1.2.0',
     group: 'mongodb',
     title: 'MongoDB data endpoint',
     endpoint: '/api/v1/mongodb/endpoint',
@@ -5710,12 +5717,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-endpoints',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'mongodb',
     title: 'Saved MongoDB endpoints',
     endpoint: '/api/v1/mongodb/endpoints',
     summary: 'Manage the signed-in user’s saved data-plane MongoDB endpoints.',
     detail:
-      'Saved endpoints persist in the user’s private secure state on the home DB, with the Thingtime default always available. Saved URLs may embed credentials, so responses only ever return the sanitized host and db name. Activate a saved endpoint via POST /api/v1/mongodb/endpoint with { savedId }.',
+      'Saved endpoints persist as separate protected, owner-bound encrypted account-config-entry Things on the home DB, with the Thingtime default always available. Saved URLs may embed credentials, so responses only ever return the sanitized host and db name. Activate a saved endpoint via POST /api/v1/mongodb/endpoint with { savedId }.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Session cookie or Bearer token. Endpoints belong to the signed-in account.'
@@ -5723,7 +5731,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST', 'DELETE'],
     steps: [
       'GET to list saved endpoints; the one active for this session carries active: true.',
-      'POST { name?, url } to save an endpoint (probed first; duplicates and >20 entries are rejected).',
+      'POST { name?, url } to save an endpoint (probed first; duplicate URLs are rejected, with no total endpoint cap).',
       'DELETE { id } to remove one — if it is the session’s active endpoint the override is cleared too.',
       'Activate with POST /api/v1/mongodb/endpoint { savedId }.'
     ],
@@ -8089,8 +8097,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-invites',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Community invites',
     endpoint: '/api/v1/communities/invites',
@@ -8385,14 +8393,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'algorithms',
     title: 'Feed algorithms',
     endpoint: '/api/v1/algorithms',
     summary: 'Lists or creates the current user feed-ranking algorithms.',
     detail:
-      'Creation accepts an optional description (300 characters); new algorithms start private and unlisted. Feed algorithms store per-user ranking weights trained from dwell, expand, reaction, comment, and share events. Users can keep multiple named algorithms and switch the active one.',
+      'Creation accepts an optional description; new algorithms start private and unlisted. Feed algorithms store per-user ranking weights trained from dwell, expand, reaction, comment, and share events. Users can keep multiple named algorithms and switch the active one without a total algorithm cap. Learned weights are separate private billable rows; complete reads and transfer preserve every weight while generation/count checks reject torn data.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8475,6 +8483,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms-delete',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'algorithms',
     title: 'Delete feed algorithm',
     endpoint: '/api/v1/algorithms/delete',
@@ -8509,6 +8518,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms-track',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'algorithms',
     title: 'Track feed engagement',
     endpoint: '/api/v1/algorithms/track',
@@ -8523,7 +8533,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST events and optionally algorithmId.',
       'If algorithmId is omitted, the caller active feed algorithm is trained.',
-      'Keep batches small; the route enforces a 128 KiB payload cap.',
+      'Clients may batch work for responsiveness; every valid submitted event is processed, without an application-level count or payload ceiling.',
       'Handle 400 for empty or malformed event batches.'
     ],
     requestExamples: [
@@ -8553,14 +8563,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms-update',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'algorithms',
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
     summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
     detail:
-      'Optional listed (strict boolean) opts into the public directory and enables sharing; listed:false removes directory discoverability without revoking links. shared:false clears listed as well. Existing shared algorithms are never automatically listed. Optional description is bounded to 300 characters. Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
+      'Optional listed (strict boolean) opts into the public directory and enables sharing; listed:false removes directory discoverability without revoking links. shared:false clears listed as well. Existing shared algorithms are never automatically listed. Optional description preserves the submitted text. Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8712,6 +8722,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'apps',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'embed',
     title: 'Embed apps',
     endpoint: '/api/v1/apps',
@@ -8863,12 +8874,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'apps-update',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'embed',
     title: 'Update an embed app',
     endpoint: '/api/v1/apps/update',
     summary: 'Rename one of your embed apps or change its origin allowlist.',
     detail:
-      'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
+      'POST { clientId, name?, origins? }. Origins and native callbacks are re-validated like registration and saved as protected relational allowlist entries without a total entry cap. Removing an origin ' +
       'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
       'allowlist every time. Storage allowance and usage fields are server-owned and ignored here, so an ' +
       'app developer cannot raise either quota through this identity/origin route. Use /api/v1/apps/storage ' +
@@ -8907,6 +8919,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'apps-delete',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'embed',
     title: 'Delete an embed app',
     endpoint: '/api/v1/apps/delete',
@@ -8928,8 +8941,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'apps-public',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'embed',
     title: 'Public app lookup',
     endpoint: '/api/v1/apps/public',
@@ -8991,7 +9004,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'oauth-authorize',
+    id: 'oauth-authorize', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'embed',
     title: 'Authorize (mint app token)',
     endpoint: '/api/v1/oauth/authorize',
@@ -9061,8 +9074,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'oauth-desktop-authorize',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'embed',
     title: 'Desktop authorize (issue PKCE code)',
     endpoint: '/api/v1/oauth/desktop/authorize',
@@ -9249,7 +9262,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'oauth-shared',
+    id: 'oauth-shared', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'embed',
     title: 'Shared things (picker grant)',
     endpoint: '/api/v1/oauth/shared',
@@ -9488,7 +9501,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'oauth-userinfo',
+    id: 'oauth-userinfo', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'embed',
     title: 'Userinfo (SSO identity)',
     endpoint: '/api/v1/oauth/userinfo',
@@ -9751,8 +9764,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.66.0',
-    contractVersion: '1.66.0',
+    featureVersion: '1.67.0',
+    contractVersion: '1.67.0',
 
 
     group: 'things',
@@ -9762,7 +9775,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.66 accepts optional tt-pdf document and tt-pdf-page canvas element blocks with individually editable child controls. Canonical src media references use existing dependency/ACL/copy traversal; PDF scripts and annotations do not execute. ' +
+      'Version 1.67 accepts optional tt-pdf document and tt-pdf-page canvas element blocks with individually editable child controls. Canonical src media references use existing dependency/ACL/copy traversal; PDF scripts and annotations do not execute. ' +
+      'Version 1.66 combines complete relational ACL and audience projections with saved Component/Webpage source input retention; writes and reads preserve current-root authorization and generation checks. ' +
       'Version 1.65 accepts saved Component/Webpage source retainOnInputChange for explicitly listed non-ID input names; source authority and input identity remain fenced. ' +
       'Version 1.64 preserves closed v5 folder-backup uploadPolicy with byte-rate and rolling-hour ceilings. Hosts must negotiate independent upload-policy support. ' +
       'Version 1.63 expands owner-library Archive to eligible user-facing Things, including dedicated message and community content. Protected-content Archived rows carry libraryArchivePresentation:metadata and only a static title, kind and canonical identity; ordinary content retains inherited audience checks. ' +
@@ -10215,8 +10229,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-search',
     // 1.6.0: optional presentation metadata follows existing avatar projections.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
@@ -10361,8 +10375,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.12.0',
-    contractVersion: '1.12.0',
+    featureVersion: '1.13.0',
+    contractVersion: '1.13.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -10439,8 +10453,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-delete',
-    featureVersion: '1.1.1',
-    contractVersion: '1.1.1',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     // 1.1.1: drained managed placements fence active reviewed restores.
     notes: ['Version 1.1.1 advances an active reviewed restore epoch when draining managed placements, preventing stale completion after a concurrent delete.'],
     group: 'things',
@@ -10480,8 +10494,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-bulk',
     // 1.8.0: first-party owners can archive and restore their library placements.
-    featureVersion: '1.9.0',
-    contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
     // 1.7.2: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
     // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
@@ -10797,14 +10811,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-react',
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'React to post',
     endpoint: '/api/v1/things/react',
     summary: 'Toggles one of the current user reactions on a visible post (multi-react). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.2.1 accepts the complete emoji-only combination without a character or emoji-count limit; invalid text, whitespace inside tokens and Mongo-key-hostile characters remain rejected. ' +
+      'Version 1.3.0 removes total reaction counts per user and per post and uses current relational token permissions; rate limits and emoji validation remain. Version 1.2.1 accepts the complete emoji-only combination without a character or emoji-count limit; invalid text, whitespace inside tokens and Mongo-key-hostile characters remain rejected. ' +
       'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
@@ -10842,8 +10856,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-save',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Save to library',
     endpoint: '/api/v1/things/save',
@@ -10962,8 +10976,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -11074,8 +11088,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // additive)
     // 1.4.0: moderators get openReportCount — open reports waiting in the
     // Reports queue (S5, additive)
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
@@ -11147,8 +11161,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
@@ -11158,10 +11172,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
       'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
-      'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
-      '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
+      'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title, ' +
+      'message } — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
       '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
-      'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }, ≤50; modOnly ' +
+      'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }; modOnly ' +
       'ones are assigned by moderators only); userFlairSelfAssign (default true) lets members pick one themselves ' +
       'and allowCustomUserFlair (default false) lets them type their own text (≤40 chars) — both switches gate ' +
       'members only, moderators may always dress anyone (POST /api/v1/subspaces/members action userFlair). ' +
@@ -11204,8 +11218,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
     // 1.3.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
@@ -11291,8 +11305,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the individual moderator — the same posture as a post removal; role
     // changes and accepted requests still name the acting mod — a
     // compatible correction
-    featureVersion: '1.4.1',
-    contractVersion: '1.4.1',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -11318,7 +11332,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'expired temporary ban is healed on the row so the request reaches the queue), or userFlair — the flair ' +
       'beside a member’s name: without userId/username (or naming yourself) an ACTIVE member picks a template ' +
       '(flairId; not a modOnly one → 403) while the subspace’s userFlairSelfAssign is on, types custom text ' +
-      '(text ≤40 chars, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
+      '(text, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
       'always clear their own (flairId null + empty text); a non-member answers 403, an unknown template 400. ' +
       'Moderators set anyone’s — the owner’s included (who can always override it) — any template incl. modOnly ' +
       'or custom text, bound by neither switch — a banned target answers 400, a pending requester / non-member ' +
@@ -11387,8 +11401,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // post (resolution removed / approved; the mod-log detail carries
     // resolvedReports) and the re-projected post carries subspaceMod.reportCount
     // for moderators (additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Moderate post',
     endpoint: '/api/v1/subspaces/moderate',
@@ -11416,8 +11430,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the mod-log detail carries resolvedReports when any were, and the returned post’s subspaceMod.reportCount ' +
       '(moderators only) reads 0 again. ' +
       'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
-      'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
-      'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
+      'every feed; locked posts refuse new comments (423) from everyone but moderators; pinned posts are ' +
+      'cursor-paged before ordinary posts, without a total pin cap. The post keeps its author’s emoji reactions and up/down votes throughout.',
     auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the post’s subspace.' },
     methods: ['POST'],
     steps: ['POST the post id and an action.', 'Use the returned post to reconcile the card in place.'],
@@ -11568,8 +11582,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the subspace block carries removalReasons (S4, additive)
     // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
     // against the post (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
@@ -11605,8 +11619,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
@@ -11615,7 +11629,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
       'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
-      'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
+      'not a member → 404). There is no total ownership count cap. The target becomes owner ' +
       '(approved), the previous owner steps down to moderator — and may now leave — and the subspace thing ' +
       'changes hands (its accounted bytes move ledgers in the same transaction). Every write in that transaction ' +
       'is conditional on the state the gate saw, so two transfers racing from the same owner commit at most once: ' +
@@ -11684,8 +11698,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-vote',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
@@ -11733,8 +11747,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-updown',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Upvote / downvote',
     endpoint: '/api/v1/things/updown',
@@ -11801,8 +11815,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
@@ -11861,6 +11875,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       metadata: { id: null, targetId: 'source_thing', sourceHash: 'a'.repeat(64), canonicalVersion: 1, jsonBytes: 128, attachedBytes: 0, knownAttachedBytes: 0, attachmentCount: 0, unavailableAttachmentCount: 0 } } }]
   }),
   endpoint({
+    id: 'things-acl', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
+    title: 'Thing access entries', endpoint: '/api/v1/things/acl',
+    summary: 'Page or atomically add and remove audience or token access entries of an owned Thing.',
+    detail: 'GET id, cursor, optional limit and family (audience by default, or token) returns entries, nextCursor and revision for that family. Pages are fenced to one ACL revision; start again after a conflict. POST id, family, operation add or remove, entries, and optional expectedAclRevision changes only those entries in the selected family. Token entries use tt:token/<id> subjects; audience and token revisions are independent. No total entry ceiling applies. Subject grants live in protected relational Things and authorization queries only matching subjects. Owner-only management preserves personal-token audience and creation restrictions, selected data plane and storage admission; app tokens are refused. Legacy full ACL reads and replacement remain compatible. The revision changes after every ACL mutation. These operations never expose raw protected ACL documents.',
+    auth: { mode: 'session-or-bearer', description: 'Authenticated Thing owner with things.read for GET or things.update for POST; private/no-store.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.things-acl 1.0.0 at the selected origin.', 'Page all entries needed for editing and retain the returned revision.', 'Add or remove exact entries, optionally fencing the mutation with expectedAclRevision.'],
+    requestExamples: [{ name: 'Read access entries', description: 'First page for an owned Thing.', method: 'GET', query: { id: '<thing-id>' } }, { name: 'Grant read access', description: 'Add one exact grant without rewriting other entries.', method: 'POST', body: { id: '<thing-id>', operation: 'add', entries: ['tt:user/alex'] } }],
+    responseExamples: [{ status: 200, description: 'Access page.', body: { ok: true, entries: ['tt:user'], nextCursor: null, revision: '<revision>' } }, { status: 409, description: 'ACL changed; reload before replacement.' }]
+  }),
+  endpoint({
     id: 'things-pins', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
     title: 'Thing browser pins', endpoint: '/api/v1/things/pins', methods: ['GET', 'POST'],
     summary: 'Private ordered pins scoped to an exact page and complete parent path.',
@@ -11869,6 +11894,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: ['Negotiate api.things-pins 1.0.0 at the selected origin and active API.', 'Read the stable page and complete parent path.', 'Write the intended change with its current revision, then read back.'],
     requestExamples: [{ name: 'Read pins', description: 'Root Thing browser pins.', method: 'GET', query: { path: '["/things"]' } }],
     responseExamples: [{ status: 200, description: 'Private authorized pins in saved order.', body: { ok: true, revision: '0', pins: [] } }, { status: 409, description: 'Concurrent change requires refresh.', body: { ok: false, error: 'Pins changed. Refresh before trying again.' } }]
+
   }),
   endpoint({
     id: 'things-storage-policy',
@@ -12145,24 +12171,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'groups',
+    featureVersion: '1.2.0', contractVersion: '1.2.0',
     group: 'things',
     title: 'Audience groups',
     endpoint: '/api/v1/groups',
     summary: 'Reusable "share with these people" lists for custom-audience things.',
     detail:
-      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole (list semantics mirror tokenAcl — merging is ambiguous); DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Bounds: 64 groups per user, 128 members per group. Deleting a group instantly retires every tt:group acl entry that referenced it (the entries become inert).',
+      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole for compatibility. PATCH { id, addMemberIds?, removeMemberIds? } applies an idempotent member delta and returns { membership: { id, memberCount } } so clients can send arbitrarily many members in successive bounded requests without returning the entire group each time. Replacement and delta fields cannot be mixed. DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Group and membership totals have no product ceiling; group and member rows use the normal content storage accounting and subscription admission. Group writes serialize through the group root in one transaction; deleting a group retires every tt:group acl entry that referenced it (the entries become inert).',
     auth: { mode: 'session', description: 'Full session only — tokens and apps cannot manage your audience groups.' },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     steps: [
       'GET to list your groups.',
       'POST { name, memberIds } to create — pick members from /api/v1/groups/audience-sources or /api/v1/users/search.',
       'Grant it on a thing: acl [..., "tt:group/<group id>/comment"].',
-      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.'
+      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.',
+      'For large groups, PATCH { id, addMemberIds } or PATCH { id, removeMemberIds } in successive batches. After an uncertain reply, read the group and stop if its state differs; an opposing edit from another tab may have happened, so require fresh user intent before replaying.'
     ],
     requestExamples: [
       { name: 'List groups', description: 'Your groups + members.', method: 'GET' },
       { name: 'Create', description: 'A study group.', method: 'POST', body: { name: 'Study group 📚', memberIds: ['<user id>', '<user id>'] } },
       { name: 'Replace members', description: 'Member list replaces whole.', method: 'PATCH', body: { id: '<group id>', memberIds: ['<user id>'] } },
+      { name: 'Add members', description: 'Add one transport batch without replacing others.', method: 'PATCH', body: { id: '<group id>', addMemberIds: ['<user id>'] } },
+      { name: 'Remove members', description: 'Remove one transport batch without replacing others.', method: 'PATCH', body: { id: '<group id>', removeMemberIds: ['<user id>'] } },
       { name: 'Delete', description: 'Group + memberships.', method: 'DELETE', body: { id: '<group id>' } }
     ],
     responseExamples: [
@@ -12180,6 +12210,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'groups-audience-sources',
+    featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'things',
     title: 'Audience sources',
     endpoint: '/api/v1/groups/audience-sources',
@@ -12356,7 +12387,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'users-follow',
+    id: 'users-follow', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'social',
     title: 'Read or change a follow',
     endpoint: '/api/v1/users/follow',
@@ -12422,7 +12453,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['POST changes draw from the users.follow rate-limit bucket (30 requests per minute).']
   }),
   endpoint({
-    id: 'users-friend',
+    id: 'users-friend', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'social',
     title: 'Friend request actions',
     endpoint: '/api/v1/users/friend',
@@ -13294,11 +13325,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'schemas',
     title: 'Thingtime Schemas',
     endpoint: '/api/v1/schemas',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
-      'Version 1.1.1 removes the obsolete emoji-count maximum from the built-in reaction schema, matching the shared validator. ' +
+      'Version 1.3.0 removes product count ceilings for authored schema fields, Component descriptors and saved arguments; user-authored minItems/maxItems remain intact. Version 1.1.1 removes the obsolete emoji-count maximum from the built-in reaction schema, matching the shared validator. ' +
       'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
     auth: {
       mode: 'none',
@@ -13462,8 +13493,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-export',
     // 1.16.1: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
-    featureVersion: '1.16.1',
-    contractVersion: '1.16.1',
+    featureVersion: '1.17.0',
+    contractVersion: '1.17.0',
     // 1.12.0: include shared emoji content referenced by authorized live history.
     // Standalone emoji exports remain owner-only; stored bytes keep current gates.
     // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
@@ -13506,8 +13537,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: owner-only algorithm snapshots and private validated restoration.
     // 1.9.0: atomic private chat archives with importer identity substitution.
     // 1.9.1: accept canonical stored-upload custom emoji IDs in archives.
-    featureVersion: '1.13.0',
-    contractVersion: '1.13.0',
+    featureVersion: '1.14.0',
+    contractVersion: '1.14.0',
     notes: [
       'Imported webpages preserve editable content and omit any optional automatic Action opt-in.',
       'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
@@ -14235,8 +14266,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -14479,13 +14510,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.7.0',
+    featureVersion: '1.7.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
+      'provision-relational-acl-validator inspects or installs canonical strict/error home Things validation while preserving independent constraints. Dry run reads metadata and effective collMod privileges from the same home database connection without DDL; its closed collModAuthority is granted, absent or unknown. Unknown covers unauthenticated, denied, incomplete and malformed privilege responses. Authority is informational and independent of installed protection; even granted authority does not prove a future collMod will succeed. No Thing, grant or database privilege changes. Custom data-plane selection is refused. Failures disclose only closed stage/category diagnostics, a bounded numeric MongoDB code and enumerated driver/code-name labels, never raw database messages or arbitrary exception names. Generic codes do not establish a permission or compatibility failure. ' +
       'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +

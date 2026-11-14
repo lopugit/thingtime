@@ -1,3 +1,4 @@
+import { deleteAppAllowlist, readAppAllowlist, relationalAppAllowsNative, relationalAppAllowsOrigin, replaceAppAllowlist } from './appAllowlist';
 import { randomUUID } from 'node:crypto';
 import { WIDGET_CLIENT_ID, widgetClientSeed } from './widgetClient';
 
@@ -18,8 +19,7 @@ import {
   DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
   DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
   MAX_APPS_PER_USER,
-  MAX_APP_NAME_CHARS,
-  MAX_APP_ORIGINS
+  MAX_APP_NAME_CHARS
 } from '~/schemas/registry';
 import { normalizeDesktopRedirectUri, type DesktopRedirect } from './desktopOAuthRedirect';
 
@@ -30,7 +30,7 @@ import { normalizeDesktopRedirectUri, type DesktopRedirect } from './desktopOAut
 // schema has no generic-route sanitizer), the server mints the clientId, and a
 // partial unique index keeps clientId one-of-a-kind.
 // Origin normalization + wildcard matching live in appOriginsCore.ts.
-import { normalizeAppOrigin, normalizeAppOriginEntry, originAllowedBy } from './appOriginsCore';
+import { normalizeAppOrigin, normalizeAppOriginEntry } from './appOriginsCore';
 
 export { normalizeAppOrigin };
 
@@ -85,11 +85,9 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
   if (!Array.isArray(value) || !value.length) {
     return fail(400, 'origins must be a non-empty list of web origins');
   }
-  if (value.length > MAX_APP_ORIGINS) {
-    return fail(400, `An app can have at most ${MAX_APP_ORIGINS} origins`);
-  }
 
   const origins: string[] = [];
+  const seen = new Set<string>();
   for (const entry of value) {
     const normalized = normalizeAppOriginEntry(entry);
     if (!normalized) {
@@ -100,7 +98,7 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
           'https://myapp-*-myteam.vercel.app — anchor both sides of the * on shared hosts.'
       );
     }
-    if (!origins.includes(normalized)) origins.push(normalized);
+    if (!seen.has(normalized)) { seen.add(normalized); origins.push(normalized); }
   }
   return origins;
 };
@@ -108,13 +106,13 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
 export const sanitizeNativeRedirectUris = (value: unknown): string[] | Fail => {
   if (value === undefined) return [];
   if (!Array.isArray(value)) return fail(400, 'nativeRedirectUris must be a list of exact native callback URIs');
-  if (value.length > MAX_APP_ORIGINS) return fail(400, `An app can have at most ${MAX_APP_ORIGINS} native callback URIs`);
   const redirects: string[] = [];
+  const seen = new Set<string>();
   for (const entry of value) {
     const redirect = normalizeDesktopRedirectUri(entry);
     if (!redirect?.native)
       return fail(400, 'Native callbacks must use an exact reverse-domain scheme such as com.example.app://oauth/callback');
-    if (!redirects.includes(redirect.uri)) redirects.push(redirect.uri);
+    if (!seen.has(redirect.uri)) { seen.add(redirect.uri); redirects.push(redirect.uri); }
   }
   return redirects;
 };
@@ -148,14 +146,15 @@ export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
   };
 };
 
-const toPublicApp = (doc: any): PublicApp => {
+const toPublicApp = async (doc: any, collection?: any, session?: any): Promise<PublicApp> => {
+  const allowlist = await readAppAllowlist(collection || await getThingsCollection(), doc, session);
   const policy = appStoragePolicyOf(doc);
   const appUsage = storageUsage(policy.storageUsedBytes, policy.storageAllowanceBytes, DEFAULT_APP_STORAGE_ALLOWANCE_BYTES);
   return {
     clientId: doc.crystal?.clientId,
     name: doc.crystal?.name,
-    origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
-    nativeRedirectUris: Array.isArray(doc.crystal?.nativeRedirectUris) ? doc.crystal.nativeRedirectUris : [],
+    origins: allowlist.origins,
+    nativeRedirectUris: allowlist.nativeRedirectUris,
     storageAllowanceBytes: appUsage.allowanceBytes,
 		storageUsedBytes: policy.ready ? appUsage.usedBytes : null,
 		storageRemainingBytes: policy.ready ? remainingStorageBytes(appUsage) : null,
@@ -202,20 +201,17 @@ export const findAppsByClientIds = async (clientIds: string[]) => {
   return things.find({ thingtime: 'app', 'crystal.clientId': { $in: ids } }).toArray();
 };
 
-export const appAllowsOrigin = (appDoc: any, origin: string): boolean =>
-  originAllowedBy(appDoc?.crystal?.origins, origin);
+export const appAllowsOrigin = async (appDoc: any, origin: string): Promise<boolean> =>
+  relationalAppAllowsOrigin(await getThingsCollection(), appDoc, origin);
 
-export const appAllowsNativeRedirectUri = (appDoc: any, value: string): boolean => {
-  const redirect = normalizeDesktopRedirectUri(value);
-  return !!redirect?.native && Array.isArray(appDoc?.crystal?.nativeRedirectUris)
-    && appDoc.crystal.nativeRedirectUris.includes(redirect.uri);
-};
+export const appAllowsNativeRedirectUri = async (appDoc: any, value: string): Promise<boolean> =>
+  relationalAppAllowsNative(await getThingsCollection(), appDoc, value);
 
-export const appAllowsDesktopRedirect = (appDoc: any, redirect: DesktopRedirect): boolean =>
+export const appAllowsDesktopRedirect = async (appDoc: any, redirect: DesktopRedirect): Promise<boolean> =>
   redirect.native ? appAllowsNativeRedirectUri(appDoc, redirect.uri) : appAllowsOrigin(appDoc, redirect.origin);
 
-export const appAllowsTokenAudience = (appDoc: any, audience: string): boolean =>
-  appAllowsOrigin(appDoc, audience) || appAllowsNativeRedirectUri(appDoc, audience);
+export const appAllowsTokenAudience = async (appDoc: any, audience: string): Promise<boolean> =>
+  await appAllowsOrigin(appDoc, audience) || await appAllowsNativeRedirectUri(appDoc, audience);
 
 export const createApp = async (ownerId: string, input: { name?: unknown; origins?: unknown; nativeRedirectUris?: unknown }): Promise<{ ok: true; app: PublicApp } | Fail> => {
   const name = sanitizeAppName(input.name);
@@ -274,8 +270,11 @@ export const createApp = async (ownerId: string, input: { name?: unknown; origin
     updatedAt: now
   };
 
-  await things.insertOne(doc as any);
-  return { ok: true, app: toPublicApp(doc) };
+  await withHomeMongoTransaction(async session => {
+    await replaceAppAllowlist(things, doc, origins, nativeRedirectUris, session);
+    await things.insertOne(doc as any, { session });
+  });
+  return { ok: true, app: await toPublicApp(doc) };
 };
 
 // No .limit(): if racing registrations ever exceed the soft cap, the overflow
@@ -292,7 +291,7 @@ export const listApps = async (ownerId: string): Promise<PublicApp[]> => {
     })
     .sort({ createdAt: 1 })
     .toArray();
-  return docs.map(toPublicApp);
+  return Promise.all(docs.map(doc => toPublicApp(doc, things)));
 };
 
 export const updateApp = async (
@@ -321,20 +320,29 @@ export const updateApp = async (
     set['crystal.nativeRedirectUris'] = nativeRedirectUris;
   }
 
-  // Managers = the registering owner or any 'app' account-link holder; both
-  // resolve through the same check so a linked co-owner has the full surface.
-  const app = await findAppByClientId(clientId);
-  if (!app || !(await userCanManageApp(ownerId, app))) return fail(404, 'App not found');
-
+  // Membership, legacy migration, child replacement and root update share
+  // the home transaction. Name-only edits preserve the complete allowlist.
   const things = await getThingsCollection();
-  const updated = await things.findOneAndUpdate(
-    { thingtime: 'app', 'crystal.clientId': clientId.trim() },
-    { $set: set },
-    { returnDocument: 'after' }
-  );
-
-  if (!updated) return fail(404, 'App not found');
-  return { ok: true, app: toPublicApp(updated) };
+  const requestedOrigins = set['crystal.origins'];
+  const requestedNative = set['crystal.nativeRedirectUris'];
+  delete set['crystal.origins']; delete set['crystal.nativeRedirectUris'];
+  return withHomeMongoTransaction(async session => {
+    const app = await things.findOne({ thingtime: 'app', 'crystal.clientId': clientId.trim() }, { session });
+    if (!app || !(await userCanManageApp(ownerId, app, session))) return fail(404, 'App not found');
+    const prior = await readAppAllowlist(things, app, session);
+    const origins = sanitizeAppOrigins(requestedOrigins ?? prior.origins);
+    if (!Array.isArray(origins)) return origins;
+    const native = sanitizeNativeRedirectUris(requestedNative ?? prior.nativeRedirectUris);
+    if (!Array.isArray(native)) return native;
+    const next = { ...app, crystal: { ...app.crystal }, updatedAt: set.updatedAt };
+    await replaceAppAllowlist(things, next, origins, native, session);
+    const updated = await things.findOneAndUpdate({ _id: app._id, thingtime: 'app' }, {
+      $set: { ...set, 'crystal.allowlistVersion': 1, 'crystal.allowlistGeneration': next.crystal.allowlistGeneration, 'crystal.allowlistCounts': next.crystal.allowlistCounts },
+      $unset: { 'crystal.origins': '', 'crystal.nativeRedirectUris': '' }
+    }, { session, returnDocument: 'after' });
+    if (!updated) throw Error('App changed while its allowlist was being updated');
+    return { ok: true as const, app: await toPublicApp(updated, things, session) };
+  });
 };
 
 // Deleting an app revokes every app-scoped session minted for it in the same
@@ -356,7 +364,8 @@ export const deleteApp = async (ownerId: string, clientId: unknown): Promise<{ o
 			clientId: id,
 			revokedAt,
 			session,
-			canManage: userCanManageApp
+			canManage: userCanManageApp,
+      cleanupApp: (appDoc, activeSession) => deleteAppAllowlist(things, appDoc, activeSession)
 		})
 	);
 
@@ -391,5 +400,5 @@ export const setAppRevoked = async (clientId: unknown, revoked: boolean, adminId
     await (await getSessionsCollection()).updateMany({ purpose: 'app', 'meta.clientId': id, revokedAt: null }, { $set: { revokedAt: new Date() } });
   }
 
-  return { ok: true, app: toPublicApp(updated) };
+  return { ok: true, app: await toPublicApp(updated) };
 };
