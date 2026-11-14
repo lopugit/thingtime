@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher } from './preview-environment-refresh.mjs';
 import { timePublicationStage } from './preview-publication-timing.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
@@ -392,6 +393,7 @@ const deploymentMetadata = ({ pullRequest, config }) => {
 		githubCommitRef: pullRequest.head.ref,
 		githubCommitSha: sourceSha(config, pullRequest),
 		...(config.maintenance ? maintenanceMetadata(config.maintenance) : {}),
+		...(config.refresh ? { thingtimeRuntimeEnvRefresh: '1', thingtimeRuntimeEnvRefreshFrom: config.refresh.deploymentId } : {}),
 		githubPrId: String(pullRequest.number),
 		githubRepoId: String(config.gitRepoId),
 		githubRepositoryId: String(config.repositoryId),
@@ -1268,7 +1270,7 @@ const runSelfTest = async () => {
 	// and custom-develop rows cannot satisfy it. No secret values enter argv.
 	const source = await readFile(new URL(import.meta.url), 'utf8');
 	const upload = source.slice(source.lastIndexOf('const deployPrebuiltOutput = async')).split('const createVercelDeployment')[0];
-	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf('() => execute('));
+	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf("timePublicationStage('vercel-cli-upload'"));
 	truthy(!source.slice(source.lastIndexOf('const main = async')).includes('reconcileStableDevelopAlias('));
 	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
 	truthy(deployHandler.includes('if (!config.maintenance && !error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
@@ -2050,6 +2052,7 @@ const admitMaintenanceRecovery = async (config, pullRequest) => {
 const prepareDeployment = async (config, pullRequest, {
 	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
 } = {}) => timePublicationStage('deployment-preparation', async () => {
+	if (config.refresh) return null;
 	if (config.maintenance) return config.maintenanceCandidate ?? null;
 	const deployments = await list(config, { prNumber: pullRequest.number });
 	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
@@ -2267,16 +2270,18 @@ const deployPrebuiltOutput = async (config, pullRequest, {
 	const prebuiltDirectory = resolve(directory);
 	await prepare(config, prebuiltDirectory);
 	const gatewaySecret = await readPreviewGatewaySecret(config, readVariables);
+	const automationCredential = config.refresh ? refreshAutomationCredential(await readVariables(`/v9/projects/${config.projectId}`), config.projectId) : null;
 	const metadata = deploymentMetadata({ pullRequest, config });
 	const runtimeEnvironment = prPreviewRuntimeEnvironment(config, pullRequest);
 	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
 	return guardPreviewUpload(config, pullRequest, async () => {
-	const { stdout } = await timePublicationStage('vercel-cli-upload', () => execute(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
-		env: prebuiltUploadEnvironment(config, pullRequest.head.ref, gatewaySecret, requiredEnv('VERCEL_API_TOKEN')),
-		maxBuffer: 4 * 1024 * 1024,
-		timeout: 10 * 60 * 1000
-	}));
+	const command = resolve(requiredEnv('VERCEL_CLI_PATH'));
+	const options = { env: prebuiltUploadEnvironment(config, pullRequest.head.ref, gatewaySecret, requiredEnv('VERCEL_API_TOKEN')),
+		maxBuffer: 4 * 1024 * 1024, timeout: 10 * 60 * 1000 };
+	const { stdout } = await timePublicationStage('vercel-cli-upload', () => config.refresh
+		? executeRefreshPublisher({ execute, command, args, options, credential: automationCredential })
+		: execute(command, args, options));
 	const candidateUrl = stdout
 		.trim()
 		.split(/\r?\n/)
@@ -2557,6 +2562,10 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 const deploy = async (config, pullRequest) => {
 	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive PR preview publication skipped'); return; }
+	if (config.refresh) {
+		validateRefreshIncumbent(config.refresh, await getAliasBinding(config, pullRequest.number), pullRequest, config);
+		if (config.refresh.runId) validateRefreshReceipt(config.refresh, JSON.parse(await readFile(requiredEnv('PREVIEW_REFRESH_RECEIPT_PATH'), 'utf8')));
+	}
 	if (config.maintenance) {
 		assertMaintenanceHead(config.maintenance, pullRequest);
 		maintenanceBindingState(config.maintenance, await getAliasBinding(config, pullRequest.number));
@@ -2606,6 +2615,10 @@ const deploy = async (config, pullRequest) => {
 		await assignAliasVerified(config, ready, pullRequest.number, {
 			assertCurrent: async () => {
 				await assertCurrentPullRequest(config, snapshot, config.actor);
+				if (config.refresh) {
+					const binding = await getAliasBinding(config, pullRequest.number);
+					if (binding?.deployment.id !== ready.id) validateRefreshIncumbent(config.refresh, binding, pullRequest, config);
+				}
 				if (config.maintenance) {
 					const binding = await getAliasBinding(config, pullRequest.number);
 					if (binding?.deployment.id !== ready.id) maintenanceBindingState(config.maintenance, binding);
@@ -2642,9 +2655,9 @@ const deploy = async (config, pullRequest) => {
 	}
 };
 
-const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null, maintenance = null }) => {
+const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null, maintenance = null, refresh = null }) => {
 	const outputPath = requiredEnv('GITHUB_OUTPUT');
-	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`];
+	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`, `should_refresh=${refresh?.runId ? 'true' : 'false'}`, `refresh_run_attempt=${refresh?.runAttempt ?? ''}`];
 	if (pullRequest) {
 		lines.push(`pr_number=${boundedInteger(pullRequest.number, 'PR number')}`);
 		lines.push(`head_sha=${pullRequest.head.sha}`);
@@ -2698,6 +2711,17 @@ const prepareBuildPlan = async () => {
 		assertMaintenanceHead(config.maintenance, pullRequest);
 		config = await admitMaintenanceRecovery(config, pullRequest);
 	}
+	const refresh = refreshRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber, maintenance: !!config.maintenance });
+	if (refresh) {
+		await assertTrustedPrincipal(config, config.actor, 'environment-refresh-actor');
+		const intent = validateRefreshIncumbent(refresh, await getAliasBinding(config, prNumber), pullRequest, config);
+		if (intent.runId) {
+			const run = await githubRequest(`/repos/${config.repository}/actions/runs/${intent.runId}`);
+			const artifacts = await githubRequest(`/repos/${config.repository}/actions/runs/${intent.runId}/artifacts?per_page=100`);
+			validateRefreshArtifacts(intent, run, artifacts.artifacts || [], config.repository);
+		}
+		config = { ...config, refresh: intent, maintenanceCandidate: null };
+	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {
 		await writePrepareOutputs({ shouldBuild: false });
@@ -2722,7 +2746,7 @@ const prepareBuildPlan = async () => {
 			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 			expectedReady
 		}, { bestEffort: true });
-	await writePrepareOutputs({ shouldBuild: !config.maintenanceCandidate, pullRequest, expectedReady, maintenance: config.maintenance });
+	await writePrepareOutputs({ shouldBuild: !config.maintenanceCandidate && !config.refresh?.runId, pullRequest, expectedReady, maintenance: config.maintenance, refresh: config.refresh });
 	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
 };
 
@@ -2785,6 +2809,17 @@ const main = async () => {
 		config = { ...config, maintenance: await loadMaintenance(maintenancePin, { github: githubRequest, repository: config.repository, prNumber }) };
 		assertMaintenanceHead(config.maintenance, pullRequest);
 		config = await admitMaintenanceRecovery(config, pullRequest);
+	}
+	const refresh = refreshRequest(process.env, { eventName, ref: process.env.GITHUB_REF, prNumber, maintenance: !!config.maintenance });
+	if (refresh) {
+		await assertTrustedPrincipal(config, config.actor, 'environment-refresh-actor');
+		const intent = validateRefreshIncumbent(refresh, await getAliasBinding(config, prNumber), pullRequest, config);
+		if (intent.runId) {
+			const run = await githubRequest(`/repos/${config.repository}/actions/runs/${intent.runId}`);
+			const artifacts = await githubRequest(`/repos/${config.repository}/actions/runs/${intent.runId}/artifacts?per_page=100`);
+			validateRefreshArtifacts(intent, run, artifacts.artifacts || [], config.repository);
+		}
+		config = { ...config, refresh: intent, maintenanceCandidate: null };
 	}
 	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
 	if (dispatchIssue) {

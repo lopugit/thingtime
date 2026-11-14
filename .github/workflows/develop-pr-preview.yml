@@ -8,6 +8,16 @@ on:
         required: false
         default: 0
         type: number
+      refresh_deployment_id:
+        description: Exact incumbent to freshly publish with current runtime environment
+        required: false
+        default: ''
+        type: string
+      refresh_artifact_run_id:
+        description: Original successful controller run with bundle and receipt; empty rebuilds exact source
+        required: false
+        default: ''
+        type: string
       maintenance_artifact_commit:
         description: Reviewed canonical-main commit containing a retained-source protection manifest
         required: false
@@ -119,12 +129,16 @@ jobs:
       pull-requests: write
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
+      should_refresh: ${{ steps.plan.outputs.should_refresh }}
+      refresh_run_attempt: ${{ steps.plan.outputs.refresh_run_attempt }}
       pr_number: ${{ steps.plan.outputs.pr_number }}
       head_sha: ${{ steps.plan.outputs.head_sha }}
       source_sha: ${{ steps.plan.outputs.source_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
       expected_ready_at: ${{ steps.plan.outputs.expected_ready_at }}
     env:
+      PREVIEW_REFRESH_DEPLOYMENT_ID: ${{ inputs.refresh_deployment_id || '' }}
+      PREVIEW_REFRESH_RUN_ID: ${{ inputs.refresh_artifact_run_id || '' }}
       PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
       PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
       PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
@@ -156,7 +170,7 @@ jobs:
           # phase may use Lopu's existing repository automation PAT; the
           # separate untrusted build job still receives no secrets.
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
-          VERCEL_API_TOKEN: ${{ inputs.maintenance_artifact_commit != '' && secrets.VERCEL_DEVELOP_DEPLOY_TOKEN || '' }}
+          VERCEL_API_TOKEN: ${{ (inputs.maintenance_artifact_commit != '' || inputs.refresh_deployment_id != '') && secrets.VERCEL_DEVELOP_DEPLOY_TOKEN || '' }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare
@@ -261,6 +275,8 @@ jobs:
       issues: write
       pull-requests: write
     env:
+      PREVIEW_REFRESH_DEPLOYMENT_ID: ${{ inputs.refresh_deployment_id || '' }}
+      PREVIEW_REFRESH_RUN_ID: ${{ inputs.refresh_artifact_run_id || '' }}
       PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
       PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
       PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
@@ -296,19 +312,37 @@ jobs:
           name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
           path: ${{ runner.temp }}/prebuilt-artifact
 
+      - name: Download exact original GitHub bundle for environment refresh
+        if: needs.prepare.outputs.should_refresh == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: develop-preview-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.pr_number }}
+          run-id: ${{ inputs.refresh_artifact_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/prebuilt-artifact
+
+      - name: Download protected original upload receipt
+        if: needs.prepare.outputs.should_refresh == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-preview-receipt-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.refresh_run_attempt }}
+          run-id: ${{ inputs.refresh_artifact_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/refresh-receipt
+
       - name: Validate and extract untrusted preview bundle
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         run: >-
           python3 .github/scripts/extract-vercel-prebuilt.py
           "$RUNNER_TEMP/prebuilt-artifact/vercel-prebuilt.tgz"
           "$RUNNER_TEMP/validated-prebuilt"
 
       - name: Install pinned Vercel publisher without deployment credentials
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
 
       - name: Upload and publish GitHub-built preview
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
@@ -316,12 +350,13 @@ jobs:
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          PREVIEW_REFRESH_RECEIPT_PATH: ${{ runner.temp }}/refresh-receipt/pr-preview-upload-receipt.json
           PREVIEW_MAINTENANCE_RECEIPT_PATH: ${{ runner.temp }}/prebuilt-artifact/maintenance-source.json
           VERCEL_PREBUILT_DIR: ${{ runner.temp }}/validated-prebuilt
         run: node .github/scripts/deploy-develop-pr-preview.mjs
 
       - name: Reconcile or clean up without a new build
-        if: needs.prepare.outputs.should_build != 'true'
+        if: needs.prepare.outputs.should_build != 'true' && needs.prepare.outputs.should_refresh != 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
