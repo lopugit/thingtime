@@ -1,3 +1,5 @@
+import { PdfViewer } from '../Attachments/PdfDocument';
+import { isPdfAttachment } from '../Attachments/pdfPresentation';
 import { PostAttachments } from '../Attachments/PostAttachments';
 import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
@@ -145,6 +147,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 					</Box>
 				) : null}
 				{attachment.mediaKind === 'video' ? <Box mt={5}><PostAttachments attachments={[attachment]} /></Box> : null}
+				{isPdfAttachment(attachment) ? <Box mt={5}><PdfViewer attachment={attachment} /></Box> : null}
 				{isAudio ? (
 					<Box mt={5}>
 						<AudioAttachmentPlayer attachments={[attachment]} />

@@ -127,7 +127,7 @@ const resolveCompositionFromRoot = async (
 				// public/group-readable node starts its own boundary; its authored
 				// children work exactly as when that node is opened independently.
 				const inherited = boundary && parent.ownerId === boundary.ownerId && found.ownerId === boundary.ownerId && found.shareId !== boundary.shareId;
-				const candidate = inherited ? { ...found, acl: ['tt:inherit'], targetId: boundary.shareId } : found;
+				const candidate = inherited ? { ...found, acl: ['tt:inherit'], aclGeneration: undefined, aclBaseline: undefined, aclBaselineVersion: undefined, targetId: boundary.shareId } : found;
 				if (await canViewInherited(candidate, viewer, (target) => boundary && target === boundary.shareId ? Promise.resolve(boundary) : lookup(target))) {
 					child = found;
 					childBoundary = inherited ? boundary : found;
@@ -218,7 +218,7 @@ export const createCanViewSharedCompositionAttachment = (resolve = resolveShared
 		const audiences = bound || compositionMediaBoundaries(composition).get(attachment.shareId) || [];
 		for (const boundary of audiences) {
 			if (!boundary.ownerId || attachment.ownerId !== boundary.ownerId) continue;
-			if (await canViewInherited({ ...attachment, acl: ['tt:inherit'], targetId: boundary.shareId } as ThingDoc, viewer,
+			if (await canViewInherited({ ...attachment, acl: ['tt:inherit'], aclGeneration: undefined, aclBaseline: undefined, aclBaselineVersion: undefined, targetId: boundary.shareId } as ThingDoc, viewer,
 				(id) => Promise.resolve(id === boundary.shareId ? boundary : null))) return true;
 		}
 	}

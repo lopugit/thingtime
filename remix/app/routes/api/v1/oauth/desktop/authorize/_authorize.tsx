@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { appAllowsDesktopRedirect, appIsRevoked, findAppByClientId } from '~/api/utils/apps/apps';
@@ -26,7 +26,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Too many authorizations — take a breather 🌸' }, rateLimitedResponseInit(limit));
 	}
 
-	const body = await readJsonBody(request, 48 * 1024);
+	const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 	const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
 	const redirect = normalizeDesktopRedirectUri(body?.redirectUri);
 	const codeChallenge = normalizePkceChallenge(body?.codeChallenge, body?.codeChallengeMethod);
@@ -65,7 +65,7 @@ export const action = async ({ request }: { request: Request }) => {
 	const app = await findAppByClientId(clientId);
 	if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
 	if (appIsRevoked(app)) return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
-	if (!appAllowsDesktopRedirect(app, redirect)) {
+	if (!(await appAllowsDesktopRedirect(app, redirect))) {
 		return json({ ok: false, error: 'This desktop callback is not registered on the app' }, { status: 403 });
 	}
 

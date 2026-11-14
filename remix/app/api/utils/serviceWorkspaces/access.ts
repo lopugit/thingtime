@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
 import { getThingsCollection } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -94,7 +95,7 @@ async function readAccess(rootId: string, viewerId: string): Promise<WorkspaceAc
 	return { rootId, ownerId, config, role, member, records, visibleIds };
 }
 export function workspaceRootFor(doc: any): string | null {
-	if (!Array.isArray(doc?.acl) || doc.acl.length !== 3 || !['tt:user', 'tt:custom', SERVICE_WORKSPACE_ACL].every((acl) => doc.acl.includes(acl)))
+	if (!doc || hasRelationalAclEntries(doc) || !Array.isArray(doc.acl) || rootAcl(doc).length !== 3 || !['tt:user', 'tt:custom', SERVICE_WORKSPACE_ACL].every((acl) => rootAcl(doc).includes(acl)))
 		return null;
 	const root = doc.thingtime?.includes('webpage') ? doc.extended?.serviceWorkspaceId : doc.crystal?.workspaceId;
 	return typeof root === 'string' ? root : null;

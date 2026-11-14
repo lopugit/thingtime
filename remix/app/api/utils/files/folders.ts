@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '../../../fileSync/cloudSyncDestination';
 import { assertCloudSyncDestination } from './inventory';
 import { createHash } from 'node:crypto';
@@ -68,9 +69,9 @@ export function createCloudFolderService(
 			if (!standalone(doc, owner)) fail(404, 'Folder not found');
 			if (!first) first = doc;
 			if (!privateAudience) {
-				if (!Array.isArray(doc.acl) || doc.acl.length !== 1 || !['tt:user', 'tt:inherit'].includes(doc.acl[0]))
+				if (hasRelationalAclEntries(doc) || !Array.isArray(doc.acl) || rootAcl(doc).length !== 1 || !['tt:user', 'tt:inherit'].includes(rootAcl(doc)[0]))
 					fail(409, 'Choose a private cloud folder.');
-				privateAudience = doc.acl[0] === 'tt:user';
+				privateAudience = rootAcl(doc)[0] === 'tt:user';
 			}
 			next = doc.folderId ?? null;
 		}

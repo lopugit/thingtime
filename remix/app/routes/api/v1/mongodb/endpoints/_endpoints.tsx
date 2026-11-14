@@ -1,6 +1,7 @@
+import { accountConfigurationVaultReady } from '~/api/utils/auth/accountConfiguration';
 import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
-import { json, readJsonBody } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import type { SavedMongoEndpoint } from '~/api/utils/auth/users';
@@ -17,8 +18,7 @@ import {
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { Submit } from '~/components/API/Submit';
 
-const MAX_BODY_BYTES = 16 * 1024;
-const MAX_NAME_LENGTH = 64;
+
 
 // Public projection of a saved endpoint: the raw URL (which may embed
 // credentials) never leaves the server — clients see host + db name only.
@@ -63,6 +63,8 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!accountConfigurationVaultReady()) return json({ ok: false, error: 'Secure Vault is unavailable for saved account configuration.' }, { status: 503 });
+
   // failClosed: saving probes the supplied URL (an outbound connect vector) —
   // if the limiter can't answer, refuse rather than probe unbounded.
   const rate = await enforceRateLimit(request, 'mongodb.endpoints', `user:${user.id}`, { failClosed: true });
@@ -78,7 +80,7 @@ export const action = async ({ request }: { request: Request }) => {
     );
   }
 
-  const body = await readJsonBody(request, MAX_BODY_BYTES);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
 
   if (request.method === 'DELETE') {
     if (typeof body?.id !== 'string' || !body.id) {
@@ -110,7 +112,7 @@ export const action = async ({ request }: { request: Request }) => {
 
   const name =
     typeof body?.name === 'string' && body.name.trim()
-      ? body.name.trim().slice(0, MAX_NAME_LENGTH)
+      ? body.name.trim()
       : sanitiseMongoHost(url) || 'MongoDB endpoint';
 
   const probe = await probeMongoUrl(url);

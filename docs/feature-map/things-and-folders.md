@@ -1,5 +1,13 @@
 # Things and folders
 
+The default private Debug folder has protected root uniqueness and a
+`libraryHidden` marker: omitted from normal root/sidebar listings, available to
+exact owner Things/MCP reads. Its relational accounted `device-diagnostic`
+children have dedicated paired writers and ordinary owner deletion/export.
+Generic sharing/editing cannot widen their audience or alter the managed folder.
+See [private diagnostics](../private-device-diagnostics.md) and diagnostic,
+builtin projection and owner-library query regressions.
+
 Archive and Restore use the shared Thing action registry, `PersistedThingContextMenu`
 and exact-subject `/things/actions` availability/mutation contract. The canonical
 server predicate owns authorization; a page, content kind or stale parent projection
@@ -17,6 +25,13 @@ Builder library folders share Archive/Restore. See [the manual
 checklist](../../TESTING.md#things-library-archive).
 
 ## Thing storage choices
+
+Relational ACL migration installs the shared collection validator through
+`mongodb/collections.ts` before entering a content transaction.
+`mongodb/aclWriteFence.ts` enforces the legacy audience and timestamp floor;
+`mongodb/thingMutationTimestamp.ts` keeps operator writes' root `updatedAt`
+monotonic on both home and selected data planes. This does not change user
+crystal dates. Run `test:acl:relational`; see [rollout prerequisites](../relational-access.md#verification-and-rollout).
 
 `ThingStoragePanel` and the shared Thing context menu expose individually editable
 storage controls. `thingStoragePolicy.ts` in the Things utility layer owns private,
@@ -261,6 +276,22 @@ Adding an item action: extend `ThingsItemAction` in `ThingsViews.tsx`, add the
 action to `buildThingsItemMenu`, handle it in both `onItemAction` and
 `onItemMenuAction` in `ThingsPage.tsx`, and keep bulk selections in mind
 (`actCount > 1`).
+
+## Parent-path pins
+
+The shared Thing browser adds canonical Pin/Unpin and Reorder pins actions through
+`schemas/thingActions.ts`, `thingEntityMenu.ts` and `thingsMenuModel.ts`.
+`useThingPathPins.ts` fences account/origin/data-plane state and reads paginated
+private placement records; `thingPathPins.ts` defines stable page/parent paths
+and filtered ordering. `ThingPinControls.tsx` serves pointer/touch, keyboard and
+move-button controls in grid/list/columns and stored cloud-file views.
+
+The protected relational `thing-browser-pin` and `thing-browser-pin-scope` kinds
+are implemented by `api/utils/things/thingBrowserPins.ts`, with the origin-scoped
+`api.things-pins` 1.0.0 contract registered at `/api/v1/things/pins`. Source ACLs,
+shared unique/index helpers, transactions and storage accounting remain server
+owned. See [the pin contract](../thing-browser-pins.md), `TESTING.md` and
+`remix/scripts/test-thing-pins-ui.mjs` for isolation, paging and real-browser checks.
 
 ## Folder and metadata editing
 
@@ -1223,3 +1254,12 @@ Device location / LiDAR sections of `TESTING.md` for acceptance requirements.
 
 Rendered regression entry points: `remix/scripts/device-details.browser.mjs`
 and `remix/scripts/lidar-scan.browser.mjs` (isolated synthetic fixtures).
+
+### Canonical file previews — 2026-11-13
+
+`fileMediaPresentation.ts` validates `crystal.content` and the exact attachment
+binding; `ThingFilePreview.tsx` uses authorized metadata and an explicit embedded
+Component for legacy files without a saved `renderComponent`. Grid thumbnails
+are independent of the Names/Previews preference; detail and quick look display
+real media instead of the content-reference data tree. Tests live in
+`fileMediaPresentation.test.ts` and `scripts/file-media.browser.mjs`.

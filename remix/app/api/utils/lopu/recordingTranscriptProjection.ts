@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { ACL_INHERIT, ACL_OWNER } from '~/schemas/registry';
 import { isPrivateRecordingPost, isPrivateSavedRecording } from './recordingSources';
 
@@ -10,9 +11,9 @@ export const parseTranscriptAttachmentIds = (value: string): string[] | null => 
 
 // Bound children normally inherit their parent's ACL. This predicate is only
 // used after resolving their exact, currently owned/private recording parent.
-const privateOwnedChild = (row: any, ownerId: string) => row?.ownerId === ownerId && !row.appId && !row.deletedAt &&
-	row.moderation?.status !== 'blocked' && Array.isArray(row.acl) && row.acl.length === 1 &&
-	(row.acl[0] === ACL_OWNER || row.acl[0] === ACL_INHERIT);
+const privateOwnedChild = (row: any, ownerId: string) => row?.ownerId === ownerId && !hasRelationalAclEntries(row) && !row.appId && !row.deletedAt &&
+	row.moderation?.status !== 'blocked' && Array.isArray(row.acl) && rootAcl(row).length === 1 &&
+	(rootAcl(row)[0] === ACL_OWNER || rootAcl(row)[0] === ACL_INHERIT);
 
 export const canReadRecordingTranscript = (ownerId: string, attachment: any, parent: any) =>
 	isPrivateSavedRecording(attachment, ownerId) || (

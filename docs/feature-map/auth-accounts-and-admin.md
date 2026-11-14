@@ -567,3 +567,11 @@ full request hashing retains AppID in the verification/session binding.
 `browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
+
+Relational access/configuration: `apps/appAllowlist.ts` owns registered
+origin/callback rows; `apps/sharedThings.ts` owns session resource grants;
+`auth/accountConfiguration.ts` owns encrypted endpoint/link/path-rule records.
+Account-link administration is home-pinned; co-manager writes fence the exact
+current link in the transaction. Account/session writers own migration and
+revocation boundaries. Run `test:acl:relational`, desktop OAuth and account-link
+authorization tests. See [relational access](../relational-access.md).

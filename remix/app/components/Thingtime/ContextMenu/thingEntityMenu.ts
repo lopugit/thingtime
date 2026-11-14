@@ -12,11 +12,11 @@ export function buildThingEntityMenu(
   const action = (id: ThingActionId): ThingContextAction[] => capabilities[id]
     ? [{ ...THING_ACTIONS[id], ...(typeof capabilities[id] === 'object' ? capabilities[id] : {}), id, command: id }]
     : [];
-  const archiveActions = [...action('archive'), ...action('restore')];
+  const organiseActions = [...action('pin'), ...action('unpin'), ...action('reorder-pins'), ...action('archive'), ...action('restore')];
   const sections = extensions.map(section => section.id === 'organise'
-    ? { ...section, actions: [...section.actions, ...archiveActions] } : section);
-  if (archiveActions.length && !sections.some(section => section.id === 'organise'))
-    sections.push({ id: 'organise', label: 'Organise', actions: archiveActions });
+    ? { ...section, actions: [...section.actions, ...organiseActions] } : section);
+  if (organiseActions.length && !sections.some(section => section.id === 'organise'))
+    sections.push({ id: 'organise', label: 'Organise', actions: organiseActions });
   return { subjectId, sections: [
     { id: 'thing', actions: [...action('open'), ...action('inspect'), ...action('storage-placement'), ...action('history'), ...action('copy-link'), ...action('share-preview'), ...action('rename'), ...action('edit'), ...action('share')] },
     { id: 'lopu', actions: action('send-to-lopu') },

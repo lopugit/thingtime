@@ -1,3 +1,4 @@
+import { hydrateSubspaceDefinitions, findSubspaceDefinition } from './definitions';
 import { subspaceMediaUrl } from './subspaceMediaCore';
 // The subspace posting/visibility gate — the small, things.ts-safe half of the
 // subspace family. things.ts imports THIS module (never subspaces.ts, which
@@ -10,10 +11,9 @@ import { subspaceMediaUrl } from './subspaceMediaCore';
 // use to honour post locks and bans.
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
-import { MAX_SUBSPACE_MEMBERSHIPS_PER_USER, type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
+import { type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
 import {
 	canPostIn,
-	flairById,
 	isActiveMembershipState,
 	isModeratorRole,
 	subspaceModHoldsPost,
@@ -112,15 +112,8 @@ export const membershipOf = async (subspaceId: string, userId: string | null | u
 	return doc ? membershipOfDoc(doc) : null;
 };
 
-// Every membership row of one user — ONE indexed query, bounded by the
-// per-user membership cap. Read paths hang the result on the Viewer so the
-// sync acl checks (canView) can resolve private-subspace posts.
-//
-// The result is a bounded SNAPSHOT, not a complete roster: the cap bounds
-// ACTIVE memberships (membershipCount in subspaces.ts counts `left != true`),
-// while kicked and banned rows keep their doc forever and a moderator `add`
-// mints one without re-checking the cap. So a miss means "not in the
-// snapshot", NOT "not a member" — see membershipFor below.
+// Every membership row is streamed into this request-local view. There is no
+// membership-count ceiling; authoritative write gates still recheck exact rows.
 export const loadViewerSubspaceRoles = async (userId: string | null | undefined): Promise<ViewerSubspaceRoles> => {
 	const roles = new Map<string, SubspaceMembership>();
 	if (!userId) return roles;
@@ -128,10 +121,9 @@ export const loadViewerSubspaceRoles = async (userId: string | null | undefined)
 	const docs = await things
 		.find({ thingtime: 'subspace-member', ownerId: userId } as any)
 		.project({ targetId: 1, crystal: 1 })
-		.limit(MAX_SUBSPACE_MEMBERSHIPS_PER_USER)
-		.toArray();
+		.batchSize(100);
 	const now = Date.now();
-	for (const doc of docs) {
+	for await (const doc of docs) {
 		const membership = membershipOfDoc(doc, now);
 		if (membership.subspaceId) roles.set(membership.subspaceId, membership);
 	}
@@ -255,7 +247,7 @@ export const assertSubspacePosting = async (
 	}
 	let resolvedFlairId: string | null = null;
 	if (flairId) {
-		const flair = flairById(flairsOf(subspace), flairId);
+		const flair = await findSubspaceDefinition(await getThingsCollection(),subspace,'flairs',flairId);
 		if (!flair) return fail(400, `s/${slug} has no flair "${flairId}"`);
 		if (flair.modOnly && !moderator) return fail(403, `The "${flair.label}" flair is moderator-only`);
 		resolvedFlairId = flair.id;
@@ -379,8 +371,8 @@ export const loadSubspaceEmbeds = async (subspaceIds: readonly string[]): Promis
 	const things = await getThingsCollection();
 	const docs = await things
 		.find({ thingtime: 'subspace', shareId: { $in: wanted } } as any)
-		.project({ shareId: 1, iconAttachmentId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1, 'crystal.userFlairs': 1 })
+		.project({ shareId: 1, iconAttachmentId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1, 'crystal.userFlairs': 1, definitionGeneration: 1, definitionCounts: 1, ownerId: 1 })
 		.toArray();
-	for (const doc of docs) embeds.set(String(doc.shareId), toSubspaceEmbed(doc));
+	for (const doc of await hydrateSubspaceDefinitions(things,docs,undefined,['flairs','userFlairs'])) embeds.set(String(doc.shareId), toSubspaceEmbed(doc));
 	return embeds;
 };

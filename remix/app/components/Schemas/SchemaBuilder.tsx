@@ -8,7 +8,6 @@ import { CornerDownRight, Plus, Trash2, X } from 'lucide-react';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import {
-  MAX_SCHEMA_FIELDS,
   MAX_SCHEMA_FIELD_DEPTH,
   MAX_SCHEMA_FIELD_NAME_CHARS,
   MAX_SCHEMA_NAME_CHARS,
@@ -168,7 +167,7 @@ const compileDrafts = (drafts: DraftField[], depth: number, path: string): Compi
     if (draft.type === 'string' || draft.type === 'string[]') {
       const maxLength = num(draft.maxLength);
       if (maxLength !== undefined) {
-        if (Number.isInteger(maxLength) && maxLength > 0) field.maxLength = maxLength;
+        if (Number.isSafeInteger(maxLength) && maxLength > 0) field.maxLength = maxLength;
         else issues.push(`${name}: maxLength must be a whole number > 0`);
       }
     }
@@ -176,11 +175,11 @@ const compileDrafts = (drafts: DraftField[], depth: number, path: string): Compi
       const minItems = num(draft.minItems);
       const maxItems = num(draft.maxItems);
       if (minItems !== undefined) {
-        if (Number.isInteger(minItems) && minItems >= 0) field.minItems = minItems;
+        if (Number.isSafeInteger(minItems) && minItems >= 0) field.minItems = minItems;
         else issues.push(`${name}: minItems must be a whole number ≥ 0`);
       }
       if (maxItems !== undefined) {
-        if (Number.isInteger(maxItems) && maxItems >= 0) field.maxItems = maxItems;
+        if (Number.isSafeInteger(maxItems) && maxItems >= 0) field.maxItems = maxItems;
         else issues.push(`${name}: maxItems must be a whole number ≥ 0`);
       }
       if (field.minItems !== undefined && field.maxItems !== undefined && field.minItems > field.maxItems) {
@@ -427,7 +426,6 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
   if (!name.trim()) issues.unshift('Give your schema a name');
   if (name.length > MAX_SCHEMA_NAME_CHARS) issues.unshift(`Name caps at ${MAX_SCHEMA_NAME_CHARS} chars`);
   if (!drafts.length) issues.push('Add at least one field');
-  if (compiled.nodes > MAX_SCHEMA_FIELDS) issues.push(`Too many fields — max ${MAX_SCHEMA_FIELDS} counting nested ones`);
 
   const sample = React.useMemo(
     () => (compiled.fields.length ? generateSampleFromFields(compiled.fields) : null),
@@ -478,7 +476,7 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
         </Text>
         <Box flex={1} />
         <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-          {compiled.nodes}/{MAX_SCHEMA_FIELDS} fields
+          {compiled.nodes} fields
         </Text>
         <Button aria-label="Close builder" onClick={onClose} size="xs" variant="ghost">
           <X size={14} />

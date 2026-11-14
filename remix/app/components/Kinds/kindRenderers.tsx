@@ -762,7 +762,7 @@ const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; 
 	// under the MAX_RESOLVED_NODES/_CHARS budgets, so a feed or search page listing
 	// several component things would redo that work on every parent render.
 	// adapt() rebuilds `values` on every RenderThing pass, so the memo keys on
-	// its content — a bounded scalar map (≤ MAX_COMPONENT_SAVED_ARGS entries) —
+	// its content — a scalar map under the renderer’s execution budget —
 	// rather than its identity, which would never hit.
 	const valuesKey = JSON.stringify(value.values);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values

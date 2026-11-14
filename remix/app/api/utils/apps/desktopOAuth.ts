@@ -1,7 +1,8 @@
 import { findUserById } from '../auth/users';
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession } from '../auth/sessions';
-import { getSessionsCollection } from '../mongodb/collections';
+import { storeSessionSharedThings, sharedThingsCount, type SharedThingsSource } from './sharedThings';
+import { getHomeThingsCollection, withHomeMongoTransaction, getSessionsCollection } from '../mongodb/collections';
 import { appAllowsDesktopRedirect, appIsRevoked, findAppByClientId } from './apps';
 import { issueAppToken } from './appTokens';
 import type { AppTokenGrant } from './appTokens';
@@ -30,7 +31,9 @@ export const issueDesktopAuthorizationCode = async (
 	}
 ): Promise<{ code: string; expiresAt: Date }> => {
 	const expiresAt = new Date(Date.now() + DESKTOP_CODE_TTL_MS);
-	const session = await createSession(userId, {
+	const session = await withHomeMongoTransaction(async transaction => {
+	const created = await createSession(userId, {
+    session: transaction,
 		purpose: 'oauth-code',
 		expiresAt,
 		meta: {
@@ -40,9 +43,12 @@ export const issueDesktopAuthorizationCode = async (
 			codeChallenge: input.codeChallenge,
 			codeChallengeMethod: 'S256',
 			scopes: input.scopes,
-			sharedThings: input.sharedThings ?? []
+      sharedThingsVersion: 1, sharedThingCount: sharedThingsCount(input.sharedThings || [])
 		}
 	});
+  await storeSessionSharedThings(await getHomeThingsCollection(), userId, created.jti, expiresAt, input.sharedThings || [], transaction);
+  return created;
+  });
 
 	// The code is signed so a guessed jti is useless, while the backing session
 	// makes it revocable and one-time. It cannot act as a normal account token:
@@ -80,7 +86,7 @@ export const exchangeDesktopAuthorizationCode = async (input: {
 	// suspending/deleting the app, or deleting the user invalidates an issued but
 	// not-yet-exchanged code.
 	const [app, user] = await Promise.all([findAppByClientId(clientId), findUserById(claims.sub)]);
-	if (!app || appIsRevoked(app) || !appAllowsDesktopRedirect(app, redirect) || !user) return invalidGrant();
+	if (!app || appIsRevoked(app) || !(await appAllowsDesktopRedirect(app, redirect)) || !user) return invalidGrant();
 
 	// Consume before minting. The compare-and-set is the replay boundary: two
 	// racing exchanges can both validate PKCE, but only one can flip revokedAt.
@@ -100,8 +106,12 @@ export const exchangeDesktopAuthorizationCode = async (input: {
 	);
 	if (!consumed) return invalidGrant();
 
+  if (meta.sharedThingsVersion !== undefined && meta.sharedThingsVersion !== 1) return invalidGrant();
 	const scopes = sessionScopes(meta);
-	const sharedThings = Array.isArray(meta.sharedThings) ? meta.sharedThings.filter((id: unknown): id is string => typeof id === 'string') : [];
+  const sharedThings: SharedThingsSource = meta.sharedThingsVersion === 1
+    ? { sessionId: claims.jti, count: meta.sharedThingCount }
+    : Array.isArray(meta.sharedThings) ? meta.sharedThings.filter((id: unknown): id is string => typeof id === 'string') : [];
+  if (!Array.isArray(sharedThings) && (!Number.isSafeInteger((sharedThings as { count: number }).count) || (sharedThings as { count: number }).count < 0)) return invalidGrant();
 	const grant = await issueAppToken(claims.sub, clientId, redirect.origin, scopes, sharedThings);
 	return { ok: true, grant };
 };

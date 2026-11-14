@@ -64,6 +64,7 @@ final class MobileDeviceBridge {
                 MobileDeviceBackgroundPresence.shared.stop(matching: scope)
                 location.suspendAuthorization(matching: scope)
                 MobileDeviceAlerts.shared.stop(matching: scope)
+                MobileDeviceDiagnostics.shared.suspendAuthorization(matching: scope)
                 reply("mobile-device-result", ["requestId": id, "ownerId": owner,
                     "origin": scope.origin.absoluteString, "state": "paused"])
                 return
@@ -129,8 +130,12 @@ final class MobileDeviceBridge {
                 if result.state == "paired" {
                     self?.location.verified(scope)
                     MobileDeviceAlerts.shared.approve(scope)
+                    if let deviceId = result.deviceId { MobileDeviceDiagnostics.shared.verified(scope, deviceId: deviceId) }
                 }
-                else if result.state == "revoked" { MobileDeviceAlerts.shared.stop(matching: scope) }
+                else if result.state == "revoked" {
+                    MobileDeviceAlerts.shared.stop(matching: scope)
+                    MobileDeviceDiagnostics.shared.suspendAuthorization(matching: scope)
+                }
                 if action == "presence" {
                     if result.state == "paired" { MobileDeviceBackgroundPresence.shared.approve(scope) }
                     else { MobileDeviceBackgroundPresence.shared.stop(matching: scope) }
@@ -149,6 +154,8 @@ final class MobileDeviceBridge {
                     }
                     return
                 }
+                if case MobileDevicePairing.Failure.identity = error { MobileDeviceDiagnostics.shared.suspendAuthorization(matching: scope) }
+                if case MobileDevicePairing.Failure.revoked = error { MobileDeviceDiagnostics.shared.suspendAuthorization(matching: scope) }
                 let message = (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Device connection could not be checked. Retry to resume saved work."
                 reply("mobile-device-result", base.merging(["error": message]) { _, new in new })
             }
@@ -166,12 +173,14 @@ final class MobileDeviceBridge {
         let status = try await makeEngine(webView: webView, cookies: cookies, check: check).status(scope)
         try check()
         guard status.state == "paired", status.deviceId == deviceId else { throw MobileDevicePairing.Failure.revoked }
+        MobileDeviceDiagnostics.shared.verified(scope, deviceId: deviceId)
     }
     func pairedDeviceId(_ scope: MobileDevicePairing.Scope, webView: WKWebView,
                         cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie], check: @escaping () throws -> Void) async throws -> String {
         let status = try await makeEngine(webView: webView, cookies: cookies, check: check).status(scope)
         try check()
         guard status.state == "paired", let deviceId = status.deviceId else { throw MobileDevicePairing.Failure.revoked }
+        MobileDeviceDiagnostics.shared.verified(scope, deviceId: deviceId)
         return deviceId
     }
     private func makeEngine(webView: WKWebView, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],

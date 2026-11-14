@@ -92,7 +92,9 @@ export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOr
     const name = status.custom ? 'MongoDB (custom)' : 'MongoDB';
     label = status.connected
       ? `${name}: connected${typeof status.pingMs === 'number' ? ` (${status.pingMs}ms)` : ''}`
-      : `${name}: disconnected`;
+      : status.error === 'Branch deployment status requires authentication'
+        ? `${name}: authentication required`
+        : `${name}: disconnected`;
   }
 
   const isUnavailable = Boolean(checking || error || (status && !status.connected));

@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
@@ -36,7 +36,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Too many authorizations — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const body = await readJsonBody(request, 32 * 1024);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
   const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
   const origin = normalizeAppOrigin(body?.origin);
 
@@ -69,7 +69,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
   }
 
-  if (!appAllowsOrigin(app, origin)) {
+  if (!(await appAllowsOrigin(app, origin))) {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
   }
 
@@ -85,7 +85,7 @@ export const action = async ({ request }: { request: Request }) => {
     tokenType: grant.tokenType,
     expiresAt: grant.expiresAt.toISOString(),
     scopes: grant.scopes,
-    sharedThings: grant.sharedThings.length,
+    sharedThings: grant.sharedThingCount,
     user: {
       id: user.id,
       username: user.username,

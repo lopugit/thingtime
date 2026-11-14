@@ -475,6 +475,7 @@ export const action = async ({ request }: { request: Request }) => {
       {
         replaceCrystal: body?.replaceCrystal === true,
         expectedUpdatedAt: body?.expectedUpdatedAt,
+        expectedAclRevision: body?.expectedAclRevision,
         ...(guardedStorageWrite && isStoragePolicyRevision(expectedStoragePolicyRevision) ? { storageCloudWrite: {
           expectedRevision: expectedStoragePolicyRevision,
           ...(attachmentRequest.present && attachmentRequest.kind === 'sync' ? { attachmentIds: attachmentRequest.attachmentIds } : {})

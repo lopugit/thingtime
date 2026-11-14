@@ -30,8 +30,6 @@ export type FriendState = 'none' | 'pending-outgoing' | 'pending-incoming' | 'fr
 export type FriendIntent = 'request' | 'cancel' | 'accept' | 'decline' | 'unfriend';
 export const FRIEND_INTENTS: FriendIntent[] = ['request', 'cancel', 'accept', 'decline', 'unfriend'];
 
-const MAX_FOLLOWING_PER_USER = 5000;
-const MAX_FRIENDS_PER_USER = 2000;
 const MAX_CONNECTIONS_LIMIT = 50;
 const DEFAULT_CONNECTIONS_LIMIT = 20;
 
@@ -69,13 +67,6 @@ export const setFollow = async (
   const things = await getThingsCollection();
   const existing = await isFollowing(viewer.id, targetId);
   const desired = typeof follow === 'boolean' ? follow : !existing;
-
-  if (desired && !existing) {
-    const followingCount = await things.countDocuments({ thingtime: 'follow', ownerId: viewer.id } as any);
-    if (followingCount >= MAX_FOLLOWING_PER_USER) {
-      return fail(400, `Following limit reached (${MAX_FOLLOWING_PER_USER})`);
-    }
-  }
 
   // One canonical writer for every caller: messenger + social both persist the
   // home-pinned crystal.followKey shape. `created` identifies the unique-index
@@ -155,14 +146,6 @@ export const friendAction = async (
           return accept(existing);
         }
         return { ok: true, friendState: friendStateOf(existing, viewer.id) };
-      }
-      const friendCount = await things.countDocuments({
-        thingtime: 'friend',
-        'crystal.status': 'accepted',
-        $or: [{ ownerId: viewer.id }, { targetId: viewer.id }]
-      } as any);
-      if (friendCount >= MAX_FRIENDS_PER_USER) {
-        return fail(400, `Friend limit reached (${MAX_FRIENDS_PER_USER})`);
       }
       try {
         await things.insertOne({
@@ -257,7 +240,7 @@ export const groupIdsOf = async (userId: string): Promise<Set<string>> => {
   const docs = await things
     .find({ thingtime: 'group-member', targetId: userId } as any)
     .project({ crystal: 1 })
-    .limit(2000)
+    .batchSize(100)
     .toArray();
   const ids = new Set<string>();
   for (const doc of docs as any[]) {

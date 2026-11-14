@@ -1,4 +1,5 @@
 import { webpageComponentRefs } from '../../../timeline/componentBindings.ts';
+import { aclMarkerClause, relationalAclCandidateStages } from '../things/relationalAcl';
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
@@ -74,7 +75,7 @@ const resolveComponents = async (
 	const arms: Record<string, unknown>[] = [];
 	// exact shareId hits ride the ordinary visibility fence
 	if (visibility) arms.push(withMatch({ shareId: { $in: refs } }, visibility));
-	else arms.push({ shareId: { $in: refs }, acl: 'tt:all' });
+	else arms.push(withMatch({ shareId: { $in: refs } }, aclMarkerClause('tt:all')));
 	if (root) arms.push({ shareId: { $in: refs }, ownerId: root.ownerId });
 	// seeded platform docs are system-owned tt:all — match them directly so a
 	// logged-out viewer still resolves the catalog
@@ -87,7 +88,14 @@ const resolveComponents = async (
 	// one component must never crowd a different required component out.
 	const exactIds = [...refs, ...slugRefs.map((ref) => `component-${ref}`)];
 	const docs = (await collection.aggregate([
-		{ $match: { $and: [{ thingtime: 'component' }, { $or: arms }] } },
+		// Restrict identities before joining, then apply the audience superset.
+		{ $match: { thingtime: 'component', $or: [
+			{ shareId: { $in: exactIds } },
+			...(compositionOwnerId && slugRefs.length ? [{ ownerId: compositionOwnerId, 'crystal.componentKey': { $in: slugRefs } }] : [])
+		] } },
+		...relationalAclCandidateStages(collection.collectionName, viewer),
+		{ $match: { $or: arms } },
+		{ $unset: '_aclCandidate' },
 		{ $sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } },
 		{ $group: { _id: { $cond: [
 			{ $in: ['$shareId', exactIds] }, { exact: '$shareId' },
@@ -104,7 +112,7 @@ const resolveComponents = async (
 		// token grants, or foreign private components. Preserve the child's
 		// moderation checks and judge its audience through the authorised root.
 		const inherited = inheritAudience && root && doc.ownerId === root.ownerId;
-		const candidate = inherited ? { ...doc, acl: ['tt:inherit'], targetId: root.shareId } : doc;
+		const candidate = inherited ? { ...doc, acl: ['tt:inherit'], aclGeneration: undefined, aclBaseline: undefined, aclBaselineVersion: undefined, targetId: root.shareId } : doc;
 		const allowed = await canViewInherited(candidate, viewer, (id) => id === root?.shareId ? Promise.resolve(root) : lookup(id));
 		return allowed ? doc : null;
 	}))).filter((doc): doc is ThingDoc => !!doc);
@@ -215,7 +223,7 @@ export const resolveWebpage = async (
 	const visibility = visibilityQueryFor(viewer, []);
 	const match = visibility
 		? withMatch({ shareId: id, thingtime: 'webpage' }, visibility)
-		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
+		: withMatch({ shareId: id, thingtime: 'webpage' }, aclMarkerClause('tt:all'));
 	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
 
 	// A direct canonical id opens an unlisted page. This exact lookup never

@@ -100,6 +100,15 @@ authorized overview read adapter.
 
 ## Failure and recovery
 
+With `api.agent-reporting` 1.2.0, preparation uses atomic relational ACL grants
+instead of appending every task Character to a bounded workspace array.
+An incomplete preparation returns a distinct resumable state rather than
+misreporting all missing initial grants as revoked access. Retry `prepare`
+with the same external task identity and unchanged workspace references.
+Already completed grants, immutable generation intents and explicit revocations
+remain checked; resuming must not re-enable revoked access or create a new
+Character. See [relational access](relational-access.md).
+
 Missing capability, permission, private reference, membership and Character
 liveness are distinct failures. Do not substitute owner posting, public records,
 new schemas or a different origin. Complete independent task work while the

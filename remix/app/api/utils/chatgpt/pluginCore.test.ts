@@ -261,6 +261,7 @@ test('capability discovery is origin scoped and every registered route has a sem
   assert.equal(discovery.authorizationServer.client_id_metadata_document_supported, true);
   assert.equal(discovery.authorizationServer.registration_endpoint, 'https://thingtime.com/api/v1/integrations/chatgpt/oauth/register');
   assert.deepEqual(discovery.capabilityManifest.features, CHATGPT_PLUGIN_FEATURES);
+  assert.equal(discovery.capabilityManifest.features['chatgpt.ui'], '1.1.1');
   for (const route of CHATGPT_PLUGIN_ROUTES) {
     assert.ok(route.feature in CHATGPT_PLUGIN_FEATURES, `${route.method} ${route.path} lacks a known capability feature`);
   }

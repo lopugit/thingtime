@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 import { validateThingtimeCrystal } from '~/schemas/registry';
+import { StorageMutationError } from '../storage/storageCore';
 let docs: any[] = [], characters: any[] = [], calls = 0, revoked = false, missingScope = false, disabled = false, member = true, customPlane = false, publicSpace = false, wrongAccount = false, badSchema = false, crashAfterWrite = false;
+let grantFailureAt: string | null = null;
+let grantCalls = 0;
+let snapshotConflicts = 0, projectionConflicts = 0, stableReadDenied = false;
 let postModeration: string | undefined, projectionOverride: Record<string, unknown> | null, createPostCalls: number, updatePostCalls: number;
 const owner = { _id: 'owner', id: 'owner', username: 'owner' };
 const pat = { jti: 'token', scopes: ['agents.report'], visibility: 'private', onlyCreatedThings: false };
@@ -41,6 +45,19 @@ mock.module('../subspaces/gate', { namedExports: {
 } });
 mock.module('../subspaces/subspaces', { namedExports: { listSubspaces: async () => ({ ok: true, subspaces: [{ id: 'agents', name: 'Thingtime Agents' }], nextCursor: null }), mutateMember: async () => ({ ok: true }) } });
 mock.module('../things/things', { namedExports: {
+  readAllThingAclEntries: async (doc: any) => {
+    if (snapshotConflicts-- > 0) throw new StorageMutationError(409, 'storage_conflict', 'Synthetic concurrent ACL update');
+    return [...doc.acl, ...(doc.relationalEntries || [])];
+  },
+  grantThingAclEntries: async (viewer: any, id: string, entries: readonly string[], options: any = {}) => {
+    grantCalls++;
+    const doc = docs.find(doc => doc.shareId === id);
+    if (Object.hasOwn(options, 'expectedAclGeneration') && options.expectedAclGeneration !== (doc?.aclGeneration ?? null)) return { ok: false, status: 409, error: 'ACL revision changed' };
+    if (grantFailureAt === id) return { ok: false, status: 503, error: 'Synthetic grant interruption' };
+    if (!doc || viewer.id !== doc.ownerId) return { ok: false, status: 403, error: 'Owner required' };
+    doc.acl = [...new Set([...doc.acl, ...entries])];
+    return { ok: true, doc };
+  },
   createThing: async (ownerId: string, input: any, _viewer: any, _app: any, hooks: any) => {
     createPostCalls++;
     const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
@@ -52,6 +69,11 @@ mock.module('../things/things', { namedExports: {
   viewerOf: (user: any, token: any) => ({ id: user.id, username: user.username, pat: token }),
   getThing: async (viewer: any, id: string) => {
     const doc = docs.find(doc => doc.shareId === id);
+    if (projectionConflicts-- > 0 && doc) {
+      doc.aclRevision = `concurrent-${projectionConflicts}`;
+      return { ok: false, status: 404, error: 'Thing not found' };
+    }
+    if (stableReadDenied) return { ok: false, status: 404, error: 'Thing not found' };
     const isPost = doc?.thingtime.includes('post');
     const author = viewer?.id === doc?.ownerId;
     if (!doc || (viewer?.pat?.visibility === 'private' && doc.acl.includes('tt:all')) ||
@@ -100,6 +122,7 @@ const request = () => new Request('https://thingtime.test/api/v1/agents/reportin
 const body = (operation: string, extra: any = {}) => ({ operation, origin: 'https://thingtime.test', externalTaskId: 'chat-stable', ...extra });
 const reset = () => {
   docs = Object.entries({ overview: 'webpage', detail: 'webpage', ...Object.fromEntries(Object.values(workspace.schemas).map(id => [id, 'schema'])), ...Object.fromEntries(Object.values(workspace.actions).map(id => [id, 'action'])) }).map(([shareId, kind]) => ({ shareId, ownerId: 'owner', thingtime: [kind], acl: ['tt:user'], crystal: {}, updatedAt: new Date() }));
+  grantFailureAt = null; grantCalls = 0; snapshotConflicts = 0; projectionConflicts = 0; stableReadDenied = false;
   lockGate = null; characters = []; calls = 0; revoked = false; missingScope = false; disabled = false; member = true; customPlane = false; publicSpace = false; wrongAccount = false; badSchema = false; crashAfterWrite = false;
   postModeration = undefined; projectionOverride = null; createPostCalls = 0; updatePostCalls = 0;
 };
@@ -331,4 +354,101 @@ test('nested child inherits the root project actor and refuses ancestor revocati
   rootCharacter.meta.character.disabled = false;
   characters.find(c => c._id === child.binding.characterId).meta.character.disabled = true;
   assert.equal((await agentReporting(request(), body('get', { externalTaskId: 'grandchild-chat' }))).ok, false);
+});
+
+
+test('interrupted preparation resumes its immutable binding and Character, with a precise incomplete read', async () => {
+  reset(); grantFailureAt = 'detail';
+  const first = await prepare(); assert.equal(first.status, 503);
+  assert.equal(characters.length, 1);
+  const binding = docs.find(doc => doc.thingtime.includes('agent-reporting-binding'));
+  const characterId = binding.crystal.characterId;
+  const read = await agentReporting(request(), body('get'));
+  assert.equal(read.status, 409); assert.match(read.error, /preparation is incomplete/);
+  const attempts = grantCalls; grantFailureAt = null;
+  const resumed = await prepare(); assert.equal(resumed.ok, true);
+  assert.equal(resumed.binding.id, binding.shareId); assert.equal(resumed.binding.characterId, characterId);
+  assert.equal(characters.length, 1);
+  assert.equal(grantCalls - attempts, 12); // overview was already granted, thirteen total references
+});
+
+test('an explicit grant removal during interrupted preparation stays revoked', async () => {
+  reset(); grantFailureAt = 'detail'; assert.equal((await prepare()).status, 503);
+  docs.find(doc => doc.shareId === 'overview').acl = ['tt:user'];
+  grantFailureAt = null;
+  const resumed = await prepare(); assert.equal(resumed.status, 403); assert.match(resumed.error, /revoked during preparation/);
+  assert.deepEqual(docs.find(doc => doc.shareId === 'overview').acl, ['tt:user']);
+  assert.equal(characters.length, 1);
+});
+
+test('more than 64 tasks share exact workspace references and concurrent grants lose no Character', async () => {
+  reset();
+  const ids = Array.from({ length: 70 }, (_, n) => `shared-workspace-task-${n}`);
+  const prepared = await Promise.all(ids.map(externalTaskId => agentReporting(request(), body('prepare', { externalTaskId, displayName: externalTaskId, workspace }))));
+  for (const result of prepared) assert.equal(result.ok, true, result.error);
+  assert.equal(new Set(prepared.map(result => result.binding.characterId)).size, 70);
+  for (const externalTaskId of ids) assert.equal((await agentReporting(request(), body('get', { externalTaskId }))).ok, true);
+  for (const doc of docs.filter(doc => doc.ownerId === 'owner' && !doc.thingtime.includes('agent-reporting-binding'))) {
+    assert.equal(doc.acl.filter((entry: string) => entry.startsWith('tt:user/')).length, 70);
+    assert(!doc.acl.includes('tt:all'));
+  }
+});
+
+
+test('interrupted preparation refuses a replacement ACL generation for an unconfirmed grant', async () => {
+  reset(); grantFailureAt = 'detail'; assert.equal((await prepare()).status, 503);
+  const page = docs.find(doc => doc.shareId === 'detail');
+  page.aclGeneration = 'replacement-generation';
+  grantFailureAt = null;
+  const retry = await prepare(); assert.equal(retry.status, 409); assert.match(retry.error, /ACL revision changed/);
+  assert.deepEqual(page.acl, ['tt:user']); assert.equal(characters.length, 1);
+});
+
+
+test('reporting validates complete relational audiences before creating a Character', async () => {
+  for (const entry of ['tt:group/foreign', '!tt:user/blocked', 'tt:all']) {
+    reset(); docs[0].aclGeneration = 'generation'; docs[0].aclEntryCount = 1; docs[0].relationalEntries = [entry];
+    const result = await prepare();
+    assert.equal(result.ok, false); assert.equal(result.status, 403); assert.equal(characters.length, 0);
+  }
+  reset(); docs[0].aclGeneration = 'generation'; docs[0].aclEntryCount = 1; docs[0].relationalEntries = ['tt:user/other'];
+  assert.equal((await prepare()).ok, true);
+});
+
+
+test('preparation explicitly preserves the custom read-only audience marker', async () => {
+  reset();
+  assert.equal((await prepare()).ok, true);
+  for (const id of [workspace.pages.overview, workspace.pages.taskDetail, ...Object.values(workspace.schemas)]) {
+    const doc = docs.find(item => item.shareId === id);
+    assert.ok(doc.acl.includes('tt:custom'));
+    assert.ok(doc.acl.includes(`tt:user/${characters[0].username}`));
+    assert.ok(!doc.acl.includes(`tt:user/${characters[0].username}/write`));
+    assert.ok(!doc.acl.includes(`tt:user/${characters[0].username}/comment`));
+  }
+});
+
+
+test('concurrent ACL reads retry proven conflicts without duplicating a task Character', async () => {
+  for (const mode of ['snapshot', 'projection']) {
+    reset();
+    if (mode === 'snapshot') snapshotConflicts = 1;
+    else projectionConflicts = 1;
+    const result = await prepare();
+    assert.equal(result.ok, true, mode);
+    assert.equal(characters.length, 1, mode);
+  }
+});
+
+test('persistent ACL read conflicts remain resumable and stable denial stays forbidden', async () => {
+  reset(); snapshotConflicts = 3;
+  const conflicted = await prepare();
+  assert.equal(conflicted.status, 409);
+  assert.match(conflicted.error, /retry the same task request/);
+  assert.equal(characters.length, 0);
+  assert.equal((await prepare()).ok, true);
+  assert.equal(characters.length, 1);
+  reset(); stableReadDenied = true;
+  assert.equal((await prepare()).status, 403);
+  assert.equal(characters.length, 0);
 });

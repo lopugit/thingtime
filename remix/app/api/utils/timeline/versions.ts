@@ -13,7 +13,7 @@ import { StorageMutationError } from '../storage/storageCore';
 import { readTimelineEntries, readTimelineNodes, type TimelineGraphNode } from './repository.ts';
 import { comparePublishedComponents, liveComponentContext, planPublishedComponentCopies, recordedComponentVersions } from './publishedComponents';
 import { webpageComponentRefs } from '../../../timeline/componentBindings';
-import { newThingMutationCapture, thingContentSnapshot } from './recordMutation.ts';
+import { newThingMutationCapture, thingContentSnapshot, materializeThingContentSnapshotDocument } from './recordMutation.ts';
 import { readDeletedThingState } from './deletedThing.ts';
 export { parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
 
@@ -240,7 +240,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		const base = baseNode ? (await read([baseNode.id]))[0] : null;
 		const resolved = (entry: TimelineEntry) => deps.snapshot(things, ownerId, entry.event.id, 'after', entry.event.after);
 		const contentFor = createVersionContentReader(graph, read, resolved);
-		const currentSnapshot = thingContentSnapshot(doc)!;
+		const currentSnapshot = thingContentSnapshot(await materializeThingContentSnapshotDocument(things, doc))!;
 		const current = restorableContent(currentSnapshot);
 		const beforeContent = async (basis?: TimelineSnapshot['value']) =>
 			['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(source.event.before?.adapter ?? '')

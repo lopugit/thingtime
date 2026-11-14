@@ -1,3 +1,4 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { ExactCloudSyncDestinationChanged, type CloudSyncDestination } from '../../../fileSync/cloudSyncDestination';
 import { openInventoryUniqueness } from './inventoryUniqueness';
 import { cloudFolderMetadata } from './folderMetadata';
@@ -25,7 +26,7 @@ const projection = {
 	appId: 1,
 	sandbox: 1,
 	sandboxSpace: 1,
-	acl: 1,
+	acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclEntryCount: 1,
 	updatedAt: 1,
 	timelineHeadId: 1,
 	'crystal.name': 1,
@@ -45,7 +46,7 @@ const owned = (doc: any, ownerId: string) =>
 	doc.sandbox == null &&
 	doc.sandboxSpace == null;
 const privateAudience = (doc: any, inherited: boolean) =>
-	Array.isArray(doc.acl) && doc.acl.length === 1 && (doc.acl[0] === 'tt:user' || (inherited && doc.acl[0] === 'tt:inherit'));
+	!hasRelationalAclEntries(doc) && Array.isArray(doc.acl) && rootAcl(doc).length === 1 && (rootAcl(doc)[0] === 'tt:user' || (inherited && rootAcl(doc)[0] === 'tt:inherit'));
 const folderRevision = (doc: any) => cloudFolderMetadata(doc).revision;
 
 /** Read one tree in a Mongo snapshot transaction. Each breadth level is one

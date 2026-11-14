@@ -136,7 +136,7 @@ export type UserStorageUsage = {
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
-  'post-discovery',
+  'post-discovery', 'app-allowlist-entry', 'acl-entry', 'session-resource-grant', 'account-config-entry',
 	'lopu-recording-settings',
 	'lopu-background-task',
 	'lopu-recording-job',

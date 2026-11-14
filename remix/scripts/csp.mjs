@@ -109,7 +109,7 @@ export const devCsp = buildCsp({ dev: true });
 // exception hash-only: never broaden the application policy with
 // 'unsafe-inline'. pluginLimitlessCore.test.ts proves this hash still matches
 // renderThingtimeMcpUi() whenever the embedded app changes.
-export const mcpLabScriptHash = "'sha256-EIabPPWdF7FAxu5/3Y6fMmhH4wbbHXK51o1HOg8YzA8='";
+export const mcpLabScriptHash = "'sha256-6sdpeXmgnL2I6d8kPVfqlTAkz2zjGBlAH+UJ387S3P0='";
 export const mcpLabCsp = serialize({
 	...directives(),
 	'script-src': [...directives()['script-src'], mcpLabScriptHash]

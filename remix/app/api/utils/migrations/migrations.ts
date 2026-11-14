@@ -1,3 +1,6 @@
+import { AclWriteFenceError } from '../mongodb/aclWriteFence';
+import { createAclWriteFenceMigration } from './aclWriteFence';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { subspaceMessagingMigration } from './subspaceMessaging';
 import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
 import { createHash, randomUUID } from 'node:crypto';
@@ -5,6 +8,9 @@ import { isDeepStrictEqual } from 'node:util';
 
 import {
   ensureHomeThingsIndexPlan,
+  inspectHomeThingAclWriteFence,
+  inspectHomeThingCollModAuthority,
+  provisionHomeThingAclWriteFence,
   withHomeIndexMaintenance,
   isHomeIndexRecoveryActive,
   ensureIndexes,
@@ -161,6 +167,7 @@ export type MigrationReport = {
   created: number;
   skipped: number;
   notes: string[];
+  collModAuthority?: 'granted' | 'absent' | 'unknown';
 };
 
 export type Migration = {
@@ -173,6 +180,7 @@ export type Migration = {
   // drops data (cleanup migrations): the run endpoint requires an explicit
   // confirm flag and the panel badges it
   destructive?: boolean;
+  homeOnly?: boolean;
   // physical collections this migration still READS from — the cleanup
   // migration refuses to drop any collection a pending migration lists here
   sourcePhysicals?: () => string[];
@@ -3285,6 +3293,7 @@ const consolidateSyncAttachmentBlobs: Migration = {
 };
 
 export const migrations: Migration[] = [
+  createAclWriteFenceMigration({ customPlane: isCustomMongoEndpointActive, inspect: inspectHomeThingAclWriteFence, inspectAuthority: inspectHomeThingCollModAuthority, provision: provisionHomeThingAclWriteFence }),
   subspaceMessagingMigration,
 	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical
@@ -3464,6 +3473,8 @@ export const runMigration = async (
 ): Promise<Fail | MigrationFailure | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
+  if (migration.homeOnly && isCustomMongoEndpointActive())
+    return migrationFailureResult(migration.id, new AclWriteFenceError('selection', 'wrong-plane'), 'rejected');
   const dryRun = options.dryRun === true || options.dryRun === 'true';
   // destructive migrations (collection drops) never run on an unconfirmed
   // call — a mis-sent id can cost data, so the API demands intent twice

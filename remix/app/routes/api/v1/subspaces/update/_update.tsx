@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -19,7 +19,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (!limit.allowed) {
     return json({ ok: false, error: 'Slow down a little 🌸' }, rateLimitedResponseInit(limit));
   }
-  const body = await readJsonBody(request, 64 * 1024);
+  const body = await readJsonBody(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT);
   const result = await updateSubspace(viewerOf(user), body || {});
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
