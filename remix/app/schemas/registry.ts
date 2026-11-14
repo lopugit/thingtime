@@ -4288,6 +4288,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-s
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'device-diagnostic',
   'thing-browser-pin', 'thing-browser-pin-scope',
   'sync-source-index', 'sync-source-observation',
   THING_METADATA_KIND,
@@ -4543,6 +4544,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
     summary: 'Protected private source-discovery metadata; never proof of saved bytes.',
     detail: 'Quota-accounted atomic Things with relational target links and canonical cascade deletion. The approved sync-run endpoint owns writes; full-owner scoped reads remain available after Pause or authorization expiry.',
     createdVia: '/api/v1/files/sync-transfer-admissions', fields: [], example: {} })),
+  { id: 'device-diagnostic', version: 1, kind: 'crystal', collection: null, title: 'Private device diagnostic',
+    summary: 'Owner-private, safe structured device event.',
+    detail: 'Paired-device writes only. No raw logs, text, URLs, filenames, credentials or photo contents. Ordinary owner Things/MCP reads, export and deletion retain ACLs and quota accounting. Debug folder settings never affect sync.',
+    createdVia: '/api/v1/devices/node/diagnostics', fields: [], example: {} },
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',

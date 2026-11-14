@@ -6,6 +6,7 @@ import { ATTACHMENT_THINGTIME } from '../attachments/attachmentCore';
 export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly string[], includeArchives = false, requiredKinds?: readonly string[]) => {
   const ordinary = { thingtime: { $nin: [...excludedKinds] } };
   const managed = [
+    { thingtime: ['device-diagnostic'], acl: ['tt:user'], appId: null, sandbox: null, sandboxSpace: null },
     { thingtime: ['theme'] },
     { thingtime: ['file'], 'crystal.trashed': false },
     { thingtime: ['feed-algorithm'] },
@@ -25,6 +26,7 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
 
 /** Root containment is structural; explicit folders and searches retain scope. */
 export const ownerLibraryRootMatch = () => ({
+  libraryHidden: { $ne: true },
   folderId: { $in: [null] }, parentId: { $in: [null] }, targetId: { $in: [null] }, 'crystal.parentId': { $in: [null] },
   thingtime: { $nin: ['file-sync', ATTACHMENT_THINGTIME] }
 });

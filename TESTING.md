@@ -1,3 +1,11 @@
+## Private device diagnostics
+
+- [ ] Full-owner sign-in provisions one hidden private Debug folder across concurrent retries; accounting/storage failure preserves successful auth and is explicit through diagnostics. Normal root/sidebar lists omit it; exact owner Things/MCP reads work. Anonymous, another owner, device bearer history reads, generic share/edit and spoofed device/owner fields must fail. Parent ACL changes must never expose event children.
+- [ ] Real paired append preserves closed phase/reason/operation/retry/background/system-error facts, rejects raw text/paths/URLs/userInfo, survives immutable replay with no duplicate charge, and refuses revoked credentials or another device's config. Opt-out stops capture/clears pending diagnostic spool without affecting sync; re-enable works at normal foreground entry. Verify the installed app separately.
+- [ ] Append more than 100 events; clear with one confirmed requestId+server throughSequence across batches and uncertain replies. Insert new events between chunks and after a later independent clear; replay the old pair and verify new arrivals survive, all eligible rows drain and canonical storage refunds. Filter before paging; concurrent appends must not starve retained cursor traversal. Check normal event deletion and explicitly scoped export.
+
+- [ ] Native diagnostic replay preserves exact IDs and bytes across offline restart; old owner/origin/device callbacks and acknowledgments cannot affect a replacement pairing. Confirm capture opt-out persists, foreground can re-enable, a rejected event does not block later events, and 429 Retry-After survives foreground, network recovery and relaunch. Logging failure must never fail sync or request its own background lease.
+- [ ] Discard only the metadata index of a fully acknowledged Photos backup, then reopen normally. The same run must detect discard, rotate only metadata, rebuild resource/publication proofs after its saved retry, and preserve every file ID, revision, full hash, byte epoch and consumed payload budget. No new owner discard or Retry tap is allowed during recovery.
 ## Relational access and growing authorization collections
 
 - Prepare more than 64 task Characters against the same private workspace,

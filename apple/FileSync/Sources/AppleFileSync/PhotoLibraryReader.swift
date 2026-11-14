@@ -566,6 +566,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         try queueStore(scope: scope, request: request).rotateSourceIndex()
     }
+    public func checkpointAcknowledgedQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        try queueStore(scope: scope, request: request).checkpointAcknowledgedSourceIndex()
+    }
     public func pendingQueueSourceIndex(scope: Scope, request: PhotoBackupQueueRequest) throws -> PhotoSourceIndexPage? {
         lock.lock(); defer { lock.unlock() }
         return try queueStore(scope: scope, request: request).pendingSourceIndex()

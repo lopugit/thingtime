@@ -14,8 +14,16 @@ import { authCookie } from '../app/api/utils/auth/authCookie';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import { canonicalDevicePairingClaimBytes } from '../app/api/utils/devices/deviceAuth';
 import { contentPartPlan } from '../app/fileSync/contentFingerprint';
+import { scrubErrorLogText } from '../app/api/utils/errors/errorLogs';
 
 assert.equal(process.argv.length, 2, 'Run this fixture without arguments');
+const timeoutOverride = process.env.THINGTIME_TRANSFER_FIXTURE_TIMEOUT_MS;
+const timeoutMillis = (fallback: number) => {
+	if (timeoutOverride === undefined) return fallback;
+	const value = Number(timeoutOverride);
+	assert.ok(Number.isSafeInteger(value) && value > 0, 'Fixture timeout must be a positive integer in milliseconds');
+	return value;
+};
 await access('.output/server/index.mjs');
 const directory = await mkdtemp(join(tmpdir(), 'thingtime-transfer-admissions-'));
 await chmod(directory, 0o700);
@@ -50,7 +58,13 @@ const serverEnv = {
 };
 const children = new Set<ChildProcess>();
 const start = (command: string, args: string[], env: SpawnOptions['env'] = clean) => {
-	const child = spawn(command, args, { env, stdio: 'ignore' });
+	const child = spawn(command, args, { env, stdio: process.env.THINGTIME_TRANSFER_FIXTURE_DIAGNOSTICS ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
+    child.stderr?.on('data', data => {
+        // Optional isolated-fixture failure evidence, with both generated test
+        // credentials and the canonical text redactor applied before output.
+        const safe = String(data).split(secret).join('[redacted]').split(password).join('[redacted]');
+        process.stderr.write(scrubErrorLogText(safe));
+    });
 	children.add(child);
 	child.once('close', () => children.delete(child));
 	return child;
@@ -75,12 +89,12 @@ const abort = () => {
 process.once('SIGTERM', abort);
 process.once('SIGINT', abort);
 async function until(check: () => Promise<boolean>, label: string) {
-	const deadline = Date.now() + 20_000;
+	const timeout = timeoutMillis(20_000), deadline = Date.now() + timeout;
 	while (Date.now() < deadline) {
 		if (await check()) return;
 		await delay(100);
 	}
-	assert.fail(label + ' did not become ready');
+	assert.fail(label + ' did not become ready within ' + timeout + 'ms');
 }
 async function startApi(admin = false) {
 	const child = start(process.execPath, ['.output/server/index.mjs'], { ...serverEnv, ...(admin ? { ADMIN_USERNAMES: adminName } : {}) });
@@ -101,7 +115,7 @@ async function call(path: string, body?: unknown, options: Options = {}) {
 	const response = await fetch(origin + path, {
 		method: options.method ?? (body === undefined ? 'GET' : 'POST'),
 		redirect: 'error',
-		signal: AbortSignal.timeout(30_000),
+		signal: AbortSignal.timeout(timeoutMillis(30_000)),
 		headers: {
 			...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
 			...(options.cookie ? { Cookie: options.cookie, Origin: origin } : {}),
@@ -192,7 +206,7 @@ try {
 		'--eval',
 		`rs.initiate({_id:'sync-transfer-admissions',members:[{_id:0,host:'127.0.0.1:${db.port}'}]});while(!db.hello().isWritablePrimary){sleep(100)}`
 	]);
-	const bootstrapTimer = setTimeout(() => shell.kill('SIGTERM'), 30_000);
+	const bootstrapTimer = setTimeout(() => shell.kill('SIGTERM'), timeoutMillis(30_000));
 	try {
 		assert.equal((await once(shell, 'close'))[0], 0, 'Replica bootstrap');
 	} finally {

@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class MobileDeviceNodeTransport {
     enum Failure: Error { case http(Int, String?) }
+    private(set) var retryAfter: Date?
     private let load: (MobileDevicePairing.Scope) throws -> MobileDevicePairing.Record?
     private let save: (MobileDevicePairing.Record) throws -> Void
     private let transport: MobileDevicePairing.Transport
@@ -30,6 +31,7 @@ final class MobileDeviceNodeTransport {
     }
     func request(_ scope: MobileDevicePairing.Scope, _ path: String, body: Data? = nil,
                          check: () throws -> Void) async throws -> [String: Any] {
+        retryAfter = nil
         try check(); try Task.checkCancellation()
         guard var record = try load(scope), record.scope == scope, !record.revoked, record.deviceId != nil else { throw MobileDevicePairing.Failure.revoked }
         let url = URL(string: path, relativeTo: scope.origin)!.absoluteURL
@@ -46,6 +48,7 @@ final class MobileDeviceNodeTransport {
         let (data, response) = try await transport(request)
         try check(); try Task.checkCancellation()
         guard let actual = response.url, LopuVoiceContract.sameOrigin(actual, scope.origin) else { throw MobileDevicePairing.Failure.destination }
+        if response.statusCode == 429 { retryAfter = Self.retryDate(response.value(forHTTPHeaderField: "Retry-After")) }
         if response.statusCode == 401 {
             record.revoked = true; try save(record)
             throw MobileDevicePairing.Failure.revoked
@@ -56,6 +59,21 @@ final class MobileDeviceNodeTransport {
         }
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any], result["ok"] as? Bool != false else { throw MobileDevicePairing.Failure.invalid }
         return result
+    }
+
+    static func retryDate(_ header: String?, now: Date = Date()) -> Date? {
+        guard let header else { return nil }
+        let value = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.range(of: #"^\d+$"#, options: .regularExpression) != nil,
+           let seconds = TimeInterval(value), seconds.isFinite {
+            let date = now.addingTimeInterval(seconds)
+            return date.timeIntervalSince1970.isFinite ? date : nil
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"; formatter.isLenient = false
+        guard let date = formatter.date(from: value), date > now else { return nil }
+        return date
     }
 
     func negotiate(_ requirements: [String: [Int]], scope: MobileDevicePairing.Scope, check: () throws -> Void) async throws {

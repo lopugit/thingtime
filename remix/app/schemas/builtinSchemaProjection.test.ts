@@ -25,6 +25,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'backup-job-event': [],
   'sync-source-index': [], // Private discovery metadata is written only by the approved sync-run endpoint.
   'sync-source-observation': [],
+  'device-diagnostic': [],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
