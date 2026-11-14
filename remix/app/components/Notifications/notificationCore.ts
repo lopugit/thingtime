@@ -40,6 +40,8 @@ export type NotificationItem = {
 
 export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; label: string; hint: string }> = {
   'device-alert': {emoji:'🔔',label:'Device alert',hint:'A message sent to one of your paired devices.'},
+  'chat-message': { emoji: '💬', label: 'Chat messages', hint: 'New private chat messages; message content stays in the conversation — email is opt-in' },
+  'chat-request': { emoji: '💬', label: 'Message requests', hint: 'A new private message request — email is opt-in' },
   'friend-request': { emoji: '🤝', label: 'Friend requests', hint: 'Someone asks to be your friend' },
   'friend-accepted': { emoji: '💚', label: 'Request accepted', hint: 'A friend request you sent is accepted' },
   'new-follower': { emoji: '👀', label: 'New followers', hint: 'Someone starts following you' },
@@ -91,6 +93,10 @@ export const isSystemNotification = (item: Pick<NotificationItem, 'type' | 'cate
 
 export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'>): string => {
   switch (item.type) {
+    case 'chat-message':
+      return 'sent you a message';
+    case 'chat-request':
+      return 'sent you a message request';
     case 'friend-request':
       return 'sent you a friend request';
     case 'friend-accepted':

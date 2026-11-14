@@ -160,6 +160,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-13: Save private Messenger message/request notifications in canonical
+  bell/history with Character attribution, content-free previews, muted-history
+  handling, retry deduplication and bounded post-commit delivery. **Codex (AI)**
+
 - 2026-11-14: Forward explicit incumbent and original-artifact inputs to the protected preview controller for safe runtime credential refreshes.
 
 - 2026-11-14: Initialize the PDF worker on the executed loading path so production tree shaking retains it. Build verification and a real-worker browser regression now cover emitted Vite chunks under production CSP. **Codex (AI)**

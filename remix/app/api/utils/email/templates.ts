@@ -99,6 +99,14 @@ export type NotificationEmailInput = {
 };
 
 const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => string; line: (actor: string) => string }> = {
+  'chat-message': {
+    subject: actor => `${actor} sent you a message on Thingtime`,
+    line: actor => `${actor} sent you a private message. Open Thingtime to read it.`
+  },
+  'chat-request': {
+    subject: actor => `${actor} sent you a message request on Thingtime`,
+    line: actor => `${actor} sent you a private message request. Open Thingtime to review it.`
+  },
   'friend-request': {
     subject: (actor) => `${actor} wants to be your friend on Thingtime 🤝`,
     line: (actor) => `${actor} sent you a friend request.`
