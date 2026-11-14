@@ -16575,6 +16575,8 @@ including loading/retry, selection preservation and bottom-of-page controls.
 
 ## File media and in-app PDF regression — 2026-11-13
 
+- After `pnpm --dir remix run build:client`, run `pnpm --dir remix run test:file-media:production-build`: the actual Vite chunks must retain the called PDF worker initializer and render a synthetic PDF using the real self-hosted module worker under production CSP. Source/esbuild-only fixtures cannot establish bundler initialization.
+
 - Run `pnpm --dir remix run test:file-media` and the shared-media unit tests.
 - In Names and Previews grid modes, open a synced PNG/JPEG and video: thumbnails
   must use the bound original bytes; detail and quick look must show media, with

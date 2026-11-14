@@ -62,7 +62,8 @@ function PdfDocumentSession({ attachment, url, actorId, characterId, plane, expe
     };
     void (async () => {
       await requireThingtimeCapability('api.attachment-content', '1.14.0');
-      const [{ pdfjs }, metadata] = await Promise.all([import('./pdfRuntime.client'), request({ fingerprint: '1' }).then(r => r.json())]);
+      const [{ getPdfRuntime }, metadata] = await Promise.all([import('./pdfRuntime.client'), request({ fingerprint: '1' }).then(r => r.json())]);
+      const pdfjs = getPdfRuntime();
       const version = metadata.version, size = metadata.size;
       if (!/^[a-f0-9]{64}$/.test(version) || !Number.isSafeInteger(size) || size !== attachment.size || (expectedVersion && version !== expectedVersion)) throw Error('PDF version changed');
       const read = async (begin: number, end: number) => {

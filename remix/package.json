@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "node scripts/ensure-dependencies.js && npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && node scripts/package-claude-oauth.mjs && npm run patch:vercel-output && npm run verify:vercel-output",
-    "build:client": "node scripts/ensure-dependencies.js && node scripts/ensure-mapbox-assets.mjs && node scripts/ensure-pdf-assets.mjs && npm run build:password-extension && vite build && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
+    "build:client": "node scripts/ensure-dependencies.js && node scripts/ensure-mapbox-assets.mjs && node scripts/ensure-pdf-assets.mjs && npm run build:password-extension && vite build && node scripts/verify-pdf-runtime-build.mjs && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
     "build:password-extension": "node scripts/build-password-extension.mjs",
     "test:password-extension": "node --test ../browser-extension/test/*.test.mjs",
     "build:library": "vite build --config vite.library.config.ts",
@@ -228,7 +228,8 @@
     "test:thing-storage:integration": "node scripts/test-thing-metadata.mjs --storage-policy",
     "test:thing-storage:browser": "node scripts/test-thing-metadata.mjs --storage-browser",
     "test:file-media": "node --import tsx --test app/components/Things/fileMediaPresentation.test.ts app/components/Attachments/pdfPresentation.test.ts && node scripts/file-media.browser.mjs",
-    "test:file-media:built": "node scripts/smoke-built-file-media.mjs"
+    "test:file-media:built": "node scripts/smoke-built-file-media.mjs",
+    "test:file-media:production-build": "node scripts/file-media-built.browser.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",
