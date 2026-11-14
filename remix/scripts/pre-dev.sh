@@ -55,3 +55,6 @@ else
 		echo "$env_marker"
 	} >> .env
 fi
+
+# Self-host PDF.js font/decoder assets for the document viewer.
+node "$(dirname "$0")/ensure-pdf-assets.mjs"

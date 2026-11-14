@@ -1,3 +1,4 @@
+import { usesPdfBlocks, PDF_BUILDER_REQUIREMENTS } from '../components/Attachments/pdfControlContract';
 import { requireAuthoredCollectionCapability, usesExpandedAuthoredCollections } from '~/utils/authoredCollectionCapabilities';
 import { requireAccountCollectionCapability, requireSubspaceCollectionCapability } from '~/utils/relationalCollectionsCapabilities';
 
@@ -1473,6 +1474,7 @@ export function useApi() {
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
@@ -1574,6 +1576,7 @@ export function useApi() {
           if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           return asyncFetcher.submit(
             {
@@ -1611,6 +1614,7 @@ export function useApi() {
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');

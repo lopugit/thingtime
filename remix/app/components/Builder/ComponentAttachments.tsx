@@ -91,9 +91,8 @@ function AttachmentField({
 	);
 }
 
-export function ComponentMedia({ attachments, postId }: { attachments?: unknown; postId?: unknown }) {
+export function ComponentMedia({ attachments, postId, contentVersion }: { attachments?: unknown; postId?: unknown; contentVersion?: unknown }) {
 	if (!Array.isArray(attachments)) return null;
-	if (attachments.length > 50) return <p role="alert">Page the media source to display at most 50 attachments at a time.</p>;
 	const list = attachments.map(normalizePublicAttachment).filter((item): item is NonNullable<typeof item> => !!item);
-	return <PostAttachments attachments={list} postId={typeof postId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(postId) ? postId : undefined} />;
+	return <PostAttachments attachments={list} contentVersion={typeof contentVersion === 'string' ? contentVersion : undefined} postId={typeof postId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(postId) ? postId : undefined} />;
 }
