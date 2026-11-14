@@ -899,3 +899,28 @@ No arguments, URLs, provider responses, error messages or credentials are added
 to these timing records. Existing retries, deadlines, gates and stage order are
 unchanged; collect evidence from the next normally scheduled rollout rather than
 dispatching another deployment for diagnostics.
+
+### Refresh a retained preview runtime environment
+
+Changing Vercel's automation default does not update deployed runtime values.
+Vercel's `redeploy` operation also retains a prebuilt deployment's old settings.
+Use the default-branch Develop S3 PR preview dispatcher with
+`refresh_deployment_id` set to the exact current incumbent. To reuse a bundle,
+set `refresh_artifact_run_id` to its original successful controller run. Both
+the unexpired bundle and protected upload receipt must match that deployment,
+PR, current head and source. The controller makes a fresh `deploy --prebuilt`
+publication; it explicitly delivers the sole current automation default through
+the child process environment and the name-only runtime `--env` option. No
+credential values enter arguments, receipts or metadata. Platform rejection of
+the override fails publication rather than claiming rotation acceptance.
+
+An empty artifact run ID rebuilds the same current source on GitHub. Reviewed
+retained-source maintenance requires its existing pinned manifest inputs and
+must retain the exact canonical manifest/tree/patch receipt, or use the rebuild path; it never substitutes the PR's newer feature head.
+Owners, production, changed heads, forks, missing receipts and changed alias
+bindings are refused. The existing protected-alias restore, smoke, current-head
+and rollback gates still apply. Concurrent replacement of the incumbent aborts
+the refresh. Dispatch one canary first and verify its new deployment identity,
+refresh provenance and real proxied operation before a bounded rollout.
+Keep the old credential only for that finite rollout; revoke it after every
+active consumer is freshly published or retired through normal retention.

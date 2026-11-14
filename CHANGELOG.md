@@ -1,3 +1,10 @@
+## 2026-11-14 — Fresh preview runtime environment publication
+
+- Add an explicit incumbent-bound manual refresh that reuses an exact successful
+  GitHub bundle and protected receipt, or rebuilds the same pinned source.
+- Deliver the current project automation default only through protected runtime
+  environment injection; retain current-head, alias rollback and source gates.
+
 # Control-plane changelog
 
 ## 2026-11-14 — Avoid unrelated PR preview detail reads
