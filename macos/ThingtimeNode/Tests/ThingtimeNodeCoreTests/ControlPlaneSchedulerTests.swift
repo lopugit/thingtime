@@ -220,7 +220,17 @@ final class ControlPlaneSchedulerTests: XCTestCase {
             hooks: .init(
                 makeHeartbeat: { self.heartbeat(at: now) },
                 dispatchCommand: { leased in
-                    try? await Task.sleep(for: .milliseconds(35))
+                    // Keep dispatch active until the failed renewal cancels it;
+                    // elapsed wall time does not prove that the heartbeat ran.
+                    do {
+                        try await Task.sleep(for: .seconds(5))
+                        XCTFail("The failed lease heartbeat did not cancel dispatch.")
+                    } catch is CancellationError {
+                        // A successful dispatch result must still be uncertain
+                        // when the scheduler lost its lease during execution.
+                    } catch {
+                        XCTFail("Unexpected dispatch wait error: \(error)")
+                    }
                     return .success(id: leased.leaseID, result: .bool(true))
                 }
             ),
@@ -229,6 +239,9 @@ final class ControlPlaneSchedulerTests: XCTestCase {
 
         try await scheduler.runOnce(now: now)
         let reports = await client.reports
+        let heartbeatCount = await client.leaseHeartbeatCount
+        XCTAssertEqual(heartbeatCount, 1)
+        XCTAssertEqual(reports.count, 1)
         let report = try XCTUnwrap(reports.first)
         XCTAssertEqual(report.status, .uncertain)
         XCTAssertEqual(report.response.error?.code, ThingtimeNodeError.commandOutcomeUncertain.code)
