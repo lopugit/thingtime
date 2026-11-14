@@ -159,6 +159,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-14: Integrate relational ACL changes with the media/PDF viewer; publish Things 1.67.0 for PDF blocks above the ACL contract and verify desktop/mobile rendering and compiled discovery. See [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 - 2026-11-14: Classify exact URL-bound Vercel SSO challenges in frontend and
   remote service health as authentication required, including custom preview
   aliases, without following redirects or forwarding credentials. **Codex (AI)**
@@ -203,6 +205,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [relational access](../docs/relational-access.md) and
   [PR #1497](../PRs/1497-codex-relational-acl-no-limits-store-growing-acls-and-collection-settings-relationally.md).
 
+- 2026-11-14: Verify the media/PDF viewer after integrating parent-path pins, gateway protection and bounded capability revalidation. Preserve both contracts and regression suites; see [PR 1496](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
+
+- 2026-11-13: Keep protected environment gateway discovery and relays on the configured origin with a server-only Vercel automation bypass; strip caller bypass headers and retain same-origin browser capability cookies. **Codex (AI)**
+
+- 2026-11-13: Restore synced-file thumbnails in Names/Previews and real media in detail/quick look. Add an in-app PDF reader with page, zoom, text and download controls using authorized exact-version ranges and self-hosted PDF.js assets. See [PR 1496 validation and boundaries](../PRs/1496-file-media-pdf-viewer-render-synced-file-media-and-open-pdfs.md). **Codex (AI)**
 - 2026-11-13: Forward pinned, reviewed main release artifacts for retained-preview
   protection maintenance through the trusted manual controller path. Preserve
   exact-current-head ordinary builds and distinguish retained source/tree from

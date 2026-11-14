@@ -488,3 +488,30 @@ test('same-origin active API discovery retains platform cookies while foreign an
   }
 
 });
+
+test('same-origin active discovery keeps protection cookies while scoped discovery omits them', async t => {
+  const calls: string[] = [];
+  const mock = t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push(String(url));
+    assert.equal(init?.redirect, 'error');
+    assert.equal(init?.credentials, calls.length === 1 ? 'same-origin' : 'omit');
+    assert.equal(new Headers(init?.headers).has('x-vercel-protection-bypass'), false);
+    return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } });
+  });
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0');
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://selected.test');
+  assert.equal(calls.length, 2);
+  const aborted = new AbortController(); aborted.abort();
+  let customCalls = 0;
+  const transport = { fetch: (async () => { customCalls++; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
+    currentOrigin: () => 'https://thingtime.test', signal: aborted.signal };
+  await assert.rejects(createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://thingtime.test', transport));
+  assert.equal(customCalls, 0, 'aborted scoped transport cannot perform discovery');
+  mock.mock.restore();
+  let scopedCredentials: RequestCredentials | undefined;
+  await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', 'https://thingtime.test', {
+    fetch: (async (_url, init) => { scopedCredentials = init?.credentials; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
+    currentOrigin: () => 'https://thingtime.test'
+  });
+  assert.equal(scopedCredentials, 'omit');
+});

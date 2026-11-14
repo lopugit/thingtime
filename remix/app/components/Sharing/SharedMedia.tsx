@@ -1,3 +1,5 @@
+import { useCharacterScope } from '../Characters/CharacterScope';
+import { characterAttachmentUrl } from './sharedMediaCore';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { sharedAttachmentUrl, sharedThingPath } from './sharedMediaCore';
@@ -15,6 +17,7 @@ export const useSharedThingPath = () => {
 export const useSharedMediaUrl = () => React.useContext(SharedMediaContext);
 export const SharedMediaProvider = ({ linkKey, sharedRoot, children, inheritContext = true }: { linkKey?: string; sharedRoot?: string; children: React.ReactNode; inheritContext?: boolean }) => {
 	const parent = React.useContext(SharedLinkContext);
+	const character = useCharacterScope();
 	linkKey = linkKey || (inheritContext ? parent.linkKey : undefined);
 	sharedRoot = sharedRoot || (inheritContext ? parent.sharedRoot : undefined);
 	const contextKey = JSON.stringify([linkKey || '', sharedRoot || '']);
@@ -31,7 +34,7 @@ export const SharedMediaProvider = ({ linkKey, sharedRoot, children, inheritCont
 	}, [linkKey, sharedRoot, contextKey]);
 	const mediaUrl = React.useCallback((url: string) => {
 		const authorized = sharedAttachmentUrl(url, linkKey, sharedRoot);
-		return authorized !== url && readyKey !== contextKey ? '' : authorized;
-	}, [linkKey, sharedRoot, readyKey, contextKey]);
+		return authorized !== url && readyKey !== contextKey ? '' : characterAttachmentUrl(authorized, character?.id);
+	}, [linkKey, sharedRoot, readyKey, contextKey, character?.id]);
 	return <SharedLinkContext.Provider value={{ linkKey, sharedRoot }}><SharedMediaContext.Provider value={mediaUrl}>{children}{(linkKey || sharedRoot) && failure === contextKey ? <p role="alert">Shared media requires a newer server. Please refresh after the update.</p> : null}</SharedMediaContext.Provider></SharedLinkContext.Provider>;
 };

@@ -16565,6 +16565,30 @@ including loading/retry, selection preservation and bottom-of-page controls.
   synthetic HTTP/native data; keep their evidence separate from deployed data
   and physical LiDAR acceptance.
 
+## File media and in-app PDF regression — 2026-11-13
+
+- Run `pnpm --dir remix run test:file-media` and the shared-media unit tests.
+- In Names and Previews grid modes, open a synced PNG/JPEG and video: thumbnails
+  must use the bound original bytes; detail and quick look must show media, with
+  no duplicate raw data preview. Explicit custom render Components still win.
+- Open a canonical PDF and an older octet-stream attachment detected as PDF.
+  At desktop and iPhone widths, navigate next/previous, enter a page number,
+  zoom, Fit width, open page text, Download and scroll to the bottom. Controls
+  remain reachable with visible keyboard focus and no page-level overflow.
+- Refused/missing bytes, stale versions and malformed PDFs show one inline
+  error with Retry/Download. Account, Character, origin and file-version changes
+  must destroy old render/read tasks; no prior private canvas may survive.
+- Verify the actual deployed user file against its canonical attachment page.
+  Synthetic browser fixtures prove component/PDF behavior, not live ACL/storage
+  access. Verify self-hosted worker/CMap/font/WASM assets in the build output.
+
+- Select a PDF toolbar button and page field independently in the Builder,
+  edit the label/style, save/reload and verify page navigation still works.
+  The isolated fixture exercises the actual element renderer and selection
+  callbacks with browser-local saved blocks, distinct from real API persistence.
+- A PDF larger than the initial 256 KiB chunk must request later pinned ranges;
+  verify Character headers/query selectors, exact ETags and refusal/retry.
+
 ### Commander Rust stdin pipe recovery — 2026-11-13
 
 - Run Commander daemon search and filesystem-indexer regressions. Close a real worker's stdin while it remains
