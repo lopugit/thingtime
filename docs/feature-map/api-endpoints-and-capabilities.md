@@ -819,11 +819,16 @@ OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
 ### Branch health diagnostics
 
-Health frontend 1.0.1, MongoDB 1.0.3, Nitro 1.3.1 and Vercel 1.0.1 preserve
+Health frontend 1.0.2, MongoDB 1.0.4, Nitro 1.3.2 and Vercel 1.0.2 preserve
 the selected Branch target. `health/statusTarget.ts` checks anonymously, rejects
 redirects and bounds headers, bodies and legacy fallback by one 3.5s deadline.
-Only an observed 401/403 from the exact platform-generated branch/deployment
-origin gets the redacted authentication-required label. No bypass credential is
+An observed 401/403 from the exact platform-generated branch/deployment
+origin gets the redacted authentication-required label. An HTTP 302 to the literal
+`https://vercel.com/sso-api` with exactly one full matching `url` and one nonempty
+`nonce` also qualifies on a resolver-allowed first-party or configured target.
+This covers custom preview aliases without status-origin overrides. Unconfigured
+arbitrary vercel.app targets, foreign endpoints, extra/duplicate parameters and
+unbound URLs remain unavailable. The challenge is never followed or returned. No bypass credential is
 sent, so public diagnostics cannot grant access to protected previews.
 Run `test:api-capabilities` and verify the footer at desktop/mobile widths.
 

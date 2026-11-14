@@ -546,7 +546,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.health-nitro'], '1.3.1');
+	assert.equal(manifest.features['api.health-nitro'], '1.3.2');
 	assert.equal(manifest.features['api.lopu-recordings-run'], '1.6.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
@@ -554,7 +554,7 @@ test('storage-aware health and the corrected email environment gate publish thei
 test('pooled MongoDB diagnostics publish compatible patches in both manifests', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
 	for (const [feature, version] of [
-		['api.health-mongodb', '1.0.3'],
+		['api.health-mongodb', '1.0.4'],
 		['api.mongodb-status', '1.0.1'],
 		['api.mongodb-status-data', '1.0.1']
 	] as const) {
@@ -739,7 +739,7 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
 test('agent testing and task installation negotiate their additive contracts', () => {
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
-    ['api.health-nitro', '1.3.1', '1.2.0'],
+    ['api.health-nitro', '1.3.2', '1.2.0'],
     ['api.lopu-recordings-run', '1.6.0', '1.5.0'],
     ['api.webpages-suites-install', '1.6.0', '1.4.0']
   ]) {
@@ -1321,7 +1321,7 @@ test('private path pins register both manifests and reject missing or incompatib
 test('health protection diagnostics use compatible corrective versions on both manifests', () => {
   const docs = createApiCapabilitiesManifest(Object.keys(routeModules));
   const runtime = thingtimeCapabilityManifest('https://health.test');
-  for (const [feature, version] of Object.entries({ 'api.health-frontend': '1.0.1', 'api.health-mongodb': '1.0.3', 'api.health-nitro': '1.3.1', 'api.health-vercel': '1.0.1' })) {
+  for (const [feature, version] of Object.entries({ 'api.health-frontend': '1.0.2', 'api.health-mongodb': '1.0.4', 'api.health-nitro': '1.3.2', 'api.health-vercel': '1.0.2' })) {
     assert.equal(docs.features[feature], version);
     assert.equal(runtime.features[feature].version, version);
 
