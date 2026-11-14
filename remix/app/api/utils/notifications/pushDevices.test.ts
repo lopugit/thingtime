@@ -103,3 +103,14 @@ test('canonical targeting binds the exact device and container cache while ordin
  assert.equal(targeted.$set.crystal.canonicalDeviceId,'canonical-device');assert.equal(targeted.$set.crystal.cacheGeneration,'installation-cache');
  const ordinary=pushDeviceUpsert('next-owner','web-session',result,new Date());assert.equal('canonicalDeviceId' in ordinary.$set.crystal,false);assert.equal('cacheGeneration' in ordinary.$set.crystal,false);
 });
+
+
+test('private chat pushes preserve the Character and open the conversation or request inbox without message content', () => {
+  for (const type of ['chat-message', 'chat-request'] as const) {
+    const href = type === 'chat-request' ? '/messages?view=requests' : '/messages?chat=chat-id';
+    const payload = buildApnsPayload({ notificationId: 'notice', recipientId: 'owner', type,
+      actor: { id: 'character', username: 'watchdog', displayName: 'Watchdog' }, href });
+    assert.equal(payload.url, href); assert.equal(payload.aps.alert.body, undefined);
+    assert.match(payload.aps.alert.title, /^Watchdog sent you a message/);
+  }
+});
