@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher } from './preview-environment-refresh.mjs';
+import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher, reconcilePublicationRetention } from './preview-environment-refresh.mjs';
 import { timePublicationStage } from './preview-publication-timing.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { maintenanceRequest, loadMaintenance, assertMaintenanceHead, assertMaintenanceIncumbent, maintenanceBindingState, maintenanceGithubDeploymentMatches, getOrCreateMaintenanceDeployment, maintenanceMetadata, maintenanceMetadataIssue, maintenancePinFromDeployment, preserveMaintenanceAlias, assertMaintenanceReceipt } from './preview-maintenance.mjs';
@@ -2642,8 +2642,16 @@ const deploy = async (config, pullRequest) => {
 				dashboard,
 				note: 'The alias passed the develop bucket CORS preflight and a final live PR/SHA fence.'
 			});
-		const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
-		await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
+		const retention = await reconcilePublicationRetention({
+			refresh: config.refresh, repository: config.repository,
+			readCurrent: async () => ({ pullRequest: await assertCurrentPullRequest(config, snapshot, config.actor),
+				policy: config.retentionPolicy, currentHeadVerified: true }),
+			cleanup: async () => {
+				const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
+				await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
+			}
+		});
+		if (retention.skipped) console.log('Retention sweep not needed: verified current open refresh and policy preserves open versions.');
 		if (!config.maintenance) await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
 		console.log(`PR preview ready for PR #${pullRequest.number}: ${aliasUrl}`);
 	} catch (error) {

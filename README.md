@@ -924,3 +924,14 @@ the refresh. Dispatch one canary first and verify its new deployment identity,
 refresh provenance and real proxied operation before a bounded rollout.
 Keep the old credential only for that finite rollout; revoke it after every
 active consumer is freshly published or retired through normal retention.
+
+Ordinary receipts created before retained-source maintenance omitted the
+authorization head. Refresh accepts that absence only when the protected receipt's
+source is independently the exact current ordinary PR head. Explicit null or
+mismatched heads and maintenance receipts still require their original proof.
+
+An exact-source refresh avoids a redundant retention sweep only after the
+canonical current-head/trust/liveness check refreshes the policy and proves an
+open, non-draft same-repository PR, with pruning explicitly false and inactive
+expiry explicitly null. Any changed or uncertain predicate retains the full
+sweep. Normal publication and closed-PR cleanup are unchanged.
