@@ -914,6 +914,13 @@ the child process environment and the name-only runtime `--env` option. No
 credential values enter arguments, receipts or metadata. Platform rejection of
 the override fails publication rather than claiming rotation acceptance.
 
+Cross-run bundle and receipt downloads use the same protected-controller
+credential as their metadata verification (`CONFLICT_RESOLVER_PAT`, falling back
+to `github.token`). This adds no credential or permission. Installation-token
+quota exhaustion fails before publication; it must not weaken receipt checks.
+A failed-job rerun retains its reusable workflow revision, so a workflow change
+requires a fresh canary dispatch or an explicitly reconciled all-jobs rerun.
+
 An empty artifact run ID rebuilds the same current source on GitHub. Reviewed
 retained-source maintenance requires its existing pinned manifest inputs and
 must retain the exact canonical manifest/tree/patch receipt, or use the rebuild path; it never substitutes the PR's newer feature head.

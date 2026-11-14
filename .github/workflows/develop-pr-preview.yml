@@ -318,7 +318,7 @@ jobs:
         with:
           name: develop-preview-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.pr_number }}
           run-id: ${{ inputs.refresh_artifact_run_id }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           path: ${{ runner.temp }}/prebuilt-artifact
 
       - name: Download protected original upload receipt
@@ -327,7 +327,7 @@ jobs:
         with:
           name: pr-preview-receipt-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.refresh_run_attempt }}
           run-id: ${{ inputs.refresh_artifact_run_id }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           path: ${{ runner.temp }}/refresh-receipt
 
       - name: Validate and extract untrusted preview bundle
