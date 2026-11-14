@@ -379,3 +379,112 @@ test('same-origin active discovery keeps protection cookies while scoped discove
   });
   assert.equal(scopedCredentials, 'omit');
 });
+
+test('a completed manifest outlives its request deadline and has a deliberate freshness bound', async t => {
+  let time = 1;
+  const deadlines: AbortController[] = [];
+  t.mock.method(AbortSignal, 'timeout', () => {
+    const controller = new AbortController(); deadlines.push(controller); return controller.signal;
+  });
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => Response.json(manifest()));
+  const check = createThingtimeCapabilityChecker({ now: () => time });
+  await check('api.lopu-reminders', '1.1.0');
+  deadlines[0].abort(new DOMException('Old request timed out', 'TimeoutError'));
+  time += 30_000;
+  await check('api.lopu-reminders', '1.1.0');
+  assert.equal(fetchMock.mock.callCount(), 1, 'An expired request deadline cannot evict its completed value');
+  time += 30_000;
+  await check('api.lopu-reminders', '1.1.0');
+  assert.equal(fetchMock.mock.callCount(), 2, 'Public capabilities cannot remain cached indefinitely');
+});
+
+test('expired public manifests single-flight conditional revalidation and detect rollout changes', async t => {
+  let time = 1, calls = 0, etag = '"before"';
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    calls++;
+    assert.equal(init?.cache, 'no-store');
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get('If-None-Match'), calls === 1 ? null : '"before"');
+    if (calls === 2) return new Response(null, { status: 304 });
+    return Response.json(manifest(calls === 1 ? '1.1.0' : '2.0.0'), { headers: { ETag: etag } });
+  });
+  const check = createThingtimeCapabilityChecker({ now: () => time });
+  await check('api.lopu-reminders', '1.1.0');
+  time += 60_000;
+  await Promise.all(Array.from({ length: 12 }, () => check('api.lopu-reminders', '1.1.0')));
+  assert.equal(fetchMock.mock.callCount(), 2);
+  time += 60_000; etag = '"after"';
+  await assert.rejects(check('api.lopu-reminders', '1.1.0'), /incompatible/);
+});
+
+test('conditional validators never cross selected origins and unsolicited 304 fails closed', async t => {
+  let time = 1, calls = 0;
+  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    calls++;
+    assert.equal(new Headers(init?.headers).has('If-None-Match'), false);
+    return calls === 1 ? Response.json(manifest(), { headers: { ETag: '"first-origin"' } }) : new Response(null, { status: 304 });
+  });
+  const check = createThingtimeCapabilityChecker({ now: () => time });
+  await check('api.lopu-reminders', '1.1.0');
+  time += 60_000;
+  await assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://selected.test'), /unavailable/);
+});
+
+test('failed revalidation cannot reuse stale compatibility and an explicit retry fetches again', async t => {
+  let time = 1, calls = 0;
+  const mock = t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    calls++;
+    if (calls === 2) throw new TypeError('Network unavailable');
+    assert.equal(new Headers(init?.headers).has('If-None-Match'), false);
+    return Response.json(manifest(), { headers: { ETag: '"valid"' } });
+  });
+  const check = createThingtimeCapabilityChecker({ now: () => time });
+  await check('api.lopu-reminders', '1.1.0');
+  time += 60_000;
+  await assert.rejects(check('api.lopu-reminders', '1.1.0'), /Network unavailable/);
+  await check('api.lopu-reminders', '1.1.0');
+  assert.equal(mock.mock.callCount(), 3);
+});
+
+
+test('a completed scoped result survives later caller cancellation without relaxing the scope fence', async () => {
+  const caller = new AbortController();
+  let calls = 0;
+  const transport = {
+    currentOrigin: () => 'https://thingtime.test',
+    fetch: (async () => { calls++; return Response.json(manifest()); }) as typeof fetch
+  };
+  const check = createThingtimeCapabilityChecker();
+  await check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', { ...transport, signal: caller.signal });
+  caller.abort();
+  await assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', { ...transport, signal: caller.signal }), /abort/i);
+  await check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', transport);
+  assert.equal(calls, 1);
+  await assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', {
+    ...transport, currentOrigin: () => 'https://different.test'
+  }), /selected API server changed/);
+  assert.equal(calls, 1);
+});
+
+
+test('same-origin active API discovery retains platform cookies while foreign and scoped transports omit credentials', async t => {
+  for (const [expectedOrigin, customTransport, credentials] of [
+    ['https://thingtime.test', false, 'same-origin'],
+    ['https://selected.test', false, 'omit'],
+    ['https://thingtime.test', true, 'omit'],
+    ['https://selected.test', true, 'omit']
+  ] as const) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async (url, init) => {
+      assert.equal(String(url), expectedOrigin + '/api/v1/capabilities');
+      assert.equal(init?.credentials, credentials);
+      assert.equal(init?.redirect, 'error');
+      assert.equal(new Headers(init?.headers).has('x-vercel-protection-bypass'), false, 'A project secret must never be needed in browser discovery');
+      return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } });
+    });
+    const transport = customTransport ? { fetch: globalThis.fetch, currentOrigin: () => expectedOrigin } : undefined;
+    await createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0', expectedOrigin, transport);
+    assert.equal(fetchMock.mock.callCount(), 1);
+    fetchMock.mock.restore();
+  }
+
+});

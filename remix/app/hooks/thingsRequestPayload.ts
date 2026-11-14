@@ -34,7 +34,7 @@ export const buildThingCreateRequestPayload = (args: ThingRequestArgs): Record<s
 	// the first-class `richText` field beside their canonical text fallback.
 	return Array.isArray(thingtime)
 		? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId, ...(geo !== undefined ? { geo } : {}) }
-		: { type, text, richText, images, listing, thing, mediaLayout, title, subspaceId, flairId, acl, visibility, tags, attachmentIds, shareId, ...(geo !== undefined ? { geo } : {}) };
+		: { type, text, richText, images, listing, thing, mediaLayout, title, subspaceId, flairId, acl, visibility, tags, tokenAcl, attachmentIds, shareId, ...(geo !== undefined ? { geo } : {}) };
 };
 
 export const buildThingCommentRequestPayload = (args: ThingRequestArgs): Record<string, unknown> => {

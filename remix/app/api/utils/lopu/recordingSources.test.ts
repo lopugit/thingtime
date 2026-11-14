@@ -8,7 +8,7 @@ const saved = { shareId: 'audio-id', ownerId: 'owner', thingtime: ['attachment']
 test('only canonical owner-private ready standalone audio qualifies for explicit processing', () => {
 	assert.equal(isPrivateSavedRecording(saved, 'owner'), true);
 	for (const patch of [{ ownerId: 'other' }, { appId: 'app' }, { deletedAt: new Date() },
-		{ acl: ['tt:all'] }, { acl: ['tt:user', 'tt:all'] }, { acl: ['tt:inherit'] }, { targetId: 'post' }, { targetId: null },
+		{ acl: ['tt:all'] }, { aclGeneration: 'generation', aclEntryCount: 1 }, { aclGeneration: 'generation' }, { acl: ['tt:user', 'tt:all'] }, { acl: ['tt:inherit'] }, { targetId: 'post' }, { targetId: null },
 		{ thingtime: ['attachment', 'post'] }, { attachmentLinked: true }, { attachmentState: 'pending' },
 		{ attachmentState: 'deleting' }, { attachmentPurpose: 'message' }, { attachmentPurpose: 'post' },
 		{ crystal: { mediaKind: 'image' } }, { moderation: { status: 'blocked' } }])
@@ -22,4 +22,11 @@ test('standalone recording support does not expand automatic Watch discovery', (
 	assert.equal(isPrivateRecordingPost(watch, 'owner'), true);
 	for (const patch of [{ ownerId: 'other' }, { tags: [] }, { acl: ['tt:all'] }, { thingtime: ['post', 'comment'] }])
 		assert.equal(isPrivateRecordingPost({ ...watch, ...patch }, 'owner'), false);
+});
+
+test('relational owner baseline remains private only with valid fence and authoritative empty grants', () => {
+ const relational = { ...saved, acl: ['tt:user', '-tt:user'], aclBaseline: ['tt:user'], aclBaselineVersion: 1, aclGeneration: 'g', aclEntryCount: 0 };
+ assert.equal(isPrivateSavedRecording(relational, 'owner'), true);
+ for (const patch of [{ aclEntryCount: 1 }, { aclEntryCount: undefined }, { aclBaselineVersion: 2 }, { aclBaseline: ['tt:all'] }, { acl: ['tt:user'] }, { acl: undefined }])
+  assert.equal(isPrivateSavedRecording({ ...relational, ...patch }, 'owner'), false);
 });

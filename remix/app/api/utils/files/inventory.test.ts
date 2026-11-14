@@ -492,3 +492,14 @@ test('a queued observation retains its original deadline and leaves no slot or a
 	assert.equal(entered, 2); assert.equal(getEventListeners(queued.signal, 'abort').length, 0);
 	f.clock(0); assert.equal((await read('owner', 'root', 'fresh')).ok, true); assert.equal(entered, 3);
 });
+
+
+test('an owner-only baseline with relational grants is not a private sync destination', async () => {
+  for (const count of [1, undefined]) {
+    const current = { ...folder('root', null), aclGeneration: 'generation', aclEntryCount: count };
+    const f = fixture([current]);
+    const result = await f.read('owner', 'root');
+    assert.equal(result.ok, false);
+    assert.equal(result.ok === false && result.status, 409);
+  }
+});

@@ -6,6 +6,63 @@
 
 - [ ] Native diagnostic replay preserves exact IDs and bytes across offline restart; old owner/origin/device callbacks and acknowledgments cannot affect a replacement pairing. Confirm capture opt-out persists, foreground can re-enable, a rejected event does not block later events, and 429 Retry-After survives foreground, network recovery and relaunch. Logging failure must never fail sync or request its own background lease.
 - [ ] Discard only the metadata index of a fully acknowledged Photos backup, then reopen normally. The same run must detect discard, rotate only metadata, rebuild resource/publication proofs after its saved retry, and preserve every file ID, revision, full hash, byte epoch and consumed payload budget. No new owner discard or Retry tap is allowed during recovery.
+## Relational access and growing authorization collections
+
+- Prepare more than 64 task Characters against the same private workspace,
+  including overlapping preparation requests. Read all bindings back; no
+  earlier grant may disappear and no replacement Character may be created.
+- Interrupt preparation and resume the same task/workspace. Remove a completed
+  grant and verify resume refuses to restore it. Distinguish incomplete setup
+  from deliberately revoked access.
+- Race concurrent task preparation with a reference read while another grant
+  updates the ACL revision. A transient snapshot conflict must retry the read
+  against the same task; stable denial must stay denied.
+- Create a large custom ACL with grants, exclusions and read/comment/write
+  capabilities. Check direct reads, search/feed pagination and attachments as
+  owner, each permitted viewer, an excluded viewer, stranger and anonymous.
+  Concurrently replace/revoke while reading; stale generations must fail closed.
+- Page ACL entries while changing the ACL in another session; stale cursors
+  and expected revisions must conflict. Confirm ordinary content edits preserve
+  every grant and old clients still receive complete ACL arrays.
+- Round-trip large ACLs through Timeline, version restoration, copies and
+  backups. Protected authorization rows cannot be forged or independently
+  restored through generic Things CRUD.
+- Read a migrated public/custom Thing through an older runtime: nonowners must
+  be denied by its legacy audience fence, while the new runtime evaluates the
+  original grants and exclusions. Confirm old ordinary content edits retain
+  the fence; old explicit ACL replacements and stale sandbox writes must be
+  rejected by the database without changing any grant.
+- Hold an old runtime's write after its read, migrate through the new runtime,
+  then release it. Cover same-millisecond writes, a lagging clock and old
+  full-document conversion. Migration must strictly advance the timestamp;
+  no writer may restore the captured version or remove the relational fence.
+- Start with no installed validator, then exercise a saved Action that creates
+  a relational audience. Verify strict/error collection validation, preservation
+  of any existing validator and idempotent readiness. Denied `collMod` or failed
+  readback must refuse migration before content changes. An outer transaction
+  must preflight protection, never issue DDL inside that transaction.
+- Verify the timestamp floor cannot be authored through generic writes or
+  restored through backups, copies or Timeline. It must not appear in public
+  content; a same-name field inside the user's crystal remains ordinary data.
+- Create a relational root with the earlier pre-floor preview runtime. After
+  protection is installed, its content edits and dedicated touches must remain
+  usable; current ordinary edits add the floor atomically without losing grants
+  or changing logical-byte accounting. Absent legacy floors are accepted, but
+  null/invalid floors and raw ACL overwrites remain refused before and after
+  the upgrade.
+- Exceed former group/member, social and subspace-membership ceilings. Confirm
+  late memberships and bans participate in authorization and no list is silently
+  truncated. Preserve duplicate prevention and friend-request approval.
+- Exceed former owned-subspace and custom flair counts through create, transfer,
+  moderator editing and member selection. Reload the complete collections and
+  preserve authorization, ownership and storage accounting.
+- Issue an app session with more than 100 explicitly selected Things. Page the
+  consent picker and granted list, revoke/delete resources and revoke/expire
+  the session. Exact-resource reads and stranger sessions must remain fenced.
+
+Automated entry points and isolated HTTP acceptance are documented in
+[relational access](docs/relational-access.md). Production acceptance uses the
+same previously failed reporting task identity after the compatible deployment.
 
 ## Unified folder sync configs and deduplication
 
@@ -95,6 +152,19 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Verify another owner's Thing and a signed-out view never advertise owner editing; direct Builder editor links still enforce ownership. Ordinary Things, files and folders retain their existing navigation.
 - [ ] Exercise iconized Thing links and shared persisted-Thing menus outside the library. Confirm the authenticated viewer, rather than cached ownership or a Builder marker alone, determines the default editor link.
 - [ ] At desktop and narrow mobile widths, open menus near viewport edges, use keyboard focus/Enter/Escape and touch overflow controls, scroll top to bottom, and verify no clipping, horizontal overflow or obstructed menu actions. Edit, save and reload one representative Builder Thing through the opened editor.
+
+## Thing browser pins (2026-11-13)
+
+- [ ] Pin and unpin Things from both right-click and touch overflow menus. Verify private personal placement leaves the underlying Thing, its ACL and other users unchanged; include apps, folders, data, files and paired device cards.
+- [ ] Pin the same Thing in Things and Builder and under distinct parent paths. Reorder each independently and reload. Switching grid/list/columns, kind, search, group and sort must not create a new pin scope or reset saved order.
+- [ ] With an empty browser cache, load a path whose pins were saved independently through the API. The first mount must read and render them without a UI write, including React effect restart/cancellation; a cancelled read must not suppress its replacement.
+- [ ] Enter **Reorder pins** from an item and the background menu. Drag with mouse and touch, including moving the first pin to the end; use arrow keys/Home/End and Move earlier/later controls. Finish with **Done** and verify ordinary opening, selection and folder moves still work.
+- [ ] Verify each visible column reads and edits its own parent path. Filtered reorders preserve a hidden middle pin's slot; an older pinned item outside the first content page still appears after reload. Navigate to an otherwise empty parent with a pin already cached from another parent, then reload: the pin must appear both times. Pins remain ahead of ordinary sorted content without duplicates.
+- [ ] Select all and Shift-select across pinned and ordinary entries, including a filter where every visible entry is pinned. Compact columns retain readable labels and usable reorder controls.
+- [ ] Pin an owned archived protected item. Its safe metadata card survives pagination and reload without revealing source bodies, participants or media. Active protected items and another owner's archive are refused; restoring the item removes an ineligible protected pin from reads.
+- [ ] In two sessions, make conflicting pin changes. Verify revision fencing, refresh/retry, no lost pins and no duplicate records. Switch account/origin/data plane during delayed reads and saves; no prior identity's pin state may appear or be written.
+- [ ] Refuse anonymous or wrong-account pin reads/writes and private/deleted targets. Verify paginated reads and capability negotiation, including missing/breaking feature versions, without changing the target Thing's access.
+- [ ] At desktop and narrow mobile widths, open edge menus and reorder controls, scroll top to bottom, and verify no clipping, horizontal overflow, accidental navigation or scrolling blocked outside the drag handle. Preserve usable content during refresh and show one inline failure/retry state.
 
 ## Builder app browser (2026-10-28)
 
@@ -4157,7 +4227,7 @@ email whose link points at the attacker.
 - [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
       with emoji/label/color/mods-only, ids minted on save, ≤50; switches
       "Members pick their own flair" (default on) and "Members may type their
-      own text" (default off; ≤40 chars)); any moderator may save it. On
+      own text" (default off; no product text-length cap)); any moderator may save it. On
       `/s/<slug>` an active member sees the sidebar **Your flair** card:
       template pills (mod-only ones 🎩 only for mods; the active one shows ✓
       and clicking it again takes it off), a custom-text input when allowed,
@@ -4174,7 +4244,12 @@ email whose link points at the attacker.
       `member.ban` / `member.role` mod-log detail reads
       `userFlairCleared: true`). Renaming a template updates every wearer's
       chip — on the post page AND on a comment's own `/post/<commentId>`
-      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      drill-down; deleting one keeps their snapshot.
+      A custom flair longer than 700 characters saves and reloads in both the
+      member and moderator controls. On desktop and mobile, Feed, comments and
+      sidebar chips retain their full accessible text while showing one line
+      with an ellipsis; the page's pre-wrap descendants must not override the
+      chip's nowrap rule or make it taller than one line. Mod page → Members →
       **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
       ones / Custom text… + emoji / No flair; a worn template the mods
       deleted since opens as editable custom text with a "removed" hint;
@@ -4185,7 +4260,7 @@ email whose link points at the attacker.
       someone ELSE writes a `member.userFlair` mod-log entry. API walls:
       anonymous 401, a non-member setting their own 403, someone else's
       without a mod hat 403, unknown template 400, mod-only template as a
-      member 403, custom text while it is off 403 / over 40 chars 400,
+      member 403, custom text while it is off 403,
       self-assign off → a member's pick 403 but clearing still 200, a mod
       dressing a non-member 404 / a banned user 400. The fresh comment
       `POST /api/v1/things/comment` answers with already carries
@@ -5487,6 +5562,12 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] For `provision-relational-acl-validator`, confirm admin Dry run shows only
+      `granted`/`absent`/`unknown` effective home Things `collMod` authority, does
+      no DDL and discloses no principal, role, resource, command or raw error.
+      An authenticated root fixture grants, a read-only fixture lacks authority,
+      and unauthenticated/malformed/denied responses stay unknown. Installed
+      validator readiness must remain ready even when authority is absent.
 - [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
       call `/api/v1/health/nitro`: it reports `degraded` with
       `storageAccounting.state: "migration-required"` while any current user
@@ -5901,7 +5982,64 @@ halves.
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)
 
+## Request cost controls (13 November 2026)
+
+- [ ] A preview must return its local `robots.txt` exclusion with GET and a
+  body-free HEAD even when its configured gateway is older or unavailable.
+  The middleware must make no gateway request for crawler policy; production
+  keeps `Allow: /`, while data-backed sitemap and API routes remain admitted.
+- [ ] Run `test:marketing`, `test:api-capabilities`, `test:devices`,
+  `test:collections` and `test:environment-gateway` from `remix`; retain the
+  tested source revision. Unit/mocked checks do not establish live protection.
+- [ ] On desktop and narrow mobile, open the drawer and Admin → Marketing with
+  real publication data. Compare published/hidden entries with an independent
+  authorized API read. Exercise cold load, cached refresh, HTTP 503 with stale
+  data, unavailable cold data, Retry and a stalled response body. Keep usable
+  links/content visible with one inline status; stale data must not appear live
+  or become an empty success. Scroll both surfaces to the bottom and check
+  wrapping, focus, clipping and the opened drawer. Verify the read's underlying
+  driver deadline and the client's body-inclusive timeout, rather than merely
+  racing a still-running operation.
+- [ ] Change account/Character during a pending publication read and write;
+  audit data clears immediately and old completions cannot restore it. An
+  acknowledged write whose readback fails keeps useful optimistic content,
+  reports degraded verification and reconciles without replaying the write.
+- [ ] Read the exact-origin capability manifest, then send its ETag using
+  `If-None-Match`: expect bodyless 304, working HEAD/OPTIONS and no CDN/browser
+  ownership cache. Repeated client checks within the freshness window share a
+  request; expiry revalidates. Change alias ownership, origin, transport and
+  feature versions independently: tags/cache must not cross those boundaries.
+  Cancel during body consumption and verify a fresh retry; missing/breaking or
+  malformed manifests still refuse dependent actions, including active-API
+  checks behind a newer frontend.
+- [ ] With an isolated paired device, disconnect real HTTP event/command waits
+  and verify the server stops polling and issues no late command claim or
+  state write. Exercise deadline expiry, repeated snapshot collisions and
+  cancellation during state/accounting work; retries terminate, ownership and
+  transaction fences hold, and an independent caller remains usable. Retain
+  existing event cursors, lease semantics and authorization refusals.
+- [ ] Before enabling Vercel deployment protection, verify server-only automation
+  bootstrap against the intended protected gateway: manifest plus signed relay
+  work, forged incoming bypass headers are stripped, secrets never reach
+  responses/client bundles, and redirects cannot forward them elsewhere.
+  Then verify unauthenticated preview blocking, authorized access, production
+  public routes, and required cron/webhook automation on the live selected
+  scope. Record actual activation separately from source support. Restore the
+  previous protection scope on refusal and verify rollback without data reset.
+
 ## Environment gateway and index lifecycle
+
+- [ ] Keep static and follower responses open during promotion; verify old
+  owner pools drain when the last admitted database stream/job finishes.
+  Expired async scopes cannot admit new work, and rollback waits for close.
+- [ ] Abort the sole budgeted HTTP waiter during shared connection and index
+  initialization, then demote. The initializer must retain independent gateway
+  admission until it settles; only then may clients/cache drain and rollback
+  admit a fresh connection. Keep ETag revalidation and platform-header origin
+  fencing covered alongside this lifetime regression.
+- [ ] Verify the installed Vercel pool adapter registers `waitUntil` through
+  the configured idle timeout; distinguish this local adapter test from actual
+  Fluid suspension and Atlas monitoring-socket observations.
 
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
@@ -6351,6 +6489,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       clause); hidden baseline mints a linkKey (key = read only). Groups are
       protected kinds managed solely via /api/v1/groups (+ audience-sources).
       Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Audience groups with large membership: create an empty group, add members through successive `/api/v1/groups` delta PATCH batches until the combined IDs exceed one former 64 KiB request, replay a batch, remove a batch, and verify exact member count and complete GET readback. Check that an independently signed-in account cannot edit or read the group, mixed replacement/delta is rejected, and concurrent add/remove/delete operations leave no duplicate or orphan membership. The custom audience picker must save a large selected group without truncation; reload and verify its grant and revocation on a referenced Thing.
+- [ ] Check owner storage usage through `/api/v1/auth/me` before group create, after member batches, after removals, after delete, and after a finite-quota 507 refusal. A refused add must roll back the root timestamp, membership and ledger. Create an older unstamped group through the prior built API in a disposable replica set; verify finite-quota growth fails closed, run `backfill-user-storage-accounting` through the admin API, then verify growth and exact refund. Production must complete and verify that migration before existing-group edits are accepted.
+- [ ] Interrupt one group batch after the server commits but before the client receives the response; the picker must read the original group's membership and confirm when it matches. If it differs, do not auto-replay: another tab may have made an opposing change. Show the preserved group ID and an explicit retry control inside the modal. Switch accounts or data planes during a pending batch; no later request or readback may run under the new identity. If readback is unavailable, preserve the partial group. Never delete an uncertain newly created group automatically.
 - [ ] Unified Thing sharing: `/things` Share, Builder page settings,
       component-card Save version, and component-detail Save version all offer
       Public / Friends / Family / Private / Anyone with the link / Custom from
@@ -7883,6 +8024,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       silently changed. Selecting folders reveals the "Also apply to
       everything inside" checkbox (off by default) — applying with it on
       updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Relational ACL candidate lists: an owned Thing with a signed-negative
+      logical `-tt:all` marker remains discoverable to its authorized owner
+      through a private-visibility PAT and eligible circle query. Anonymous
+      and public-visibility PAT reads remain denied; the negative marker must
+      never become a positive public grant. Verify exact reads and lists after
+      a grant revision changes, including the legacy-reader fence.
 - [ ] Right-click context menus (the design-system Thing Context Menu):
       right-clicking a thing selects it (Finder semantics) and opens
       Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
@@ -14899,6 +15046,25 @@ separate from deterministic discovery/lease tests.
   controller reads require the exact repository/ref and a fresh timestamp,
   return only the policy and no revision/audit data. Wrong signatures, stale
   requests and DB failure must refuse cleanup. Check both manifest generators.
+- Run `node remix/scripts/workflow-caller-contract.mjs` after changing preview
+  dispatch inputs. Confirm selected retirement IDs default to empty, dry-run
+  remains boolean/false, and the listener only forwards to `github-actions`.
+  After controller rollout, dry-run a reviewed exact-ID batch with PR 0 and
+  inspect the private policy/decision artifact before any deletion. Ordinary
+  scheduled/PR events must preserve existing behavior. Confirm the obsolete
+  standalone product promotion workflow stays absent while the protected Lopu
+  manager retains its promotion component.
+- Retained-preview maintenance: run the caller contract and protected controller
+  maintenance tests. Require all three optional inputs empty for ordinary events;
+  reject partial inputs, unmerged artifact provenance, changed manifest/patch,
+  stale PR head/ref, replaced incumbent and a mismatched reconstructed tree.
+  Reconstruct the frozen patch with an isolated Git index and compare its tree
+  independently. Before alias mutation, verify the immutable candidate's shell,
+  origin-scoped manifest, root data and signed relay. Verify maintenance metadata
+  distinguishes the authorization head from retained source/tree, scheduled
+  reconcile preserves the accepted incumbent, and a healthy ordinary replacement
+  still passes atomic promotion. Finally exercise protected browser bootstrap
+  at desktop/mobile widths; passing transport alone is insufficient.
 - Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
   active current-head protection, opt-in inactive open-PR expiry, failed policy
   reads and stable/production/gateway/alias protection. Real Vercel deletion is
@@ -16365,6 +16531,18 @@ never print the file-download JSON, encryption metadata or signed URL.
   fixture. Simulator/build evidence does not establish physical background work.
 
 
+### Relational collection scale acceptance — 2026-11-12
+
+Save more than 100 selected app Things,
+20 database endpoints, 10 deployment links and 50 path rules through the real
+API with isolated identities. Check secret redaction, duplicate refusal,
+authoritative empty migration, unavailable vault key, revocation and rollback.
+Create subspace definitions above the old limits, edit individual fields,
+reload all four families and verify byte accounting/ownership/deletion. Pin
+more than five posts and exhaust feed cursors without duplicates or omissions.
+Inspect consent paging and subspace moderator forms at desktop/mobile widths,
+including loading/retry, selection preservation and bottom-of-page controls.
+
 ### Compact devices and explicit scan library saves — 2026-11-12
 
 - At desktop/mobile widths, confirm Things breadcrumbs have no LiDAR panel,
@@ -16402,3 +16580,40 @@ never print the file-download JSON, encryption metadata or signed URL.
   Buffered old stdout/exit/error events must not settle or fail replacement requests; Rust search failures must
   preserve deterministic local search. Verify the installed signed daemon stays healthy and serves real searches
   after recovery, with bounded worker restarts and preserved settings. See `Commander/docs/TESTING.md`.
+
+
+## Protected Branch health diagnostics — 13 November 2026
+
+- [ ] On public production, select Branch in the Status footer; confirm its actual branch target is retained and normally reachable while protection is off.
+- [ ] With a controlled exact-platform branch 401/403, verify Frontend, Nitro, MongoDB and Vercel show authentication required without cookies or an automation credential crossing the proxy; unrelated targets remain unavailable.
+- [ ] Reject redirect responses, never follow a login redirect, and stop stalled response bodies plus legacy fallback within one 3.5-second deadline. Run `test:api-capabilities`.
+- [ ] Inspect status labels and refresh controls at desktop/mobile widths, scroll top to bottom, and confirm no clipping or overflow.
+
+
+## Built gateway harness compatibility — 13 November 2026
+
+- [ ] Build both client and server before `test:environment-gateway:acceptance`. Confirm instrumentation resolves the MongoClient exported by the actual Nitro driver bundle (factory, default or namespace), with a callable connect method; never substitute a separate driver copy for command evidence.
+- [ ] The manifest check must accept compatible `api.environment-gateway` updates from1.2.1 while rejecting older or breaking-major versions. Preserve actual API registration/cookie/write/promotion/rollback checks and the zero follower Mongo dial assertion.
+
+- [ ] ACL validator provisioning: on an isolated replica with an API-created
+      administrator, run `agent-reporting-acceptance.mjs --acl-provisioning`.
+      Anonymous/non-admin calls fail, repeated Dry run leaves missing protection
+      pending, Run provisions and repeated Run is idempotent. A custom data plane
+      fails before lease/provisioning. Grant/read/revoke works through the real
+      API afterward. Run authenticated DDL lifecycle acceptance separately to
+      verify independent validators survive and denied metadata/DDL access returns
+      only closed stage/category diagnostics, with no false readiness or secrets.
+
+- [ ] ACL provisioning diagnostics: authenticated DDL refusal retains numeric
+      MongoDB code 13 and only server/Unauthorized labels. Unknown server codes
+      stay unclassified; arbitrary names, string/negative/non-integer/out-of-range
+      codes, messages, nested causes and command bodies must never reach public
+      migration failures or saved diagnostics. Preserve actual origin/account and
+      inspect readiness before retrying any uncertain provisioning attempt.
+
+
+### Protected frontend SSO diagnostics (2026-11-14)
+
+- [ ] With status-origin overrides absent, check current custom preview aliases and remote selected targets: a bound Vercel SSO 302 must show authentication required while remaining not ready; do not forward cookies or bypass credentials.
+- [ ] Compare with a public frontend shell (ready), an outage (unavailable), and actual Nitro storage readiness (preserve its independent degraded state).
+- [ ] Refuse foreign/duplicate/unbound SSO locations and all other redirects without following or consuming them. Preserve the 3.5-second header/body/fallback deadline.

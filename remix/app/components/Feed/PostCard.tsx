@@ -278,7 +278,11 @@ export const AuthorFlairChip = ({ flair, size = 'sm' }: { flair: PublicAuthorFla
       border={`1px solid ${flair.color || 'var(--tt-border, #ececef)'}`}
       color={flair.color || TEXT}
       maxWidth="160px"
+      minWidth={0}
       whiteSpace="nowrap"
+      // The app shell's descendant rule otherwise overrides this chip's
+      // whitespace and turns long labels into tall, clipped pills.
+      sx={{ '&&': { whiteSpace: 'nowrap' } }}
       overflow="hidden"
       textOverflow="ellipsis"
       title={label}

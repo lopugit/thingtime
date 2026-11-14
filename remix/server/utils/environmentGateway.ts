@@ -3,8 +3,9 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
+import { ROBOTS_PATH } from '../../app/api/utils/seo/sitemapCore';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, withGatewayWork, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -24,7 +25,9 @@ export const gatewayFailure = (status = 503, code = 'ENVIRONMENT_GATEWAY_UNAVAIL
   ok: false, code, error: 'The selected environment API gateway is unavailable or incompatible.'
 }, { status, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && (
+// Crawler policy belongs to this deployment, contains no account data, and must
+// remain available when an older or unavailable gateway cannot serve its APIs.
+export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && pathname !== ROBOTS_PATH && (
   pathname === '/api' || pathname.startsWith('/api/') || pathname === '/social-card' || pathname === '/sitemap.xml' ||
   apiEndpointDocs.some(doc => doc.endpoint === pathname && pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH)
 );
@@ -153,4 +156,12 @@ export const environmentGatewayIngress = async (request: Request): Promise<Respo
     if (authority.owner || getMongoConnectionMode() === 'dedicated') return null;
     return proxyEnvironmentRequest(request, authority);
   } catch { return gatewayFailure(); }
+};
+
+/** SPA shells remain local. Only their owner-side public metadata lookup holds
+ * a database lease; proxy followers render generic metadata without a DB dial. */
+export const withGatewayShellWork = async <T>(work: () => Promise<T>, fallback: () => T): Promise<T> => {
+  const authority = await gatewayAuthority.current();
+  if (authority && !authority.owner && getMongoConnectionMode() === 'proxy') return fallback();
+  return withGatewayWork(work);
 };

@@ -1,3 +1,4 @@
+import { StorageMutationError } from '../storage/storageCore';
 import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection } from '../mongodb/collections';
@@ -5,7 +6,7 @@ import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { ACL_INHERIT, COLLECTION_SCHEMA_VERSIONS, UPDOWN_THINGTIME } from '~/schemas/registry';
 import { assertSubspaceInteraction, UPDOWN_KEY_FIELD } from '../subspaces/gate';
 import { emptyUpdownVotes, parseUpdownDirection, updownKeyOf, type PublicUpdownVotes, type UpdownDirection } from './updownCore';
-import { asViewer, fail, findViewableThing, isPostThing, patSandboxOf, tokenAclEntryFor, tokenAclOf, type Fail, type ThingDoc, type Viewer } from './things';
+import { asViewer, fail, findViewableThing, isPostThing, patSandboxOf, tokenAclAllows, withSandboxedThingMutation, type Fail, type ThingDoc, type Viewer } from './things';
 
 // Up/down voting (see updownSchema in schemas/registry.ts): Reddit-style
 // scoring as a SEPARATE focused reaction kind. One relational child thing per
@@ -84,7 +85,7 @@ export const castUpdown = async (viewerInput: string | Viewer, shareId: unknown,
 
 	// sandboxed tokens may only engage with things carrying their tt:token grant
 	const sandboxTokenId = patSandboxOf(viewer);
-	if (sandboxTokenId && !tokenAclOf(target).includes(tokenAclEntryFor(sandboxTokenId))) {
+	if (sandboxTokenId && !(await tokenAclAllows(target, sandboxTokenId))) {
 		return fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 	}
 
@@ -96,15 +97,18 @@ export const castUpdown = async (viewerInput: string | Viewer, shareId: unknown,
 	const key = updownKeyOf(target.shareId, viewerId);
 	const keyFilter = thingUniqueKeyFilter(UPDOWN_KEY_FIELD, key);
 	const now = new Date();
-	const existing = (await things.findOne({ thingtime: UPDOWN_THINGTIME, ownerId: viewerId, ...keyFilter } as any)) as any as ThingDoc | null;
+	try {
+    const mutation = await withSandboxedThingMutation(viewer, target, async session => {
+      const options = session ? { session } : {};
+      const existing = (await things.findOne({ thingtime: UPDOWN_THINGTIME, ownerId: viewerId, ...keyFilter } as any, options)) as ThingDoc | null;
 
 	if (!direction || (existing && existing.crystal?.direction === direction)) {
 		// clear, or the same direction again → toggle the vote off (the react
 		// util's opinion — tapping what you already did undoes it)
-		if (existing) await things.deleteOne({ _id: (existing as any)._id } as any);
+		if (existing) await things.deleteOne({ _id: (existing as any)._id } as any, options);
 	} else if (existing) {
 		// flip in place — direction is the only mutable field
-		await things.updateOne({ _id: (existing as any)._id } as any, { $set: { 'crystal.direction': direction, updatedAt: now } });
+		await things.updateOne({ _id: (existing as any)._id } as any, { $set: { 'crystal.direction': direction, updatedAt: now } }, options);
 	} else {
 		try {
 			await things.insertOne({
@@ -120,17 +124,25 @@ export const castUpdown = async (viewerInput: string | Viewer, shareId: unknown,
 				tags: [],
 				createdAt: now,
 				updatedAt: now
-			} as any);
+			} as any, options);
 		} catch (err) {
-			if (!isDuplicateKey(err)) throw err;
+			if (!isDuplicateKey(err) || session) throw err;
 			// raced our own double-tap — the unique key kept one doc; settle it
 			const settled = await things.updateOne({ thingtime: UPDOWN_THINGTIME, ownerId: viewerId, ...keyFilter } as any, {
 				$set: { 'crystal.direction': direction, updatedAt: now }
-			});
+			}, options);
 			if (!settled.matchedCount) return fail(409, 'Your vote slot on this post is blocked — try again later');
 		}
 	}
-	await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
+	await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } }, options);
+      return null;
+    });
+    if (mutation) return mutation;
+  } catch (error) {
+    if (error instanceof StorageMutationError) return fail(error.status, error.message);
+    if (isDuplicateKey(error)) return fail(409, 'Your vote changed concurrently. Retry.');
+    throw error;
+  }
 
 	const votes = await updownVotesOf(target.shareId, viewerId);
 	return { ok: true, votes, direction: votes.viewerVote };

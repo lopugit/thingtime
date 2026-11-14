@@ -1,8 +1,9 @@
+import { hasRelationalAclEntries, rootAcl } from '../things/relationalAcl';
 import { ACL_OWNER } from '~/schemas/registry';
 
 const isOwnedPrivateSource = (source: any, ownerId: string) =>
-	!!source && source.ownerId === ownerId && !source.appId && !source.deletedAt &&
-	Array.isArray(source.acl) && source.acl.length === 1 && source.acl[0] === ACL_OWNER;
+	!!source && !hasRelationalAclEntries(source) && source.ownerId === ownerId && !source.appId && !source.deletedAt &&
+	Array.isArray(source.acl) && rootAcl(source).length === 1 && rootAcl(source)[0] === ACL_OWNER;
 
 export const isPrivateRecordingPost = (source: any, ownerId: string) =>
 	isOwnedPrivateSource(source, ownerId) && Array.isArray(source.thingtime) &&

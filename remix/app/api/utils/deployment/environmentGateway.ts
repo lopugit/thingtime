@@ -10,7 +10,9 @@ export const GATEWAY_OWNERSHIP_TTL_MS = 5_000;
 export type GatewaySettings = { environment: string; origin: string; deploymentId: string; secret: string };
 export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
 export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass';
-/** A server-only platform credential, sent solely to the validated gateway origin. */
+/** Platform protection is separate from signed gateway authentication. Deliver
+ * its server-only secret solely to the configured, validated gateway origin. */
+
 export const gatewayProtectionHeaders = (settings: GatewaySettings): Record<string, string> => {
   if (gatewayOrigin(settings.origin) !== settings.origin) throw new GatewayUnavailable();
   const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
@@ -96,85 +98,136 @@ export const createGatewayAuthority = (options: {
 } = {}) => {
   const settings = options.settings || getGatewaySettings;
   const now = options.now || Date.now;
-  let cache: { key: string; expires: number; value: GatewayManifest } | null = null;
-  let pending: { key: string; promise: Promise<GatewayManifest> } | null = null;
+  let cache: { key: string; expires: number; value: GatewayManifest; etag: string | null } | null = null;
+  let pending: { key: string; promise: Promise<{ value: GatewayManifest; etag: string | null }> } | null = null;
   let wasOwner = false;
   const current = async (fresh = false) => {
     const selected = settings();
     if (!selected) return null;
     const key = createHash('sha256').update(JSON.stringify(selected)).digest('hex');
+    let active: typeof pending = null;
     try {
       if (!fresh && cache?.key === key && cache.expires > now()) return { settings: selected, manifest: cache.value, owner: cache.value.gateway!.deploymentId === selected.deploymentId };
       if (!pending || pending.key !== key) {
+        // Retain a verified body only for conditional revalidation. An expired
+        // value never grants authority without a fresh response from the alias.
+        const previous = cache?.key === key ? cache : null;
         const promise = (async () => {
           const response = await (options.fetch || globalThis.fetch)(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin), {
             redirect: 'error', cache: 'no-store', credentials: 'omit',
-            headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected) }, signal: AbortSignal.timeout(5_000)
+            headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected), ...(previous?.etag ? { 'If-None-Match': previous.etag } : {}) },
+            signal: AbortSignal.timeout(5_000)
+
           });
-          const manifest = await readManifest(response);
+          if (response.url && response.url !== new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin).href) throw new GatewayUnavailable();
+          const manifest = response.status === 304 && previous?.etag ? previous.value : await readManifest(response);
           if (manifest.schemaVersion !== 1 || manifest.origin !== selected.origin ||
             manifest.gateway?.origin !== selected.origin || manifest.gateway.environment !== selected.environment ||
             typeof manifest.gateway.deploymentId !== 'string' || !manifest.gateway.deploymentId ||
             !capabilitySatisfies(manifest.features?.['api.environment-gateway']?.version, ENVIRONMENT_GATEWAY_VERSION) ||
             !Array.isArray(manifest.operations)) throw new GatewayUnavailable();
-          cache = { key, expires: now() + GATEWAY_OWNERSHIP_TTL_MS, value: manifest };
-          return manifest;
+          return { value: manifest, etag: response.status === 304 ? previous!.etag : response.headers.get('ETag') };
         })();
         pending = { key, promise };
       }
-      const active = pending;
-      let manifest: GatewayManifest;
-      try { manifest = await active.promise; }
-      finally { if (pending === active) pending = null; }
+      active = pending;
+      const result = await active.promise;
+      const manifest = result.value;
       // Never authorize an old selection after an asynchronous config change.
       if (JSON.stringify(settings()) !== JSON.stringify(selected)) throw new GatewayUnavailable();
+      if (pending === active) {
+        cache = { key, expires: now() + GATEWAY_OWNERSHIP_TTL_MS, value: manifest, etag: result.etag };
+        pending = null;
+      }
       const owner = manifest.gateway!.deploymentId === selected.deploymentId;
       if (wasOwner && !owner) options.demoted?.();
       wasOwner = owner;
       return { settings: selected, manifest, owner };
     } catch {
-      cache = null;
-      if (wasOwner) options.demoted?.();
-      wasOwner = false;
+      // A late failure for an old selection cannot evict or demote a newly
+      // verified selection, or disturb its in-flight discovery.
+      if (pending === active || (!pending && cache?.key === key)) {
+        cache = null;
+        if (pending?.key === key) pending = null;
+        if (wasOwner) options.demoted?.();
+        wasOwner = false;
+      }
       throw new GatewayUnavailable();
     }
   };
   return { current, requireDatabase: async () => { const authority = await current(); if (authority && !authority.owner && getMongoConnectionMode() !== 'dedicated') throw new GatewayUnavailable(); } };
 };
 
-let activeWork = 0;
-let draining = false;
-let drainBarrier: Promise<unknown> = Promise.resolve();
-const drains = new Set<() => Promise<void>>();
-const finishDrain = () => {
-  if (draining && activeWork === 0) {
-    draining = false;
-    // A rollback may re-admit this worker while close is still pending. All
-    // new work waits for close + cache eviction before opening a fresh pool.
-    drainBarrier = drainBarrier.then(() => Promise.allSettled([...drains].map(drain => drain())));
-  }
+/** Only admitted database work participates in pool draining. Each scope expires
+ * with its lease; a detached job must acquire its own lease while its parent is
+ * still active rather than retaining an expired AsyncLocalStorage boolean. */
+export const createGatewayWorkLifecycle = (requireDatabase: () => Promise<void>) => {
+  let activeWork = 0;
+  let generation = 0;
+  let drainBarrier: Promise<void> = Promise.resolve();
+  let pendingDrain: { started: boolean; previous: Promise<void>; finish: () => void } | null = null;
+  const drains = new Set<() => Promise<void>>();
+  const admittedWork = new AsyncLocalStorage<{ active: boolean }>();
+  const finishDrain = () => {
+    const pending = pendingDrain;
+    if (!pending || pending.started || activeWork !== 0) return;
+    pending.started = true;
+    void pending.previous.then(() => Promise.allSettled([...drains].map(drain => Promise.resolve().then(drain)))).then(() => {
+      if (pendingDrain === pending) pendingDrain = null;
+      pending.finish();
+    });
+  };
+  const demote = () => {
+    // Close admission synchronously, including callers awaiting authority.
+    generation++;
+    if (!pendingDrain) {
+      const previous = drainBarrier;
+      let finish!: () => void;
+      drainBarrier = new Promise<void>(resolve => { finish = resolve; });
+      pendingDrain = { started: false, previous, finish };
+    }
+    finishDrain();
+  };
+  const isAdmitted = () => admittedWork.getStore()?.active === true;
+  const admit = async () => {
+    if (!isAdmitted()) {
+      const observedGeneration = generation;
+      await drainBarrier;
+      await requireDatabase();
+      if (generation !== observedGeneration || pendingDrain) throw new GatewayUnavailable();
+    }
+    const scope = { active: true };
+    activeWork++;
+    return {
+      run: <T>(work: () => T): T => admittedWork.run(scope, work),
+      end: () => {
+        if (!scope.active) return;
+        scope.active = false;
+        activeWork--;
+        finishDrain();
+      }
+    };
+  };
+  const withWork = async <T>(work: () => Promise<T>): Promise<T> => {
+    const lease = await admit();
+    try { return await lease.run(work); } finally { lease.end(); }
+  };
+  return { demote, admit, withWork, isAdmitted,
+    registerDrain: (drain: () => Promise<void>) => { drains.add(drain); return () => drains.delete(drain); } };
 };
-export const registerGatewayDrain = (drain: () => Promise<void>) => { drains.add(drain); return () => drains.delete(drain); };
-export const beginGatewayWork = () => {
-  activeWork++;
-  let ended = false;
-  return () => { if (!ended) { ended = true; activeWork--; finishDrain(); } };
-};
-/** Detached waitUntil jobs must keep their lease through the final save. */
-export const withGatewayWork = async <T>(work: () => Promise<T>): Promise<T> => {
-  const end = beginGatewayWork();
-  try { return await work(); } finally { end(); }
-};
-export const gatewayAuthority = createGatewayAuthority({ demoted: () => { draining = true; finishDrain(); } });
-const admittedWork = new AsyncLocalStorage<boolean>();
-export const runAdmittedGatewayWork = async <T>(work: () => Promise<T>) => {
-  await drainBarrier;
-  return admittedWork.run(true, work);
-};
+
+const gatewayWork = createGatewayWorkLifecycle(() => gatewayAuthority.requireDatabase());
+export const gatewayAuthority = createGatewayAuthority({ demoted: gatewayWork.demote });
+export const registerGatewayDrain = gatewayWork.registerDrain;
+export const admitGatewayWork = gatewayWork.admit;
+/** Detached waitUntil jobs must acquire a lease through their final save. */
+export const withGatewayWork = gatewayWork.withWork;
+export const runAdmittedGatewayWork = gatewayWork.withWork;
 export const requireGatewayDatabaseAccess = async () => {
-  // A request admitted while this was the owner may finish its transaction or
-  // stream after promotion; new requests cannot borrow that scoped admission.
-  if (admittedWork.getStore()) return;
-  await drainBarrier;
-  await gatewayAuthority.requireDatabase();
+  // Already admitted requests and their leased jobs may finish after promotion.
+  if (gatewayWork.isAdmitted()) return;
+  // This is an authorization check, not an operation lifetime. Standalone
+  // DB work must wrap connect + use in withGatewayWork, as Workflow steps do.
+  // The short lease also waits for rollback pool close/cache eviction.
+  await gatewayWork.withWork(async () => {});
 };

@@ -1,10 +1,11 @@
+import { StorageMutationError } from '../storage/storageCore';
 import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection } from '../mongodb/collections';
 import { relationshipUniqueKeys } from '../messenger/shared';
 import { ACL_INHERIT, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { pollShapeOfCrystal, tallyPollVotes, voteKeyOf, type PollVoteEntry, type PublicPollVotes } from './pollCore';
-import { asViewer, fail, findViewableThing, patSandboxOf, tokenAclEntryFor, tokenAclOf, type Fail, type ThingDoc, type Viewer } from './things';
+import { asViewer, fail, findViewableThing, patSandboxOf, tokenAclAllows, withSandboxedThingMutation, type Fail, type ThingDoc, type Viewer } from './things';
 
 // Poll voting (see voteSchema in schemas/registry.ts): one relational child
 // thing per (user, poll) — kind ['vote'], targetId = the poll thing, acl
@@ -40,7 +41,7 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 
 	// sandboxed tokens may only engage with things carrying their tt:token grant
 	const sandboxTokenId = patSandboxOf(viewer);
-	if (sandboxTokenId && !tokenAclOf(target).includes(tokenAclEntryFor(sandboxTokenId))) {
+	if (sandboxTokenId && !(await tokenAclAllows(target, sandboxTokenId))) {
 		return fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 	}
 
@@ -51,12 +52,13 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 	// Keep the indexed crystal reader for pre-backfill and custom databases.
 	// The shared key enforces uniqueness; it is not a readiness claim for old rows.
 	const voteFilter = { thingtime: 'vote', 'crystal.voteKey': voteKey, ownerId: viewerId, targetId: target.shareId };
-	const existing = (await things.findOne(voteFilter as any)) as any as ThingDoc | null;
-
 	try {
+    const mutation = await withSandboxedThingMutation(viewer, target, async session => {
+      const options = session ? { session } : {};
+      const existing = (await things.findOne(voteFilter as any, options)) as ThingDoc | null;
 		if (existing && Number(existing.crystal?.optionIndex) === optionIndex) {
 			// same option again → toggle the vote off (the react util's opinion)
-			await things.deleteOne({ ...voteFilter, _id: (existing as any)._id });
+			await things.deleteOne({ ...voteFilter, _id: (existing as any)._id }, options);
 		} else if (existing) {
 			// re-vote → update in place (optionIndex is the only mutable field)
 			await things.updateOne(
@@ -64,7 +66,7 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 				{
 					$set: { 'crystal.optionIndex': optionIndex, updatedAt: now },
 					$addToSet: { uniqueKeys: { $each: uniqueKeys } }
-				}
+				}, options
 			);
 		} else {
 			try {
@@ -81,28 +83,32 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 					tags: [],
 					createdAt: now,
 					updatedAt: now
-				} as any);
+				} as any, options);
 			} catch (err) {
-				if (!isDuplicateKey(err)) throw err;
+				if (!isDuplicateKey(err) || session) throw err;
 				// raced our own double-tap — the shared uniqueKeys index kept one doc;
 				// settle it on the requested option
 				const settled = await things.updateOne(voteFilter, {
 					$set: { 'crystal.optionIndex': optionIndex, updatedAt: now },
 					$addToSet: { uniqueKeys: { $each: uniqueKeys } }
-				});
+				}, options);
 				// A concurrent toggle can remove the winner before this update, or
 				// a conflicting legacy identity can hold the protected slot. Do not
 				// claim success when the requested option could not be written.
 				if (!settled.matchedCount) return fail(409, 'Your vote changed concurrently or needs reconciliation — please retry');
 			}
 		}
+      await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } }, options);
+      return null;
+    });
+    if (mutation) return mutation;
 	} catch (error) {
+    if (error instanceof StorageMutationError) return fail(error.status, error.message);
 		// Existing duplicate legacy rows must be reconciled explicitly; never
 		// select or delete a winner merely to make a unique-key backfill pass.
 		if (isDuplicateKey(error)) return fail(409, 'Your vote slot needs reconciliation — try again later');
 		throw error;
 	}
-	await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
 
 	// fresh authoritative tally for this poll — one query, same shape the feed
 	// projection carries (pollVotes), so the card can reconcile in place

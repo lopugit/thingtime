@@ -8,6 +8,22 @@ const clientId = 'ttapp_a';
 const ownerId = 'owner-a';
 const revokedAt = new Date('2026-08-07T01:02:03.000Z');
 
+test('app allowlist cleanup shares the deletion transaction and failure aborts before session revocation', async () => {
+  const app = { _id: 'app', shareId: 'app-root', ownerId, crystal: { clientId, allowlistVersion: 1 } };
+  const session = { active: true }, calls: string[] = [];
+  const input = {
+    things: { findOne: async () => app, findOneAndDelete: async () => { calls.push('delete'); return app; } },
+    sessions: { updateMany: async () => { calls.push('revoke'); return { modifiedCount: 1 }; } },
+    ownerId, clientId, revokedAt, session, canManage: async () => true,
+    cleanupApp: async (doc: any, active: any) => { assert.equal(doc, app); assert.equal(active, session); calls.push('allowlist'); }
+  };
+  assert.equal((await deleteAppLifecycleInSession(input)).ok, true);
+  assert.deepEqual(calls, ['delete', 'allowlist', 'revoke']);
+  calls.length = 0;
+  await assert.rejects(deleteAppLifecycleInSession({ ...input, cleanupApp: async () => { throw Error('cleanup failed'); } }), /cleanup failed/);
+  assert.deepEqual(calls, ['delete']);
+});
+
 test('app deletion removes only the control Thing and revokes sessions on the same session', async () => {
 	const transactionSession = { id: 'transaction-a' };
 	const docs = [

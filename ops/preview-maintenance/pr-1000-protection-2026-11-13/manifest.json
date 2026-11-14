@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "purpose": "preview-protection",
+  "repository": "lopugit/thingtime",
+  "prNumber": 1000,
+  "expectedHeadSha": "f4e4f2a09cbf3603cea8123f72eb48ace5bd5373",
+  "headRef": "codex/anonymous-local-first",
+  "retainedDeploymentId": "dpl_HauwwocNZWrpfYWXJFuNtGAJoUp5",
+  "retainedSourceSha": "d214a6b5a1965831febd2e5d1f2488ee3f13d1fc",
+  "sourceTree": "4627d0ac32896f2ac870acc2bca4bd548e167bcc",
+  "patchPath": "ops/preview-maintenance/pr-1000-protection-2026-11-13/protection.patch",
+  "patchSha256": "988c247e196a09d7cf18fd6480bc74359ed05e2e9763152b97e3678496388765",
+  "implementationCommit": "803a5b4fa2be5de0fb2be6e94f651e393c9aa0ac"
+}

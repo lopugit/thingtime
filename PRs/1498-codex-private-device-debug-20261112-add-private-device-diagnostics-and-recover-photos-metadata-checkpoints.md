@@ -21,3 +21,7 @@ An acknowledged Photos queue now emits one empty metadata checkpoint per admitte
 - Targeted lint after main integration completed with zero errors and eight pre-existing API documentation style warnings.
 
 The scoped seven-document semantic graph refresh reached its measured 900-second limit after four of 147 chunks. Its partial private cache was preserved, and the supported structural refresh supplies the graph, report and HTML; changed-document semantic coverage is incomplete. Required source CI passed, and the current-head preview shell and exact-origin diagnostics manifest are publicly reachable. Installed Mac delivery and automatic TestFlight state remain tracked separately on this same branch. Physical iPhone background execution remains unfinished and is not a condition newly claimed by this publication.
+
+## 14 November production integration
+
+Preserved the remote preview-protection correction, production relational ACL and pin protections, and gateway admission/drain plus conditional capability caching. The combined Things contract is 1.67.0, above production ACL 1.66.0; Things update remains 1.30.0 and environment gateway remains 1.2.3. Native source is unchanged from the previously compiled branch. Focused integrated validation passes 210 capability tests, 29 gateway tests, and 153 diagnostics, owner-library and built-in schema tests. These checks do not replace the separately recorded installed app and physical-device acceptance.

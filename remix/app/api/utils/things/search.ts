@@ -5,7 +5,8 @@ import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
-import { fetchCappedTotal } from '../mongodb/cappedTotal';
+import { fetchCappedAggregateTotal } from '../mongodb/cappedTotal';
+import { aclMarkerClause, relationalAclCandidateStages } from './relationalAcl';
 import {
   ACL_INHERIT,
   KEY_SEGMENT_PATTERN,
@@ -584,12 +585,11 @@ export const searchThings = async (
   // canViewInherited below; include them in this coarse DB-level superset.
   const visibility =
     !app && directVisibility && circles.length === 0
-      ? { $or: [directVisibility, { acl: ACL_INHERIT }] }
+      ? { $or: [directVisibility, aclMarkerClause(ACL_INHERIT)] }
       : directVisibility;
   if (!visibility) return emptyResult;
 
   // subspace fences (removed / private-subspace posts) — same clauses the feeds use
-  const baseMatch = withMatch(visibility, ...clauses, ...subspaceFeedClauses(viewer));
   const ranked = sort === 'relevance';
 
   // A cursor is minted for one paging mode and is meaningless in another: offset
@@ -608,9 +608,15 @@ export const searchThings = async (
 
   // $text must sit in a top-level $and (withMatch provides exactly that)
   const textClause = q ? { $text: { $search: q } } : null;
-  const match = textClause ? withMatch(textClause, visibility, ...clauses) : baseMatch;
+  const candidateMatch = withMatch(textClause || {}, ...clauses, ...subspaceFeedClauses(viewer));
 
   const things = await getThingsCollection();
+  const visibleStages = (extra: Record<string, any> = {}): any[] => [
+    { $match: withMatch(candidateMatch, extra) },
+    ...(!app ? relationalAclCandidateStages(things.collectionName, viewer) : []),
+    { $match: visibility },
+    { $unset: '_aclCandidate' }
+  ];
 
   // -- engagement-window mode ------------------------------------------------
   // Reaction/comment counts are aggregated from child things at read time
@@ -634,7 +640,7 @@ export const searchThings = async (
 
     const candidates = (await things
       .aggregate([
-        { $match: match },
+        ...visibleStages(),
         { $sort: windowSort },
         { $limit: ENGAGEMENT_CANDIDATE_WINDOW },
         {
@@ -743,10 +749,8 @@ export const searchThings = async (
     if (ranked) {
       const offset = Math.min(Math.max(0, Number(query.cursor) || 0), MAX_RANKED_OFFSET);
       const docs = (await things
-        .find(match as any, { projection: { score: { $meta: 'textScore' } } } as any)
-        .sort({ score: { $meta: 'textScore' }, createdAt: -1, shareId: 1 } as any)
-        .skip(offset)
-        .limit(limit + 1)
+        .aggregate([...visibleStages(), { $set: { score: { $meta: 'textScore' } } },
+          { $sort: { score: { $meta: 'textScore' }, createdAt: -1, shareId: 1 } }, { $skip: offset }, { $limit: limit + 1 }])
         .toArray()) as any as ThingDoc[];
       // the clamp allows offsets up to and including MAX_RANKED_OFFSET
       const nextOffset = offset + limit;
@@ -754,11 +758,9 @@ export const searchThings = async (
     }
     const parsed = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
     const cursorClause = parsed ? (sort === 'oldest' ? oldestCursorClause(parsed) : chronoCursorClause(parsed)) : null;
-    const pageMatch = cursorClause ? withMatch(match, cursorClause) : match;
     const docs = (await things
-      .find(pageMatch as any)
-      .sort(sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 })
-      .limit(limit + 1)
+      .aggregate([...visibleStages(cursorClause || {}),
+        { $sort: sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 } }, { $limit: limit + 1 }])
       .toArray()) as any as ThingDoc[];
     const last = docs.slice(0, limit)[Math.min(docs.length, limit) - 1];
     return {
@@ -774,7 +776,7 @@ export const searchThings = async (
   // with the schema browser via fetchCappedTotal so both stay in lockstep.
   const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([
     fetchPage(),
-    fetchCappedTotal(things, match, query.cursor)
+    fetchCappedAggregateTotal(things, visibleStages(), query.cursor)
   ]);
   const page = docs.slice(0, limit);
 

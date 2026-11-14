@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { attachmentTargetAclAllows, createCanViewHomeAttachmentTarget, profileAttachmentTargetAllows } from './attachmentAccess';
 import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
+import { aclEntryId, legacyAclFence } from '../things/relationalAcl';
 
 const post = (overrides: Record<string, unknown> = {}) => ({
 	shareId: 'post-1',
@@ -47,6 +48,38 @@ test('narrow attachment target ACL check handles owners, public grants, exclusio
 	assert.equal(attachmentTargetAclAllows(post({ thingtime: ['post', 'share'], targetId: 'root-1' }), null), false);
 	assert.equal(attachmentTargetAclAllows(post({ acl: ['tt:inherit'] }), { id: 'reader-1' }), false);
 	assert.equal(attachmentTargetAclAllows(null, { id: 'reader-1' }), false);
+});
+
+test('home attachment reads apply relational subject grants and exclusions from the home collection', async () => {
+  const target = {
+    ...post({ acl: legacyAclFence(['tt:all', 'tt:custom']), aclBaselineVersion: 1, aclGeneration: 'generation-1', aclRevision: 'revision-1' }),
+    aclBaseline: ['tt:all', 'tt:custom']
+  };
+  const viewer = { id: 'bob-id', username: 'bob', friendIds: new Set<string>(), groupIds: new Set<string>(),
+    subspaceRoles: new Map(), extAccountIds: new Set<string>() };
+  const grant = (entry: string) => ({ shareId: aclEntryId(target.shareId, 'generation-1', entry), targetId: target.shareId,
+    ownerId: target.ownerId, thingtime: ['acl-entry'], crystal: { revision: 'generation-1', entry } });
+  let rows = [grant('-tt:user/bob')];
+  const queries: any[] = [];
+  const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({
+    findOne: async (query: any, options: any) => {
+      if (query.shareId !== target.shareId) return null;
+      assert.equal(options.projection.aclGeneration, 1, 'the projected target must retain its relation generation');
+      return target;
+    },
+    find: (query: any) => {
+      queries.push(query);
+      return { async *[Symbol.asyncIterator]() { yield* query.shareId.$in.includes(target.shareId) ? [target] : rows.filter(row => query.shareId.$in.includes(row.shareId)); } };
+    }
+  } as any) });
+  const attachment = { shareId: 'media-1', targetId: target.shareId, ownerId: target.ownerId, attachmentPurpose: 'post' as const };
+  assert.equal(await view(viewer, attachment), false, 'a public baseline must not bypass a relational exclusion');
+  target.aclBaseline = ['tt:user', 'tt:custom']; target.acl = legacyAclFence(target.aclBaseline);
+  rows = [grant('tt:user/bob')];
+  assert.equal(await view(viewer, attachment), true, 'a private root must honor its relational reader');
+  rows = [];
+  assert.equal(await view(viewer, attachment), false, 'revocation applies on the next media read');
+  assert.ok(queries.length >= 3);
 });
 
 const profileAttachment = (overrides: Record<string, unknown> = {}) => ({

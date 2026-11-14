@@ -3,7 +3,7 @@ import { json } from '~/api/http';
 import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { scopeCovers } from '~/api/utils/apps/scopes';
-import { getSharedThings } from '~/api/utils/apps/sharedThings';
+import { getSessionSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/oauth/shared — the things the user HAND-PICKED to share with
@@ -39,8 +39,13 @@ export const loader = async ({ request }: { request: Request }) => {
     );
   }
 
-  const things = await getSharedThings(ctx.user.id, ctx.sharedThings);
-  return json({ ok: true, things }, { headers: cors });
+  const query = new URL(request.url).searchParams;
+  const id = query.get('id') || undefined;
+  const cursor = query.get('cursor');
+  if ((id && (id.length > 128 || /[\s$]/.test(id))) || (cursor && (cursor.length > 200 || /[\s$]/.test(cursor) || (ctx.sharedThingsRelational && (!/^\d+_session-resource-grant-[a-f0-9]{64}$/.test(cursor) || !Number.isFinite(new Date(Number(cursor.split('_')[0])).getTime()))))))
+    return json({ ok: false, error: 'Invalid shared Thing id or cursor' }, { status: 400, headers: cors });
+  const result = await getSessionSharedThings(ctx.user.id, ctx.jti, ctx.sharedThingsRelational ? null : ctx.sharedThings, { id, cursor, limit: Number(query.get('limit')) || undefined });
+  return json({ ok: true, ...result }, { headers: cors });
 };
 
 // GET-only: preflights advertise GET, and stray POSTs get a CORS-readable 405.
