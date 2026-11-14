@@ -1,3 +1,4 @@
+import { PdfDocument, PdfPageCanvas, usePdfElementBinding } from '../Attachments/PdfDocument';
 import { ACTION_BATCH_ATTRIBUTE } from '../Actions/actionBatches';
 import { MODIFIER_ACTION_INPUTS } from '../Actions/localUiAction';
 import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
@@ -241,6 +242,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentStyle>
 		);
+	if (tag === 'tt-pdf') return <PdfDocument key={key} {...node.props}>{node.children}</PdfDocument>;
+	if (tag === 'tt-pdf-page') return <PdfPageCanvas key={key} />;
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
 	if (tag === 'tt-rich-text') return <ComponentRichText key={key} {...node.props} />;
@@ -349,6 +352,10 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children, marke
  tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode; markerContent?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
+ const pdfBinding = usePdfElementBinding(attributes, children);
+ attributes = pdfBinding.attributes; children = pdfBinding.children;
+ if (tag === 'tt-pdf') return <div {...editorProps}>{editorProps?.onClick ? children : <PdfDocument {...attributes} renderedChildren={children} />}</div>;
+ if (tag === 'tt-pdf-page') return <div {...editorProps}><PdfPageCanvas /></div>;
  if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
  if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} markerContent={markerContent} /></div>;
  if (tag === 'tt-upload') return <div {...editorProps}><ComponentUpload {...attributes} /></div>;

@@ -244,3 +244,29 @@ test('server-only Vercel protection bypass is limited to the configured discover
 
   }
 });
+
+test('gateway discovery uses the server-only protection credential at the validated origin', async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  try {
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    assert.deepEqual(gatewayProtectionHeaders(selected), {});
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+    assert.throws(() => gatewayProtectionHeaders({ ...selected, origin: 'https://other.test/path' }));
+    let calls = 0;
+    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, selected.origin);
+      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.credentials, 'omit');
+      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), secret);
+      return Response.json(manifest());
+    } });
+    await authority.current();
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(manifest()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
+});

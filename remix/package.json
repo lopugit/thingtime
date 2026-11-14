@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "node scripts/ensure-dependencies.js && npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && node scripts/package-claude-oauth.mjs && npm run patch:vercel-output && npm run verify:vercel-output",
-    "build:client": "node scripts/ensure-dependencies.js && node scripts/ensure-mapbox-assets.mjs && npm run build:password-extension && vite build && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
+    "build:client": "node scripts/ensure-dependencies.js && node scripts/ensure-mapbox-assets.mjs && node scripts/ensure-pdf-assets.mjs && npm run build:password-extension && vite build && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
     "build:password-extension": "node scripts/build-password-extension.mjs",
     "test:password-extension": "node --test ../browser-extension/test/*.test.mjs",
     "build:library": "vite build --config vite.library.config.ts",
@@ -162,7 +162,7 @@
     "test:timeline:large-pages:acceptance": "node scripts/timeline-large-pages-acceptance.mjs",
     "test:thing-metadata": "node --import tsx --test app/api/utils/things/thingMetadataCore.test.ts app/components/Things/thingMetadataClient.test.ts",
     "test:thing-metadata:integration": "node scripts/test-thing-metadata.mjs",
-    "test:things": "node --import tsx --test app/api/utils/things/*Transfer.test.ts app/api/utils/things/ownerLibraryQuery.test.ts app/api/utils/things/renameLibraryThing.test.ts app/api/utils/things/postLinkedThings.test.ts app/api/utils/things/emojiSearch.test.ts app/api/utils/things/relatedProjection.test.ts app/api/utils/things/patVisibility.test.ts app/api/utils/things/foundPosts.test.ts app/api/utils/things/subspaceProtected.test.ts app/routes/api/v1/things/sharedThingRead.test.ts app/components/Sharing/*.test.ts app/components/Things/thingAttachmentDetailCore.test.ts app/components/Things/thingFileLocation.test.ts app/components/Things/thingParentPathsCore.test.ts app/components/Things/thingDetailSectionsCore.test.ts app/components/Things/thingDatabaseIdentity.test.ts app/components/Things/thingIcon.test.ts app/components/Things/thingsCore.test.ts app/components/Things/thingPathPins.test.ts app/components/Things/thingsMenuModel.test.ts app/routes/api/v1/things/pins/pins.test.ts app/components/Things/browseInteraction.test.ts app/components/Things/thingEntityMenu.test.ts app/components/Things/thingsLocation.test.ts app/components/Builder/builderAppEntryPoint.test.ts app/routes/api/v1/things/actions/actions.test.ts app/utils/thingTransfer/*.test.ts app/components/Things/filesystemTransfer.test.ts app/components/Things/filesystemClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/things/commentProjection.test.mts",
+    "test:things": "node --import tsx --test app/api/utils/things/*Transfer.test.ts app/api/utils/things/ownerLibraryQuery.test.ts app/api/utils/things/renameLibraryThing.test.ts app/api/utils/things/postLinkedThings.test.ts app/api/utils/things/emojiSearch.test.ts app/api/utils/things/relatedProjection.test.ts app/api/utils/things/patVisibility.test.ts app/api/utils/things/foundPosts.test.ts app/api/utils/things/subspaceProtected.test.ts app/routes/api/v1/things/sharedThingRead.test.ts app/components/Sharing/*.test.ts app/components/Things/thingAttachmentDetailCore.test.ts app/components/Things/fileMediaPresentation.test.ts app/components/Attachments/pdfPresentation.test.ts app/components/Things/thingFileLocation.test.ts app/components/Things/thingParentPathsCore.test.ts app/components/Things/thingDetailSectionsCore.test.ts app/components/Things/thingDatabaseIdentity.test.ts app/components/Things/thingIcon.test.ts app/components/Things/thingsCore.test.ts app/components/Things/thingPathPins.test.ts app/components/Things/thingsMenuModel.test.ts app/routes/api/v1/things/pins/pins.test.ts app/components/Things/browseInteraction.test.ts app/components/Things/thingEntityMenu.test.ts app/components/Things/thingsLocation.test.ts app/components/Builder/builderAppEntryPoint.test.ts app/routes/api/v1/things/actions/actions.test.ts app/utils/thingTransfer/*.test.ts app/components/Things/filesystemTransfer.test.ts app/components/Things/filesystemClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/things/commentProjection.test.mts",
     "test:theme": "node --import tsx --test app/components/Profile/themeTryOnCore.test.ts app/theme/tokens.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/themes/themesRoute.test.mts",
     "test:typecheck-ratchet": "node --test scripts/typecheck-ratchet.test.mjs",
     "test:smarts": "node --import tsx --test app/smarts/index.test.ts",
@@ -226,7 +226,9 @@
     "test:backups:workspace": "NITRO_PRESET=node_middleware npm run build:server && node scripts/test-account-profile-backup.mjs backup-workspace",
     "test:thing-storage": "node --import tsx --test app/storage/*.test.ts app/components/Things/thingStorageClient.test.ts",
     "test:thing-storage:integration": "node scripts/test-thing-metadata.mjs --storage-policy",
-    "test:thing-storage:browser": "node scripts/test-thing-metadata.mjs --storage-browser"
+    "test:thing-storage:browser": "node scripts/test-thing-metadata.mjs --storage-browser",
+    "test:file-media": "node --import tsx --test app/components/Things/fileMediaPresentation.test.ts app/components/Attachments/pdfPresentation.test.ts && node scripts/file-media.browser.mjs",
+    "test:file-media:built": "node scripts/smoke-built-file-media.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",
@@ -300,6 +302,7 @@
     "nitro": "^3.0.260610-beta",
     "openai": "^6.44.0",
     "parse5": "8.0.1",
+    "pdfjs-dist": "6.5.438",
     "postcss": "8.5.17",
     "postcss-value-parser": "4.2.0",
     "prismjs": "^1.29.0",

@@ -946,3 +946,28 @@ checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
 still reads both replicas afresh. The canonical mixed fixture reports queued
 peer deferrals before first confirmed file alongside byte/hash/recovery proof.
 - Local file-sync recovery details: `pagedRunJournal.reservedPublication` performs an owner/root/run-fenced read of the original reserved operation and cloud file binding; `SyncProgressViewer` shows its safe identity and receipt markers only inside the expanded Progress → Recovery details disclosure. This diagnostic does not authorize publication, reset saved work, or interpret a missing server receipt as a terminal fence.
+
+### File media presentation and PDF reading — 2026-11-13
+
+`ThingFilePreview` reads the exact bound attachment for a canonical Files Thing;
+`fileMediaPresentation` supplies an explicit embedded render Component. Existing
+`renderComponent` declarations retain precedence. Names mode keeps image/video
+thumbnails independently of expanded rendered previews. Detail and quick look
+reuse the same media path and preserve shared-root/Character authorization.
+
+`PdfDocument` supplies a narrow document/page adapter to `tt-pdf` / `tt-pdf-page`.
+Its toolbar is the editable HTML Component tree in `pdfPresentation.ts`; local
+`data-tt-pdf` controls do not execute saved Actions or PDF JavaScript. Uploaded
+PDFs are recognized from canonical MIME/detected MIME, read through fingerprint
+and pinned bounded ranges, and destroyed on identity/navigation changes. Worker,
+font, CMap and decoder assets are self-hosted by `ensure-pdf-assets.mjs` during
+dev/build; no external document viewer receives file content. Browser integration
+is `node remix/scripts/file-media.browser.mjs` (synthetic transport, actual
+PDF.js/React, desktop/mobile); production/installed acceptance remains separate.
+
+`pdfViewerBlocks()` exposes the toolbar, individual labels, inputs, buttons,
+status and page canvas as ordinary saved element blocks. `HtmlBlockElement`
+applies the narrow PDF context to each block while preserving Builder selection
+and editing. `api.things` 1.66 / update 1.30 negotiate the additive saved grammar.
+PDF documents load on viewport approach; ComponentMedia no longer rejects a
+valid attachment list merely because it exceeds 50 items.

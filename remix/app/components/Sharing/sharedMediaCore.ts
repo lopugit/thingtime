@@ -38,3 +38,15 @@ export const sharedThingPath = (value: string, _linkKey?: string, sharedRoot?: s
   if (sharedRoot && !url.searchParams.has('sharedRoot')) url.searchParams.set('sharedRoot', sharedRoot);
   return `${url.pathname}${url.search}${url.hash}`;
 };
+
+/** Media elements cannot attach identity headers. Only the canonical local
+ * content endpoint receives the selected Character; external links stay intact. */
+export function characterAttachmentUrl(value: string, characterId?: string): string {
+  if (!characterId || !value) return value;
+  try {
+    const parsed = new URL(value, 'https://thingtime.invalid');
+    if (parsed.origin !== 'https://thingtime.invalid' || parsed.pathname !== '/api/v1/attachments/content') return value;
+    parsed.searchParams.set('character', characterId);
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch { return value; }
+}

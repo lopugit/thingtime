@@ -5900,7 +5900,7 @@ const sanitizeWebpageBlock = (
 	if (type === 'element' || type === 'collection' || type === 'condition') {
 		if (type === 'element') {
 			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-pdf', 'tt-pdf-page', 'tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
 			if (tag === 'tt-media-pipeline') {
 				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
 			}

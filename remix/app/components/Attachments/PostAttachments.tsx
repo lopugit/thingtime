@@ -1,3 +1,5 @@
+import { PdfViewer } from './PdfDocument';
+import { isPdfAttachment } from './pdfPresentation';
 import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 import { SharedMediaProvider, useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -210,6 +212,7 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 };
 
 type PostAttachmentsProps = {
+	contentVersion?: string;
 	attachments?: PublicAttachment[];
 	mediaLayout?: PostMediaLayout | null;
 	compact?: boolean;
@@ -221,6 +224,7 @@ type PostAttachmentsProps = {
 };
 
 const PostAttachmentsGallery = ({
+	contentVersion,
 	attachments,
 	mediaLayout,
 	compact,
@@ -420,7 +424,7 @@ const PostAttachmentsGallery = ({
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>
 					{files.map((attachment) => (
-						<AttachmentFileRow key={attachment.id} attachment={attachment} compact={compact} />
+						isPdfAttachment(attachment) ? <PdfViewer key={attachment.id} attachment={attachment} version={contentVersion} /> : <AttachmentFileRow key={attachment.id} attachment={attachment} compact={compact} />
 					))}
 				</Flex>
 			)}

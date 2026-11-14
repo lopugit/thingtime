@@ -17,7 +17,7 @@ Private diagnostics use `api.devices-diagnostics` and
 narrow paired safe-event append. The service owns live-session/pairing fences,
 default provisioning, immutable IDs, accounting and watermarked clear. Both
 manifests derive registered routes. `api.auth-me` 1.3 adds non-failing provisioning;
-Things 1.67/Things-update 1.30 retain private managed-folder boundaries. See
+Things 1.68/Things-update 1.30 retain private managed-folder boundaries. See
 [the contract](../private-device-diagnostics.md); run diagnostic, schema, owner
 query, capability suites and the built API diagnostics fixture.
 Relational access uses `api.things-acl` 1.0.0 at
@@ -1145,6 +1145,15 @@ Photos source discovery extends the existing sync-transfer-admissions route at
 writes, owner reads/discard and watermark pagination share that route; no generic
 Things permission is delegated. See [source index](../sync-source-index.md).
 
+### Editable PDF media controls — 2026-11-13
+
+`api.things` 1.67.0 and `api.things-update` 1.30.0 add compatible optional
+`tt-pdf` / `tt-pdf-page` element blocks to canonical Webpage validation. The
+client gates only writes containing these blocks through
+`PDF_BUILDER_REQUIREMENTS`. Both manifest generators derive these versions
+from `apiDocs.ts`; capability tests assert the published versions and refusal
+of missing/breaking features. `src` remains an ordinary canonical attachment
+media dependency, with existing sharing, copy and ACL traversal.
 
 The relational collection release updates app/OAuth/FedCM, algorithm transfer
 and training, saved database/deployment settings, community invites and

@@ -25,3 +25,7 @@ The scoped seven-document semantic graph refresh reached its measured 900-second
 ## 14 November production integration
 
 Preserved the remote preview-protection correction, production relational ACL and pin protections, and gateway admission/drain plus conditional capability caching. The combined Things contract is 1.67.0, above production ACL 1.66.0; Things update remains 1.30.0 and environment gateway remains 1.2.3. Native source is unchanged from the previously compiled branch. Focused integrated validation passes 210 capability tests, 29 gateway tests, and 153 diagnostics, owner-library and built-in schema tests. These checks do not replace the separately recorded installed app and physical-device acceptance.
+
+Production advanced during CI with PR 1496. The final integration preserves its PDF/media implementation and dependency and advances the combined Things contract to 1.68.0, above PDF 1.67.0; update remains 1.30.0. Native source remains unchanged.
+
+The post-PDF combined capability suite passes 212/212 tests. Focused PDF/media projection tests also pass; earlier diagnostics/schema and gateway checks are retained for their unchanged paths.

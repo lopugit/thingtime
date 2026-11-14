@@ -1,3 +1,5 @@
+import { ThingFilePreview } from '~/components/Things/ThingFilePreview';
+import { fileMediaReference, type MediaThing } from '~/components/Things/fileMediaPresentation';
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import { ContentExecutionBoundary, ContentExecutionScope, useContentExecutionHeld } from '~/components/Builder/ContentExecutionHold';
@@ -436,6 +438,7 @@ function GenericThingPage() {
 	const isSchema = kinds.includes('schema');
 	const isData = kinds.includes('data');
 	const attachment = attachmentFromThing(thing);
+	const fileMedia = thing ? fileMediaReference(thing as MediaThing) : null;
 	// The API's attachment post projection exists for the interaction-focused
 	// `/media/:id` route. It is the attachment coerced into a post-shaped
 	// projection, not the attachment's parent post, so it must never become a
@@ -1031,6 +1034,8 @@ function GenericThingPage() {
 						{sections.preview && thing && (attachment || thing.thingtime?.includes('file')) ? <ThingFileLocation key={thing.id} thing={thing as any} /> : null}
 						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
+						{sections.preview && fileMedia && thing ? <ThingFilePreview thing={thing as MediaThing} /> : null}
+
 						{sections.preview && post ? (
 							<Stack spacing={3} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
@@ -1053,7 +1058,7 @@ function GenericThingPage() {
 							</Stack>
 						) : null}
 
-						{sections.preview && thing && !post ? (
+						{sections.preview && thing && !post && !attachment && !fileMedia ? (
 							// The page runtime is what makes a live surface live: sources
 							// load and refetch after every run, `$refresh`/`$install` work.
 							// Its source is the viewer's ownership; its installer exists only
