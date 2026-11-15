@@ -99,6 +99,24 @@ import UniformTypeIdentifiers
         try require(Data(base64Encoded: imageChunk["base64"] as! String) == originalPhotoBytes, "original image bytes preserved")
         try require((providerPayload["directories"] as! [String]).contains("Item 1/Original Folder/Nested Empty"), "empty directory preserved")
         try require(try Data(contentsOf: source.appendingPathComponent("original.bin")) == Data([8, 7, 6]), "source unchanged")
+        // Finder/NSSharingService's file providers put the content type first.
+        // These must remain original attachments rather than typed previews.
+        let selectedText = root.appendingPathComponent("Original bytes 🥰.txt")
+        let selectedTextBytes = Data("Selected file\nSecond line 🥰\n".utf8)
+        try selectedTextBytes.write(to: selectedText)
+        let selectedFiles = NSExtensionItem()
+        selectedFiles.attachments = [NSItemProvider(contentsOf: selectedText)!, NSItemProvider(contentsOf: photo)!]
+        let originalsId = try await MacShareItemImporter(inbox: inbox).save([selectedFiles])
+        let originalsSession = try ShareComposerSession(inbox: inbox, id: originalsId, origin: renderer, bindUnboundOrigin: true)
+        let originals = try originalsSession.incoming(accountId: "provider-owner")
+        try require(originals["text"] as? String == "", "explicit text file is not inline composer text")
+        let originalsFiles = originals["attachments"] as! [[String: Any]]
+        try require(Set(originalsFiles.map { $0["name"] as! String }) == Set(["Original bytes 🥰.txt", "Original photo.jpg"]), "contentsOf preserves original basenames")
+        for file in originalsFiles {
+            let chunk = try originalsSession.read(accountId: "provider-owner", fileId: file["id"] as! String, offset: 0, length: 256)
+            let expected = file["name"] as? String == "Original photo.jpg" ? originalPhotoBytes : selectedTextBytes
+            try require(Data(base64Encoded: chunk["base64"] as! String) == expected, "contentsOf preserves exact original bytes")
+        }
         let cancelled = MacShareItemImporter(inbox: inbox)
         cancelled.cancel()
         do { _ = try await cancelled.save([item]); throw NSError(domain: "Expected cancellation", code: 1) }

@@ -2484,8 +2484,8 @@
     "semantic_hash": "5fa60f2df750fc49bcaf0454365553c3"
   },
   "browser-extension/page-hook.js": {
-    "mtime": 1794720245.9320607,
-    "seen": 1794720317.636632,
+    "mtime": 1794721510.9682107,
+    "seen": 1794721649.513667,
     "ast_hash": "505e1be58dfacda3f9de3453d2f0cf4c",
     "semantic_hash": "505e1be58dfacda3f9de3453d2f0cf4c"
   },
@@ -3456,9 +3456,9 @@
     "semantic_hash": "c0d38bec62ae5afd7f1a30f6b7a42513"
   },
   "electron/main.cjs": {
-    "mtime": 1794719153.0534854,
-    "seen": 1794719476.89817,
-    "ast_hash": "a141a088f798a47434cc05c5a944246b",
+    "mtime": 1794720990.480897,
+    "seen": 1794721190.217511,
+    "ast_hash": "83e1b577be339d5dcc6a5a76d9b74e86",
     "semantic_hash": ""
   },
   "electron/package.json": {
@@ -12222,10 +12222,10 @@
     "semantic_hash": "c0a1f148b063246356dc59827d519def"
   },
   "remix/app/components/Attachments/useAttachmentUploads.ts": {
-    "mtime": 1794718518.4575791,
-    "seen": 1794719082.606883,
-    "ast_hash": "f67dc8facfe98693a63f7c3bf074dba4",
-    "semantic_hash": "f67dc8facfe98693a63f7c3bf074dba4"
+    "mtime": 1794721449.8898468,
+    "seen": 1794721649.5876968,
+    "ast_hash": "f6d25260a96734672b74b491f0518117",
+    "semantic_hash": ""
   },
   "remix/app/components/Branding/BrandAssetSection.tsx": {
     "mtime": 1794718518.461431,
@@ -14202,10 +14202,10 @@
     "semantic_hash": "5975cd0ad6ce803019c5ad7722297403"
   },
   "remix/app/components/Feed/PostComposer.tsx": {
-    "mtime": 1794718518.5642962,
-    "seen": 1794719082.607198,
-    "ast_hash": "57a060c2df4522ec9baf106a31188ec1",
-    "semantic_hash": "57a060c2df4522ec9baf106a31188ec1"
+    "mtime": 1794720871.8370717,
+    "seen": 1794721190.276474,
+    "ast_hash": "aff64d7b3dcf2b69ec69edb16c8b4d58",
+    "semantic_hash": ""
   },
   "remix/app/components/Feed/PostInteractiveThing.tsx": {
     "mtime": 1794718518.5643954,
@@ -29100,9 +29100,9 @@
     "semantic_hash": "5935a79a6033f4540a084131c4badb54"
   },
   "TESTING.md": {
-    "mtime": 1794720175.9353395,
-    "seen": 1794720317.778111,
-    "ast_hash": "7e6aa91d9b606efe313bd5046a039b1e",
+    "mtime": 1794721581.2173517,
+    "seen": 1794721649.692457,
+    "ast_hash": "e561efff6dddf9274d83b645f4eac858",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -30192,9 +30192,9 @@
     "semantic_hash": "206103177ef24727b10304e655440e4c"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1794719077.6272,
-    "seen": 1794719082.6097221,
-    "ast_hash": "1de76a7a41e1bede20c85c8afdba4e46",
+    "mtime": 1794721581.2191567,
+    "seen": 1794721649.6977448,
+    "ast_hash": "ff5d78ceedcc93b77b7768eac81dd28f",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -33744,10 +33744,10 @@
     "semantic_hash": "b929f7d53491b243ce8498fa744c4912"
   },
   "remix/app/components/Attachments/desktopAttachmentUpload.test.ts": {
-    "mtime": 1794718518.4563239,
-    "seen": 1794719082.60687,
-    "ast_hash": "341d14ed38ad7182e3e44590bf67d185",
-    "semantic_hash": "341d14ed38ad7182e3e44590bf67d185"
+    "mtime": 1794721449.8900561,
+    "seen": 1794721649.58716,
+    "ast_hash": "2f13eb6448f37e125256116423a40ecf",
+    "semantic_hash": ""
   },
   "remix/app/components/Attachments/desktopAttachmentUpload.ts": {
     "mtime": 1794718518.456394,
@@ -34218,16 +34218,16 @@
     "semantic_hash": "2a6077dbd2220f46c356c3b2c15b7825"
   },
   "remix/app/components/IncomingShare/incomingShare.test.ts": {
-    "mtime": 1794718518.5699437,
-    "seen": 1794719082.6072268,
-    "ast_hash": "b25abe97bc1da512db9d0db2b1500bb0",
-    "semantic_hash": "b25abe97bc1da512db9d0db2b1500bb0"
+    "mtime": 1794720860.6316488,
+    "seen": 1794721190.277405,
+    "ast_hash": "4f6e2e1660eb104f0ec5c7d0495689de",
+    "semantic_hash": ""
   },
   "remix/app/components/IncomingShare/incomingShare.ts": {
-    "mtime": 1794718518.570014,
-    "seen": 1794719082.6072268,
-    "ast_hash": "e10666087ecca8d3ef0f5c38dbcd115d",
-    "semantic_hash": "e10666087ecca8d3ef0f5c38dbcd115d"
+    "mtime": 1794720860.6304896,
+    "seen": 1794721190.277406,
+    "ast_hash": "a11a78a0562d76d46297dac0c5364317",
+    "semantic_hash": ""
   },
   "remix/app/components/IncomingShare/incomingShareBlocks.ts": {
     "mtime": 1794718518.5700788,
@@ -34272,16 +34272,16 @@
     "semantic_hash": "276130f8f9f369a7a2828cec6ff0a1a1"
   },
   "remix/app/routes/share.tsx": {
-    "mtime": 1794718518.9205556,
-    "seen": 1794719082.608453,
-    "ast_hash": "362e8ae748fefa137e5a16a792937a23",
-    "semantic_hash": "362e8ae748fefa137e5a16a792937a23"
+    "mtime": 1794720860.631382,
+    "seen": 1794721190.318569,
+    "ast_hash": "ded640036cb2ed50e5eb2eb5f417a6ca",
+    "semantic_hash": ""
   },
   "remix/scripts/incoming-share-acceptance.mjs": {
-    "mtime": 1794718521.976773,
-    "seen": 1794719082.6088781,
-    "ast_hash": "1a00b031b2bc23f1ca82275a23f9333a",
-    "semantic_hash": "1a00b031b2bc23f1ca82275a23f9333a"
+    "mtime": 1794720860.6318123,
+    "seen": 1794721190.3318028,
+    "ast_hash": "f60386f0f021b38f794f6bce2175afb5",
+    "semantic_hash": ""
   },
   "docs/incoming-sharing.md": {
     "mtime": 1794718515.8947196,
@@ -38832,9 +38832,9 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeShare/MacShareItemImporter.swift": {
-    "mtime": 1794719243.7426465,
-    "seen": 1794719476.909773,
-    "ast_hash": "4f0aa18045f87c1fb40ce6b89a8d70bf",
+    "mtime": 1794721208.4345422,
+    "seen": 1794721353.685083,
+    "ast_hash": "b5c799d7a490839f251faac4a4ddbcff",
     "semantic_hash": ""
   },
   "macos/ThingtimeShare/ShareBridgeMain.swift": {
@@ -38850,9 +38850,9 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeShare/NativeShareTests.swift": {
-    "mtime": 1794719271.3755412,
-    "seen": 1794719476.909775,
-    "ast_hash": "95f681c234e315f0bbc19abe49295b33",
+    "mtime": 1794721208.4349477,
+    "seen": 1794721353.685087,
+    "ast_hash": "46042b0454e2d3bd173fd073e9c90b59",
     "semantic_hash": ""
   },
   "macos/ThingtimeShare/ShareViewController.swift": {
@@ -38874,9 +38874,9 @@
     "semantic_hash": ""
   },
   "docs/macos-sharing.md": {
-    "mtime": 1794720175.9316576,
-    "seen": 1794720317.781787,
-    "ast_hash": "f538ad33176d9b0dbefffe035ec42090",
+    "mtime": 1794721449.890618,
+    "seen": 1794721649.6965399,
+    "ast_hash": "dd8f516a6a9909ad707f591013cc5237",
     "semantic_hash": ""
   },
   "electron/scripts/verify-share-handoff.mjs": {

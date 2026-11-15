@@ -16749,11 +16749,20 @@ including loading/retry, selection preservation and bottom-of-page controls.
   sharing service. Compare composer contents and file bytes to the originals.
   Repeat with Thingtime running and closed; repeated delivery of the same UUID
   must focus the existing dialog and must not duplicate a submission.
+- Verify actual `NSItemProvider(contentsOf:)` text and image selections remain
+  files with their original names and exact bytes, rather than inline text or
+  converted previews. Prepare and upload a shared Post attachment on the home
+  data plane through the native transport; a custom data plane must retain its
+  existing upload destination and must never silently switch to home storage.
 - Keep unsaved work in the main window while sharing. Open all three destination
   views, scroll to the bottom, resize narrow/wide, and verify focus, clipping and
   attachment previews. Closing preserves content; File → Resume shared content
   and Saved shares reopen it after relaunch. Switch account/API endpoint while
   open and verify protected content closes before another identity can read it.
+- Confirm the normal macOS close button dismisses the share window, the main
+  window stays usable, and File → Resume shared content restores it. Share
+  multiline plain text with literal markup; Post must preserve line breaks and
+  display markup as text rather than interpreting it as HTML or Markdown.
 - For publishing/saving acceptance, use a disposable test account and isolated
   backend; read the exact result back through the real API. Failed/uncertain
   submission retries retain the original operation identity and payload.

@@ -52,6 +52,14 @@ final class MacShareItemImporter: @unchecked Sendable {
     }
     private func save(_ provider: NSItemProvider, into directory: URL) async throws -> URL? {
         let types = provider.registeredTypeIdentifiers
+        // macOS file providers advertise their content UTI before file-url.
+        // Preserve the selected file's bytes, basename and directory identity
+        // before considering text/image object representations. Never convert
+        // an unreadable explicit file reference into inline text or a preview.
+        if let fileType = types.first(where: { UTType($0)?.conforms(to: .fileURL) == true }) {
+            _ = try await saveItem(provider, type: fileType, into: directory, requiresFileURL: true)
+            return nil
+        }
         for type in types {
             try check()
             let ut = UTType(type)
@@ -81,13 +89,16 @@ final class MacShareItemImporter: @unchecked Sendable {
         }
         throw ShareInbox.Failure.empty
     }
-    private func saveItem(_ provider: NSItemProvider, type: String, into directory: URL) async throws -> URL? {
+    private func saveItem(_ provider: NSItemProvider, type: String, into directory: URL, requiresFileURL: Bool = false) async throws -> URL? {
         let suggestedName = filename(provider, type: type, fallback: "Shared item")
         return try await withCheckedThrowingContinuation { continuation in
             let receive: @Sendable (NSSecureCoding?, Error?) -> Void = { item, error in
                 do {
                     try self.check()
                     guard let item else { throw error ?? ShareInbox.Failure.empty }
+                    if requiresFileURL {
+                        guard let url = item as? URL, url.isFileURL else { throw ShareInbox.Failure.empty }
+                    }
                     if let url = item as? URL {
                         if url.isFileURL {
                             let scoped = url.startAccessingSecurityScopedResource()

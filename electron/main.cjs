@@ -1889,7 +1889,7 @@ function openIncomingShare(id) {
  pendingShareStore.add(id, endpoint);
  createApplicationMenu();
  // A later incoming share stays in recovery while the current composer retains
- // its edits. Never stack modal composers or discard an unfinished draft.
+ // its edits. Never stack composers or discard an unfinished draft.
  const currentShare = [...incomingShareWindows.values()].find(state => !state.window.isDestroyed());
  if (currentShare) { currentShare.window.show(); currentShare.window.focus(); return; }
  const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'dist', 'native');
@@ -1906,7 +1906,9 @@ function openIncomingShare(id) {
  } else if (settings.testing === true || settings.testRoot !== undefined) throw Error('Synthetic sharing is unavailable in the installed app.');
  fs.accessSync(executable, fs.constants.X_OK);
  const origin = appOrigin;
- const window = new BrowserWindow({ parent: mainWindow, modal: true, width: 740, height: 840, minWidth: 360, minHeight: 480,
+ // macOS sheets hide their traffic-light close control. A titled child window
+ // keeps dismissal available and leaves the main window usable while composing.
+ const window = new BrowserWindow({ parent: mainWindow, modal: false, width: 740, height: 840, minWidth: 360, minHeight: 480,
   show: false, title: 'Share to Thingtime', backgroundColor: '#ffffff',
   webPreferences: { partition: rendererPartition(), contextIsolation: true, nodeIntegration: false, sandbox: true,
    preload: path.join(__dirname, 'preload.cjs'), additionalArguments: ['--thingtime-incoming-share'] } });
@@ -1916,6 +1918,11 @@ function openIncomingShare(id) {
  const upload = new DesktopAttachmentUpload({ context: () => ({ enabled: !desktopServicesClosing, window, appOrigin: origin, apiOrigin: endpoint }) });
  const state = { window, session: shareSession, upload }; incomingShareWindows.set(id, state);
  window.on('closed', () => { shareSession.close(); upload.invalidate(); incomingShareWindows.delete(id); });
+ window.webContents.on('before-input-event', (event, input) => {
+  if (input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'w') {
+   event.preventDefault(); window.close();
+  }
+ });
  window.webContents.on('render-process-gone', () => { shareSession.close(); upload.invalidate(); });
  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
  window.webContents.on('will-navigate', (event, rawUrl) => {

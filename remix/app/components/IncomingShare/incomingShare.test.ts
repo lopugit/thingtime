@@ -124,3 +124,13 @@ test('directory-only incoming shares remain valid and malformed folders never di
  bridge.request = async body => body.method === 'getIncomingShare' ? { id, accountId, apiOrigin: origin, text: '', attachments: [], directories: ['kept', 42] } : invoke(body);
  await assert.rejects(readIncomingShare(bridge, id, accountId, origin, new AbortController().signal), /folder/);
 });
+
+test('literal shared text preserves line breaks without interpreting markup or Markdown', async () => {
+ const { incomingShareEditorDocument } = await import('./incomingShare');
+ const { blocksToText } = await import('../Editor/editorJsValue');
+ const text = 'Thingtime macOS share acceptance — line one\nLine two 🥰';
+ const doc = incomingShareEditorDocument(text);
+ assert.equal(doc.blocks[0].data.text, 'Thingtime macOS share acceptance — line one<br>Line two 🥰');
+ assert.equal(blocksToText(doc.blocks), text);
+ assert.equal(incomingShareEditorDocument('<script>& # literal\r\n\rnext').blocks[0].data.text, '&lt;script&gt;&amp; # literal<br><br>next');
+});

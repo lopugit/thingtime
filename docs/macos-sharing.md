@@ -74,3 +74,5 @@ and preserve the prior installed app if verification fails.
 Apple references: [Share extensions](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Share.html),
 [App Group containers on macOS](https://developer.apple.com/documentation/xcode/accessing-app-group-containers),
 and [opening URLs in a specified app](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:withapplicationat:configuration:completionhandler:)).
+
+Incoming-share Post, Comment and other media uploads use the existing scoped native transport on the home data plane, avoiding renderer CORS restrictions for signed storage transfers. Upload admission still enforces the requested purpose and account. Custom-data-plane media retains its existing browser transport; it is never silently uploaded to home storage. Files retain their existing home-scoped native path.
