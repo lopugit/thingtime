@@ -75,7 +75,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
   "mongodb-connection-snapshot": ["source"],
   "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
-  "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
+  "ai-model": ["modelId", "label", "provider", "efforts", "providerEfforts", "providerEffortsCheckedAt", "providerEffortsVersion", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
   "account-invite": ["status", "amountMicros"],
   "lopu-account": ["balanceMicros", "lifetimeCostMicros", "lifetimeInputTokens", "lifetimeOutputTokens", "turns", "monthKey", "monthCostMicros", "monthTurns", "starterGranted", "starterMicros", "lowBalanceNotifiedAt", "inflight", "inflightSince", "appliedIds"],
   "lopu-usage": ["chatId", "requestId", "surface", "provider", "providerLabel", "model", "billing", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "costMicros", "priced", "estimated", "debitedMicros", "toolCalls", "hops", "durationMs"],

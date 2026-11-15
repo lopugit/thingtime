@@ -1,3 +1,4 @@
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -27,6 +28,7 @@ const run = async () =>
 		const scheduledReminders = await runLopuReminders();
 		const recordings = await runRecordingAutomation();
 		const handoffs = await runRecordingHandoffs();
+    recordScheduledPassResult('/api/v1/lopu/recordings/run',{reminders,scheduledReminders,recordings,handoffs,storageRecovery});
 		return json({ ok: true, reminders, scheduledReminders, recordings, handoffs, storageRecovery }, { headers });
 	});
 

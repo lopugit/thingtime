@@ -82,6 +82,8 @@ export const AI_MODEL_PRICING: Readonly<Record<string, AiModelPrice>> = Object.f
   // --- Anthropic (list prices) --------------------------------------------
   'claude-fable-5-1': { ...anthropic(10, 50), cacheReadPerM: 0.25 },
   'claude-fable-5': anthropic(10, 50),
+  // https://platform.claude.com/docs/en/models/opus-5-5/overview
+  'claude-opus-5-5': { ...anthropic(4, 20), cacheReadPerM: 0.2 },
   'claude-opus-5': anthropic(5, 25),
   'claude-opus-4-8': anthropic(5, 25),
   'claude-opus-4-7': anthropic(5, 25),

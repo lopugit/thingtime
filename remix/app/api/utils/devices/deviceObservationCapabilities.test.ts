@@ -17,14 +17,15 @@ test('observation operations are deliberately versioned in both origin-scoped ma
 	const manifest = thingtimeCapabilityManifest(origin);
 	const map = readFileSync(new URL('../../../../server/routes/api/[...].ts', import.meta.url), 'utf8');
 	for (const [id, [path, methods]] of Object.entries(endpoints)) {
+		const version = id === 'devices-observations-cleanup' ? '1.1.0' : '1.0.0';
 		const doc = apiEndpointDocs.find((d) => d.id === id);
-		assert.equal(doc?.featureVersion, '1.0.0');
-		assert.equal(doc?.contractVersion, '1.0.0');
+		assert.equal(doc?.featureVersion, version);
+		assert.equal(doc?.contractVersion, version);
 		assert.deepEqual(doc?.methods, [...methods]);
 		assert.equal(doc?.endpoint, path);
-		assert.equal(source.features[`api.${id}`], '1.0.0');
+		assert.equal(source.features[`api.${id}`], version);
 		assert.equal(manifest.origin, origin);
-		assert.equal(manifest.features[`api.${id}`].version, '1.0.0');
+		assert.equal(manifest.features[`api.${id}`].version, version);
 		assert.ok(manifest.operations.some((o) => o.path === path && o.feature === `api.${id}` && methods.every((m) => o.methods.includes(m as any))));
 		for (const compatible of ['1.0.0', '1.1.0', '1.0.1']) assert.equal(capabilitySatisfies(compatible, '1.0.0'), true);
 		for (const refused of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(refused, '1.0.0'), false);

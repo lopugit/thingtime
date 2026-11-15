@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 let docs: any[] = [];
 let insertBatchSizes: number[] = [];
+const authorizationWrites: any[] = [];
+let authorizationMatch = true;
 const matches = (doc: any, query: any) => Object.entries(query).every(([key, expected]: any) => {
   const value = key.split('.').reduce((at, part) => at?.[part], doc);
   return expected && typeof expected === 'object' && '$in' in expected ? expected.$in.includes(value) : Array.isArray(value) ? value.includes(expected) : value === expected;
@@ -19,7 +21,7 @@ const collection = {
   insertMany: async (rows: any[]) => { insertBatchSizes.push(rows.length); docs.push(...rows); },
   findOneAndUpdate: async (query: any, patch: any) => { const doc = docs.find(doc => matches(doc, query)); if (doc) { for (const [key, value] of Object.entries(patch.$set)) { const parts = key.split('.'); if (parts.length === 2) doc[parts[0]][parts[1]] = value; else doc[key] = value; } } return doc || null; },
   countDocuments: async (query: any) => docs.filter(doc => matches(doc, query)).length,
-  updateOne: async (query: any, patch: any) => { const doc = docs.find(doc => matches(doc, query)); if (!doc) return { matchedCount: 0 }; Object.assign(doc, patch.$set); return { matchedCount: 1 }; },
+  updateOne: async (query: any, patch: any, options: any) => { if (patch.$set?.authorizationFence) { authorizationWrites.push({query,patch,options}); if (!authorizationMatch) return {matchedCount:0}; } const doc = docs.find(doc => matches(doc, query)); if (!doc) return { matchedCount: 0 }; Object.assign(doc, patch.$set); return { matchedCount: 1 }; },
   deleteMany: async (query: any) => { docs = docs.filter(doc => !matches(doc, query)); },
   deleteOne: async (query: any) => { const index = docs.findIndex(doc => matches(doc, query)); if (index < 0) return { deletedCount: 0 }; docs.splice(index, 1); return { deletedCount: 1 }; }
 };
@@ -34,8 +36,8 @@ mock.module(new URL('../storage/accountedThings.ts', import.meta.url).href, { na
 mock.module(new URL('../auth/users.ts', import.meta.url).href, { namedExports: { findUserById: async (id: string) => id === 'missing' ? null : { _id: id } } });
 mock.module(new URL('../users/social.ts', import.meta.url).href, { namedExports: { friendIdsOf: async () => new Set(), groupIdsOf: async () => new Set() } });
 mock.module(new URL('../things/things.ts', import.meta.url).href, { namedExports: { resolveProfiles: async (ids: string[]) => new Map(ids.map(id => [id, { id }])) } });
-const { createGroup, listGroups, updateGroup } = await import('./groups.ts');
-beforeEach(() => { docs = []; insertBatchSizes = []; });
+const { createGroup, listGroups, updateGroup, fenceOwnedGroup } = await import('./groups.ts');
+beforeEach(() => { docs = []; insertBatchSizes = []; authorizationWrites.length = 0; authorizationMatch = true; });
 test('relational groups and member lists remain reachable beyond former caps', async () => {
   const now = new Date();
   docs = Array.from({ length: 70 }, (_, i) => ({ shareId: `group-${i}`, thingtime: ['group'], ownerId: 'owner', crystal: { name: `Group ${i}` }, createdAt: now, updatedAt: now }));
@@ -78,4 +80,20 @@ test('large membership validation still rejects unknown users and excludes owner
   const created = await createGroup('owner', { name: 'Group', memberIds: ['owner', 'member', 'member'] });
   assert.equal(created.ok, true);
   if (created.ok) assert.equal(created.group.memberCount, 1);
+});
+
+
+test('owned-group fences touch the exact current root and deny deletion or wrong ownership', async () => {
+  docs = [{ _id: 'physical-group', shareId: 'group', thingtime: ['group'], ownerId: 'owner' }];
+  const session = { inTransaction: () => true };
+  assert.equal(await fenceOwnedGroup('owner', 'group', session, 'token'), true);
+  assert.deepEqual(authorizationWrites[0].query, { _id: 'physical-group', shareId: 'group', thingtime: 'group', ownerId: 'owner' });
+  assert.equal(authorizationWrites[0].options.session, session);
+  assert.match(authorizationWrites[0].patch.$set.authorizationFence, /^token:[a-f0-9-]{36}$/);
+  assert.equal(await fenceOwnedGroup('other', 'group', session, 'token'), false);
+  authorizationMatch = false;
+  assert.equal(await fenceOwnedGroup('owner', 'group', session, 'token'), false);
+  docs = [];
+  assert.equal(await fenceOwnedGroup('owner', 'group', session, 'token'), false);
+  await assert.rejects(fenceOwnedGroup('owner', 'group', {}, 'token'), /active transaction/);
 });

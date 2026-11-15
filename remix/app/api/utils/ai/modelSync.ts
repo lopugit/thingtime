@@ -12,7 +12,7 @@ import {
 	getAiModelCatalogEntry,
 	type AiModelProviderId
 } from './modelsCore';
-import { discoverConfiguredProviderModels, isModelUnavailableError, ModelDiscoveryHttpError, type DiscoveredAiModel } from './modelDiscovery';
+import { ANTHROPIC_MODELS_VERSION, discoverConfiguredProviderModels, isModelUnavailableError, ModelDiscoveryHttpError, type DiscoveredAiModel } from './modelDiscovery';
 
 // Leave room for cron invocation jitter so a daily job is never skipped.
 const DAILY_INTERVAL = 23 * 60 * 60_000;
@@ -196,6 +196,7 @@ export const createMongoModelSyncStore = (
 							updatedAt: claim.startedAt
 						} : { 'crystal.providerAvailable': true, 'crystal.lastSyncedAt': claim.startedAt,
 							'crystal.publicCatalogAvailable': true, 'crystal.catalogSource': 'authenticated', 'crystal.catalogCheckedAt': claim.startedAt,
+              ...(provider==='anthropic' && model.efforts!==undefined?{'crystal.providerEfforts':[...model.efforts],'crystal.providerEffortsCheckedAt':claim.startedAt,'crystal.providerEffortsVersion':ANTHROPIC_MODELS_VERSION}:{}),
 							updatedAt: claim.startedAt }
 					}
 				}

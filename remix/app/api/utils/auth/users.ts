@@ -480,6 +480,35 @@ export const fenceCurrentAdminCredentialImport = async (userId: string, session:
 	return updated.matchedCount === 1;
 };
 
+/** Fence a trusted internal authorization predicate against the current
+ * Things-first account root in the caller's home transaction. The predicate
+ * receives the same decoded account representation as normal authentication.
+ * A denied Thing never falls through to an older, more permissive legacy twin. */
+export const createCurrentAccountAuthorizationFence = (dependencies = {
+  getThings: getThingsCollection, getUsers: getUsersCollection
+}) => async (id: string, predicate: (user: any) => boolean, session: ClientSession, token: string): Promise<boolean> => {
+  if (typeof session?.inTransaction !== 'function' || !session.inTransaction() || typeof token !== 'string' || !token) throw new Error('Account authorization requires an active transaction and fence token');
+  const things = await dependencies.getThings();
+  const options = { session };
+  const filter = { shareId: id, thingtime: 'user' };
+  const row = await things.findOne(filter, options);
+  // Always change the stamp, even if an internal caller reuses its token.
+  const stamp = () => `${token}:${lopuSettingsRevision()}`;
+  if (row) {
+    if (predicate(userThingToDoc(row)) !== true) return false;
+    const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { accountAuthorizationFence: stamp() } }, options);
+    return result.matchedCount === 1;
+  }
+  if (!ObjectId.isValid(id)) return false;
+  const legacy = await dependencies.getUsers();
+  const legacyFilter = { _id: new ObjectId(id) };
+  const user = await legacy.findOne(legacyFilter, options);
+  if (!user || predicate(user) !== true) return false;
+  const result = await legacy.updateOne(legacyFilter, { $set: { accountAuthorizationFence: stamp() } }, options);
+  return result.matchedCount === 1;
+};
+export const fenceCurrentAccountAuthorization = createCurrentAccountAuthorizationFence();
+
 /** A delegated private upload publication must serialize with the current
  * account's upload-permission change or deletion, as well as session revoke.
  * Keep the same Things-first identity and permission policy as ordinary auth. */

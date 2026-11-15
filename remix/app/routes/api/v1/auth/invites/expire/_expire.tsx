@@ -1,3 +1,4 @@
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { expireInvites } from '~/api/utils/invites/invites';
@@ -10,5 +11,6 @@ export const loader = async ({ request }: { request: Request }) => {
 	if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers });
 	await expireInvites();
+  recordScheduledPassResult('/api/v1/auth/invites/expire',{ok:true});
 	return json({ ok: true }, { headers });
 };

@@ -1,3 +1,4 @@
+import type { AiModelEffort } from '../settings/prConflictResolverModelWaterfallCore';
 import type { AiModelProviderId } from './modelsCore';
 import { buildAiProviderProbeRequest } from './providerProbe';
 
@@ -7,7 +8,19 @@ export class ModelDiscoveryHttpError extends Error {
 	}
 }
 
-export type DiscoveredAiModel = { id: string; label: string; source?: 'public-docs'; lifecycle?: 'active' | 'legacy' | 'deprecated' | 'retired' };
+export type DiscoveredAiModel = { id: string; label: string; efforts?: AiModelEffort[]; source?: 'public-docs'; lifecycle?: 'active' | 'legacy' | 'deprecated' | 'retired' };
+export const ANTHROPIC_MODELS_VERSION = '2026-10-21' as const;
+const ANTHROPIC_EFFORTS = ['low','medium','high','xhigh','max'] as const;
+// Complete explicit provider booleans only. Missing/legacy/malformed metadata
+// never clears an earlier verified capability snapshot.
+export const parseAnthropicModelEfforts = (capabilities: unknown): AiModelEffort[] | undefined => {
+  const effort=(capabilities as any)?.effort;
+  if (!effort || typeof effort!=='object' || Array.isArray(effort)) return undefined;
+  if (effort.supported===false) return ANTHROPIC_EFFORTS.some(tier=>effort[tier]!==undefined && (typeof effort[tier]?.supported!=='boolean'||effort[tier].supported===true))?undefined:[];
+  if (effort.supported!==true || ANTHROPIC_EFFORTS.some(tier=>typeof effort[tier]?.supported!=='boolean')) return undefined;
+  const supported=ANTHROPIC_EFFORTS.filter(tier=>effort[tier].supported===true);
+  return supported.length?[...supported]:undefined;
+};
 export type ModelDiscoveryRequest = { url: string; headers: Record<string, string> };
 export const MODEL_DISCOVERY_TIMEOUT_MS = 20_000;
 const MAX_MODELS = 2_000;
@@ -61,7 +74,8 @@ export async function discoverProviderModels(
 			if (!row || typeof row.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(row.id))
 				throw new Error('Model discovery returned an invalid model');
 			if (row.lifecycle === 'retired') continue;
-			models.set(row.id, { id: row.id, label: typeof row.display_name === 'string' ? row.display_name.slice(0, 120) : row.id });
+			const efforts=provider==='anthropic'?parseAnthropicModelEfforts(row.capabilities):undefined;
+      models.set(row.id, { id: row.id, label: typeof row.display_name === 'string' ? row.display_name.slice(0, 120) : row.id, ...(efforts!==undefined?{efforts}:{}) });
 			if (models.size > MAX_MODELS) throw new Error('Model discovery exceeded its model limit');
 		}
 		if (body.has_more !== true) {
@@ -100,7 +114,7 @@ export async function discoverConfiguredProviderModels(
 		try {
 			return await discoverProviderModels(provider, {
 				url: 'https://api.anthropic.com/v1/models',
-				headers: { 'x-api-key': catalogueKey, 'anthropic-version': '2023-06-01' }
+				headers: { 'x-api-key': catalogueKey, 'anthropic-version': ANTHROPIC_MODELS_VERSION }
 			}, fetchImpl);
 		} catch (error) {
 			if (!(error instanceof ModelDiscoveryHttpError) || ![401, 403].includes(error.status)) throw error;

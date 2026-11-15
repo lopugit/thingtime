@@ -76,6 +76,21 @@ test('composed option ids parse, canonicalize segment order, and reject invalid 
   }
 });
 
+test('Opus 5.5 exposes verified efforts while preserving provider default and normal speed', () => {
+  const opus = getAiWorkflowBaseModel('claude-opus-5-5');
+  assert.equal(opus?.label, 'Claude Opus 5.5');
+  assert.deepEqual(opus?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.equal(parseAiWorkflowModelOptionId(`claude-opus-5-5:${effort}`)?.effort, effort);
+  }
+  assert.equal(parseAiWorkflowModelOptionId('claude-opus-5-5')?.effort, null);
+  for (const effort of ['none', 'minimal', 'ultra', 'fast']) {
+    assert.equal(parseAiWorkflowModelOptionId(`claude-opus-5-5:${effort}`), null);
+  }
+  // Discovery alone must not infer effort tiers for an unverified future model.
+  assert.deepEqual(getAiWorkflowBaseModel('claude-opus-9-9')?.efforts, []);
+});
+
 test('Astra exposes only API-supported reasoning levels and preserves provider default', () => {
   const astra = getAiWorkflowBaseModel('gpt-6-astra');
   assert.deepEqual(astra?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
