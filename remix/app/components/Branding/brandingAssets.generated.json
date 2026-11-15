@@ -50,103 +50,103 @@
           "w": 32,
           "h": 6,
           "url": "/branding/generated/logo/thingtime-logo-32x6.png",
-          "bytes": 518
+          "bytes": 542
         },
         {
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo/thingtime-logo-50x9.png",
-          "bytes": 656
+          "bytes": 681
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo/thingtime-logo-64x12.png",
-          "bytes": 690
+          "bytes": 715
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo/thingtime-logo-100x19.png",
-          "bytes": 743
+          "bytes": 769
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo/thingtime-logo-128x24.png",
-          "bytes": 761
+          "bytes": 786
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo/thingtime-logo-200x37.png",
-          "bytes": 768
+          "bytes": 794
         },
         {
           "w": 256,
           "h": 47,
           "url": "/branding/generated/logo/thingtime-logo-256x47.png",
-          "bytes": 789
+          "bytes": 815
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo/thingtime-logo-500x93.png",
-          "bytes": 909
+          "bytes": 935
         },
         {
           "w": 512,
           "h": 95,
           "url": "/branding/generated/logo/thingtime-logo-512x95.png",
-          "bytes": 521
+          "bytes": 523
         },
         {
           "w": 1000,
           "h": 185,
           "url": "/branding/generated/logo/thingtime-logo-1000x185.png",
-          "bytes": 781
+          "bytes": 779
         },
         {
           "w": 1024,
           "h": 190,
           "url": "/branding/generated/logo/thingtime-logo-1024x190.png",
-          "bytes": 819
+          "bytes": 818
         },
         {
           "w": 2000,
           "h": 370,
           "url": "/branding/generated/logo/thingtime-logo-2000x370.png",
-          "bytes": 1581
+          "bytes": 1580
         },
         {
           "w": 2048,
           "h": 379,
           "url": "/branding/generated/logo/thingtime-logo-2048x379.png",
-          "bytes": 2093
+          "bytes": 2119
         },
         {
           "w": 4096,
           "h": 759,
           "url": "/branding/generated/logo/thingtime-logo-4096x759.png",
-          "bytes": 4993
+          "bytes": 5016
         },
         {
           "w": 5000,
           "h": 926,
           "url": "/branding/generated/logo/thingtime-logo-5000x926.png",
-          "bytes": 7439
+          "bytes": 7460
         },
         {
           "w": 8192,
           "h": 1517,
           "url": "/branding/generated/logo/thingtime-logo-8192x1517.png",
-          "bytes": 16651
+          "bytes": 16677
         },
         {
           "w": 10000,
           "h": 1852,
           "url": "/branding/generated/logo/thingtime-logo-10000x1852.png",
-          "bytes": 23374
+          "bytes": 23396
         }
       ]
     },
@@ -1082,103 +1082,103 @@
           "w": 32,
           "h": 6,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-32x6.png",
-          "bytes": 545
+          "bytes": 577
         },
         {
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-50x9.png",
-          "bytes": 880
+          "bytes": 919
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-64x12.png",
-          "bytes": 887
+          "bytes": 936
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-100x19.png",
-          "bytes": 1313
+          "bytes": 1371
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-128x24.png",
-          "bytes": 1272
+          "bytes": 1319
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-200x37.png",
-          "bytes": 1502
+          "bytes": 1569
         },
         {
           "w": 256,
           "h": 47,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-256x47.png",
-          "bytes": 1558
+          "bytes": 1627
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-500x93.png",
-          "bytes": 1713
+          "bytes": 1765
         },
         {
           "w": 512,
           "h": 95,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-512x95.png",
-          "bytes": 1140
+          "bytes": 1143
         },
         {
           "w": 1000,
           "h": 185,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-1000x185.png",
-          "bytes": 1449
+          "bytes": 1447
         },
         {
           "w": 1024,
           "h": 190,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-1024x190.png",
-          "bytes": 1584
+          "bytes": 1582
         },
         {
           "w": 2000,
           "h": 370,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-2000x370.png",
-          "bytes": 2778
+          "bytes": 2775
         },
         {
           "w": 2048,
           "h": 379,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-2048x379.png",
-          "bytes": 3429
+          "bytes": 3482
         },
         {
           "w": 4096,
           "h": 759,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-4096x759.png",
-          "bytes": 6423
+          "bytes": 6472
         },
         {
           "w": 5000,
           "h": 926,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-5000x926.png",
-          "bytes": 8972
+          "bytes": 9016
         },
         {
           "w": 8192,
           "h": 1517,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-8192x1517.png",
-          "bytes": 18243
+          "bytes": 18308
         },
         {
           "w": 10000,
           "h": 1852,
           "url": "/branding/generated/logo-outline/thingtime-logo-outline-10000x1852.png",
-          "bytes": 24832
+          "bytes": 24874
         }
       ]
     },
@@ -1346,97 +1346,97 @@
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-50x9.png",
-          "bytes": 1156
+          "bytes": 1167
         },
         {
           "w": 64,
           "h": 11,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-64x11.png",
-          "bytes": 1349
+          "bytes": 1357
         },
         {
           "w": 100,
           "h": 18,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-100x18.png",
-          "bytes": 1567
+          "bytes": 1575
         },
         {
           "w": 128,
           "h": 23,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-128x23.png",
-          "bytes": 1987
+          "bytes": 1994
         },
         {
           "w": 200,
           "h": 36,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-200x36.png",
-          "bytes": 1975
+          "bytes": 1992
         },
         {
           "w": 256,
           "h": 46,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-256x46.png",
-          "bytes": 2503
+          "bytes": 2506
         },
         {
           "w": 500,
           "h": 89,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-500x89.png",
-          "bytes": 3747
+          "bytes": 3767
         },
         {
           "w": 512,
           "h": 91,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-512x91.png",
-          "bytes": 3534
+          "bytes": 3542
         },
         {
           "w": 1000,
           "h": 179,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-1000x179.png",
-          "bytes": 4818
+          "bytes": 4850
         },
         {
           "w": 1024,
           "h": 183,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-1024x183.png",
-          "bytes": 4868
+          "bytes": 4885
         },
         {
           "w": 2000,
           "h": 357,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-2000x357.png",
-          "bytes": 7381
+          "bytes": 7395
         },
         {
           "w": 2048,
           "h": 366,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-2048x366.png",
-          "bytes": 7375
+          "bytes": 7383
         },
         {
           "w": 4096,
           "h": 731,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-4096x731.png",
-          "bytes": 17805
+          "bytes": 17814
         },
         {
           "w": 5000,
           "h": 893,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-5000x893.png",
-          "bytes": 24569
+          "bytes": 24584
         },
         {
           "w": 8192,
           "h": 1463,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-8192x1463.png",
-          "bytes": 54442
+          "bytes": 54456
         },
         {
           "w": 10000,
           "h": 1786,
           "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-10000x1786.png",
-          "bytes": 77254
+          "bytes": 77252
         }
       ]
     },
@@ -1475,7 +1475,7 @@
           "w": 50,
           "h": 50,
           "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-50x50.png",
-          "bytes": 1557
+          "bytes": 1558
         },
         {
           "w": 64,
@@ -1487,7 +1487,7 @@
           "w": 100,
           "h": 100,
           "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-100x100.png",
-          "bytes": 2102
+          "bytes": 2103
         },
         {
           "w": 128,
@@ -1511,7 +1511,7 @@
           "w": 500,
           "h": 500,
           "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-500x500.png",
-          "bytes": 4179
+          "bytes": 4175
         },
         {
           "w": 512,
@@ -1559,7 +1559,7 @@
           "w": 8192,
           "h": 8192,
           "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-8192x8192.png",
-          "bytes": 86947
+          "bytes": 86948
         },
         {
           "w": 10000,
@@ -1604,97 +1604,97 @@
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-50x9.png",
-          "bytes": 795
+          "bytes": 799
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-64x12.png",
-          "bytes": 970
+          "bytes": 979
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-100x19.png",
-          "bytes": 1253
+          "bytes": 1259
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-128x24.png",
-          "bytes": 1285
+          "bytes": 1291
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-200x37.png",
-          "bytes": 1895
+          "bytes": 1900
         },
         {
           "w": 256,
           "h": 48,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-256x48.png",
-          "bytes": 1624
+          "bytes": 1631
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-500x93.png",
-          "bytes": 2801
+          "bytes": 2806
         },
         {
           "w": 512,
           "h": 96,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-512x96.png",
-          "bytes": 2321
+          "bytes": 2337
         },
         {
           "w": 1000,
           "h": 187,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-1000x187.png",
-          "bytes": 4308
+          "bytes": 4331
         },
         {
           "w": 1024,
           "h": 191,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-1024x191.png",
-          "bytes": 4568
+          "bytes": 4599
         },
         {
           "w": 2000,
           "h": 374,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-2000x374.png",
-          "bytes": 7237
+          "bytes": 7257
         },
         {
           "w": 2048,
           "h": 383,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-2048x383.png",
-          "bytes": 7818
+          "bytes": 7835
         },
         {
           "w": 4096,
           "h": 766,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-4096x766.png",
-          "bytes": 18101
+          "bytes": 18132
         },
         {
           "w": 5000,
           "h": 935,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-5000x935.png",
-          "bytes": 9964
+          "bytes": 9958
         },
         {
           "w": 8192,
           "h": 1531,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-8192x1531.png",
-          "bytes": 56999
+          "bytes": 57039
         },
         {
           "w": 10000,
           "h": 1869,
           "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-10000x1869.png",
-          "bytes": 81605
+          "bytes": 81628
         }
       ]
     },
@@ -1727,55 +1727,55 @@
           "w": 32,
           "h": 6,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-32x6.png",
-          "bytes": 518
+          "bytes": 542
         },
         {
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-50x9.png",
-          "bytes": 688
+          "bytes": 712
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-64x12.png",
-          "bytes": 722
+          "bytes": 747
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-100x19.png",
-          "bytes": 762
+          "bytes": 788
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-128x24.png",
-          "bytes": 791
+          "bytes": 816
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-200x37.png",
-          "bytes": 789
+          "bytes": 813
         },
         {
           "w": 256,
           "h": 47,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-256x47.png",
-          "bytes": 818
+          "bytes": 843
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-500x93.png",
-          "bytes": 940
+          "bytes": 965
         },
         {
           "w": 512,
           "h": 95,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-512x95.png",
-          "bytes": 529
+          "bytes": 531
         },
         {
           "w": 1000,
@@ -1787,43 +1787,43 @@
           "w": 1024,
           "h": 190,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-1024x190.png",
-          "bytes": 822
+          "bytes": 820
         },
         {
           "w": 2000,
           "h": 370,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-2000x370.png",
-          "bytes": 1584
+          "bytes": 1582
         },
         {
           "w": 2048,
           "h": 379,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-2048x379.png",
-          "bytes": 2131
+          "bytes": 2153
         },
         {
           "w": 4096,
           "h": 759,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-4096x759.png",
-          "bytes": 5019
+          "bytes": 5041
         },
         {
           "w": 5000,
           "h": 926,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-5000x926.png",
-          "bytes": 7467
+          "bytes": 7489
         },
         {
           "w": 8192,
           "h": 1517,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-8192x1517.png",
-          "bytes": 16682
+          "bytes": 16707
         },
         {
           "w": 10000,
           "h": 1852,
           "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-10000x1852.png",
-          "bytes": 23414
+          "bytes": 23438
         }
       ]
     },
@@ -1862,7 +1862,7 @@
           "w": 50,
           "h": 10,
           "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-50x10.png",
-          "bytes": 348
+          "bytes": 344
         },
         {
           "w": 64,
@@ -1952,7 +1952,7 @@
           "w": 10000,
           "h": 2000,
           "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-10000x2000.png",
-          "bytes": 24645
+          "bytes": 24641
         }
       ]
     },
@@ -2098,7 +2098,7 @@
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-1200x630.png",
-      "bytes": 5923
+      "bytes": 5912
     },
     {
       "slug": "og-card-dark",
@@ -2111,7 +2111,7 @@
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-dark-1200x630.png",
-      "bytes": 5978
+      "bytes": 5986
     },
     {
       "slug": "og-card-square-light",
@@ -2124,7 +2124,7 @@
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-square-light-1200x630.png",
-      "bytes": 5823
+      "bytes": 5824
     },
     {
       "slug": "og-card-square-dark",
@@ -2137,7 +2137,7 @@
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-square-dark-1200x630.png",
-      "bytes": 5895
+      "bytes": 5897
     },
     {
       "slug": "og-card-icon-light",
@@ -2176,7 +2176,7 @@
       "w": 1500,
       "h": 500,
       "url": "/branding/presskit/thingtime-banner-1500x500.png",
-      "bytes": 5536
+      "bytes": 5532
     },
     {
       "slug": "banner-wordmark-dark",
@@ -2189,7 +2189,7 @@
       "w": 1500,
       "h": 500,
       "url": "/branding/presskit/thingtime-banner-wordmark-dark-1500x500.png",
-      "bytes": 5594
+      "bytes": 5593
     },
     {
       "slug": "banner-square-light",
@@ -2202,7 +2202,7 @@
       "w": 1500,
       "h": 500,
       "url": "/branding/presskit/thingtime-banner-square-light-1500x500.png",
-      "bytes": 5516
+      "bytes": 5514
     },
     {
       "slug": "banner-square-dark",
@@ -2215,7 +2215,7 @@
       "w": 1500,
       "h": 500,
       "url": "/branding/presskit/thingtime-banner-square-dark-1500x500.png",
-      "bytes": 5565
+      "bytes": 5566
     },
     {
       "slug": "banner-icon-light",
@@ -2254,7 +2254,7 @@
       "w": 1584,
       "h": 396,
       "url": "/branding/presskit/thingtime-linkedin-banner-1584x396.png",
-      "bytes": 4357
+      "bytes": 4355
     },
     {
       "slug": "linkedin-banner-wordmark-dark",
@@ -2267,7 +2267,7 @@
       "w": 1584,
       "h": 396,
       "url": "/branding/presskit/thingtime-linkedin-banner-wordmark-dark-1584x396.png",
-      "bytes": 4406
+      "bytes": 4405
     },
     {
       "slug": "linkedin-banner-square-light",
@@ -2280,7 +2280,7 @@
       "w": 1584,
       "h": 396,
       "url": "/branding/presskit/thingtime-linkedin-banner-square-light-1584x396.png",
-      "bytes": 4843
+      "bytes": 4838
     },
     {
       "slug": "linkedin-banner-square-dark",
@@ -2293,7 +2293,7 @@
       "w": 1584,
       "h": 396,
       "url": "/branding/presskit/thingtime-linkedin-banner-square-dark-1584x396.png",
-      "bytes": 4881
+      "bytes": 4885
     },
     {
       "slug": "linkedin-banner-icon-light",
@@ -2332,7 +2332,7 @@
       "w": 1080,
       "h": 1080,
       "url": "/branding/presskit/thingtime-social-square-1080x1080.png",
-      "bytes": 37106
+      "bytes": 37108
     },
     {
       "slug": "social-square-wordmark-dark",
@@ -2345,7 +2345,7 @@
       "w": 1080,
       "h": 1080,
       "url": "/branding/presskit/thingtime-social-square-wordmark-dark-1080x1080.png",
-      "bytes": 47879
+      "bytes": 47884
     },
     {
       "slug": "social-square-square-light",
@@ -2358,7 +2358,7 @@
       "w": 1080,
       "h": 1080,
       "url": "/branding/presskit/thingtime-social-square-square-light-1080x1080.png",
-      "bytes": 37292
+      "bytes": 37289
     },
     {
       "slug": "social-square-square-dark",
@@ -2371,7 +2371,7 @@
       "w": 1080,
       "h": 1080,
       "url": "/branding/presskit/thingtime-social-square-square-dark-1080x1080.png",
-      "bytes": 48110
+      "bytes": 48105
     },
     {
       "slug": "social-square-icon-light",
@@ -2410,7 +2410,7 @@
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-wordmark-light-1920x1080.png",
-      "bytes": 13686
+      "bytes": 13688
     },
     {
       "slug": "wallpaper",
@@ -2423,7 +2423,7 @@
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-1920x1080.png",
-      "bytes": 13936
+      "bytes": 13935
     },
     {
       "slug": "wallpaper-square-light",
@@ -2449,7 +2449,7 @@
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-square-dark-1920x1080.png",
-      "bytes": 14872
+      "bytes": 14867
     },
     {
       "slug": "wallpaper-icon-light",
@@ -2462,7 +2462,7 @@
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-icon-light-1920x1080.png",
-      "bytes": 13764
+      "bytes": 13746
     },
     {
       "slug": "wallpaper-icon-dark",
@@ -2475,7 +2475,7 @@
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-icon-dark-1920x1080.png",
-      "bytes": 13856
+      "bytes": 13858
     },
     {
       "slug": "wallpaper-4k-wordmark-light",
@@ -2488,7 +2488,7 @@
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-wordmark-light-3840x2160.png",
-      "bytes": 41961
+      "bytes": 42135
     },
     {
       "slug": "wallpaper-4k",
@@ -2501,7 +2501,7 @@
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-3840x2160.png",
-      "bytes": 42483
+      "bytes": 42489
     },
     {
       "slug": "wallpaper-4k-square-light",
@@ -2527,7 +2527,7 @@
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-square-dark-3840x2160.png",
-      "bytes": 43233
+      "bytes": 43242
     },
     {
       "slug": "wallpaper-4k-icon-light",
@@ -2540,7 +2540,7 @@
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-icon-light-3840x2160.png",
-      "bytes": 41980
+      "bytes": 41982
     },
     {
       "slug": "wallpaper-4k-icon-dark",
@@ -2553,7 +2553,7 @@
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-icon-dark-3840x2160.png",
-      "bytes": 42301
+      "bytes": 42304
     },
     {
       "slug": "wallpaper-phone-wordmark-light",
@@ -2566,7 +2566,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-wordmark-light-1170x2532.png",
-      "bytes": 20484
+      "bytes": 20473
     },
     {
       "slug": "wallpaper-phone-wordmark-dark",
@@ -2579,7 +2579,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-wordmark-dark-1170x2532.png",
-      "bytes": 20722
+      "bytes": 20733
     },
     {
       "slug": "wallpaper-phone-square-light",
@@ -2592,7 +2592,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-square-light-1170x2532.png",
-      "bytes": 20416
+      "bytes": 20411
     },
     {
       "slug": "wallpaper-phone-square-dark",
@@ -2605,7 +2605,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-square-dark-1170x2532.png",
-      "bytes": 20847
+      "bytes": 20852
     },
     {
       "slug": "wallpaper-phone-icon-light",
@@ -2618,7 +2618,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-icon-light-1170x2532.png",
-      "bytes": 19751
+      "bytes": 19750
     },
     {
       "slug": "wallpaper-phone",
@@ -2631,7 +2631,7 @@
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-1170x2532.png",
-      "bytes": 19986
+      "bytes": 19990
     },
     {
       "slug": "app-tile-wordmark-light",
@@ -2644,7 +2644,7 @@
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-wordmark-light-1024x1024.png",
-      "bytes": 6682
+      "bytes": 6685
     },
     {
       "slug": "app-tile-wordmark-dark",
@@ -2657,7 +2657,7 @@
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-wordmark-dark-1024x1024.png",
-      "bytes": 6741
+      "bytes": 6739
     },
     {
       "slug": "app-tile-square-light",
@@ -2670,7 +2670,7 @@
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-square-light-1024x1024.png",
-      "bytes": 6671
+      "bytes": 6668
     },
     {
       "slug": "app-tile-square-dark",
@@ -2683,7 +2683,7 @@
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-square-dark-1024x1024.png",
-      "bytes": 6727
+      "bytes": 6724
     },
     {
       "slug": "app-tile",
@@ -2722,7 +2722,7 @@
       "w": 2048,
       "h": 2048,
       "url": "/branding/presskit/thingtime-confetti-pattern-2048x2048.png",
-      "bytes": 38000
+      "bytes": 38021
     },
     {
       "slug": "confetti-pattern-dark",
@@ -2735,7 +2735,7 @@
       "w": 2048,
       "h": 2048,
       "url": "/branding/presskit/thingtime-confetti-pattern-dark-2048x2048.png",
-      "bytes": 39055
+      "bytes": 39080
     }
   ]
 }

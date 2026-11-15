@@ -16,7 +16,7 @@ import { sharePreviewBlocks } from './sharePreviewBlocks';
 import { OPEN_SHARE_PREVIEW, customisedShareLink, validShareDestination } from './sharePreviewLink';
 const themeSwatches: Record<string, string> = {
  editorial: 'linear-gradient(100deg, #fff 0% 55%, #16161a 55% 70%, #6f3198 70% 85%, #00b7ef 85%)',
- 'colour-blocks': 'linear-gradient(100deg, #59ff9c 0% 40%, #ffa3b1 40% 70%, #6f3198 70% 90%, #fff 90%)',
+ 'colour-blocks': 'linear-gradient(100deg, #59ff9c 0% 40%, #ffa9dd 40% 70%, #6f3198 70% 90%, #fff 90%)',
  'editorial-white': 'linear-gradient(100deg, #fff 0% 35%, #59bdff 35% 48%, #59ff9c 48% 61%, #a8e61d 61% 74%, #6f3198 74% 87%, #ffc20e 87%)',
  'pink-invitation': 'linear-gradient(100deg, #ff69b4 0% 35%, #fff 35% 65%, #59ff9c 65% 80%, #ffc20e 80% 90%, #6f3198 90%)',
  'night-garden': 'linear-gradient(100deg, #16161a 0% 50%, #a8e61d 50% 70%, #59bdff 70% 85%, #ff69b4 85%)'

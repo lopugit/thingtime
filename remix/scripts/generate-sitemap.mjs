@@ -38,6 +38,7 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingAssets.generated.json');
+const IMAGERY_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingImagery.generated.json');
 const DEFAULT_ORIGIN = 'https://thingtime.com';
 const DEFAULT_OUT = path.join(HERE, '..', 'sitemap-out');
 
@@ -58,7 +59,7 @@ const shouldFetch = flag('fetch') === true;
 const toStdout = flag('stdout') === true;
 const generatedAt = new Date().toISOString();
 
-const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+const manifest = { ...JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')), imagery: JSON.parse(readFileSync(IMAGERY_PATH, 'utf8')).items };
 const staticXml = renderUrlset(staticSitemapUrls(origin, manifest, generatedAt));
 
 if (toStdout) {

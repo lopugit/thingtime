@@ -2974,8 +2974,10 @@ email whose link points at the attacker.
 - [ ] Six full-width sections (wordmark, square, icon and their three pink
       cuts) and the ten-card "Fun cuts" gallery each show their preview. Every
       cut comes from the `logoVariants.ts` registry; the square is the
-      two-line lock-up centred on a 24×24 voxel canvas and matches the owner's
-      artwork (first i red over cyan, second cyan over red).
+      two-line lock-up centred on a 24×24 voxel canvas. Wordmark and square
+      both match the owner's artwork (`public/branding/thingtime-horizontal.svg`):
+      the first i is red over cyan, the second cyan over red, and the n is
+      `#ffa9dd`. The palette section lists that pink, not `#ffa3b1`.
 - [ ] The Transparent / Light / Dark switch on every cut swaps the preview,
       "Download SVG", "PNG · 1024px", "Copy SVG code" and the size ladder to
       that background. Light/dark files carry two voxels of padding around a
@@ -2998,22 +3000,53 @@ email whose link points at the attacker.
       Trimmed exports the tight 14:8 lock-up.
 - [ ] In the two-column gallery (≥992px) the cards in a row share one panel
       height and each button row stays on one line at 1280px.
-- [ ] `npm --prefix remix run test:branding` passes: artwork, registry,
-      transforms, backgrounds, trim/padding, and the checks that the committed
-      manifests match the registry and every promised file exists on disk.
-- [ ] Press kit: the Logo (Wordmark / Square / Icon) and Background (Light /
-      Dark) selectors swap all nine tiles in place and each Download link
-      follows; the confetti pattern ignores the logo choice. The portrait
-      phone wallpaper previews as a centre crop and must not stretch its grid
-      row. File names published before the matrix existed (for example
+- [ ] `npm --prefix remix run test:branding` passes: artwork (wordmark
+      compared voxel for voxel with the horizontal SVG), registry, transforms,
+      backgrounds, trim/padding, the scene engine, the curated imagery set,
+      and the checks that the committed manifests match the registries and
+      every promised file exists on disk.
+- [ ] Ready-to-post imagery (`#press-kit`): the gallery lists the curated
+      scenes first, then the classic press kit, and opens on a mix of
+      wordmark, square, tree and fun cuts. Logo (All / Wordmark / Square /
+      Tree / Ways to play), Format and Background chips narrow it and the
+      count line follows (`Showing 12 of N`); a combination with nothing in
+      it shows the one-line empty message, not a blank grid. "Show more" adds
+      a page below without moving pictures already on screen; changing a
+      filter starts again from the first page. Three columns at ≥1280px, two
+      at ≥768px, one on a phone; chips wrap and nothing scrolls sideways at
+      375px. File names published earlier (for example
       `thingtime-og-card-1200x630.png`) still resolve.
+- [ ] Every curated picture has "Remix": it scrolls to the studio and the
+      studio shows that exact picture (same size, logo, background, pattern
+      and seed in the summary line). Classic press-kit pictures have Download
+      only.
+- [ ] Studio (`#studio`): Size and Logo selects, Background and Pattern chips
+      each redraw the preview at once. Shuffle changes only the seed;
+      Surprise me changes logo, background, pattern and seed but keeps the
+      size. "Fine-tune" is collapsed on first render; opened, the logo-size,
+      density and voxel-detail sliders, the plate control and the seed field
+      all redraw the preview. "Custom size…" reveals width/height fields that
+      commit on blur or Enter. On a phone the preview panel sits above the
+      controls and fully contains the canvas (no picture poking out of the
+      panel).
+- [ ] Studio downloads: "Download PNG" saves a PNG at exactly the chosen
+      width × height and "SVG" a file whose `width`/`height`/`viewBox` match;
+      both are named `thingtime-<format|custom>-<logo>-<backdrop>-<pattern>-<seed>-<W>x<H>`
+      and raise a Lopu success toast. A size the browser canvas cannot draw
+      raises one Lopu error that names the size and points at the SVG.
+- [ ] A studio picture and its committed twin are the same pixels: Remix any
+      gallery picture, download the PNG without changing anything, and
+      compare it with the gallery file.
 - [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
-- [ ] After changing `logoMatrix.ts` or `logoVariants.ts`, re-run
-      `npm --prefix remix run branding-assets` and commit the refreshed
-      `remix/public/branding/`, `brandingAssets.generated.json` and
-      `brandingSurfaces.generated.json` (byte-stable when nothing changed;
+- [ ] After changing `logoMatrix.ts`, `logoVariants.ts`, `brandScenes.ts` or
+      `brandImagery.ts`, re-run `npm --prefix remix run branding-assets` and
+      commit the refreshed `remix/public/branding/`,
+      `brandingAssets.generated.json`, `brandingSurfaces.generated.json` and
+      `brandingImagery.generated.json` (byte-stable when nothing changed;
       about 20 s). If the encoder itself changes, decode old and new files and
-      compare pixels before committing.
+      compare pixels before committing. Adding, removing or reordering scene
+      recipes in `brandImagery.ts` must leave every other picture's bytes
+      untouched (each seed comes from the recipe's own name).
 - [ ] A plain local dev stack without a signing secret answers
       `503 LOCAL_API_NOT_CONFIGURED` and never paints `/branding`. Check the
       page against an isolated stack (disposable replica set, random

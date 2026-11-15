@@ -73,6 +73,13 @@ const triggerDownload = (url: string, filename: string) => {
   link.remove();
 };
 
+/** Hand a finished file to the browser's download flow. */
+export const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, filename);
+  URL.revokeObjectURL(url);
+};
+
 /** Renders + downloads the export. Resolves once the file has been handed to the browser. */
 export const downloadBrandExport = async (options: BrandExportOptions): Promise<{ filename: string }> => {
   const { svg, width, height } = buildExportSvg(options);

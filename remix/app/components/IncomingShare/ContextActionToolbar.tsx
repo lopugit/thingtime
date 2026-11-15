@@ -16,7 +16,7 @@ export function contextToolbarBlocks(actions: Pick<ContextToolbarAction, 'id' | 
   ]
  })) };
  return [{ id: 'context-toolbar-workspace', type: 'element', tag: 'section', css: { display: 'grid', gap: '8px', width: '100%' }, children: [
-  { id: 'context-toolbar-pixels', type: 'element', tag: 'div', props: { 'aria-hidden': true }, css: { display: 'flex', gap: '3px', 'justify-content': 'center' }, children: ['#59ff9c', '#ffa3b1', '#6f3198', '#59bdff', '#ffc20e'].map((color, index) => ({ id: `context-pixel-${index}`, type: 'element', tag: 'span', css: { display: 'block', width: '8px', height: '8px', background: color } })) }, controls
+  { id: 'context-toolbar-pixels', type: 'element', tag: 'div', props: { 'aria-hidden': true }, css: { display: 'flex', gap: '3px', 'justify-content': 'center' }, children: ['#59ff9c', '#ffa9dd', '#6f3198', '#59bdff', '#ffc20e'].map((color, index) => ({ id: `context-pixel-${index}`, type: 'element', tag: 'span', css: { display: 'block', width: '8px', height: '8px', background: color } })) }, controls
  ] }];
 }
 /** The adapter supplies selection and callbacks only. Layout, each label,
