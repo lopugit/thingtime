@@ -267,7 +267,7 @@ test('public publication preserves account availability and admission, only expl
 		transaction: async (work: any) => work({})
 	} as any);
 	await store.publish('anthropic', { token: 'fixture', startedAt: new Date() }, [
-		{ id: 'claude-opus-5-5', label: 'Claude Opus 5.5', source: 'public-docs', lifecycle: 'active' },
+		{ id: 'claude-opus-9-9', label: 'Future Opus', source: 'public-docs', lifecycle: 'active' },
 		{ id: 'claude-opus-4-20250514', label: 'Old Opus', source: 'public-docs', lifecycle: 'retired' }
 	]);
 	assert.equal(writes[0].update.$setOnInsert.crystal.enabled, false);

@@ -1,5 +1,16 @@
 # UI shell, menus and design system
 
+## Contextual AI waterfall selection
+
+`AI/AiWaterfallSelector.tsx` matches its opening configuration to the saved
+library using `AI/savedWaterfallSelection.ts`. Compare ordered endpoint, model,
+effort and speed fields; preserve explicit template selection and fence delayed
+library reconciliation after user edits. The existing library save retains the
+matched ID and revision. Run `test:ai-models` and
+`node remix/scripts/ai-waterfall-selector-browser.mjs` (installed Playwright,
+optionally selected by `TT_PLAYWRIGHT_MODULE`) for desktop/mobile synthetic
+component coverage; follow TESTING.md for authenticated deployed acceptance.
+
 ## Publication visibility status
 
 `Marketing/marketingPublicationsStore.tsx` preserves origin-local public

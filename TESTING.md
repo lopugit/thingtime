@@ -13932,6 +13932,16 @@ separate from deterministic discovery/lease tests.
 
 ### Claude public catalogue and workflow save regression — 2026-10-18
 
+- Open **Choose AI waterfall** from two sections with different current orders.
+  Each dialog must select the saved waterfall matching its own ordered endpoints,
+  models, effort and speed, including when the saved library arrives after open.
+  Preserve an explicit saved-template selection and edits made before refresh;
+  unmatched and inherited configurations must not select an unrelated template.
+  Cancel/reopen must use the latest section value. Saving a matched template
+  updates its existing ID and revision instead of creating a duplicate.
+- Claude Opus 5.5 must offer low, medium, high, xhigh and max effort; default
+  effort leaves Anthropic's medium default intact. Future unverified models
+  must remain default-only until their capabilities are verified.
 - With no Anthropic API key and no inference credentials, run admin sync or the
   authenticated cron. Compare new Claude IDs and lifecycle states with Anthropic's
   public model status table. Verify public provenance, unknown account access,

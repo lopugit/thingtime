@@ -55,6 +55,9 @@ export const AI_WORKFLOW_BASE_MODELS: readonly AiWorkflowBaseModel[] = [
   // Anthropic research preview limited to Claude Opus 5 and Claude Opus 4.8.
   { id: 'claude-fable-5', label: 'Claude Fable 5', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
   { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
+  // Verified explicit effort support; omit effort to retain the provider's medium default.
+  // https://platform.claude.com/docs/en/build-with-claude/effort
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
   { id: 'claude-opus-5', label: 'Claude Opus 5', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_AND_FAST },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_AND_FAST },
   { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
