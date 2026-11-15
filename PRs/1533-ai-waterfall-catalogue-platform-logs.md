@@ -51,6 +51,11 @@ Verification recorded during implementation:
   authorization fences and durable workflow outcomes. Capability suite: 214 pass.
   Final Node build and the built HTTP fixture passed after the workflow-boundary fix.
   Release checks remain separate from this local evidence.
+- The canonical unit sequence passed all groups after aligning the device-cleanup,
+  recording-run capability assertions and AI model schema projection with the new
+  contracts. Passing earlier groups were retained; the schema group and remaining
+  sequence were rerun after its expected-field update. Scheduled reporting is now
+  included in `test:unit` so the same checks run in CI.
 
 The first preview was protected by Vercel login; its controller also reported a
 preview failure. The final preview and production acceptance must be checked at

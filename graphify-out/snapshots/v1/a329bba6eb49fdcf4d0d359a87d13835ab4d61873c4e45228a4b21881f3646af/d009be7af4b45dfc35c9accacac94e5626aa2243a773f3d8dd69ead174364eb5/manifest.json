@@ -15126,10 +15126,10 @@
     "semantic_hash": "3b312b758b867c00f529567883fccba5"
   },
   "remix/app/components/Lopu/recordingsCapabilities.test.ts": {
-    "mtime": 1794710856.0582457,
-    "seen": 1794711911.7388952,
-    "ast_hash": "4b6ab9ee7cc6df37e6d3aba6fc84cb4b",
-    "semantic_hash": "4b6ab9ee7cc6df37e6d3aba6fc84cb4b"
+    "mtime": 1794715413.630802,
+    "seen": 1794715540.0370681,
+    "ast_hash": "caabf5fab29c5c4dd992b122c3ea51d8",
+    "semantic_hash": ""
   },
   "remix/app/components/Lopu/recordingsCapabilities.ts": {
     "mtime": 1794710856.0582998,
@@ -22656,10 +22656,10 @@
     "semantic_hash": "397b78b221c56ee04ddff4f1d19f8935"
   },
   "remix/app/schemas/builtinSchemaProjection.test.ts": {
-    "mtime": 1794710856.2236266,
-    "seen": 1794711911.740007,
-    "ast_hash": "67e97101eeca14a1443c6ff51f63e198",
-    "semantic_hash": "67e97101eeca14a1443c6ff51f63e198"
+    "mtime": 1794715628.0640106,
+    "seen": 1794715752.096273,
+    "ast_hash": "e986fd76e1186d2889effe0f50043ec4",
+    "semantic_hash": ""
   },
   "remix/app/schemas/catalogRecordsSuite.ts": {
     "mtime": 1794710856.2236896,
@@ -24690,9 +24690,9 @@
     "semantic_hash": "2ee3ad81faa22eefa4425493964b939a"
   },
   "remix/package.json": {
-    "mtime": 1794714654.1121411,
-    "seen": 1794714836.960799,
-    "ast_hash": "cafe0038dee44711cd31744631602ef3",
+    "mtime": 1794715414.3021464,
+    "seen": 1794715540.088609,
+    "ast_hash": "1defe3e4c558f051cfec4037e190f300",
     "semantic_hash": ""
   },
   "remix/public/embed/demo-host.js": {
@@ -35232,10 +35232,10 @@
     "semantic_hash": "8d2491bc20d78ee8a2e6a3cec5f78903"
   },
   "remix/app/api/utils/devices/deviceObservationCapabilities.test.ts": {
-    "mtime": 1794710855.8962665,
-    "seen": 1794711911.73776,
-    "ast_hash": "fc1b3548242ebd7b79fb83d02359890d",
-    "semantic_hash": "fc1b3548242ebd7b79fb83d02359890d"
+    "mtime": 1794715413.630443,
+    "seen": 1794715539.997356,
+    "ast_hash": "f3a5a0ed56347dca22b6294284847679",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/devices/deviceObservationCore.test.ts": {
     "mtime": 1794710855.8963172,
@@ -38790,9 +38790,9 @@
     "semantic_hash": ""
   },
   "PRs/1533-ai-waterfall-catalogue-platform-logs.md": {
-    "mtime": 1794714561.963919,
-    "seen": 1794714836.9765692,
-    "ast_hash": "902f97eb6dde813b67320dafd3925273",
+    "mtime": 1794715689.5990674,
+    "seen": 1794715752.123581,
+    "ast_hash": "8e329cafaf016a252b69582033722b33",
     "semantic_hash": ""
   },
   "remix/app/utils/sessionRecovery.test.ts": {
