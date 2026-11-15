@@ -160,6 +160,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-15: Bundle a macOS Sharing extension and scoped desktop handoff to the
+  existing iOS share composer, with durable pending shares, account/endpoint
+  fencing, native window dismissal and signed-package verification. Preserve
+  literal incoming text and line breaks in the Post editor without changing
+  normal Markdown editing. Route home-data-plane media uploads through the
+  existing native transport while preserving custom data plane destinations.
+  See [macOS sharing](../docs/macos-sharing.md). **Codex (AI)**
+
 - 2026-11-15: Restore Opus 5.5 reasoning controls and preselect the saved AI
   waterfall matching its current context. Add optional Character usernames and
   private scheduled-run reporting with administrator audience controls and

@@ -198,3 +198,12 @@ weight separately with generation/count integrity and canonical accounting.
 Ranking math is unchanged. Run `test:subspaces`, `test:feed` and the new
 `test:acl:relational` regressions; scale acceptance exercises real moderator
 forms and feed pagination. See [relational access](../relational-access.md).
+
+## macOS incoming system shares
+
+The signed `macos/ThingtimeShare` extension stages private provider content and
+opens Electron’s `electron/lib/incoming-share.cjs` bridge. Its scoped modal
+uses the existing `/share` route and iOS `ShareInbox`/`ShareComposerSession`
+contract. See [macOS sharing](../macos-sharing.md) for the App Group, packaging,
+account/origin boundaries and installed acceptance. Run Electron tests and
+`pnpm --dir electron run test:share-native`.
