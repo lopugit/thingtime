@@ -324,7 +324,11 @@ Private MCP task delegation uses `api/utils/agents/reporting.ts`, the independen
 Character, exact private workspace references and subspace membership. Protected
 binding/operation Things fence duplicate and ambiguous writes; the executor's
 server-only operation policy constrains saved Actions. See
-[setup, recovery and acceptance](../agent-reporting.md).
+[setup, multi-account discovery and selection, recovery and acceptance](../agent-reporting.md).
+Inspect all task-authorized connected accounts with explicit account IDs before
+preparing a task; prefer its existing verified owner/origin binding. A private
+subspace membership grant does not confer saved-workspace ownership or a host
+OAuth connection.
 
 See [Characters](../characters.md) for the settings, login modes, private ownership,
 admin lookup, session selection, agent coordination and acceptance runbook.

@@ -118,6 +118,41 @@ Original request (verbatim, 5 November 2026):
 - Treat existing specialized tools and duplicate registrations as migration work: consolidate their reusable behavior into the canonical integration, preserve required capabilities and saved user configuration, update callers and documentation, and provide deliberate compatibility/deprecation where needed. Do not abruptly delete working interfaces, reset credentials or expand a documentation-only task into an unrequested implementation migration.
 - Verify the resulting public tool catalogue and configured server inventory, not just names in source. Cover representative different workflows using the shared primitives, capability/version compatibility and authorization refusals. Connection or authentication failures must be repaired in the canonical integration rather than worked around by adding a second Thingtime MCP.
 
+## Discover every authorized reporting account
+
+- Use the single canonical `thingtime` MCP for both `@thingtime` and `@lopu`.
+  Enumerate all connected accounts with `list_thingtime_accounts`; do not stop
+  after the first account lacks a scope, workspace access or private-subspace
+  membership. Inspect each task-authorized candidate on `https://thingtime.com`
+  with its explicit `accountId` and `get_thingtime_profile`, verifying its live
+  owning user, origin and independent `agents.report` grant. A display name,
+  default account, cached account list or general Things scope is not proof.
+- Check the stable `externalTaskId` with `get_thingtime_agent_task` on each
+  eligible candidate before preparing anything. Prefer the existing binding's
+  verified owner and origin, including a refreshed connector ID for that same
+  owner. If no binding exists, select an authorized candidate only after
+  verifying the exact saved workspace ownership/ACLs, private Thingtime Agents
+  administration and Character membership required by the gateway. Membership
+  alone does not grant ownership of saved workspace Things or reporting access.
+- Verify the exact private subspace ID and stored slug through supported reads
+  before interpreting a permission refusal. Do not guess a slug from its display
+  name or infer a server defect from a request aimed at the wrong target.
+- An unavailable candidate is a per-account dependency; continue inspecting
+  other authorized candidates. Do not treat a refusal as permission to bypass
+  it: never silently move an existing task to another owner, create a duplicate
+  task under another account, broaden scopes/audiences, post as the public owner,
+  or create a replacement subspace/workspace. Preserve unresolved operations and
+  their original request IDs. Record safe per-account results and recover the
+  existing binding through the supported account-specific flow.
+- Both accounts should be independently connected through the canonical MCP in
+  each host that needs them. Multi-account support does not establish that both
+  are authenticated, scoped or eligible in this chat, another desktop instance,
+  or another agent's host. Use the registered host OAuth flow for a missing
+  authorized connection; preserve existing connections and account isolation.
+  After connecting, enumerate again, verify live profiles and perform an actual
+  saved Action write plus exact-record readback before claiming reporting works.
+  See `docs/agent-reporting.md` for selection and recovery details.
+
 ## Individually editable Thingtime blocks
 
 - Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.
