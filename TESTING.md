@@ -16733,3 +16733,36 @@ including loading/retry, selection preservation and bottom-of-page controls.
 - [ ] At desktop/mobile widths, edit owner/Character fields, reload without losing a dirty draft, simulate a concurrent saved change and use the explicit saved-configuration reset. Select labels, inputs and group options separately in Builder. Scroll top to bottom with no overflow.
 - [ ] Create a private audience group, including an uncertain response after a committed create. Reload exact-name groups and select the existing group; retry must not create a duplicate. Change account/origin during profile resolution or saving and verify protected draft state clears and old operations cannot commit.
 - [ ] Run `node remix/scripts/test-platform-reporting-ui.mjs <evidence-dir>` with the project's supported isolated Playwright runtime. This fixture uses synthetic transport and does not establish real-account or deployed acceptance.
+
+## macOS incoming Share extension
+
+- Run `pnpm --dir electron run test:share-native` and the Electron suite. Verify
+  text/URL/file imports, zero-byte files, Unicode names, path/symlink rejection,
+  account/endpoint changes, competing leases and immutable submission retries.
+- Verify the final installed signed app and its nested Share extension; confirm
+  Thingtime appears in System Settings → Login Items & Extensions → Sharing.
+- Run `node --test electron/test/share-signing.test.cjs`. The unprovisioned
+  team-prefixed App Group build must omit restricted application/team identity
+  entitlements; also launch through the real OS service, since signature
+  verification alone does not detect taskgated provisioning refusals.
+- Share known text, a URL, an image and multiple files through the real macOS
+  sharing service. Compare composer contents and file bytes to the originals.
+  Repeat with Thingtime running and closed; repeated delivery of the same UUID
+  must focus the existing dialog and must not duplicate a submission.
+- Verify actual `NSItemProvider(contentsOf:)` text and image selections remain
+  files with their original names and exact bytes, rather than inline text or
+  converted previews. Prepare and upload a shared Post attachment on the home
+  data plane through the native transport; a custom data plane must retain its
+  existing upload destination and must never silently switch to home storage.
+- Keep unsaved work in the main window while sharing. Open all three destination
+  views, scroll to the bottom, resize narrow/wide, and verify focus, clipping and
+  attachment previews. Closing preserves content; File → Resume shared content
+  and Saved shares reopen it after relaunch. Switch account/API endpoint while
+  open and verify protected content closes before another identity can read it.
+- Confirm the normal macOS close button dismisses the share window, the main
+  window stays usable, and File → Resume shared content restores it. Share
+  multiline plain text with literal markup; Post must preserve line breaks and
+  display markup as text rather than interpreting it as HTML or Markdown.
+- For publishing/saving acceptance, use a disposable test account and isolated
+  backend; read the exact result back through the real API. Failed/uncertain
+  submission retries retain the original operation identity and payload.

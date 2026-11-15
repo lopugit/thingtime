@@ -14,7 +14,7 @@
 		"build": "node scripts/build-local-app.mjs",
 		"build:portable": "node scripts/build-portable-app.mjs",
 		"build:native": "node scripts/build-native-node.mjs",
-		"build:resources": "node scripts/build-web.mjs && node scripts/verify-web-build.mjs && node scripts/build-native-node.mjs && node scripts/verify-native-node.mjs && node scripts/build-native-passwords.mjs",
+		"build:resources": "node scripts/build-web.mjs && node scripts/verify-web-build.mjs && node scripts/build-native-node.mjs && node scripts/verify-native-node.mjs && node scripts/build-native-passwords.mjs && node scripts/build-native-share.mjs",
 		"build:web": "node scripts/build-web.mjs",
 		"dev": "node scripts/dev-parallel.mjs",
 		"dev:parallel": "node scripts/dev-parallel.mjs",
@@ -34,7 +34,9 @@
 		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs",
 		"build:mail": "node scripts/build-mail.mjs",
 		"build:database": "node scripts/build-database.mjs",
-		"build:passwords": "node scripts/build-native-passwords.mjs"
+		"build:passwords": "node scripts/build-native-passwords.mjs",
+		"build:share": "node scripts/build-native-share.mjs",
+		"test:share-native": "bash ../macos/ThingtimeShare/test.sh"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",
@@ -51,16 +53,32 @@
 			"scripts/install-cached-release.mjs",
 			"scripts/install-local-app.mjs",
 			"scripts/verify-signed-app.mjs",
-			"package.json"
+			"package.json",
+			"scripts/verify-share-extension.mjs"
 		],
 		"extraResources": [
-			{ "from": "scripts/password-agent.mjs", "to": "password-agent.mjs" },
-			{ "from": "scripts/password-agent-acl.cjs", "to": "password-agent-acl.cjs" },
-			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },
+			{
+				"from": "scripts/password-agent.mjs",
+				"to": "password-agent.mjs"
+			},
+			{
+				"from": "scripts/password-agent-acl.cjs",
+				"to": "password-agent-acl.cjs"
+			},
+			{
+				"from": "scripts/agent-browser.mjs",
+				"to": "agent-browser.mjs"
+			},
 			{
 				"from": "dist/agent-browser-runtime",
 				"to": "agent-browser-runtime",
-				"filter": ["Dockerfile", ".dockerignore", "*.json", "*.mjs", "*.cjs"]
+				"filter": [
+					"Dockerfile",
+					".dockerignore",
+					"*.json",
+					"*.mjs",
+					"*.cjs"
+				]
 			},
 			{
 				"from": "dist/web",
@@ -89,6 +107,14 @@
 				"filter": [
 					"**/*"
 				]
+			},
+			{
+				"from": "dist/native/ThingtimeShareBridge",
+				"to": "ThingtimeShareBridge"
+			},
+			{
+				"from": "dist/native/thingtime-share.json",
+				"to": "thingtime-share.json"
 			}
 		],
 		"extraFiles": [
@@ -102,6 +128,13 @@
 			{
 				"from": "dist/native/Thingtime Passwords.app",
 				"to": "Helpers/Thingtime Passwords.app",
+				"filter": [
+					"**/*"
+				]
+			},
+			{
+				"from": "dist/native/ThingtimeShare.appex",
+				"to": "PlugIns/ThingtimeShare.appex",
 				"filter": [
 					"**/*"
 				]
@@ -121,14 +154,24 @@
 			],
 			"signIgnore": [
 				"Thingtime Node\\.app(?:/|$)",
-				"Thingtime Passwords\\.app(?:/|$)"
+				"Thingtime Passwords\\.app(?:/|$)",
+				"ThingtimeShare\\.appex(?:/|$)",
+				"ThingtimeShareBridge$"
 			],
 			"extendInfo": {
 				"NSPhotoLibraryUsageDescription": "Thingtime reads original photos and videos only after you choose a photo backup source. Uploads start when you configure and run that backup.",
 				"NSMicrophoneUsageDescription": "Thingtime uses your microphone when you start voice input for Lopu.",
 				"NSSpeechRecognitionUsageDescription": "Thingtime transcribes your speech for Lopu. macOS may use Apple servers when on-device recognition is unavailable."
 			}
-		}
+		},
+		"protocols": [
+			{
+				"name": "Thingtime shared content",
+				"schemes": [
+					"thingtime-share"
+				]
+			}
+		]
 	},
 	"devDependencies": {
 		"electron": "^43.1.0",

@@ -20,6 +20,13 @@ final class ShareInbox {
             }
         }
     }
+    private static func storageAttributes(directory: Bool) -> [FileAttributeKey: Any] {
+        #if os(iOS)
+        return [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        #else
+        return [.posixPermissions: directory ? 0o700 : 0o600]
+        #endif
+    }
     private let root: URL
     private let files: FileManager
     init(root: URL, files: FileManager = .default) {
@@ -114,7 +121,7 @@ final class ShareInbox {
                 }
             } else {
                 guard files.createFile(atPath: target.path, contents: nil,
-                                       attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]) else { throw CocoaError(.fileWriteUnknown) }
+                                       attributes: Self.storageAttributes(directory: false)) else { throw CocoaError(.fileWriteUnknown) }
                 let input = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
                 let output = try FileHandle(forWritingTo: target)
                 defer { try? output.close() }
@@ -134,7 +141,7 @@ final class ShareInbox {
     }
     private func createDirectory(_ directory: URL) throws {
         try files.createDirectory(at: directory, withIntermediateDirectories: true,
-                                  attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+                                  attributes: Self.storageAttributes(directory: true))
     }
     /// Idempotent across termination: copy privately, publish by rename, then acknowledge.
     func drain(to sharedDirectory: URL) throws {

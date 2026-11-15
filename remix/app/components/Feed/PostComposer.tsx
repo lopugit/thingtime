@@ -140,7 +140,7 @@ export type PostComposerProps = {
   incomingShareToolbarHeight?: number;
   initialSubmission?: PendingPostSubmission;
   beforeSubmit?: (submission: PendingPostSubmission) => Promise<void>;
-  initialDraft?: { id: string; text: string; files?: readonly File[] };
+  initialDraft?: { id: string; text: string; richText?: EditorJsDoc; files?: readonly File[] };
   // in comment mode this receives the created comment (post-shaped — comments
   // share the post schema); in edit mode it receives the UPDATED post
   onPosted: (post: PublicPost) => void;
@@ -208,6 +208,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
     isEditorJsDoc(editPost?.richText)
       ? editPost.richText
+      : !props.initialSubmission && isEditorJsDoc(props.initialDraft?.richText) ? props.initialDraft.richText
       : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || String(props.initialSubmission?.payload.text || props.initialDraft?.text || '')) }
   );
   const text = blocksToText(postEditorValue.blocks);

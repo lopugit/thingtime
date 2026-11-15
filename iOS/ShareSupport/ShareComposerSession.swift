@@ -2,7 +2,9 @@ import Foundation
 import UniformTypeIdentifiers
 import Darwin
 import ImageIO
+#if canImport(UIKit)
 import UIKit
+#endif
 import CryptoKit
 import AVFoundation
 
@@ -15,7 +17,8 @@ struct ShareLivePhotoPart: Codable {
 /// Private draft, retry and receipt data kept beside the original payload.
 /// Never store authentication credentials or session material here.
 struct ShareComposerMetadata: Codable {
-    let origin: String
+    var origin: String
+    var apiOrigin: String?
     let textPaths: [String]
     var supplementalTextPaths: [String]?
     /// Generated provider namespaces are not user-supplied directories.
@@ -79,6 +82,7 @@ final class ShareComposerSession {
     }
     let id: UUID
     let origin: String
+    let apiOrigin: String
     private let directory: URL
     private let payloadDescriptor: Int32
     private let leaseDescriptor: Int32
@@ -102,29 +106,40 @@ final class ShareComposerSession {
         components.queryItems = [URLQueryItem(name: "requestId", value: requestId.uuidString)]
         return components.url
     }
-    init(inbox: ShareInbox, id: UUID, origin: URL) throws {
+    /// Only the trusted containing app may bind a macOS extension's originless
+    /// draft. The lease covers both first binding and the entire session.
+    init(inbox: ShareInbox, id: UUID, origin: URL, endpoint: URL? = nil, bindUnboundOrigin: Bool = false) throws {
         self.id = id; self.origin = Self.origin(origin)
-        guard !self.origin.isEmpty else { throw Failure.identity }
+        self.apiOrigin = endpoint.map(Self.origin) ?? self.origin
+        guard !self.origin.isEmpty, !self.apiOrigin.isEmpty else { throw Failure.identity }
         directory = try inbox.composerDirectory(id: id)
-        let metadata = try ShareComposerMetadata.read(from: directory)
-        guard metadata.origin == self.origin, !metadata.completed else { throw Failure.identity }
         let lease = directory.appendingPathComponent("composer.lock").withUnsafeFileSystemRepresentation {
             open($0!, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))
         }
         guard lease >= 0 else { throw Failure.unavailable }
         guard flock(lease, LOCK_EX | LOCK_NB) == 0 else { close(lease); throw Failure.busy }
-        let payload = directory.appendingPathComponent("payload").withUnsafeFileSystemRepresentation {
-            open($0!, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        }
-        guard payload >= 0 else { close(lease); throw Failure.unavailable }
-        leaseDescriptor = lease; payloadDescriptor = payload
+        do {
+            var metadata = try ShareComposerMetadata.read(from: directory)
+            guard !metadata.completed else { throw Failure.identity }
+            if metadata.origin.isEmpty, bindUnboundOrigin, metadata.accountId == nil, metadata.submission == nil {
+                metadata.origin = self.origin
+                metadata.apiOrigin = self.apiOrigin
+                try metadata.write(to: directory)
+            }
+            guard metadata.origin == self.origin, (metadata.apiOrigin ?? metadata.origin) == self.apiOrigin else { throw Failure.identity }
+            let payload = directory.appendingPathComponent("payload").withUnsafeFileSystemRepresentation {
+                open($0!, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            }
+            guard payload >= 0 else { throw Failure.unavailable }
+            leaseDescriptor = lease; payloadDescriptor = payload
+        } catch { close(lease); throw error }
     }
     deinit { close(payloadDescriptor); close(leaseDescriptor) }
 
     private func metadata(accountId: String) throws -> ShareComposerMetadata {
         guard !accountId.isEmpty else { throw Failure.identity }
         let metadata = try ShareComposerMetadata.read(from: directory)
-        guard metadata.origin == origin, !metadata.completed,
+        guard metadata.origin == origin, (metadata.apiOrigin ?? metadata.origin) == apiOrigin, !metadata.completed,
               metadata.accountId == nil || metadata.accountId == accountId else { throw Failure.identity }
         return metadata
     }
@@ -237,9 +252,18 @@ final class ShareComposerSession {
     }
     private static func jpegThumbnail(_ image: CGImage) -> [String: Any]? {
         for quality in [0.75, 0.45, 0.2] {
+            #if canImport(UIKit)
             if let data = UIImage(cgImage: image).jpegData(compressionQuality: quality), data.count <= 512 * 1024 {
                 return ["base64": data.base64EncodedString(), "type": "image/jpeg"]
             }
+            #else
+            let data = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+            CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+            if CGImageDestinationFinalize(destination), data.length <= 512 * 1024 {
+                return ["base64": (data as Data).base64EncodedString(), "type": "image/jpeg"]
+            }
+            #endif
         }
         return nil
     }
@@ -267,7 +291,7 @@ final class ShareComposerSession {
     }
     func complete(accountId: String) throws {
         var metadata = try ShareComposerMetadata.read(from: directory)
-        guard metadata.origin == origin, metadata.accountId == accountId,
+        guard metadata.origin == origin, (metadata.apiOrigin ?? metadata.origin) == apiOrigin, metadata.accountId == accountId,
               metadata.submission?.outcomeIds?.isEmpty == false else { throw Failure.identity }
         metadata.completed = true
         try metadata.write(to: directory)
