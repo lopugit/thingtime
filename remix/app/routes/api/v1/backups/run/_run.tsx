@@ -1,3 +1,4 @@
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json, readJsonBody } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -16,7 +17,7 @@ export function createBackupDispatchHandlers(overrides:Partial<{
  const reply=(body:unknown,status=200)=>json(body,{status,headers});
  const execute=async(request:Request)=>{
   if(new URL(request.url).search)return reply({ok:false,error:'Backup dispatch does not accept selectors'},400);
-  try{return reply({ok:true,dispatch:await deps.run(resolvePublicOrigin(request).origin)});}
+  try{const dispatch=await deps.run(resolvePublicOrigin(request).origin);recordScheduledPassResult('/api/v1/backups/run',{dispatch});return reply({ok:true,dispatch});}
   catch{return reply({ok:false,error:'Backup dispatch is temporarily unavailable'},503);}
  };
  const loader=async({request}:{request:Request})=>{

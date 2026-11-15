@@ -19,6 +19,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
 import { AiWaterfallSelector } from '../app/components/AI/AiWaterfallSelector';
+import { PRConflictResolverModelWaterfallEditor } from '../app/components/Admin/PRConflictResolverModelWaterfallEditor';
+import { normalizePrConflictResolverModelWaterfall, resolveAiPreferredAnthropicChoice } from '../app/api/utils/settings/prConflictResolverModelWaterfallCore';
+window.workflowReady=new Promise(resolve=>{window.releaseCatalog=resolve});
+window.workflowModels=[{id:'claude-opus-9-9',label:'Future Claude',provider:'anthropic',efforts:location.search.includes('removed')?[]:['low','high'],speeds:['normal'],enabled:true,available:true,verified:true,isDefault:false,family:'claude'}];
+window.workflowStored=location.search.includes('removed')?['claude-opus-9-9:high']:['default'];
+window.resolveWorkflow=()=>resolveAiPreferredAnthropicChoice({waterfall:window.workflowSaved,models:window.workflowModels},'fallback');
 import { aiWaterfallEndpoints } from '../app/api/utils/ai/waterfallCatalog';
 import { getAiModelCatalogEntry, publicAiModel } from '../app/api/utils/ai/modelsCore';
 const status={configured:true,verified:null,checkedAt:null};
@@ -26,14 +32,24 @@ const endpoints=aiWaterfallEndpoints([], [publicAiModel(getAiModelCatalogEntry('
 function Harness(){
  const [props,setProps]=React.useState({isOpen:false,value:null,items:[],initialSaved:undefined,generation:0});
  window.fixture={update:(patch)=>setProps(p=>({...p,...patch})), reset:(patch)=>setProps(p=>({isOpen:true,value:null,items:[],initialSaved:undefined,...patch,generation:p.generation+1}))};
- return <ChakraProvider><main><h1>Synthetic waterfall selector acceptance fixture</h1></main><AiWaterfallSelector key={props.generation} {...props} endpoints={endpoints} onClose={()=>setProps(p=>({...p,isOpen:false}))} onApply={(config)=>{window.applied=config}} library={{items:props.items,save:async(input)=>{window.savedInputs=[...(window.savedInputs||[]),input];return {...input,id:input.id||'fixture-new',updatedAt:'2026-11-15T01:00:00Z'}}}}/></ChakraProvider>
+ return <ChakraProvider>{location.search.includes('editor')?<PRConflictResolverModelWaterfallEditor/>:<><main><h1>Synthetic waterfall selector acceptance fixture</h1></main><AiWaterfallSelector key={props.generation} {...props} endpoints={endpoints} onClose={()=>setProps(p=>({...p,isOpen:false}))} onApply={(config)=>{window.applied=config}} library={{items:props.items,save:async(input)=>{window.savedInputs=[...(window.savedInputs||[]),input];return {...input,id:input.id||'fixture-new',updatedAt:'2026-11-15T01:00:00Z'}}}}/></>}</ChakraProvider>
 }
 createRoot(document.getElementById('root')).render(<Harness/>);
 `);
+const stubs={
+ '~/components/Nav/Drawer/useDrawer':'export const DRAWER_MODAL_OVERLAY_Z=10240; export const DRAWER_MODAL_Z=10250;',
+ '~/hooks/useCurrentUser':'export const useCurrentUser=()=>({id:"synthetic-user",temporary:false});',
+ '~/components/Lopu/useLopu':'export const useLopu=()=>()=>{};',
+ '~/components/Settings/SettingsSection':'import React from "react";export const SettingsSection=({children})=>React.createElement("section",null,children);',
+ '~/api/utils/capabilities/requireCapability.client':'export const requireThingtimeCapability=async()=>{};',
+ '~/hooks/useApi':`import {validatePrConflictResolverModelWaterfall,normalizePrConflictResolverModelWaterfall} from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
+ const response=()=>({ok:true,waterfall:normalizePrConflictResolverModelWaterfall(window.workflowStored,window.workflowModels),models:window.workflowModels});
+ export const useApi=()=>({v1:{settings:{prConflictResolverModelWaterfall:async()=>{await window.workflowReady;return response()}},admin:{setPrConflictResolverModelWaterfall:async(order)=>{const result=validatePrConflictResolverModelWaterfall(order,window.workflowModels);if(!result.ok)throw Error(result.error);window.workflowSaved=[...result.waterfall];window.workflowStored=window.workflowSaved;return response()}}}});`
+};
 let browser, server;
 const results=[];
 try {
- server=await createServer({configFile:false,root,plugins:[react(),{name:'fixture-layer-constants',enforce:'pre',resolveId(id){if(id==='~/components/Nav/Drawer/useDrawer')return '\0fixture-layers'},load(id){if(id==='\0fixture-layers')return 'export const DRAWER_MODAL_OVERLAY_Z=10240; export const DRAWER_MODAL_Z=10250;'}}],resolve:{alias:{'~':join(root,'app')}},server:{host:'127.0.0.1',port:Number(process.env.TT_WATERFALL_BROWSER_PORT||19873),strictPort:true},logLevel:'warn'});
+ server=await createServer({configFile:false,root,plugins:[react(),{name:'fixture-boundaries',enforce:'pre',resolveId(id){const app=join(root,'app');const key=id.startsWith(app+'/')?'~'+id.slice(app.length):id;if(key in stubs)return '\0fixture-stub:'+key},load(id){if(id.startsWith('\0fixture-stub:'))return stubs[id.slice('\0fixture-stub:'.length)]}}],resolve:{alias:{'~':join(root,'app')}},server:{host:'127.0.0.1',port:Number(process.env.TT_WATERFALL_BROWSER_PORT||19873),strictPort:true},logLevel:'warn'});
  await server.listen();
  const {chromium}=await import(process.env.TT_PLAYWRIGHT_MODULE||'playwright');
  browser=await chromium.launch({headless:true,chromiumSandbox:true,...(process.env.TT_CHROMIUM_EXECUTABLE?{executablePath:process.env.TT_CHROMIUM_EXECUTABLE}:{})});
@@ -85,7 +101,32 @@ try {
   await page.screenshot({path:join(evidence,label+'-bottom.png'),fullPage:true});
   const bounds=await page.getByRole('dialog').boundingBox(); assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width+1);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  assert.deepEqual(errors,[]); await context.close();
+  assert.deepEqual(errors,[]);
+  await page.route('**/api/v1/ai/models',route=>route.fulfill({json:{ok:true,models:[{id:'claude-opus-9-9',label:'Future Claude',provider:'anthropic',efforts:['low','high'],speeds:['normal'],enabled:true,available:true,verified:true,isDefault:false,family:'claude'}],vaultProviders:[]}}));
+  await page.route('**/api/v1/ai/waterfalls',async route=>{const body=route.request().postDataJSON();await route.fulfill({json:route.request().method()==='POST'?{ok:true,waterfall:{...body,id:'dynamic-saved',updatedAt:'2026-11-15T01:00:00Z'}}:{ok:true,waterfalls:[]}})});
+  const fixtureUrl=`http://127.0.0.1:${server.config.server.port}/${fixture.slice(root.length+1)}/index.html`;
+  await page.goto(fixtureUrl+'?editor=1');await page.evaluate(()=>localStorage.clear());await page.reload();
+  await page.getByRole('button',{name:'Choose AI waterfall',exact:true}).click();
+  await page.getByLabel('Endpoint for attempt 1').selectOption('server:anthropic');
+  await page.getByLabel('Model for attempt 1').selectOption('claude-opus-9-9');
+  await page.getByLabel('Reasoning effort for attempt 1').selectOption('high');
+  await page.getByLabel('Waterfall name').fill('Dynamic capability fixture');
+  await page.getByRole('button',{name:'Save & apply',exact:true}).click();
+  await page.waitForFunction(()=>window.workflowSaved?.[0]==='claude-opus-9-9:high');
+  assert.deepEqual(await page.evaluate(()=>window.workflowSaved),['claude-opus-9-9:high']);
+  assert.equal(await page.evaluate(()=>window.resolveWorkflow().effort),'high');
+  await page.evaluate(()=>window.releaseCatalog());
+  await page.screenshot({path:join(evidence,label+'-legacy-dynamic.png'),fullPage:true});
+  results.push(label+': cold editor opens before catalog response and saves discovered effort without default substitution');
+  await page.goto(fixtureUrl+'?editor=1&removed=1');await page.evaluate(()=>localStorage.clear());await page.reload();await page.evaluate(()=>window.releaseCatalog());
+  await page.getByText('Future Claude',{exact:true}).waitFor();
+  await page.route('**/api/v1/ai/models',route=>route.fulfill({json:{ok:true,models:[{id:'claude-opus-9-9',label:'Future Claude',provider:'anthropic',efforts:[],speeds:['normal'],enabled:true,available:true,verified:true,isDefault:false,family:'claude'}],vaultProviders:[]}}));
+  await page.getByRole('button',{name:'Choose AI waterfall',exact:true}).click();
+  await page.getByLabel('Model for attempt 1').waitFor();assert.equal(await page.getByLabel('Model for attempt 1').inputValue(),'claude-opus-9-9');assert.equal(await page.getByLabel('Reasoning effort for attempt 1').count(),0);
+  await page.getByLabel('Waterfall name').fill('Removed effort fixture');await page.getByRole('button',{name:'Save & apply',exact:true}).click();
+  await page.waitForFunction(()=>window.workflowSaved?.[0]==='claude-opus-9-9');assert.equal(await page.evaluate(()=>window.resolveWorkflow().effort),null);
+  results.push(label+': removed effort clamps to same model provider default through legacy save/runtime');
+  assert.deepEqual(errors,[]);await context.close();
  }
  await writeFile(join(evidence,'results.json'),JSON.stringify({kind:'synthetic actual React component; no production persistence',results},null,2));
  console.log(JSON.stringify({passed:results.length,evidence,results},null,2));

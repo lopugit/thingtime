@@ -11,6 +11,14 @@ matched ID and revision. Run `test:ai-models` and
 optionally selected by `TT_PLAYWRIGHT_MODULE`) for desktop/mobile synthetic
 component coverage; follow TESTING.md for authenticated deployed acceptance.
 
+`Admin/PlatformReportingSettings.tsx` uses individually editable settings blocks
+for private scheduled-run reporting. Its selected-origin administrator transport
+requires home storage, exact identity and `api.admin-platform-reporting` 1.0.0.
+`PRConflictResolverModelWaterfallEditor.tsx` uses the published catalogue through
+`api.settings-pr-conflict-auto-resolver-model-waterfall` 1.2.0 for editing and
+persisting newly discovered effort choices. Run `test:platform-reporting` and
+`scripts/test-platform-reporting-ui.mjs` for reporting isolation and UI checks.
+
 ## Publication visibility status
 
 `Marketing/marketingPublicationsStore.tsx` preserves origin-local public

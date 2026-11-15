@@ -157,11 +157,11 @@ const choiceFor = (base: AiWorkflowBaseModel, effort: AiModelEffort | null, spee
 // Parse a composed option id. Segment order is tolerated (`model:fast:high`
 // parses), but the returned choice always carries the canonical id
 // (`model:high:fast`) so storage and dedup stay deterministic.
-export const parseAiWorkflowModelOptionId = (value: unknown): AiWorkflowModelChoice | null => {
+export const parseAiWorkflowModelOptionId = (value: unknown, verifiedBase?: AiWorkflowBaseModel): AiWorkflowModelChoice | null => {
   if (typeof value !== 'string' || value.length < 1 || value.length > 128) return null;
 
   const [baseId, ...segments] = value.split(':');
-  const base = getAiWorkflowBaseModel(baseId);
+  const base = verifiedBase?.id===baseId?verifiedBase:getAiWorkflowBaseModel(baseId);
   if (!base) return null;
 
   let effort: AiModelEffort | null = null;
@@ -181,6 +181,25 @@ export const parseAiWorkflowModelOptionId = (value: unknown): AiWorkflowModelCho
   return choiceFor(base, effort, speed);
 };
 
+export type AiPreferredWaterfallSnapshot = { waterfall: readonly string[]; models: readonly AiWorkflowBaseModel[] };
+export const parsePublishedAiWorkflowChoice = (value:unknown,models?:readonly AiWorkflowBaseModel[],clamp=false):AiWorkflowModelChoice|null => {
+  if (!models) return parseAiWorkflowModelOptionId(value);
+  if (typeof value!=='string') return null;
+  const [id,...segments]=value.split(':');
+  if(id==='default')return parseAiWorkflowModelOptionId(value);
+  const base=models.find(model=>model.id===id);
+  if(!base)return null;
+  const parsed=parseAiWorkflowModelOptionId(value,base);
+  if(parsed || !clamp)return parsed;
+  const efforts=segments.filter(segment=>segment!=='fast');
+  if(segments.some(segment=>segment!=='fast'&&!Object.prototype.hasOwnProperty.call(AI_MODEL_EFFORT_LABELS,segment)) || efforts.length>1 || segments.filter(segment=>segment==='fast').length>1)return null;
+  return choiceFor(base,null,segments.includes('fast')&&base.speeds.includes('fast')?'fast':'normal');
+};
+const preferredSnapshot = (value:unknown,models?:readonly AiWorkflowBaseModel[]) => {
+  const snapshot=!Array.isArray(value)&&value&&typeof value==='object'?value as Partial<AiPreferredWaterfallSnapshot>:null;
+  return {value:snapshot&&Array.isArray(snapshot.waterfall)?snapshot.waterfall:value,models:models??(snapshot&&Array.isArray(snapshot.models)?snapshot.models:undefined)};
+};
+
 export const isPrConflictResolverModelId = (value: unknown): value is PRConflictResolverModelId =>
   parseAiWorkflowModelOptionId(value) !== null;
 
@@ -191,13 +210,14 @@ export const DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL: PRConflictResolverMod
 // of the order instead of losing it), duplicates keep their first position,
 // and a value with nothing usable collapses to the initial default. Valid
 // configured orders never gain additional model attempts.
-export const normalizePrConflictResolverModelWaterfall = (value: unknown): PRConflictResolverModelId[] => {
+export const normalizePrConflictResolverModelWaterfall = (input: unknown,models?:readonly AiWorkflowBaseModel[]): PRConflictResolverModelId[] => {
+  const snapshot=preferredSnapshot(input,models);const value=snapshot.value;models=snapshot.models;
   if (!Array.isArray(value)) return [...DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL];
 
   const seen = new Set<PRConflictResolverModelId>();
   const waterfall: PRConflictResolverModelId[] = [];
   for (const entry of value) {
-    const choice = parseAiWorkflowModelOptionId(entry);
+    const choice = parsePublishedAiWorkflowChoice(entry,models,true);
     if (!choice || seen.has(choice.id)) continue;
     seen.add(choice.id);
     waterfall.push(choice.id);
@@ -226,8 +246,9 @@ const resolvePreferredProviderChoice = (
   value: unknown,
   provider: Exclude<AiModelProvider, 'default'>
 ): AiWorkflowModelChoice | null => {
-  for (const id of normalizePrConflictResolverModelWaterfall(value)) {
-    const choice = parseAiWorkflowModelOptionId(id);
+  const snapshot=preferredSnapshot(value);
+  for (const id of normalizePrConflictResolverModelWaterfall(snapshot.value,snapshot.models)) {
+    const choice = parsePublishedAiWorkflowChoice(id,snapshot.models);
     if (!choice) continue;
     if (choice.provider === provider) return choice;
     // `default` means "this client's own provider-valid default": stop
@@ -278,7 +299,8 @@ export type ValidatePrConflictResolverModelWaterfallResult =
 // `model:high:fast` are the same entry). Length is unlimited — uniqueness
 // against the finite catalog is the only bound.
 export const validatePrConflictResolverModelWaterfall = (
-  value: unknown
+  value: unknown,
+  models?:readonly AiWorkflowBaseModel[]
 ): ValidatePrConflictResolverModelWaterfallResult => {
   if (!Array.isArray(value)) {
     return { ok: false, error: 'waterfall must be an array of model ids' };
@@ -290,7 +312,7 @@ export const validatePrConflictResolverModelWaterfall = (
   const seen = new Set<PRConflictResolverModelId>();
   const waterfall: PRConflictResolverModelId[] = [];
   for (const entry of value) {
-    const choice = parseAiWorkflowModelOptionId(entry);
+    const choice = parsePublishedAiWorkflowChoice(entry,models);
     if (!choice) {
       return { ok: false, error: 'waterfall contains an unknown model id' };
     }

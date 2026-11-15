@@ -575,3 +575,19 @@ Account-link administration is home-pinned; co-manager writes fence the exact
 current link in the transaction. Account/session writers own migration and
 revocation boundaries. Run `test:acl:relational`, desktop OAuth and account-link
 authorization tests. See [relational access](../relational-access.md).
+
+Character creation: `auth/characters.ts` and `accounts/accountLinks.ts` bind an
+optional normalized handle to the owner/request ID through a protected roster
+receipt in the canonical registration transaction. `api.auth-characters` 1.3.0
+adds chosen handles; `CharactersSettings.tsx` and `characterClient.ts` negotiate
+that version for this operation. Run `test:characters` and the creation/receipt
+regressions; see [Characters](../characters.md).
+
+Admin scheduled invocation reporting: `Admin/PlatformReportingSettings.tsx`
+composes `platformReportingSettingsBlocks.ts` through the normal editable
+settings document host, uses exact account/origin transport and negotiates
+`api.admin-platform-reporting` 1.0.0, groups 1.2.1 and users-profile 1.2.0.
+The UI resolves public handles, selects private audience groups, preserves
+same-account drafts and fences uncertain group creation. The synthetic browser
+regression is `scripts/test-platform-reporting-ui.mjs`; real-account readback and
+log delivery remain independent acceptance gates.

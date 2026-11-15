@@ -109,6 +109,34 @@ export const createAccountLink = async (input: {
   return { ok: true, link: toLink(doc) };
 };
 
+// Creation receipts reuse the protected roster row and existing unique shareId.
+// Keying this row by owner + request, rather than the chosen username/target,
+// makes concurrent retries atomic with registration even if their handles differ.
+export type CharacterCreation = { username: string; displayName: string; loginMode: string };
+const characterCreationMatch = (ownerId: string, requestId: string) => ({
+  shareId: linkShareId('character', ownerId, `creation:${requestId}`),
+  thingtime: LINK_KIND, ownerId, 'crystal.linkKind': 'character'
+});
+export async function getCharacterCreation(ownerId: string, requestId: string) {
+  const doc = await (await getHomeThingsCollection()).findOne(characterCreationMatch(ownerId, requestId));
+  return doc ? { targetId: String(doc.crystal.targetId), request: doc.crystal.creation as CharacterCreation } : null;
+}
+export async function saveCharacterCreation(input: {
+  ownerId: string; requestId: string; targetId: string; request: CharacterCreation; session: any;
+}) {
+  const now = new Date();
+  // An immutable insert is intentional: never swallow a duplicate inside a
+  // transaction or overwrite the winning creation's target/request.
+  await (await getHomeThingsCollection()).insertOne({
+    shareId: characterCreationMatch(input.ownerId, input.requestId).shareId,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+    thingtime: [LINK_KIND], ownerId: input.ownerId, acl: [ACL_OWNER],
+    crystal: { linkKind: 'character', userId: input.ownerId, targetId: input.targetId,
+      role: 'owner', createdBy: input.ownerId, creation: input.request },
+    targetId: null, tags: [], createdAt: now, updatedAt: now
+  }, { session: input.session });
+}
+
 export const removeAccountLink = async (linkKind: AccountLinkKind, userId: string, targetId: string): Promise<{ ok: true; removed: boolean }> => {
   const things = await getHomeThingsCollection();
   const res = await things.deleteOne(linkMatch(linkKind, userId, targetId));
@@ -144,6 +172,20 @@ export const userOwnsLinkedAccount = async (userId: string, accountId: string): 
   const doc = await things.findOne(linkMatch('account', userId, accountId), { projection: { _id: 1 } });
   return !!doc;
 };
+
+/** Internal composed writes must hold the current protected ownership row in
+ * the same transaction; unlinking it then conflicts with the dependent write. */
+export async function fenceOwnedAccountLink(actorId: string, ownerId: string, session: any, token: string): Promise<boolean> {
+  if (typeof session?.inTransaction !== 'function' || !session.inTransaction() || typeof token !== 'string' || !token) throw new Error('Account ownership requires an active transaction and fence token');
+  const things = await getHomeThingsCollection();
+  const filter = { ...linkMatch('account', actorId, ownerId), ownerId: actorId,
+    'crystal.linkKind': 'account', 'crystal.userId': actorId, 'crystal.targetId': ownerId };
+  const options = { session };
+  const row = await things.findOne(filter, options);
+  if (!row) return false;
+  const result = await things.updateOne({ ...filter, _id: row._id }, { $set: { authorizationFence: `${token}:${randomUUID()}` } }, options);
+  return result.matchedCount === 1;
+}
 
 // The clientIds of apps this user co-manages via links (their own apps are
 // matched by ownerId and never need a link).

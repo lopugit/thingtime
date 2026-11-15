@@ -5,12 +5,15 @@ let following = false;
 let friend: any = null;
 let notifications = 0;
 let rows: any[] = [];
+let groupRoots: any[] = [];
+let memberships: any[] = [];
 const collection = {
   countDocuments: async () => 10001,
   findOne: async () => friend,
   insertOne: async (doc: any) => { friend = { ...doc, _id: 'relationship' }; },
-  find: () => {
-    const cursor = { project: () => cursor, batchSize: () => cursor, toArray: async () => rows };
+  find: (query: any) => {
+    const selected = query.thingtime === 'group' ? groupRoots.filter(row => query.ownerId ? row.ownerId === query.ownerId : query.shareId.$in.includes(row.shareId)) : query.thingtime === 'group-member' ? memberships.filter(row=>row.targetId===query.targetId) : rows;
+    const cursor = { project: () => cursor, batchSize: () => cursor, toArray: async () => selected };
     return cursor;
   }
 };
@@ -37,7 +40,7 @@ mock.module(new URL('../notifications/notifications.ts', import.meta.url).href, 
   namedExports: { emitNotification: async () => { notifications += 1; } }
 });
 const { setFollow, friendAction, friendIdsOf, groupIdsOf } = await import('./social.ts');
-beforeEach(() => { following = false; friend = null; notifications = 0; rows = []; });
+beforeEach(() => { following = false; friend = null; notifications = 0; rows = []; groupRoots=[]; memberships=[]; });
 
 test('large relational social graphs accept another follow or friendship without duplicate notices', async () => {
   const viewer = { id: 'viewer', username: 'viewer' }, target = { _id: 'target', username: 'target' };
@@ -55,9 +58,22 @@ test('large relational social graphs accept another follow or friendship without
 
 test('authorization preload preserves memberships beyond the former 2000 boundary', async () => {
   rows = Array.from({ length: 2105 }, (_, i) => ({ ownerId: 'viewer', targetId: `friend-${i}`, crystal: { groupId: `group-${i}` } }));
+  groupRoots=rows.map((row,i)=>({shareId:`group-${i}`,ownerId:'group-owner'}));
+  memberships=rows.map(row=>({targetId:'viewer',ownerId:'group-owner',crystal:row.crystal}));
   const friends = await friendIdsOf('viewer'), groups = await groupIdsOf('viewer');
   assert.equal(friends.size, 2105);
   assert.equal(groups.size, 2105);
   assert(friends.has('friend-2104'));
   assert(groups.has('group-2104'));
+});
+
+
+test('group owners are implicit members; unrelated audiences and revoked/deleted groups stay excluded', async () => {
+  groupRoots=[{shareId:'owned',ownerId:'viewer'},{shareId:'joined',ownerId:'other'},{shareId:'unrelated',ownerId:'other'},{shareId:'wrong-owner',ownerId:'other'}];
+  memberships=[{targetId:'viewer',ownerId:'other',crystal:{groupId:'joined'}},{targetId:'someone-else',ownerId:'other',crystal:{groupId:'unrelated'}},{targetId:'viewer',ownerId:'former-owner',crystal:{groupId:'wrong-owner'}},{targetId:'viewer',ownerId:'other',crystal:{groupId:'deleted'}}];
+  assert.deepEqual([...await groupIdsOf('viewer')].sort(),['joined','owned']);
+  memberships=memberships.filter(row=>row.crystal.groupId!=='joined');
+  assert.deepEqual([...await groupIdsOf('viewer')],['owned']);
+  groupRoots=groupRoots.filter(root=>root.shareId!=='owned');
+  assert.equal((await groupIdsOf('viewer')).size,0);
 });

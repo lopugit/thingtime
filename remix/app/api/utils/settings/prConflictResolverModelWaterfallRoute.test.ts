@@ -101,3 +101,12 @@ test('admin POST rejects malformed and oversized bodies without writing', async 
   );
   assert.equal(writes, 0);
 });
+
+test('published capabilities validate dynamic settings and concurrent option changes return bounded conflict',async()=>{
+ const models=[{id:'claude-opus-9-9',label:'Future',provider:'anthropic',efforts:['high'],speeds:['normal'],enabled:true,available:true}];
+ const handlers=createHandlers({requireAdmin:async()=>({user:{id:'admin'}}),getCatalog:async()=>models,setWaterfall:async()=>{throw new TypeError('private capability diagnostic');}});
+ const response=await handlers.action({request:postRequest({waterfall:['claude-opus-9-9:high']})});
+ assert.equal(response.status,409);assert.deepEqual(await response.json(),{ok:false,error:'Model options changed. Reload and try again.'});
+ const invalid=await handlers.action({request:postRequest({waterfall:['claude-opus-9-9:max']})});assert.equal(invalid.status,400);
+ const read=await handlers.loader({request:new Request(endpoint)});const body=await read.json();assert.ok(body.models.some((model:any)=>model.id==='claude-opus-9-9'&&model.efforts[0]==='high'));
+});

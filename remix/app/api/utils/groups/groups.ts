@@ -124,6 +124,20 @@ export const listGroups = async (ownerId: string): Promise<{ ok: true; groups: P
   return { ok: true, groups: await projectGroups(ownerId, docs as any[]) };
 };
 
+/** Hold the exact canonical group root in its active content transaction.
+ * Platform callers explicitly enter home before obtaining their session. A
+ * concurrent deletion or ownership change cannot commit with a dependent post. */
+export async function fenceOwnedGroup(ownerId: string, groupId: string, session: any, token: string): Promise<boolean> {
+  if (typeof session?.inTransaction !== 'function' || !session.inTransaction() || typeof token !== 'string' || !token) throw new Error('Group authorization requires an active transaction and fence token');
+  const things = await getThingsCollection();
+  const filter = { thingtime: 'group', shareId: groupId, ownerId };
+  const options = { session };
+  const row = await things.findOne(filter, options);
+  if (!row) return false;
+  const result = await things.updateOne({ ...filter, _id: row._id }, { $set: { authorizationFence: `${token}:${randomUUID()}` } }, options);
+  return result.matchedCount === 1;
+}
+
 const memberDoc = (ownerId: string, groupId: string, userId: string, now: Date) => ({
   shareId: randomUUID(),
   schemaVersion: THINGS_SCHEMA_VERSION,

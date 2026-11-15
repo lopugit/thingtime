@@ -237,15 +237,24 @@ export const friendIdsOf = async (userId: string): Promise<Set<string>> => {
 // on the existing (thingtime, targetId) access pattern answers.
 export const groupIdsOf = async (userId: string): Promise<Set<string>> => {
   const things = await getThingsCollection();
-  const docs = await things
-    .find({ thingtime: 'group-member', targetId: userId } as any)
-    .project({ crystal: 1 })
-    .batchSize(100)
-    .toArray();
-  const ids = new Set<string>();
-  for (const doc of docs as any[]) {
-    const groupId = String((doc as any).crystal?.groupId || '');
-    if (groupId) ids.add(groupId);
+  // Group owners are implicit members: creation deliberately omits an owner
+  // membership row. Read current roots so deletion revokes that authority.
+  const [owned, memberships] = await Promise.all([
+    things.find({ thingtime: 'group', ownerId: userId } as any).project({ shareId: 1 }).batchSize(100).toArray(),
+    things.find({ thingtime: 'group-member', targetId: userId } as any).project({ ownerId: 1, crystal: 1 }).batchSize(100).toArray()
+  ]);
+  const ids = new Set<string>(owned.map((doc: any) => String(doc.shareId)));
+  const memberOwners = new Map<string, string>();
+  for (const row of memberships as any[]) {
+    if (typeof row.crystal?.groupId === 'string') memberOwners.set(row.crystal.groupId, String(row.ownerId));
+  }
+  const candidates = [...memberOwners.keys()];
+  // An orphan/stale membership cannot revive a deleted or differently owned
+  // group. Batch root checks through the existing unique shareId index.
+  for (let offset = 0; offset < candidates.length; offset += 100) {
+    const roots = await things.find({ thingtime: 'group', shareId: { $in: candidates.slice(offset, offset + 100) } } as any)
+      .project({ shareId: 1, ownerId: 1 }).batchSize(100).toArray();
+    for (const root of roots as any[]) if (memberOwners.get(String(root.shareId)) === String(root.ownerId)) ids.add(String(root.shareId));
   }
   return ids;
 };

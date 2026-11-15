@@ -1162,3 +1162,25 @@ in `apiDocs.ts`; client requirements stay limited to the operations they use.
 New local tests are grouped under `test:acl:relational`. Real five-family
 acceptance uses `agent-reporting-acceptance.mjs` with scale flags described in
 [relational access](../relational-access.md).
+
+
+Platform scheduled reporting uses `api.admin-platform-reporting` 1.0.0 at
+`/api/v1/admin/platform-reporting`, registered in the docs and Nitro import map.
+`automation/scheduledRunReporting.ts` admits only configured cron GET requests;
+`automation/platformReporting.ts` validates the administrator, owned root,
+active Character and private group on each event. The editable Admin settings
+surface negotiates this contract before configuration. Chosen Character handles
+require `api.auth-characters` 1.3.0. Group 1.2.1 restores implicit owner membership
+for shared audience reads. Run `test:platform-reporting`, `test:characters`,
+`test:api-capabilities`, and `scripts/platform-reporting-acceptance.mjs` against
+a built Node server and disposable replica set; use
+`scripts/test-platform-reporting-ui.mjs` for the actual editable UI fixture.
+
+
+`api.ai-models` 1.10.0 and model sync 1.3.0 project validated provider effort
+capabilities saved by authenticated catalogue discovery. `modelDiscovery.ts`
+uses an independent Anthropic Models API version, `modelSync.ts` persists
+verified effort snapshots atomically, and `modelsCore.ts` resolves current
+choices against those snapshots. Incomplete metadata/public-doc fallback retains
+the prior options; enabled policy and stored user defaults are preserved.
+Run `test:ai-models` and `test:api-capabilities`.
