@@ -165,6 +165,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   private scheduled-run reporting with administrator audience controls and
   delivery readback. See [PR 1533](../PRs/1533-ai-waterfall-catalogue-platform-logs.md). **Codex (AI)**
 
+- 2026-11-15: Check the current session in the background while its error screen
+  is shown, then reload the same full URL after a valid session response.
+  Preserve manual recovery, reject redirects/HTML/health-only responses and
+  slow repeated reloads across bootstrap failures. **Codex (AI)**
+
 - 2026-11-15: Repair iOS Photos share fallback and blank-composer recovery;
   retain Live Photo image/motion pairing for hold-to-play, show native video
   posters and recover stalled image previews. — Codex (AI)

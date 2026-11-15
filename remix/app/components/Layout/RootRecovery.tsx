@@ -1,19 +1,23 @@
-import { useRevalidator, useRouteError } from 'react-router';
-import { useBackgroundRefresh } from '../../hooks/useBackgroundRefresh';
-import { RootDataUnavailableError } from '../../utils/rootDataRecovery';
+import { useEffect } from 'react';
+import { useLocation, useRevalidator } from 'react-router';
+import { subscribeBackgroundRefresh } from '../../hooks/backgroundRefresh';
+import { startSessionRecovery } from '../../utils/sessionRecovery';
 import { DesktopConnectionRecovery } from '../Settings/DesktopConnectionRecovery';
 
 /** Deliberately outside account/theme providers: no old user content, error
  * payload, stack trace, URL query, or cached profile belongs on this screen. */
 export const RootRecovery = ({ refreshing = false }: { refreshing?: boolean }) => {
 	const revalidator = useRevalidator();
-	const error = useRouteError();
-	useBackgroundRefresh(
-		!refreshing && error instanceof RootDataUnavailableError && error.retryable ? 'root-data-recovery' : null,
-		() => revalidator.state === 'idle' ? revalidator.revalidate() : undefined,
-		30_000,
-		false
-	);
+	const { pathname, search, hash } = useLocation();
+	useEffect(() => {
+		if (refreshing) return;
+		return startSessionRecovery({
+			search,
+			storage: () => window.sessionStorage,
+			reload: () => window.location.reload(),
+			subscribe: subscribeBackgroundRefresh
+		});
+	}, [refreshing, pathname, search, hash]);
 	const busy = refreshing || revalidator.state !== 'idle';
 	return (
 		<main
@@ -37,7 +41,7 @@ export const RootRecovery = ({ refreshing = false }: { refreshing?: boolean }) =
 				<p role="status" style={{ lineHeight: 1.6 }}>
 					{refreshing
 						? 'Your previous view is hidden while we check your current session.'
-						: 'Check your connection, then try again. Your changes haven’t been repeated.'}
+						: 'We’ll check your connection in the background and reload this page when your session is available. Your changes haven’t been repeated.'}
 				</p>
 				{!refreshing && (
 					<div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginTop: 24 }}>

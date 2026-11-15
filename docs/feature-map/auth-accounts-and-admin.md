@@ -591,3 +591,15 @@ The UI resolves public handles, selects private audience groups, preserves
 same-account drafts and fences uncertain group creation. The synthetic browser
 regression is `scripts/test-platform-reporting-ui.mjs`; real-account readback and
 log delivery remain independent acceptance gates.
+
+## Session error recovery
+
+`components/Layout/RootRecovery.tsx` runs `utils/sessionRecovery.ts` while its
+error screen is mounted. It probes the existing `/api/root-data` session GET
+with the current query and validates its root contract before reloading the
+current full URL. `hooks/backgroundRefresh.ts` coalesces probes, slows failures
+and hidden-tab polling, and wakes on focus/online. A tab-local non-sensitive
+reload guard prevents rapid boot/reload loops; thirty seconds of stable
+successful `root.tsx` rendering clears it. Recovery never invokes the
+temporary-account POST or other actions.
+Run `test:root-data` and `test:hooks`; use TESTING.md's session read checklist.
