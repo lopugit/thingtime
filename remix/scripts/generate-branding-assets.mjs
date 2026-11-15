@@ -11,7 +11,10 @@
 //   (+ one scalable .svg per background)
 //   presskit/thingtime-<name>-<w>x<h>.png                 marketing suite:
 //                                                         every format × logo × background
-// plus a manifest the page reads: app/components/Branding/brandingAssets.generated.json
+//   imagery/thingtime-<format>-<logo>-<backdrop>-<pattern>-<w>x<h>.png
+//                                                         the curated generative set
+//                                                         (brandImagery.ts)
+// plus the manifests the page reads, beside the registry in app/components/Branding/.
 //
 // Zero native deps: pixels are composed in raw buffers and encoded as PNG
 // through node's zlib. Output is byte-stable run to run (no timestamps, seeded
@@ -41,14 +44,18 @@ import {
   logoPixels,
   seededRandom
 } from '../app/components/Branding/logoVariants.ts';
+import { BRAND_IMAGERY, brandImageryUrl } from '../app/components/Branding/brandImagery.ts';
+import { buildBrandScene } from '../app/components/Branding/brandScenes.ts';
 import { RAINBOW_PALETTE } from '../app/theme/tokens.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_BRANDING = path.join(HERE, '..', 'public', 'branding');
 const GENERATED_DIR = path.join(PUBLIC_BRANDING, 'generated');
 const PRESSKIT_DIR = path.join(PUBLIC_BRANDING, 'presskit');
+const IMAGERY_DIR = path.join(PUBLIC_BRANDING, 'imagery');
 const MANIFEST_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingAssets.generated.json');
 const SURFACES_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingSurfaces.generated.json');
+const IMAGERY_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingImagery.generated.json');
 
 // The requested ready-made ladder: 10px thumbnails up to 10k wall prints.
 const SIZES = [10, 16, 32, 50, 64, 100, 128, 200, 256, 500, 512, 1000, 1024, 2000, 2048, 4096, 5000, 8192, 10000];
@@ -278,7 +285,7 @@ const renderCells = (cells, colourMap, outW, outH) => {
 // Press-kit composition helpers
 
 // Extended accent dots from docs/design/DESIGN_LANGUAGE.md (the confetti set).
-const CONFETTI_COLOURS = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa3b1', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'].map(parseColour);
+const CONFETTI_COLOURS = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa9dd', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'].map(parseColour);
 
 const RAINBOW_STOPS = RAINBOW_PALETTE.map(parseColour);
 
@@ -468,8 +475,10 @@ const EMPTY = [0, 0, 0, 0];
 
 rmSync(GENERATED_DIR, { recursive: true, force: true });
 rmSync(PRESSKIT_DIR, { recursive: true, force: true });
+rmSync(IMAGERY_DIR, { recursive: true, force: true });
 mkdirSync(GENERATED_DIR, { recursive: true });
 mkdirSync(PRESSKIT_DIR, { recursive: true });
+mkdirSync(IMAGERY_DIR, { recursive: true });
 
 // Two manifests, split by who reads them. brandingAssets keeps the long-standing
 // shape (transparent files + press kit) for the sitemap, <Logo> and the
@@ -724,9 +733,55 @@ for (const format of PRESS_FORMATS) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Generative imagery: the curated scenes, painted from the same rectangle list
+// the studio draws. Scenes are flat colour on a voxel grid, so they go through
+// the palette encoder with consecutive identical rows collapsed.
+
+const colourCache = new Map();
+const sceneColour = (value) => {
+  let rgba = colourCache.get(value);
+  if (!rgba) {
+    rgba = parseColour(value);
+    colourCache.set(value, rgba);
+  }
+  return rgba;
+};
+
+const sceneRows = (scene) => {
+  const canvas = makeCanvas(scene.width, scene.height);
+  for (const [x, y, w, h, colour] of scene.rects) fillRect(canvas, x, y, w, h, sceneColour(colour));
+  const stride = scene.width * 4;
+  const rows = [];
+  const rowOf = new Int32Array(scene.height);
+  for (let y = 0; y < scene.height; y += 1) {
+    const line = canvas.data.subarray(y * stride, (y + 1) * stride);
+    if (y > 0 && line.equals(rows[rows.length - 1])) {
+      rowOf[y] = rows.length - 1;
+    } else {
+      rowOf[y] = rows.length;
+      rows.push(line);
+    }
+  }
+  return { w: scene.width, h: scene.height, rows, rowOf };
+};
+
+const imageryManifest = { items: [] };
+for (const item of BRAND_IMAGERY) {
+  const png = encodeRowsPng(sceneRows(buildBrandScene(item.scene)));
+  const url = brandImageryUrl(item);
+  writeFileSync(path.join(PUBLIC_BRANDING, '..', url), png);
+  imageryManifest.items.push({ id: item.id, name: item.name, w: item.format.width, h: item.format.height, url, bytes: png.length });
+  console.log(`imagery ${item.id} ${item.format.width}x${item.format.height} (${png.length} bytes)`);
+}
+
 writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`manifest → ${path.relative(process.cwd(), MANIFEST_PATH)}`);
 // keep each [w, h, bytes] tuple on one line so the file stays reviewable
 const surfaceJson = JSON.stringify(surfaceManifest, null, 2).replace(/\[\s+(\d+),\s+(\d+),\s+(\d+)\s+\]/g, '[$1, $2, $3]');
 writeFileSync(SURFACES_PATH, `${surfaceJson}\n`);
 console.log(`surfaces → ${path.relative(process.cwd(), SURFACES_PATH)}`);
+// one item per line, same reason
+const imageryJson = `{\n  "items": [\n${imageryManifest.items.map((entry) => `    ${JSON.stringify(entry)}`).join(',\n')}\n  ]\n}\n`;
+writeFileSync(IMAGERY_PATH, imageryJson);
+console.log(`imagery → ${path.relative(process.cwd(), IMAGERY_PATH)}`);

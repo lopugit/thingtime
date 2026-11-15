@@ -12,10 +12,13 @@ export const LOGO_ICON_MATRIX: LogoMatrix = [
   [0, 8, 0]
 ];
 
+// The two i's mirror each other, exactly as drawn in the owner's artwork
+// (public/branding/thingtime-horizontal.svg): the first carries red over cyan,
+// the second cyan over red.
 export const LOGO_FULL_MATRIX: LogoMatrix = [
-  '111,020,030,000,000,070,030',
+  '111,020,040,000,000,070,030',
   '010,022,000,550,660,707,000,999,0xx',
-  '010,022,040,550,660,080,040,999,0xx',
+  '010,022,030,550,660,080,040,999,0xx',
   '00000000000006',
   '00000000000066'
 ];
@@ -45,7 +48,7 @@ export const LOGO_DEFAULT_COLOURS: LogoColourMap = {
   2: '#59bdff',
   3: '#00b7ef',
   4: '#ed1c24',
-  5: '#ffa3b1',
+  5: '#ffa9dd',
   6: '#6f3198',
   7: '#a8e61d',
   8: '#9c5a3c',

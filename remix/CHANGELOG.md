@@ -12,6 +12,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-16: The wordmark now matches the owner's artwork: the first i is
+  red over cyan and the n is `#ffa9dd` (was cyan over red and `#ffa3b1`), so
+  every generated wordmark and square file is refreshed. `/branding` gains 96
+  curated ready-to-post pictures in `public/branding/imagery/` (every lock-up
+  and fun cut across posts, stories, link cards, banners, slides and
+  wallpapers; 0.6 MB in all), a filterable gallery over those plus the classic
+  press kit, and a studio that builds new pictures from size, logo, background,
+  pattern and seed with PNG/SVG download. One rectangle-list scene engine
+  (`brandScenes.ts`) paints the committed files, the studio canvas and the
+  SVG. The sitemap lists the new pictures. See
+  [the PR note](../PRs/1537-codex-branding-artwork-wordmark-imagery-studio--branding-artwork-matched-wordmark-96-ready-to-post-pictures-imagery-studio.md).
+  **Claude (AI)**
 - 2026-11-15: `/branding` gains the square two-line logo, a transparent /
   light / dark background for every cut (SVG plus the full PNG ladder), ten
   fun cuts and a press kit covering every format × logo × background. One

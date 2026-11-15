@@ -185,7 +185,7 @@ export const glitchPixels = (pixels: LogoPixels, unit: number, bands: ReadonlyAr
   return out;
 };
 
-const BAYER_4 = [
+export const BAYER_4 = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
   [3, 11, 1, 9],
@@ -218,7 +218,7 @@ export const bouncePixels = (pixels: LogoPixels, glyphWidth: number, offsets: re
   return out;
 };
 
-export const CONFETTI_PALETTE = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa3b1', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'];
+export const CONFETTI_PALETTE = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa9dd', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'];
 
 /**
  * Party cut: every voxel takes a random confetti colour (never matching the
@@ -471,7 +471,7 @@ export const BRAND_LOGO_VARIANTS: BrandLogoVariant[] = [
     description: 'One tree, four moods: blossom, summer, autumn and frost.',
     alt: 'Thingtime icon — four voxel trees in blossom pink, summer green, autumn orange and frost blue',
     matrix: ['0a000b000c000d0', 'a0a0b0b0c0c0d0d', '0t000t000t000t0'],
-    colourMap: { 0: 'transparent', a: '#ffa3b1', b: '#a8e61d', c: '#ff7e00', d: '#59bdff', t: '#9c5a3c' },
+    colourMap: { 0: 'transparent', a: '#ffa9dd', b: '#a8e61d', c: '#ff7e00', d: '#59bdff', t: '#9c5a3c' },
     trim: true,
     unit: 1
   },

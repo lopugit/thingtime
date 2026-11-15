@@ -4,13 +4,17 @@ import React from 'react';
 import { BrandAssetSection } from '~/components/Branding/BrandAssetSection';
 import type { ManifestSurfaces, ManifestVariant } from '~/components/Branding/BrandAssetSection';
 import { Eyebrow } from '~/components/Branding/BrandAssetSection';
+import { BrandImageryStudio } from '~/components/Branding/BrandImageryStudio';
 import { BrandPressKit } from '~/components/Branding/BrandPressKit';
-import type { PressKitItem } from '~/components/Branding/BrandPressKit';
+import type { ImageryManifestItem, PressKitItem } from '~/components/Branding/BrandPressKit';
+import { DEFAULT_SCENE } from '~/components/Branding/brandScenes';
+import type { BrandSceneOptions } from '~/components/Branding/brandScenes';
 import { LOGO_DEFAULT_COLOURS } from '~/components/Branding/logoMatrix';
 import { BRAND_LOGO_VARIANTS } from '~/components/Branding/logoVariants';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_PALETTE } from '~/theme/tokens';
 import brandingAssets from '~/components/Branding/brandingAssets.generated.json';
+import brandingImagery from '~/components/Branding/brandingImagery.generated.json';
 import brandingSurfaces from '~/components/Branding/brandingSurfaces.generated.json';
 
 // /branding — Thingtime's brand-resources page, styled after the big-league
@@ -19,6 +23,8 @@ import brandingSurfaces from '~/components/Branding/brandingSurfaces.generated.j
 // registry in logoVariants.ts and ships transparent, on light and on dark;
 // ready-made files live in remix/public/branding (npm run branding-assets) and
 // the custom exporter renders anything else client-side from the same voxels.
+// The imagery gallery and the studio share one scene engine (brandScenes.ts):
+// "Remix" on a gallery picture hands its options to the studio below it.
 
 const MONO = 'var(--tt-font-mono, "JetBrains Mono", monospace)';
 const HEAD = 'var(--tt-font-heading, "Space Grotesk", sans-serif)';
@@ -38,7 +44,8 @@ const ANCHORS = [
   { href: '#icon', label: 'Icon' },
   { href: '#logo-pink', label: 'Pink' },
   { href: '#fun', label: 'Fun cuts' },
-  { href: '#press-kit', label: 'Press kit' },
+  { href: '#press-kit', label: 'Imagery' },
+  { href: '#studio', label: 'Studio' },
   { href: '#colours', label: 'Colours' },
   { href: '#usage', label: 'Usage' }
 ];
@@ -55,12 +62,22 @@ const USAGE_IDEAS = [
   { emoji: '🌗', text: 'Play with colours, effects and backgrounds; choose the contrast that feels right for your space.' }
 ];
 
+// What the studio opens on: the square logo over rolling hills.
+const STUDIO_START: BrandSceneOptions = { ...DEFAULT_SCENE, logo: 'logo-square', backdrop: 'sky', pattern: 'hills', seed: 7, logoSize: 0.85 };
+
 const Inner = (props: React.ComponentProps<typeof Box>) => <Box maxW="1240px" mx="auto" px={{ base: '20px', md: '40px' }} {...props} />;
 
 export default function Branding() {
   const lopu = useLopu();
   const manifestBySlug = new Map<string, ManifestVariant>(brandingAssets.variants.map((variant) => [variant.slug, variant as ManifestVariant]));
   const surfacesBySlug = brandingSurfaces as Record<string, ManifestSurfaces>;
+  const [studioScene, setStudioScene] = React.useState<BrandSceneOptions>(STUDIO_START);
+
+  const remix = (scene: BrandSceneOptions) => {
+    setStudioScene(scene);
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById('studio')?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+  };
 
   const copyColour = async (hex: string) => {
     try {
@@ -109,7 +126,8 @@ export default function Branding() {
         <Text mt="20px" maxW="640px" fontSize={{ base: '16px', md: '18px' }} lineHeight={1.7} color="var(--tt-text, #5a5a66)">
           Logos, colours and ready-to-post imagery — everything on this page is yours to play with.
           Every logo comes transparent, on light and on dark: grab a ready-made size, or export any cut at
-          any resolution with your own padding. Transparent cuts are trimmed to the pixel.
+          any resolution with your own padding. Then take a finished picture from the gallery, or build
+          your own in the studio.
         </Text>
         <Flex mt="28px" gap="8px" flexWrap="wrap">
           {ANCHORS.map((anchor) => (
@@ -171,11 +189,18 @@ export default function Branding() {
           </SimpleGrid>
         </Box>
 
-        <BrandPressKit items={brandingAssets.presskit as PressKitItem[]} eyebrow={numbered(FUN_POSITION + 1, 'Press kit')} />
+        <BrandPressKit
+          items={brandingAssets.presskit as PressKitItem[]}
+          imagery={brandingImagery.items as ImageryManifestItem[]}
+          eyebrow={numbered(FUN_POSITION + 1, 'Imagery')}
+          onRemix={remix}
+        />
+
+        <BrandImageryStudio eyebrow={numbered(FUN_POSITION + 2, 'Studio')} scene={studioScene} onChange={setStudioScene} />
 
         {/* Colours */}
         <Box as="section" id="colours" pt={{ base: '72px', md: '112px' }}>
-          <Eyebrow>{numbered(FUN_POSITION + 2, 'Colours')}</Eyebrow>
+          <Eyebrow>{numbered(FUN_POSITION + 3, 'Colours')}</Eyebrow>
           <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
             The palette
           </Heading>
@@ -222,7 +247,7 @@ export default function Branding() {
 
         {/* Usage */}
         <Box as="section" id="usage" pt={{ base: '72px', md: '112px' }} pb={{ base: '80px', md: '128px' }}>
-          <Eyebrow>{numbered(FUN_POSITION + 3, 'Usage')}</Eyebrow>
+          <Eyebrow>{numbered(FUN_POSITION + 4, 'Usage')}</Eyebrow>
           <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
             Make it your own
           </Heading>
