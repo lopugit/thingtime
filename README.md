@@ -2096,6 +2096,39 @@ for the vault key and allowlist. Design note:
 `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` (§1.3 own
 providers, §6 voice + vault).
 
+### Automatic catalogue refresh and private platform run reporting
+
+The production Vercel schedule in `remix/vercel.json` calls
+`/api/v1/ai/models/sync` daily at **03:23 UTC**. The scheduler must be enabled
+on the production deployment and supply its configured `CRON_SECRET` through
+Vercel's supported protected cron authentication. Keep that irreducible
+scheduler credential in the deployment secret store; do not put it in source.
+Provider discovery persists catalogue timestamps and available model IDs. With
+a valid Anthropic catalogue API key (`ANTHROPIC_MODELS_API_KEY`, falling back to
+`ANTHROPIC_API_KEY`), explicit supported effort metadata is validated and saved
+for existing and newly discovered models. Missing or malformed metadata keeps
+the last verified options. Public-document fallback retains curated capabilities;
+speed and pricing mappings still require a reviewed release. Use the encrypted
+integration vault for provider keys; do not put them in source or client settings.
+
+Administrators can enable **Private scheduled run logs** in Admin settings.
+Create or select the platform owner account and its Character, link ownership
+through Admin → Users → Links, and choose an administrator-owned private ACL
+group. The configuring administrator must own the platform account directly or
+through that explicit account link. A group owner is an implicit member; add any
+other intended administrators through ordinary group membership controls.
+No account names, group IDs or credentials are hardcoded for forks. Reporting
+is off until configured, and every write rechecks the owner, Character, group
+and administrator authority. Disabling the Character or removing the ownership
+link prevents subsequent publication.
+
+Posts contain allowlisted run status, timestamps and identifiers, carry an
+explicit editable renderer, and are private to their Character and selected
+group. Settings show the latest delivery receipt. Manual administrator calls
+are not presented as scheduler invocations. Configure a fork's own identities,
+audience and scheduler before enabling reporting; never reuse production
+identity IDs or provider secrets.
+
 ```sh
 # at least one provider key makes Lopu think; with neither it answers with an
 # honest canned line instead of failing
@@ -7340,3 +7373,11 @@ path rules are owner-bound encrypted records; no new provider key is needed.
 Without the vault key, existing unmigrated settings remain readable, but
 saving or deleting settings returns an unavailable error before external
 credential operations. No secret belongs in repository configuration.
+
+### Receive macOS system shares
+
+The signed Thingtime Mac app includes a Sharing extension for text, URLs, images
+and files. It opens the same New post / Message / Save to Things composer used
+on iOS with the current desktop session. Pending shares can be reopened from
+File → Resume shared content or Saved shares. See [macOS sharing](docs/macos-sharing.md)
+for activation, local retention, fork-safe signing setup and verification.

@@ -272,6 +272,7 @@ checks apply to the current head; dated passing counts below are history.
 - [x] Type immediately into a newly mounted editor after changing Character. Post must become enabled without another keystroke; initial editor setup must reconcile input made before listeners attach.
 
 - [ ] Create switch-only, inherited-password and separate-password Characters through Settings. Reload and verify their generated IDs, names and modes against the owner-only API roster.
+- [ ] Create a Character with an optional chosen username (for example `thingtime-platform`); verify lowercase normalization, separate label/help and inline invalid/collision errors on desktop/mobile, then reload and compare the exact public handle with the owner-only roster. Repeat the same creation request and race it with a different handle: only one Character may exist. Existing users and reserved admin usernames must fail through canonical registration. Leaving the field blank must retain generated IDs.
 - [ ] Inherited login follows the owner's current password and email second factor. Separate login rejects the owner's password; switch-only rejects password login.
 - [ ] Post, comment and reply as each identity. Public profiles/posts never reveal the private owner ID; direct Character sessions cannot list siblings, select the owner or become admins.
 - [ ] Lock one session to a Character; another session remains unchanged. The account roster continues to represent the authenticated principal. Return to the owner and verify its session still works.
@@ -1427,6 +1428,19 @@ persisted; every check is client-side.
 
 
 ## Session read recovery
+
+- [ ] Leave the session error screen open after failed root reads (including a
+  generic route error). Restore `/api/root-data`: a credentialed, uncached GET
+  with the current query must return real session JSON before the browser
+  reloads the same full URL, including its fragment. No POST/action is replayed.
+  A redirect, HTML shell, health JSON, malformed JSON or HTTP error must keep
+  the screen and manual controls usable. Check focus/reconnect, hidden-tab
+  recovery, timeout, unmount cleanup and no overlapping probes.
+- [ ] Keep bootstrap failing after a healthy probe: repeated automatic reloads
+  slow from 30 seconds to five minutes across reloads, then permit eventual
+  recovery. Thirty seconds of stable successful app rendering clears the guard.
+  With session storage blocked, automatic reload stays off and Try again/Reload
+  page still work.
 
 - [ ] Keep an unsaved draft and an expanded panel open, fail both background
   `/api/root-data` reads, and return to the tab: the same page and component
@@ -13932,6 +13946,16 @@ separate from deterministic discovery/lease tests.
 
 ### Claude public catalogue and workflow save regression — 2026-10-18
 
+- Open **Choose AI waterfall** from two sections with different current orders.
+  Each dialog must select the saved waterfall matching its own ordered endpoints,
+  models, effort and speed, including when the saved library arrives after open.
+  Preserve an explicit saved-template selection and edits made before refresh;
+  unmatched and inherited configurations must not select an unrelated template.
+  Cancel/reopen must use the latest section value. Saving a matched template
+  updates its existing ID and revision instead of creating a duplicate.
+- Claude Opus 5.5 must offer low, medium, high, xhigh and max effort; default
+  effort leaves Anthropic's medium default intact. Future unverified models
+  must remain default-only until their capabilities are verified.
 - With no Anthropic API key and no inference credentials, run admin sync or the
   authenticated cron. Compare new Claude IDs and lifecycle states with Anthropic's
   public model status table. Verify public provenance, unknown account access,
@@ -16679,3 +16703,66 @@ including loading/retry, selection preservation and bottom-of-page controls.
 - [ ] With status-origin overrides absent, check current custom preview aliases and remote selected targets: a bound Vercel SSO 302 must show authentication required while remaining not ready; do not forward cookies or bypass credentials.
 - [ ] Compare with a public frontend shell (ready), an outage (unavailable), and actual Nitro storage readiness (preserve its independent degraded state).
 - [ ] Refuse foreign/duplicate/unbound SSO locations and all other redirects without following or consuming them. Preserve the 3.5-second header/body/fallback deadline.
+
+
+### Private platform scheduled reporting
+
+- Create a root account and a named Character through the normal account APIs;
+  retry the same Character request and confirm one identity. Conflicting handles
+  or a changed handle on the same request must refuse without another account.
+- As an administrator, link the platform root, select its active Character and
+  an owned private audience group in Admin settings, then save and reload.
+  Check separately selectable nested labels, controls and fields in Builder,
+  desktop/mobile layout, scrolling and focus, conflicts, errors and retry.
+- Keep a dirty same-account draft during refresh; switch account or origin while
+  a request is pending and confirm protected content and stale writes are cleared.
+- Observe a real automatic scheduled invocation. Read started and terminal posts
+  by exact ID as the Character and an audience member (including implicit group
+  owner); refuse anonymous and unrelated viewers. Verify the renderer after reload.
+- Verify the saved delivery receipt and scheduler timestamp independently. Manual
+  administrator requests must not masquerade as automatic executions; do not
+  infer a queued worker or email delivery completion from HTTP success.
+- Retry an identical event without a duplicate post. Disable reporting or revoke
+  Character/account/group authority and verify subsequent publication stops.
+- Run the built-server disposable fixture `node remix/scripts/platform-reporting-acceptance.mjs`
+  and the editable UI fixture `node remix/scripts/test-platform-reporting-ui.mjs`.
+
+### Platform reporting administration
+
+- [ ] In Settings → Admin, configure scheduled invocation reporting with the owner and Character usernames and a private audience group. Verify exact profile resolution, required expected-actor checks, saved revision and independent reload. Disabled/unconfigured status must remain explicit.
+- [ ] At desktop/mobile widths, edit owner/Character fields, reload without losing a dirty draft, simulate a concurrent saved change and use the explicit saved-configuration reset. Select labels, inputs and group options separately in Builder. Scroll top to bottom with no overflow.
+- [ ] Create a private audience group, including an uncertain response after a committed create. Reload exact-name groups and select the existing group; retry must not create a duplicate. Change account/origin during profile resolution or saving and verify protected draft state clears and old operations cannot commit.
+- [ ] Run `node remix/scripts/test-platform-reporting-ui.mjs <evidence-dir>` with the project's supported isolated Playwright runtime. This fixture uses synthetic transport and does not establish real-account or deployed acceptance.
+
+## macOS incoming Share extension
+
+- Run `pnpm --dir electron run test:share-native` and the Electron suite. Verify
+  text/URL/file imports, zero-byte files, Unicode names, path/symlink rejection,
+  account/endpoint changes, competing leases and immutable submission retries.
+- Verify the final installed signed app and its nested Share extension; confirm
+  Thingtime appears in System Settings → Login Items & Extensions → Sharing.
+- Run `node --test electron/test/share-signing.test.cjs`. The unprovisioned
+  team-prefixed App Group build must omit restricted application/team identity
+  entitlements; also launch through the real OS service, since signature
+  verification alone does not detect taskgated provisioning refusals.
+- Share known text, a URL, an image and multiple files through the real macOS
+  sharing service. Compare composer contents and file bytes to the originals.
+  Repeat with Thingtime running and closed; repeated delivery of the same UUID
+  must focus the existing dialog and must not duplicate a submission.
+- Verify actual `NSItemProvider(contentsOf:)` text and image selections remain
+  files with their original names and exact bytes, rather than inline text or
+  converted previews. Prepare and upload a shared Post attachment on the home
+  data plane through the native transport; a custom data plane must retain its
+  existing upload destination and must never silently switch to home storage.
+- Keep unsaved work in the main window while sharing. Open all three destination
+  views, scroll to the bottom, resize narrow/wide, and verify focus, clipping and
+  attachment previews. Closing preserves content; File → Resume shared content
+  and Saved shares reopen it after relaunch. Switch account/API endpoint while
+  open and verify protected content closes before another identity can read it.
+- Confirm the normal macOS close button dismisses the share window, the main
+  window stays usable, and File → Resume shared content restores it. Share
+  multiline plain text with literal markup; Post must preserve line breaks and
+  display markup as text rather than interpreting it as HTML or Markdown.
+- For publishing/saving acceptance, use a disposable test account and isolated
+  backend; read the exact result back through the real API. Failed/uncertain
+  submission retries retain the original operation identity and payload.

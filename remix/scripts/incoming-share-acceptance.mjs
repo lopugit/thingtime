@@ -194,6 +194,11 @@ async function browserAcceptance() {
    }
    if (batch.destination === 'post') {
     await page.getByRole('button', { name: 'Post ✨', exact: true }).waitFor();
+    const sharedParagraph = page.locator('.ce-paragraph[contenteditable="true"]').first();
+    await sharedParagraph.waitFor();
+    assert.equal(await sharedParagraph.innerText(), batch.text, 'System-shared literal line breaks survive the real Editor.js DOM');
+    assert.equal(await sharedParagraph.locator('br').count(), (batch.text.match(/\n/g) || []).length);
+    checks.push({ sharedLiteralLineBreaksInEditorDom: true });
     if (process.env.SHARE_COMPOSER_SCOPE === 'post-keyboard') {
      await page.setViewportSize({ width: 390, height: 844 });
      await page.locator('[contenteditable="true"]').first().focus();

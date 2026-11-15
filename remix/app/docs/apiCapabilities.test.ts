@@ -478,7 +478,7 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	const manifest = createApiCapabilitiesManifest();
 	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one;
 	// 1.4.0: models[].pricing (list price per million tokens, verified-access design note §2)
-	assert.equal(manifest.features['api.ai-models'], '1.9.0');
+	assert.equal(manifest.features['api.ai-models'], '1.10.0');
 	assert.equal(manifest.features['api.admin-ai-models'], '1.4.0');
 	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
 	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage;
@@ -547,7 +547,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.health-nitro'], '1.3.2');
-	assert.equal(manifest.features['api.lopu-recordings-run'], '1.6.0');
+	assert.equal(manifest.features['api.lopu-recordings-run'], '1.7.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
@@ -740,7 +740,7 @@ test('agent testing and task installation negotiate their additive contracts', (
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
     ['api.health-nitro', '1.3.2', '1.2.0'],
-    ['api.lopu-recordings-run', '1.6.0', '1.5.0'],
+    ['api.lopu-recordings-run', '1.7.0', '1.5.0'],
     ['api.webpages-suites-install', '1.6.0', '1.4.0']
   ]) {
     assert.equal(legacy.features[feature], minimum);
@@ -781,12 +781,12 @@ test('subspace image edits require the compatible presentation contract on the s
   for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, minimum), true);
 });
 
- test('exact AI workflow orders negotiate removal of the mandatory default', () => {
+ test('AI workflow orders negotiate current published provider effort choices', () => {
   const feature = 'api.settings-pr-conflict-auto-resolver-model-waterfall';
-  assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version, '1.1.0');
-  for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
-  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  assert.equal(createApiCapabilitiesManifest().features[feature], '1.2.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version, '1.2.0');
+  for (const version of [undefined, '1.0.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
+  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
 });
 
 test('background AI requires compatible operation and task contracts on both manifests', () => {
@@ -969,7 +969,7 @@ test('mobile pairing requirements are advertised by both manifests and reject de
 
 test('backup retention advertises owner-only holds and deferred cleanup together', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	for (const [id, version] of [['attachment-content', '1.19.0'], ['attachment-upload-abort', '1.3.0'], ['attachment-delete', '1.3.0'], ['attachment-cleanup', '1.3.0']]) {
+	for (const [id, version] of [['attachment-content', '1.19.0'], ['attachment-upload-abort', '1.3.0'], ['attachment-delete', '1.3.0'], ['attachment-cleanup', '1.4.0']]) {
 		assert.equal(legacy.features['api.' + id], version);
 		assert.equal(manifest.features['api.' + id].version, version);
 	}
@@ -1003,7 +1003,7 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
 
 
 test('local ChatGPT plan capabilities cover both manifests and reject unsupported origins', () => {
-  for (const [feature, version] of Object.entries({ 'api.ai-chatgpt-plan': '1.2.0', 'api.ai-models': '1.9.0', 'api.lopu-chats': '1.7.0', 'api.lopu-chats-update': '1.6.1', 'api.lopu-chats-reply': '1.23.2', 'api.lopu-chats-device-turns': '1.0.0' })) {
+  for (const [feature, version] of Object.entries({ 'api.ai-chatgpt-plan': '1.2.0', 'api.ai-models': '1.10.0', 'api.lopu-chats': '1.7.0', 'api.lopu-chats-update': '1.6.1', 'api.lopu-chats-reply': '1.23.2', 'api.lopu-chats-device-turns': '1.0.0' })) {
     assert.equal(createApiCapabilitiesManifest().features[feature], version);
     assert.equal(thingtimeCapabilityManifest('https://local.test').features[feature].version, version);
     assert.equal(capabilitySatisfies(undefined, version), false);
@@ -1243,7 +1243,7 @@ test('expanded authoring requires a Things contract newer than the source-input 
 });
 
 test('Console API-key mode is independently negotiated on both origin manifests', () => {
- const required = { 'api.lopu-vault': '1.3.0', 'api.ai-models': '1.9.0', 'api.lopu-chats-reply': '1.23.2', 'api.lopu-voice-reply': '1.5.0', 'api.ai-complete': '1.3.0' };
+ const required = { 'api.lopu-vault': '1.3.0', 'api.ai-models': '1.10.0', 'api.lopu-chats-reply': '1.23.2', 'api.lopu-voice-reply': '1.5.0', 'api.ai-complete': '1.3.0' };
  const legacy = { 'api.lopu-vault': '1.2.0', 'api.ai-models': '1.8.0', 'api.lopu-chats-reply': '1.22.0', 'api.lopu-voice-reply': '1.4.0', 'api.ai-complete': '1.2.0' };
  for (const [feature, minimum] of Object.entries(required)) {
   for (const version of [createApiCapabilitiesManifest().features[feature], thingtimeCapabilityManifest('https://thingtime.test').features[feature].version]) assert.equal(capabilitySatisfies(version, minimum), true);
@@ -1340,4 +1340,30 @@ test('health protection diagnostics use compatible corrective versions on both m
     assert.equal(runtime.features[feature].version, version);
 
   }
+});
+
+
+test('private platform reporting registers scheduled lifecycle and chosen Character contracts', () => {
+  const source = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const runtime = thingtimeCapabilityManifest('https://reporting.example');
+  const versions = {
+    'api.admin-platform-reporting': '1.0.0', 'api.auth-characters': '1.3.0',
+    'api.auth-invites-expire': '1.1.0', 'api.lopu-recordings-run': '1.7.0',
+    'api.attachment-cleanup': '1.4.0', 'api.moderation-sweep': '1.2.0',
+    'api.peers-sync': '1.1.0', 'api.notifications-email-weekly-summary': '1.1.0',
+    'api.ai-models-sync': '1.3.0', 'api.backup-dispatch': '1.1.0',
+    'api.devices-observations-cleanup': '1.1.0', 'api.groups': '1.2.1'
+  };
+  for (const [feature, version] of Object.entries(versions)) {
+    assert.equal(source.features[feature], version, feature);
+    assert.equal(runtime.features[feature]?.version, version, feature);
+  }
+  assert.equal(typeof routeModules['v1/admin/platform-reporting'], 'function');
+  assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/admin/platform-reporting'), {
+    feature: 'api.admin-platform-reporting', path: '/api/v1/admin/platform-reporting', methods: ['GET', 'POST']
+  });
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert(capabilitySatisfies(version, '1.0.0'));
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+  assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
+  assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
 });

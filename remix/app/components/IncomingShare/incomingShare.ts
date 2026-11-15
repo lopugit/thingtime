@@ -1,3 +1,4 @@
+import type { EditorJsDoc } from '../Editor/editorJsValue';
 import { capabilitySatisfies } from '../../api/utils/capabilities/capabilityContract';
 import { createAttachmentSourceFile, validAttachmentLivePhoto } from '../Attachments/attachmentFileSource';
 export type IncomingShareSubmission = { destination: 'post' | 'message' | 'save'; operationId: string; targetId?: string | null; recoveryPayload?: string; outcomeIds?: string[] };
@@ -59,4 +60,10 @@ export async function readIncomingShare(bridge: IncomingShareBridge, requestId: 
  const submission = payload.submission;
  if (submission && (!['post', 'message', 'save'].includes(submission.destination) || typeof submission.operationId !== 'string' || (submission.recoveryPayload !== undefined && typeof submission.recoveryPayload !== 'string') || (submission.outcomeIds !== undefined && (!Array.isArray(submission.outcomeIds) || submission.outcomeIds.some((id: unknown) => typeof id !== 'string'))))) throw new Error('This share has an invalid saved submission.');
  return { id: requestId.toLowerCase(), accountId, apiOrigin: origin, text: payload.text, files, submission: submission || null, directories: payload.directories || [], warnings: payload.warnings || [] };
+}
+
+/** System shares contain literal text, not Markdown paragraph soft breaks. */
+export function incomingShareEditorDocument(text: string): EditorJsDoc {
+ const html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n|\r|\n/g, '<br>');
+ return { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: html } }] };
 }

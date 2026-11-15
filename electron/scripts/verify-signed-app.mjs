@@ -1,3 +1,4 @@
+import { verifyShareExtension } from './verify-share-extension.mjs';
 import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { existsSync } from 'node:fs';
 import { access, readdir } from 'node:fs/promises';
@@ -82,6 +83,8 @@ const signature = await verifySignedArtifacts({
 }, undefined, { mode });
 
 await verifyPasswordProvider(path.join(appPath, 'Contents/Helpers/Thingtime Passwords.app'), { teamIdentifier: signature.teamIdentifier });
+
+await verifyShareExtension(appPath, { required: requireAgentBrowser, teamIdentifier: signature.teamIdentifier });
 
 const desktopDisplay = run('/usr/bin/codesign', ['--display', '--verbose=4', appPath], 'Thingtime signing detail check');
 const desktop = parseCodeSignatureDetails(desktopDisplay);

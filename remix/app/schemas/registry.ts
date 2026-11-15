@@ -3614,25 +3614,29 @@ const chatMessageSchema: ThingtimeSchema = {
 // availability, and the catalog never bills anyone.
 const aiModelSchema: ThingtimeSchema = {
   id: 'ai-model',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'AI model',
   summary: 'One catalog model Lopu can chat with — provider, effort tiers, speeds, and the admin enabled toggle.',
   detail:
-    'Written only by the catalog seed (api/utils/ai/models.ts): ownerId "system", storageClass "control", ' +
+    'Written only by the catalog seed and authenticated provider sync (api/utils/ai/): ownerId "system", storageClass "control", ' +
     'acl ["tt:all"], deterministic shareId ai-model-<modelId>, root uniqueKeys aiModel:<modelId>. The seed ' +
     'runs once per process on the first catalog read and on demand through POST /api/v1/admin/ai/models ' +
-    '{ seed: true }; it inserts missing rows and heals drifted catalog fields but never touches enabled. ' +
+    '{ seed: true }; it inserts missing rows and heals curated fields but never touches enabled or verified provider efforts. ' +
+    'Provider sync stores complete verified effort metadata separately; public projections prefer it over curated defaults. Missing metadata preserves the previous verified snapshot. ' +
     'GET /api/v1/ai/models projects every row publicly with available = enabled && provider key configured; ' +
     'POST /api/v1/admin/ai/models { id, enabled } is the only writer of the toggle. Direct create/update/' +
     'delete through the generic things routes is refused and the rows never appear in generic listings.',
-  createdVia: 'Seeded by api/utils/ai/models.ts (first catalog read, or POST /api/v1/admin/ai/models { seed: true })',
+  createdVia: 'Catalog seed or authenticated provider discovery through api/utils/ai/modelSync.ts',
   fields: [
     { name: 'modelId', type: 'string', required: true, max: 128, description: 'Provider-native model id; equals the catalog id and the shareId suffix.' },
     { name: 'label', type: 'string', required: true, max: 80, description: 'Display label from the catalog.' },
     { name: 'provider', type: 'enum', required: true, values: ['anthropic', 'openai'], description: 'Which API serves the model.' },
     { name: 'efforts', type: 'string[]', required: true, max: 8, description: 'Selectable reasoning-effort tiers; empty means provider-default effort only.' },
+    { name: 'providerEfforts', type: 'string[]', required: false, description: 'Latest complete authenticated provider effort choices; empty explicitly means no selectable effort tier.' },
+    { name: 'providerEffortsCheckedAt', type: 'date', required: false, description: 'Time the stored provider effort capabilities were verified.' },
+    { name: 'providerEffortsVersion', type: 'string', required: false, description: 'Provider Models API contract used to verify the capability snapshot.' },
     { name: 'speeds', type: 'string[]', required: true, max: 2, description: 'Offered lanes: normal, plus fast where the provider sells one.' },
     { name: 'family', type: 'enum', required: true, values: ['claude', 'gpt', 'o-series'], description: 'Derived model family for grouping in pickers.' },
     { name: 'enabled', type: 'boolean', required: true, description: 'Admin toggle; a disabled model is listed but never selectable.' },
@@ -4354,8 +4358,8 @@ export const PROTECTED_THINGTIME = [
   // executor-minted run records — a forged action-run would falsify the
   // audit trail the /actions inspector shows (api/utils/actions/)
   'action-run',
-  // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
-  // and `enabled` is admin-only, so nothing may mint a model or flip
+  // the Lopu model catalog (api/utils/ai/): catalog fields are seed/provider
+  // controlled and `enabled` is admin-only, so nothing may mint a model or flip
   // availability through generic Thing CRUD
   'ai-model',
   // Lopu credits and usage (api/utils/lopu/accounting.ts): a forged account,

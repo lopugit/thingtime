@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { discoverProviderModels, discoverConfiguredProviderModels, ModelDiscoveryHttpError, isModelUnavailableError } from './modelDiscovery';
+import { discoverProviderModels, discoverConfiguredProviderModels, ModelDiscoveryHttpError, isModelUnavailableError, parseAnthropicModelEfforts, ANTHROPIC_MODELS_VERSION } from './modelDiscovery';
 import { createAiModelSync, createMongoModelSyncStore } from './modelSync';
 import { createAiModelSyncLoader } from '../../../routes/api/v1/ai/models/sync/_sync';
 import { getAiModelCatalogEntry, resolveLopuModelChoice, publicAiModel } from './modelsCore';
@@ -202,6 +202,7 @@ test('Claude catalogue keys are discovery-only, prefer the dedicated key and nev
 			fetchImpl: (async (_url, init) => {
 				calls++;
 				assert.equal((init?.headers as any)['x-api-key'], expected);
+        assert.equal((init?.headers as any)['anthropic-version'],ANTHROPIC_MODELS_VERSION);
 				assert.equal((init?.headers as any).authorization, undefined);
 				return response({ data: [{ id: 'claude-fable-5-1' }], has_more: false });
 			}) as typeof fetch
@@ -267,7 +268,7 @@ test('public publication preserves account availability and admission, only expl
 		transaction: async (work: any) => work({})
 	} as any);
 	await store.publish('anthropic', { token: 'fixture', startedAt: new Date() }, [
-		{ id: 'claude-opus-5-5', label: 'Claude Opus 5.5', source: 'public-docs', lifecycle: 'active' },
+		{ id: 'claude-opus-9-9', label: 'Future Opus', source: 'public-docs', lifecycle: 'active' },
 		{ id: 'claude-opus-4-20250514', label: 'Old Opus', source: 'public-docs', lifecycle: 'retired' }
 	]);
 	assert.equal(writes[0].update.$setOnInsert.crystal.enabled, false);
@@ -278,4 +279,30 @@ test('public publication preserves account availability and admission, only expl
 		assert.equal(update['crystal.lastSyncedAt'], undefined);
 		assert.equal(update['crystal.enabled'], undefined);
 	}
+});
+
+
+const capability = (tiers: string[]) => ({effort:{supported:true,...Object.fromEntries(['low','medium','high','xhigh','max'].map(tier=>[tier,{supported:tiers.includes(tier)}]))}});
+test('authenticated Claude metadata accepts only complete explicit effort booleans',async()=>{
+ const data=[{id:'claude-opus-5-5',capabilities:capability(['low','medium','high','xhigh','max'])},{id:'claude-opus-9-9',capabilities:capability(['low','high'])},{id:'claude-haiku-4-5',capabilities:{effort:{supported:false}}}];
+ const discovered=await discoverProviderModels('anthropic',request,(async()=>response({data,has_more:false})) as typeof fetch);
+ assert.deepEqual(discovered.map(row=>row.efforts),[['low','medium','high','xhigh','max'],['low','high'],[]]);
+ for(const value of [undefined,null,{}, {effort:{supported:true}}, {effort:{supported:'true'}}, {effort:{supported:false,low:{supported:true}}}, {effort:{supported:false,low:{supported:'false'}}},capability([])]) assert.equal(parseAnthropicModelEfforts(value),undefined);
+ const old=await discoverProviderModels('anthropic',request,(async()=>response({data:[{id:'claude-opus-5-5',capabilities:{effort:{supported:true}}}],has_more:false})) as typeof fetch);
+ assert.equal(old[0].efforts,undefined);
+});
+test('sync updates verified effort fields on existing/new identities without changing admission; missing public/old metadata preserves them',async()=>{
+ const writes:any[]=[];
+ const store=createMongoModelSyncStore({getSettings:async()=>({updateOne:async()=>({matchedCount:1}),findOne:async()=>({autoAllowNewModels:false})}),getThings:async()=>({bulkWrite:async(ops:any[])=>{writes.push(...ops.map(op=>op.updateOne));return {matchedCount:ops.length}},updateMany:async()=>({})}),transaction:async(fn:any)=>fn({})} as any);
+ const claim={token:'test',startedAt:new Date()};
+ await store.publish('anthropic',claim,[{id:'claude-opus-5-5',label:'Opus',efforts:['medium','high']},{id:'claude-opus-9-9',label:'Future',efforts:[]}]);
+ const updates=writes.filter(row=>row.update.$set).map(row=>row.update.$set);
+ assert.deepEqual(updates.map(row=>row['crystal.providerEfforts']),[['medium','high'],[]]);
+ for(const row of updates){assert.equal(row['crystal.providerEffortsVersion'],ANTHROPIC_MODELS_VERSION);assert.equal(row['crystal.providerEffortsCheckedAt'],claim.startedAt);assert.equal(row['crystal.enabled'],undefined);}
+ writes.length=0;
+ await store.publish('anthropic',claim,[{id:'claude-opus-5-5',label:'Opus'}]);
+ assert.equal(writes.find(row=>row.update.$set).update.$set['crystal.providerEfforts'],undefined);
+ writes.length=0;
+ await store.publish('anthropic',claim,[{id:'claude-opus-5-5',label:'Opus',source:'public-docs',lifecycle:'active'}]);
+ assert.equal(writes.find(row=>row.update.$set).update.$set['crystal.providerEfforts'],undefined);
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import type { SavedAiWaterfall } from '~/api/utils/ai/savedWaterfallCore';
+import { matchingSavedWaterfall, sameWaterfall } from './savedWaterfallSelection';
 import {
 	Box,
 	Button,
@@ -62,6 +63,9 @@ const WaterfallDialog = ({
 	applyLabel = 'Apply waterfall',
 	title = 'AI model & endpoint waterfall'
 }: AiWaterfallSelectorProps) => {
+	const [openingValue] = React.useState(value);
+	const [openingSaved] = React.useState(() => initialSaved ?? matchingSavedWaterfall(value, library?.items ?? []));
+	const selectionResolved = React.useRef(!!openingSaved);
 	const [entries, setEntries] = React.useState<AiWaterfallEntry[]>(
 		() =>
 			value?.entries.map((entry) => ({ ...entry })) ??
@@ -71,15 +75,24 @@ const WaterfallDialog = ({
 	);
 	const [inherit, setInherit] = React.useState(!value && allowInherit);
 	const [error, setError] = React.useState('');
-	const [selected, setSelected] = React.useState(initialSaved);
-	const [name, setName] = React.useState(initialSaved?.name ?? '');
+	const [selected, setSelected] = React.useState(openingSaved);
+	const [name, setName] = React.useState(openingSaved?.name ?? '');
 	const [saving, setSaving] = React.useState(false);
+	React.useEffect(() => {
+		if (selectionResolved.current) return;
+		const match = matchingSavedWaterfall(openingValue, library?.items ?? []);
+		if (!match) return;
+		selectionResolved.current = true;
+		setSelected(match);
+		setName(match.name);
+	}, [openingValue, library?.items]);
 	const validated = () => {
 		if (entries.length > maxEntries) throw new TypeError(`Choose up to ${maxEntries} AI attempts.`);
 		return validateAiWaterfallSelection({ version: 1, entries }, endpoints);
 	};
 	const save = async (apply: boolean, copy = false) => {
 		if (!library || saving || inherit) return;
+		selectionResolved.current = true;
 		setSaving(true);
 		setError('');
 		try {
@@ -119,7 +132,14 @@ const WaterfallDialog = ({
 				<ModalHeader pr={12}>{title}</ModalHeader>
 				<ModalCloseButton isDisabled={saving} />
 				<ModalBody>
-					<fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+					<fieldset
+						disabled={saving}
+						onChangeCapture={() => { selectionResolved.current = true; }}
+						onClickCapture={(event) => {
+							if ((event.target as HTMLElement).closest('button')) selectionResolved.current = true;
+						}}
+						style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+					>
 						{library && (
 							<Box mb={4}>
 								<FormControl mb={2}>
@@ -157,7 +177,7 @@ const WaterfallDialog = ({
 									/>
 								</FormControl>
 								<Text role="status" fontSize="xs" mt={2}>
-									{selected && name === selected.name && JSON.stringify(entries) === JSON.stringify(selected.config.entries)
+									{selected && name === selected.name && !inherit && sameWaterfall({ version: 1, entries }, selected.config)
 										? 'Saved'
 										: 'Unsaved changes'}
 								</Text>

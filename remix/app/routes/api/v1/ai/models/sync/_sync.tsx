@@ -1,3 +1,4 @@
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
@@ -14,6 +15,7 @@ export const createAiModelSyncLoader =
 			const expected = Buffer.from(`Bearer ${secret}`);
 			if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 			const report = await dependencies.sync('scheduled');
+      recordScheduledPassResult('/api/v1/ai/models/sync',{report});
 			const ok = report.every((row) => row.status !== 'failed');
 			return json({ ok, report }, { status: ok ? 200 : 503 });
 		});

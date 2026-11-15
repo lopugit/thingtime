@@ -1,5 +1,6 @@
 import { MongoConnectionInventory } from './MongoConnectionInventory';
 import { PreviewRetentionSettings } from './PreviewRetentionSettings';
+import { PlatformReportingSettings } from './PlatformReportingSettings';
 import { SettingsSection } from '~/components/Settings/SettingsSection';
 import { LopuPromptSettings } from '~/components/Settings/LopuPromptSettings';
 import React from 'react';
@@ -397,7 +398,7 @@ const AdminManager = () => {
 
 export const AdminPanel = ({ category = 'all' }: { category?: 'all' | 'ai-providers' | 'lopu' | 'access' }) => (
   <Flex flexDirection="column" gap={4} minW={0}>
-    {category === 'all' && <><MongoConnectionInventory /><PreviewRetentionSettings /></>}
+    {category === 'all' && <><MongoConnectionInventory /><PreviewRetentionSettings /><PlatformReportingSettings /></>}
     {(category === 'all' || category === 'ai-providers') && (
       <>
     <PRConflictResolverModelWaterfallEditor />

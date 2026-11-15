@@ -1,4 +1,5 @@
 import { start } from 'workflow/api';
+import { currentScheduledRunCorrelation, type ScheduledRunCorrelation } from '../automation/scheduledRunReporting';
 import { THINGS_KIND_CREATED_INDEX } from '../mongodb/thingIndexContracts';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { runWithHomeMongoEndpoint } from '../mongodb/endpoint';
@@ -11,11 +12,11 @@ import { awaitBackupAbort } from './backupTransport.server';
 type DispatchResult = 'attached' | 'not-started' | 'unconfirmed' | 'superseded';
 type Dependencies = {
  jobs: Pick<typeof backupJobs,'reserveDispatch'|'attachWorkflow'|'markDispatchUnconfirmed'|'retireInvalidAuthorization'|'deferDispatch'>;
- start(jobId:string,dispatchId:string):Promise<{runId:string}>;
+ start(jobId:string,dispatchId:string,correlation?:ScheduledRunCorrelation):Promise<{runId:string}>;
  due(origin:string,before:number,after?:{at:number;id:string}):Promise<{items:string[];next:{at:number;id:string}|null}>;
  now():number;
 };
-const defaults:Dependencies={jobs:backupJobs,start:(jobId,dispatchId)=>start(runBackupWorkflow,[jobId,dispatchId]),now:Date.now,
+const defaults:Dependencies={jobs:backupJobs,start:(jobId,dispatchId,correlation)=>start(runBackupWorkflow,[jobId,dispatchId,correlation]),now:Date.now,
  due:async(origin,before,after)=>{
   const things=await getHomeThingsCollection(),stamp=new Date(before);
   const rows=await things.find({thingtime:BACKUP_JOB_KIND,backupVersion:1,backupPlane:'home',backupOrigin:origin,
@@ -39,7 +40,7 @@ export function createBackupDispatcher(overrides:Partial<Dependencies>={}){
   if(!reservation.start || !reservation.dispatchId)return 'not-started';
   const dispatchId=reservation.dispatchId;
   try{
-   const run=await awaitBackupAbort(deps.start(jobId,dispatchId),signal,late=>{
+   const run=await awaitBackupAbort(deps.start(jobId,dispatchId,currentScheduledRunCorrelation()),signal,late=>{
     // Late accepted receipt is useful, but never restarts or overrides a newer
     // attempt. The coordinator still checks the exact current session+attempt.
     void deps.jobs.attachWorkflow(jobId,dispatchId,late.runId).catch(()=>{});

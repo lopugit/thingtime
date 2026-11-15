@@ -4,10 +4,13 @@ import {
   normalizePrConflictResolverModelWaterfall,
   PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
   type PRConflictResolverModelId,
+  type AiWorkflowBaseModel,
+  type AiPreferredWaterfallSnapshot,
   validatePrConflictResolverModelWaterfall
 } from './prConflictResolverModelWaterfallCore';
 
 type StoreDependencies = {
+  readModelCatalog?:()=>Promise<readonly (AiWorkflowBaseModel & {enabled?:boolean;available?:boolean})[]>;
   readStoredWaterfall: () => Promise<unknown>;
   writeStoredWaterfall: (waterfall: PRConflictResolverModelId[], updatedBy: string) => Promise<void>;
 };
@@ -17,34 +20,42 @@ type StoreDependencies = {
 // a positive TTL can otherwise let separate warm serverless instances return
 // an administrator's previous model order after a successful save.
 export const createPrConflictResolverModelWaterfallStore = (dependencies: StoreDependencies) => {
-  let lastKnownGood: PRConflictResolverModelId[] | null = null;
-
-  const getWaterfall = async (): Promise<PRConflictResolverModelId[]> => {
+  type CatalogModel=AiWorkflowBaseModel&{enabled?:boolean;available?:boolean};
+  type Snapshot={waterfall:PRConflictResolverModelId[];models?:readonly CatalogModel[]};
+  let lastKnownGood:Snapshot|null=null;
+  const copyModels=(models:readonly CatalogModel[]|undefined)=>models?.map(model=>({...model,efforts:[...model.efforts],speeds:[...model.speeds]}));
+  const readSnapshot=async():Promise<Snapshot>=>{
     try {
-      const waterfall = normalizePrConflictResolverModelWaterfall(await dependencies.readStoredWaterfall());
-      lastKnownGood = waterfall;
-      return [...waterfall];
+      const [stored,loaded]=await Promise.all([dependencies.readStoredWaterfall(),dependencies.readModelCatalog?.()]);
+      const models=copyModels(loaded);
+      const snapshot={waterfall:normalizePrConflictResolverModelWaterfall(stored,models),models};
+      lastKnownGood=snapshot;
+      return snapshot;
     } catch {
-      // Preserve availability without pretending a stale cache is current:
-      // this path is used only when the durable read itself fails.
-      return [...(lastKnownGood || DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL)];
+      return lastKnownGood??{waterfall:[...DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL]};
     }
   };
-
-  const setWaterfall = async (value: unknown, updatedBy: string): Promise<PRConflictResolverModelId[]> => {
-    const validated = validatePrConflictResolverModelWaterfall(value);
-    if (validated.ok === false) throw new TypeError(validated.error);
-
-    const waterfall = [...validated.waterfall];
-    await dependencies.writeStoredWaterfall(waterfall, updatedBy);
-    lastKnownGood = waterfall;
+  const getWaterfall=async():Promise<PRConflictResolverModelId[]>=>[...(await readSnapshot()).waterfall];
+  const setWaterfall=async(value:unknown,updatedBy:string):Promise<PRConflictResolverModelId[]>=>{
+    const models=copyModels(await dependencies.readModelCatalog?.());
+    const validated=validatePrConflictResolverModelWaterfall(value,models?.filter(model=>model.enabled!==false&&model.available!==false));
+    if(validated.ok===false)throw new TypeError(validated.error);
+    const waterfall=[...validated.waterfall];
+    await dependencies.writeStoredWaterfall(waterfall,updatedBy);
+    lastKnownGood={waterfall,models};
     return [...waterfall];
   };
-
-  return { getWaterfall, setWaterfall };
+  const getSnapshot=async():Promise<AiPreferredWaterfallSnapshot|PRConflictResolverModelId[]>=>{
+    const snapshot=await readSnapshot();
+    return snapshot.models?{waterfall:[...snapshot.waterfall],models:copyModels(snapshot.models.filter(model=>model.enabled!==false&&model.available!==false))!}:[...snapshot.waterfall];
+  };
+  return { getWaterfall, setWaterfall, getSnapshot };
 };
 
+export const readPublishedAiWorkflowModelCatalog = async () => (await (await import('../ai/models')).listAiModels()).models;
+
 const store = createPrConflictResolverModelWaterfallStore({
+  readModelCatalog:readPublishedAiWorkflowModelCatalog,
   readStoredWaterfall: async () => {
     const doc = await (await getSettingsCollection()).findOne(
       { key: PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY },
@@ -73,4 +84,4 @@ export const setPrConflictResolverModelWaterfall = store.setWaterfall;
 
 // Canonical runtime alias. Keep the legacy exports above for the public API,
 // Admin editor, and existing workflow consumers.
-export const getAiPreferredModelWaterfall = store.getWaterfall;
+export const getAiPreferredModelWaterfall = store.getSnapshot;

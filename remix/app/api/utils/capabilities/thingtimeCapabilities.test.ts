@@ -196,7 +196,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
   assert.equal(manifest.features['api.health-nitro']?.version, '1.3.2');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.6.0');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.7.0');
   assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.4');
   for (const feature of ['api.mongodb-status', 'api.mongodb-status-data']) {
     assert.equal(manifest.features[feature]?.version, '1.0.1');
@@ -226,7 +226,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.5.0');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.6.0');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.7.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
   assert.equal(manifest.features['api.attachment-content']?.version, '1.19.0');
@@ -347,7 +347,7 @@ test('AI archive clients require the presentation contract before import, export
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   // 1.4.0: models[].pricing (verified-access design note §2)
-  assert.equal(manifest.features['api.ai-models']?.version, '1.9.0');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.10.0');
   assert.equal(manifest.features['api.admin-ai-models']?.version, '1.4.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
@@ -563,8 +563,8 @@ test('Characters negotiate management and acting identities on both manifests', 
   const origin = 'https://characters.example.test';
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(manifest.origin, origin);
-  assert.equal(manifest.features['api.auth-characters'].version, '1.2.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.auth-characters'], '1.2.0');
+  assert.equal(manifest.features['api.auth-characters'].version, '1.3.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.auth-characters'], '1.3.0');
   assert(apiV1RouteKeys.includes('v1/auth/characters'));
   for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert(capabilitySatisfies(version, '1.0.0'));
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
@@ -881,7 +881,7 @@ test('auth sessions and public profiles advertise optional saved image presentat
     'api.login': '1.3.1',
     'api.auth-passkeys-login': '1.3.1',
     'api.auth-sso-session': '1.2.0',
-    'api.auth-characters': '1.2.0',
+    'api.auth-characters': '1.3.0',
     'api.auth-temporary': '1.1.0',
     'api.auth-logout': '1.2.1',
     'api.auth-accounts-remove': '1.1.1',
@@ -934,7 +934,7 @@ test('PDF Builder intrinsics publish additive write contracts on both manifests'
 test('relational access management is origin-scoped, registered and explicitly negotiated', () => {
   const source = createApiCapabilitiesManifest();
   const runtime = thingtimeCapabilityManifest('https://acl.example');
-  const versions = { 'api.things-acl': '1.0.0', 'api.agent-reporting': '1.2.0', 'api.groups': '1.2.0', 'api.groups-audience-sources': '1.1.0' };
+  const versions = { 'api.things-acl': '1.0.0', 'api.agent-reporting': '1.2.0', 'api.groups': '1.2.1', 'api.groups-audience-sources': '1.1.0' };
   for (const [feature, minimum] of Object.entries(versions)) {
     assert.equal(source.features[feature], minimum);
     assert.equal(runtime.features[feature].version, minimum);

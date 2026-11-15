@@ -4,7 +4,7 @@ import test from 'node:test';
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
 import { createAiModelsService, type AiModelThingsCollection } from './models.ts';
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
-import { AI_MODEL_CATALOG, DEFAULT_LOPU_CHAT_DEFAULTS, aiModelShareId } from './modelsCore.ts';
+import { AI_MODEL_CATALOG, DEFAULT_LOPU_CHAT_DEFAULTS, aiModelShareId, resolveLopuModelChoice } from './modelsCore.ts';
 
 // An in-memory stand-in for the `things` collection covering exactly the
 // driver surface the service uses: uniqueKeys lookups ($in and equality on
@@ -338,4 +338,20 @@ test('public lifecycle metadata is projected without asserting account access an
   model = (await service.listAiModels()).models.find((item) => item.id === 'claude-opus-5')!;
   assert.equal(model.enabled, true);
   assert.equal(model.available, false);
+});
+
+
+test('verified stored provider efforts override curated and discovered rows while preserving admin/default policy',async()=>{
+ const {fake,service}=createService({getStoredDefaults:async()=>({model:'claude-opus-5-5',effort:'high',speed:'normal'})});
+ await service.ensureAiModelCatalog();
+ const opus=fake.docs.find(row=>row.shareId===aiModelShareId('claude-opus-5-5'));
+ Object.assign(opus.crystal,{providerEfforts:['medium'],providerEffortsCheckedAt:NOW,providerEffortsVersion:'2026-10-21'});
+ const future={...opus,shareId:aiModelShareId('claude-opus-9-9'),crystal:{...opus.crystal,modelId:'claude-opus-9-9',label:'Future model',providerEfforts:['low','high'],enabled:true}};
+ fake.docs.push(future);
+ let list=await service.listAiModels();
+ assert.deepEqual(list.models.find(row=>row.id==='claude-opus-5-5')?.efforts,['medium']);assert.equal(list.defaults.effort,'medium');
+ const choice=resolveLopuModelChoice('claude-opus-9-9:high',list.models);assert.equal(choice.ok,true);if(choice.ok)assert.equal(choice.choice.id,'claude-opus-9-9:high');
+ opus.crystal.providerEfforts=[];list=await service.listAiModels();assert.deepEqual(list.models.find(row=>row.id==='claude-opus-5-5')?.efforts,[]);assert.equal(list.defaults.effort,null);
+ opus.crystal.enabled=false;list=await service.listAiModels();assert.equal(list.models.find(row=>row.id==='claude-opus-5-5')?.enabled,false);assert.notEqual(list.defaults.model,'claude-opus-5-5');
+ future.crystal.providerEfforts=['ultra'];list=await service.listAiModels();assert.deepEqual(list.models.find(row=>row.id==='claude-opus-9-9')?.efforts,[]);
 });

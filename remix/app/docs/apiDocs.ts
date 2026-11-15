@@ -178,10 +178,10 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({id:'devices-node-media',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-node-media',endpoint:'/api/v1/devices/node/media',summary:'devices-node-media.',detail:"POST commandId,leaseId only. Requires current exact-owner/device command lease for media.play or media.prepare and approved owned audio upload. Returns private short-lived exact-version URL, attachmentId,versionId,size,contentType,expiresAt. No arbitrary URL or filesystem path accepted. Native must never forward device credentials to the signed storage URL. Rechecks lease, revocation, attachment ownership/moderation/version around delivery.",auth:{mode:'bearer',description:'Exact authorized owning account or device credential.'},methods:["POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
 	endpoint({id:'devices-node-alert-sounds',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-node-alert-sounds',endpoint:'/api/v1/devices/node/alert-sounds',summary:'devices-node-alert-sounds.',detail:"POST lease-bound CAF preparation receipt commandId,leaseId,cacheGeneration,soundId,durationSeconds,format caf,status ready|failed. Actual native conversion/cache write must precede ready; durations must be positive and shorter than 30 seconds. Filename is server-derived tt-<64hex soundId>.caf. Receipt binds exact device, installation cache generation and approved attachment version. Native devices without APNs may POST op cache,cacheGeneration to establish only their own installation cache identity.",auth:{mode:'bearer',description:'Exact authorized owning account or device credential.'},methods:["POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
 	endpoint({
-        id: 'devices-observations-cleanup', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        id: 'devices-observations-cleanup', featureVersion: '1.1.0', contractVersion: '1.1.0', group: 'devices',
         title: 'Accounted device observation expiry', endpoint: '/api/v1/devices/observations/cleanup',
         summary: 'Resumes bounded private observation retention cleanup.',
-        detail: 'Cron bearer only. Persists a leased cursor across registered device Things, rechecks each device policy in a home-accounting transaction, and deletes expired observation children with canonical accounting. Never retention deletes nothing. Bounded batches are processing details; repeated cron runs continue unfinished work without imposing a history-size limit. Response contains only aggregate cleanup counts. A failed account is retried on the next complete sweep. No raw locations, account ids or cursor are disclosed.',
+        detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' + 'Cron bearer only. Persists a leased cursor across registered device Things, rechecks each device policy in a home-accounting transaction, and deletes expired observation children with canonical accounting. Never retention deletes nothing. Bounded batches are processing details; repeated cron runs continue unfinished work without imposing a history-size limit. Response contains only aggregate cleanup counts. A failed account is retried on the next complete sweep. No raw locations, account ids or cursor are disclosed.',
         auth: { mode: 'bearer', description: 'Configured cron scheduler only.' }, methods: ['GET'],
         steps: ['Authenticate the configured scheduler.', 'Resume the durable sweep cursor.', 'Expire account-scoped samples through canonical accounting.'],
         requestExamples: [], responseExamples: []
@@ -390,10 +390,10 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{status:200,description:'Durable operation projection only',body:{ok:true,job:{id:'00000000-0000-4000-8000-000000000002',kind:'snapshot',status:'queued',progress:{phase:'inventory',items:0,bytes:'0'},createdAt:'2026-11-07T00:00:00.000Z',updatedAt:'2026-11-07T00:00:00.000Z',issue:null}}}]
   }),
 	endpoint({
-    id: 'backup-dispatch', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'storage',
+    id: 'backup-dispatch', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'storage',
     title: 'Resume admitted backup dispatch', endpoint: '/api/v1/backups/run', methods: ['GET', 'POST'],
     summary: 'Bounded scheduler recovery of already authorized durable backup jobs.',
-    detail: 'GET requires the existing deployment CRON_SECRET; POST requires the current full administrator session, home storage and same origin. Neither accepts selectors, credentials, storage addresses or commands. Only protected queued jobs from this exact origin with a still-live original account session may reserve dispatch. Fixed attempt IDs and generations fence old late Workflow initialization; paused/cancelled jobs remain paused. Scheduling uncertainty retains the original job and does not blindly start another run. This route returns aggregate counts only, not account IDs, credentials, provider errors or stored content. A configured cron is not proof of deployed scheduling or provider acceptance.',
+    detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' + 'GET requires the existing deployment CRON_SECRET; POST requires the current full administrator session, home storage and same origin. Neither accepts selectors, credentials, storage addresses or commands. Only protected queued jobs from this exact origin with a still-live original account session may reserve dispatch. Fixed attempt IDs and generations fence old late Workflow initialization; paused/cancelled jobs remain paused. Scheduling uncertainty retains the original job and does not blindly start another run. This route returns aggregate counts only, not account IDs, credentials, provider errors or stored content. A configured cron is not proof of deployed scheduling or provider acceptance.',
     auth: { mode: 'session-or-bearer', description: 'GET: existing deployment scheduler bearer. POST: full same-origin administrator account.' },
     steps: ['Negotiate api.backup-dispatch 1.0.0 on the selected origin.', 'Run through the supported five-minute scheduler or full administrator session.', 'Inspect aggregate diagnostics and saved owner job status; no user payload is accepted.'],
     requestExamples: [{ name: 'Resume admitted dispatch', description: 'Administrator maintenance of existing admitted jobs.', method: 'POST', body: {} }],
@@ -886,10 +886,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
-    id: 'auth-characters', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    id: 'auth-characters', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
     summary: 'Create private proxy identities and select a session Character.',
     detail:
-      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). Version 1.3 accepts an optional username, normalized to lowercase and limited to letters, numbers, dots, underscores and hyphens with an alphanumeric first character. Omission preserves generated login IDs. Existing usernames and reserved administrator handles cannot be claimed. Private transactional creation receipts bind the owner and requestId to the original normalized handle, display name and login mode; a changed request returns 409 without creating another Character. POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
     methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
     steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
     requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
@@ -979,10 +979,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'No queued job for this device.', body: { ok: true, job: null } }, { status: 401, description: 'Pair a device first.', body: { ok: false, error: 'Pair a personal Thingtime device first.' } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings-run', contractVersion: '1.6.0', featureVersion: '1.6.0', group: 'lopu', title: 'Run recording automation',
+		id: 'lopu-recordings-run', contractVersion: '1.7.0', featureVersion: '1.7.0', group: 'lopu', title: 'Run recording automation',
 		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
 		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
-		detail: 'Version 1.6 also drains durable account-storage recovery jobs before provider-dependent work, with lease fencing, bounded retries and a storageRecovery result containing only aggregate outcomes. Version 1.5 processes explicitly queued standalone recording Things through the same owner-selected processor, privacy fences and relational output writer. Automatic discovery remains limited to Watch posts. Version 1.4 excludes every device-assigned personal job from the hosted provider worker, including offline and expired leases. Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
+		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' + 'Version 1.6 also drains durable account-storage recovery jobs before provider-dependent work, with lease fencing, bounded retries and a storageRecovery result containing only aggregate outcomes. Version 1.5 processes explicitly queued standalone recording Things through the same owner-selected processor, privacy fences and relational output writer. Automatic discovery remains limited to Watch posts. Version 1.4 excludes every device-assigned personal job from the hosted provider worker, including offline and expired leases. Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
 		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
 		steps: ['Configure CRON_SECRET and platform API keys or owner-selected Secure Vault API connections.', 'Version 1.4 excludes personally assigned recording jobs from cloud processing, including expired/offline devices. Paired personal workers process those jobs separately.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
 		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
@@ -1069,13 +1069,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'NDJSON peer events followed by a page-complete cursor.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
 		notes: ['Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.']
 	}),
-	endpoint({
+	endpoint({ contractVersion: '1.1.0', featureVersion: '1.1.0',
 		id: 'peers-sync',
 		group: 'platform',
 		title: 'Advance deployment peer discovery',
 		endpoint: '/api/v1/peers/sync',
 		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
-		detail:
+		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
 			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
 		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
 		methods: ['GET'],
@@ -1109,6 +1109,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 409, description: 'Account changed or edit is stale.', body: { ok: false, error: 'Reload before saving.' } }
 		]
 	}),
+  endpoint({
+    id: 'admin-platform-reporting', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
+    title: 'Platform scheduled-run reporting', endpoint: '/api/v1/admin/platform-reporting',
+    summary: 'Configure private scheduled-run posts from an owned Character to an administrator audience group.',
+    detail: 'Full root administrator browser session only. GET returns configuration, safe identity labels and status. POST requires the expected actor and current revision, validates the linked owning account, active owned Character and exact private audience group, then saves in home settings. Every scheduled write rechecks that authority. Deterministic run/status post IDs recover uncertain writes without duplicates. Posts include only fixed job names, route, status, HTTP code and observed timestamps; never headers, credentials, provider bodies or raw errors. Stream completion is recorded only after consumption; dispatched background work is not represented as completed by its dispatcher.',
+    auth: { mode: 'session', description: 'Direct full administrator browser session; scoped, service and Character sessions are refused.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.admin-platform-reporting 1.0.0 on the selected origin.', 'Select a linked owning account, its Character and a private audience group.', 'Save with the current revision and X-Thingtime-Expected-Actor; independently read back.'],
+    requestExamples: [{ name: 'Read reporting settings', description: 'Read safe saved configuration.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Not configured yet.', body: { ok: true, status: 'unconfigured', config: null } }]
+  }),
   endpoint({
     id: 'admin-mongodb-connections', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'admin',
     title: 'MongoDB connection inventory', endpoint: '/api/v1/admin/mongodb/connections', methods: ['GET'],
@@ -3195,8 +3206,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'settings',
     title: 'AI workflow model waterfall',
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
@@ -3209,7 +3220,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
+      'GET to read the current waterfall and published base-model catalog with verified per-model efforts and speeds. Previously saved effort tiers removed by the provider resolve to that same model’s default effort.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
       'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
       'Include default only when a provider-selected attempt is wanted; it can be removed.'
@@ -3261,9 +3272,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'ai-models-sync', group: 'lopu', title: 'Sync provider model catalogues',
-    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.2.0', featureVersion: '1.2.0',
+    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.3.0', featureVersion: '1.3.0',
     summary: 'Daily model reconciliation with credential-free Claude public lifecycle metadata and redacted failure reasons.',
-    detail: 'Requires the deployment CRON_SECRET bearer. Claude uses public lifecycle documentation when no API key exists or catalogue access is denied. Public metadata sets publicCatalogAvailable, catalogSource and catalogCheckedAt without asserting account access or retiring absent IDs. Authenticated lists retain providerAvailable and lastSyncedAt. Reports and admin policies include source. Complete paginated provider lists atomically update protected ai-model Things. Preserves admin toggles and the last successful catalogue on any failure. Per-provider durable leases coalesce runs; model-not-found recovery and admin sync have a five-minute cooldown. New compatible chat models use provider-default options and are enabled only by admin policy; non-chat models remain excluded. Pricing remains explicitly unknown until published rates are added.',
+    detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' + 'Requires the deployment CRON_SECRET bearer. Claude uses public lifecycle documentation when no API key exists or catalogue access is denied. Public metadata sets publicCatalogAvailable, catalogSource and catalogCheckedAt without asserting account access or retiring absent IDs. Authenticated lists retain providerAvailable and lastSyncedAt. Reports and admin policies include source. Complete paginated provider lists atomically update protected ai-model Things. Preserves admin toggles and the last successful catalogue on any failure. Per-provider durable leases coalesce runs; model-not-found recovery and admin sync have a five-minute cooldown. New compatible chat models use provider-default options and are enabled only by admin policy; non-chat models remain excluded. Pricing remains explicitly unknown until published rates are added.',
     auth: { mode: 'bearer', description: 'CRON_SECRET bearer only; user sessions are not accepted.' },
     methods: ['GET'],
     steps: ['Authenticate with the deployment cron bearer.', 'Reconcile each configured provider under a durable lease.'],
@@ -3293,10 +3304,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.9.0',
-    featureVersion: '1.9.0',
+    contractVersion: '1.10.0',
+    featureVersion: '1.10.0',
     summary: 'Only currently available supported models are returned. Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
-    detail: 'Version 1.9.0 supports the explicit anthropic-api-key saved-provider kind for Console-billed native Anthropic Messages requests; existing anthropic connections retain their Claude Code OAuth mode. No implicit mode or billing fallback. ' +
+    detail: 'Authenticated provider-reported effort capabilities, when explicitly validated and saved by the catalogue synchronizer, take precedence over compiled effort defaults. Missing or malformed provider metadata retains the last verified snapshot; public-document fallback does not invent capabilities. ' + 'Version 1.9.0 supports the explicit anthropic-api-key saved-provider kind for Console-billed native Anthropic Messages requests; existing anthropic connections retain their Claude Code OAuth mode. No implicit mode or billing fallback. ' +
       'Version 1.8.0 adds optional planChatEligible:true only for available ChatGPT plan connections owned by a full account session on an eligible local/self-hosted runtime. This text-chat hint is not authority and never applies to voice. Version 1.7.0 includes owner-scoped local ChatGPT plan connections in vaultProviders; these use the selected runtime and never fall back to API billing. Version 1.6.0 adds publicCatalogAvailable, catalogSource and catalogCheckedAt; public documentation does not verify account inference access. Version 1.5.1 registers GPT-6 Astra with Low, Medium, High, Extra high and Max reasoning, its context window and list pricing. Existing admin admission choices are preserved. ' +
       'The available-only public projection of protected `ai-model` Things, including provider-discovered compatible chat models. ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
@@ -4145,10 +4156,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'auth-invites-expire', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'auth',
+    id: 'auth-invites-expire', featureVersion: '1.1.0', contractVersion: '1.1.0', group: 'auth',
     title: 'Expire unused invitations', endpoint: '/api/v1/auth/invites/expire', methods: ['GET'],
     summary: 'Return credits from expired invitations in a bounded hourly maintenance batch.',
-    detail: 'Requires the exact CRON_SECRET Bearer credential. Processes up to 50 expired pending invitations, each refund and status transition in a transaction. Concurrent or repeated runs cannot return credits twice. No account details are returned.',
+    detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' + 'Requires the exact CRON_SECRET Bearer credential. Processes up to 50 expired pending invitations, each refund and status transition in a transaction. Concurrent or repeated runs cannot return credits twice. No account details are returned.',
     auth: { mode: 'bearer', description: 'Deployment CRON_SECRET only.' },
     steps: ['Configure CRON_SECRET and the Vercel hourly schedule.'], requestExamples: [],
     responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
@@ -6671,13 +6682,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-cleanup',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Reap expired attachment drafts',
 		endpoint: '/api/v1/attachments/cleanup',
 		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
-		detail:
+		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
 			'Version 1.3 retains shared exact bytes while an eligible sync reference exists; only final-reference cleanup can purge and refund those bytes. ' +
       'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
       'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
@@ -6779,14 +6790,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
 		]
 	}),
-	endpoint({
+	endpoint({ contractVersion: '1.2.0',
 		id: 'moderation-sweep',
 		group: 'admin',
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
-		featureVersion: '1.1.0',
+		featureVersion: '1.2.0',
 		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
-		detail:
+		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
 			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
@@ -12192,7 +12203,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'groups',
-    featureVersion: '1.2.0', contractVersion: '1.2.0',
+    featureVersion: '1.2.1', contractVersion: '1.2.1',
     group: 'things',
     title: 'Audience groups',
     endpoint: '/api/v1/groups',
@@ -13048,13 +13059,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
-  endpoint({
+  endpoint({ contractVersion: '1.1.0', featureVersion: '1.1.0',
     id: 'notifications-email-weekly-summary',
     group: 'notifications',
     title: 'Weekly summary digest run',
     endpoint: '/api/v1/notifications/email/weekly-summary',
     summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
-    detail:
+    detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
       'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
       '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
       'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
