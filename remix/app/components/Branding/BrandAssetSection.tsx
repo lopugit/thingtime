@@ -68,7 +68,9 @@ const QuietButton = (props: React.ComponentProps<typeof Button>) => (
 
 // Design-language segmented control (Prism): soft container, white active pill.
 // `onPanel` swaps the container for a translucent tint so the control still
-// reads when it sits on a surface-alt preview panel.
+// reads when it sits on a surface-alt preview panel. Pass `onChange` as an
+// arrow rather than a bare state setter: a setter's updater-function overload
+// widens T to string.
 export const Segmented = <T extends string>({
   options,
   value,
@@ -334,7 +336,7 @@ export const BrandAssetSection = ({
         bg="var(--tt-surface-alt, #f5f5f7)"
       >
         <Flex width="100%" justifyContent="flex-end">
-          <Segmented label={`${title} background`} options={SURFACE_OPTIONS} value={surface} onChange={setSurface} onPanel />
+          <Segmented label={`${title} background`} options={SURFACE_OPTIONS} value={surface} onChange={(next) => setSurface(next)} onPanel />
         </Flex>
         <Flex flex="1" width="100%" alignItems="center" justifyContent="center" pt={compact ? '24px' : { base: '28px', md: '36px' }}>
           <img
@@ -480,7 +482,7 @@ export const BrandAssetSection = ({
               <Segmented
                 label="Export canvas"
                 value={canvas}
-                onChange={setCanvas}
+                onChange={(next) => setCanvas(next)}
                 options={[
                   { value: 'framed', label: 'Square' },
                   { value: 'tight', label: 'Trimmed' }

@@ -72,11 +72,11 @@ export const BrandPressKit = ({ items, eyebrow }: { items: PressKitItem[]; eyebr
       <Flex gap={{ base: '14px', md: '24px' }} flexWrap="wrap" mb={{ base: '24px', md: '36px' }}>
         <Flex flexDir="column" gap="6px">
           <Label>Logo</Label>
-          <Segmented label="Press kit logo" options={LOGO_OPTIONS} value={logo} onChange={setLogo} />
+          <Segmented label="Press kit logo" options={LOGO_OPTIONS} value={logo} onChange={(next) => setLogo(next)} />
         </Flex>
         <Flex flexDir="column" gap="6px">
           <Label>Background</Label>
-          <Segmented label="Press kit background" options={SURFACE_OPTIONS} value={surface} onChange={setSurface} />
+          <Segmented label="Press kit background" options={SURFACE_OPTIONS} value={surface} onChange={(next) => setSurface(next)} />
         </Flex>
       </Flex>
       <SimpleGrid columns={{ base: 1, md: 2 }} spacingX="28px" spacingY="40px">
