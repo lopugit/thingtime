@@ -24,6 +24,7 @@
     {
       "slug": "logo",
       "name": "Wordmark",
+      "group": "core",
       "aspect": {
         "cols": 27,
         "rows": 5
@@ -37,121 +38,251 @@
           "w": 10,
           "h": 2,
           "url": "/branding/generated/logo/thingtime-logo-10x2.png",
-          "bytes": 150
+          "bytes": 191
         },
         {
           "w": 16,
           "h": 3,
           "url": "/branding/generated/logo/thingtime-logo-16x3.png",
-          "bytes": 202
+          "bytes": 261
         },
         {
           "w": 32,
           "h": 6,
           "url": "/branding/generated/logo/thingtime-logo-32x6.png",
-          "bytes": 396
+          "bytes": 518
         },
         {
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo/thingtime-logo-50x9.png",
-          "bytes": 551
+          "bytes": 656
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo/thingtime-logo-64x12.png",
-          "bytes": 612
+          "bytes": 690
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo/thingtime-logo-100x19.png",
-          "bytes": 707
+          "bytes": 743
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo/thingtime-logo-128x24.png",
-          "bytes": 738
+          "bytes": 761
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo/thingtime-logo-200x37.png",
-          "bytes": 810
+          "bytes": 768
         },
         {
           "w": 256,
           "h": 47,
           "url": "/branding/generated/logo/thingtime-logo-256x47.png",
-          "bytes": 830
+          "bytes": 789
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo/thingtime-logo-500x93.png",
-          "bytes": 1228
+          "bytes": 909
         },
         {
           "w": 512,
           "h": 95,
           "url": "/branding/generated/logo/thingtime-logo-512x95.png",
-          "bytes": 826
+          "bytes": 521
         },
         {
           "w": 1000,
           "h": 185,
           "url": "/branding/generated/logo/thingtime-logo-1000x185.png",
-          "bytes": 1486
+          "bytes": 781
         },
         {
           "w": 1024,
           "h": 190,
           "url": "/branding/generated/logo/thingtime-logo-1024x190.png",
-          "bytes": 1559
+          "bytes": 819
         },
         {
           "w": 2000,
           "h": 370,
           "url": "/branding/generated/logo/thingtime-logo-2000x370.png",
-          "bytes": 4048
+          "bytes": 1581
         },
         {
           "w": 2048,
           "h": 379,
           "url": "/branding/generated/logo/thingtime-logo-2048x379.png",
-          "bytes": 4992
+          "bytes": 2093
         },
         {
           "w": 4096,
           "h": 759,
           "url": "/branding/generated/logo/thingtime-logo-4096x759.png",
-          "bytes": 15189
+          "bytes": 4993
         },
         {
           "w": 5000,
           "h": 926,
           "url": "/branding/generated/logo/thingtime-logo-5000x926.png",
-          "bytes": 21545
+          "bytes": 7439
         },
         {
           "w": 8192,
           "h": 1517,
           "url": "/branding/generated/logo/thingtime-logo-8192x1517.png",
-          "bytes": 52297
+          "bytes": 16651
         },
         {
           "w": 10000,
           "h": 1852,
           "url": "/branding/generated/logo/thingtime-logo-10000x1852.png",
-          "bytes": 76354
+          "bytes": 23374
+        }
+      ]
+    },
+    {
+      "slug": "logo-square",
+      "name": "Square",
+      "group": "core",
+      "aspect": {
+        "cols": 24,
+        "rows": 24
+      },
+      "svg": {
+        "url": "/branding/generated/logo-square/thingtime-logo-square.svg",
+        "bytes": 2321
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 10,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-10x10.png",
+          "bytes": 231
+        },
+        {
+          "w": 16,
+          "h": 16,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-16x16.png",
+          "bytes": 246
+        },
+        {
+          "w": 32,
+          "h": 32,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-32x32.png",
+          "bytes": 384
+        },
+        {
+          "w": 50,
+          "h": 50,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-50x50.png",
+          "bytes": 782
+        },
+        {
+          "w": 64,
+          "h": 64,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-64x64.png",
+          "bytes": 476
+        },
+        {
+          "w": 100,
+          "h": 100,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-100x100.png",
+          "bytes": 789
+        },
+        {
+          "w": 128,
+          "h": 128,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-128x128.png",
+          "bytes": 552
+        },
+        {
+          "w": 200,
+          "h": 200,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-200x200.png",
+          "bytes": 644
+        },
+        {
+          "w": 256,
+          "h": 256,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-256x256.png",
+          "bytes": 774
+        },
+        {
+          "w": 500,
+          "h": 500,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-500x500.png",
+          "bytes": 1491
+        },
+        {
+          "w": 512,
+          "h": 512,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-512x512.png",
+          "bytes": 1328
+        },
+        {
+          "w": 1000,
+          "h": 1000,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-1000x1000.png",
+          "bytes": 2630
+        },
+        {
+          "w": 1024,
+          "h": 1024,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-1024x1024.png",
+          "bytes": 2831
+        },
+        {
+          "w": 2000,
+          "h": 2000,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-2000x2000.png",
+          "bytes": 6948
+        },
+        {
+          "w": 2048,
+          "h": 2048,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-2048x2048.png",
+          "bytes": 7458
+        },
+        {
+          "w": 4096,
+          "h": 4096,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-4096x4096.png",
+          "bytes": 23040
+        },
+        {
+          "w": 5000,
+          "h": 5000,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-5000x5000.png",
+          "bytes": 36081
+        },
+        {
+          "w": 8192,
+          "h": 8192,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-8192x8192.png",
+          "bytes": 85281
+        },
+        {
+          "w": 10000,
+          "h": 10000,
+          "url": "/branding/generated/logo-square/thingtime-logo-square-10000x10000.png",
+          "bytes": 121508
         }
       ]
     },
     {
       "slug": "icon",
       "name": "Icon",
+      "group": "core",
       "aspect": {
         "cols": 3,
         "rows": 3
@@ -165,121 +296,122 @@
           "w": 10,
           "h": 10,
           "url": "/branding/generated/icon/thingtime-icon-10x10.png",
-          "bytes": 160
+          "bytes": 159
         },
         {
           "w": 16,
           "h": 16,
           "url": "/branding/generated/icon/thingtime-icon-16x16.png",
-          "bytes": 166
+          "bytes": 173
         },
         {
           "w": 32,
           "h": 32,
           "url": "/branding/generated/icon/thingtime-icon-32x32.png",
-          "bytes": 195
+          "bytes": 183
         },
         {
           "w": 50,
           "h": 50,
           "url": "/branding/generated/icon/thingtime-icon-50x50.png",
-          "bytes": 228
+          "bytes": 184
         },
         {
           "w": 64,
           "h": 64,
           "url": "/branding/generated/icon/thingtime-icon-64x64.png",
-          "bytes": 264
+          "bytes": 191
         },
         {
           "w": 100,
           "h": 100,
           "url": "/branding/generated/icon/thingtime-icon-100x100.png",
-          "bytes": 333
+          "bytes": 212
         },
         {
           "w": 128,
           "h": 128,
           "url": "/branding/generated/icon/thingtime-icon-128x128.png",
-          "bytes": 406
+          "bytes": 226
         },
         {
           "w": 200,
           "h": 200,
           "url": "/branding/generated/icon/thingtime-icon-200x200.png",
-          "bytes": 574
+          "bytes": 273
         },
         {
           "w": 256,
           "h": 256,
           "url": "/branding/generated/icon/thingtime-icon-256x256.png",
-          "bytes": 772
+          "bytes": 327
         },
         {
           "w": 500,
           "h": 500,
           "url": "/branding/generated/icon/thingtime-icon-500x500.png",
-          "bytes": 1797
+          "bytes": 685
         },
         {
           "w": 512,
           "h": 512,
           "url": "/branding/generated/icon/thingtime-icon-512x512.png",
-          "bytes": 1924
+          "bytes": 767
         },
         {
           "w": 1000,
           "h": 1000,
           "url": "/branding/generated/icon/thingtime-icon-1000x1000.png",
-          "bytes": 5456
+          "bytes": 1679
         },
         {
           "w": 1024,
           "h": 1024,
           "url": "/branding/generated/icon/thingtime-icon-1024x1024.png",
-          "bytes": 5806
+          "bytes": 1858
         },
         {
           "w": 2000,
           "h": 2000,
           "url": "/branding/generated/icon/thingtime-icon-2000x2000.png",
-          "bytes": 19108
+          "bytes": 4396
         },
         {
           "w": 2048,
           "h": 2048,
           "url": "/branding/generated/icon/thingtime-icon-2048x2048.png",
-          "bytes": 21468
+          "bytes": 4802
         },
         {
           "w": 4096,
           "h": 4096,
           "url": "/branding/generated/icon/thingtime-icon-4096x4096.png",
-          "bytes": 75838
+          "bytes": 13996
         },
         {
           "w": 5000,
           "h": 5000,
           "url": "/branding/generated/icon/thingtime-icon-5000x5000.png",
-          "bytes": 110028
+          "bytes": 19253
         },
         {
           "w": 8192,
           "h": 8192,
           "url": "/branding/generated/icon/thingtime-icon-8192x8192.png",
-          "bytes": 275675
+          "bytes": 45156
         },
         {
           "w": 10000,
           "h": 10000,
           "url": "/branding/generated/icon/thingtime-icon-10000x10000.png",
-          "bytes": 405607
+          "bytes": 70695
         }
       ]
     },
     {
       "slug": "logo-pink",
       "name": "Wordmark · Pink",
+      "group": "pink",
       "aspect": {
         "cols": 27,
         "rows": 5
@@ -293,121 +425,251 @@
           "w": 10,
           "h": 2,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-10x2.png",
-          "bytes": 123
+          "bytes": 183
         },
         {
           "w": 16,
           "h": 3,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-16x3.png",
-          "bytes": 167
+          "bytes": 221
         },
         {
           "w": 32,
           "h": 6,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-32x6.png",
-          "bytes": 344
+          "bytes": 387
         },
         {
           "w": 50,
           "h": 9,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-50x9.png",
-          "bytes": 487
+          "bytes": 465
         },
         {
           "w": 64,
           "h": 12,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-64x12.png",
-          "bytes": 537
+          "bytes": 472
         },
         {
           "w": 100,
           "h": 19,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-100x19.png",
-          "bytes": 621
+          "bytes": 518
         },
         {
           "w": 128,
           "h": 24,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-128x24.png",
-          "bytes": 655
+          "bytes": 551
         },
         {
           "w": 200,
           "h": 37,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-200x37.png",
-          "bytes": 725
+          "bytes": 582
         },
         {
           "w": 256,
           "h": 47,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-256x47.png",
-          "bytes": 736
+          "bytes": 604
         },
         {
           "w": 500,
           "h": 93,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-500x93.png",
-          "bytes": 1089
+          "bytes": 704
         },
         {
           "w": 512,
           "h": 95,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-512x95.png",
-          "bytes": 744
+          "bytes": 445
         },
         {
           "w": 1000,
           "h": 185,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-1000x185.png",
-          "bytes": 1404
+          "bytes": 713
         },
         {
           "w": 1024,
           "h": 190,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-1024x190.png",
-          "bytes": 1477
+          "bytes": 751
         },
         {
           "w": 2000,
           "h": 370,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-2000x370.png",
-          "bytes": 3971
+          "bytes": 1516
         },
         {
           "w": 2048,
           "h": 379,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-2048x379.png",
-          "bytes": 4855
+          "bytes": 1921
         },
         {
           "w": 4096,
           "h": 759,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-4096x759.png",
-          "bytes": 15041
+          "bytes": 4803
         },
         {
           "w": 5000,
           "h": 926,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-5000x926.png",
-          "bytes": 21404
+          "bytes": 7245
         },
         {
           "w": 8192,
           "h": 1517,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-8192x1517.png",
-          "bytes": 52121
+          "bytes": 16474
         },
         {
           "w": 10000,
           "h": 1852,
           "url": "/branding/generated/logo-pink/thingtime-logo-pink-10000x1852.png",
-          "bytes": 76215
+          "bytes": 23187
+        }
+      ]
+    },
+    {
+      "slug": "logo-square-pink",
+      "name": "Square · Pink",
+      "group": "pink",
+      "aspect": {
+        "cols": 24,
+        "rows": 24
+      },
+      "svg": {
+        "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink.svg",
+        "bytes": 2321
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 10,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-10x10.png",
+          "bytes": 207
+        },
+        {
+          "w": 16,
+          "h": 16,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-16x16.png",
+          "bytes": 165
+        },
+        {
+          "w": 32,
+          "h": 32,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-32x32.png",
+          "bytes": 216
+        },
+        {
+          "w": 50,
+          "h": 50,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-50x50.png",
+          "bytes": 500
+        },
+        {
+          "w": 64,
+          "h": 64,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-64x64.png",
+          "bytes": 268
+        },
+        {
+          "w": 100,
+          "h": 100,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-100x100.png",
+          "bytes": 473
+        },
+        {
+          "w": 128,
+          "h": 128,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-128x128.png",
+          "bytes": 322
+        },
+        {
+          "w": 200,
+          "h": 200,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-200x200.png",
+          "bytes": 413
+        },
+        {
+          "w": 256,
+          "h": 256,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-256x256.png",
+          "bytes": 447
+        },
+        {
+          "w": 500,
+          "h": 500,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-500x500.png",
+          "bytes": 1204
+        },
+        {
+          "w": 512,
+          "h": 512,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-512x512.png",
+          "bytes": 890
+        },
+        {
+          "w": 1000,
+          "h": 1000,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-1000x1000.png",
+          "bytes": 1864
+        },
+        {
+          "w": 1024,
+          "h": 1024,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-1024x1024.png",
+          "bytes": 2000
+        },
+        {
+          "w": 2000,
+          "h": 2000,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-2000x2000.png",
+          "bytes": 4544
+        },
+        {
+          "w": 2048,
+          "h": 2048,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-2048x2048.png",
+          "bytes": 4943
+        },
+        {
+          "w": 4096,
+          "h": 4096,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-4096x4096.png",
+          "bytes": 14155
+        },
+        {
+          "w": 5000,
+          "h": 5000,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-5000x5000.png",
+          "bytes": 19482
+        },
+        {
+          "w": 8192,
+          "h": 8192,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-8192x8192.png",
+          "bytes": 45352
+        },
+        {
+          "w": 10000,
+          "h": 10000,
+          "url": "/branding/generated/logo-square-pink/thingtime-logo-square-pink-10000x10000.png",
+          "bytes": 71206
         }
       ]
     },
     {
       "slug": "icon-pink",
       "name": "Icon · Pink",
+      "group": "pink",
       "aspect": {
         "cols": 3,
         "rows": 3
@@ -421,115 +683,1405 @@
           "w": 10,
           "h": 10,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-10x10.png",
-          "bytes": 130
+          "bytes": 135
         },
         {
           "w": 16,
           "h": 16,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-16x16.png",
-          "bytes": 138
+          "bytes": 145
         },
         {
           "w": 32,
           "h": 32,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-32x32.png",
-          "bytes": 162
+          "bytes": 152
         },
         {
           "w": 50,
           "h": 50,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-50x50.png",
-          "bytes": 194
+          "bytes": 157
         },
         {
           "w": 64,
           "h": 64,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-64x64.png",
-          "bytes": 228
+          "bytes": 163
         },
         {
           "w": 100,
           "h": 100,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-100x100.png",
-          "bytes": 300
+          "bytes": 184
         },
         {
           "w": 128,
           "h": 128,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-128x128.png",
-          "bytes": 378
+          "bytes": 199
         },
         {
           "w": 200,
           "h": 200,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-200x200.png",
-          "bytes": 550
+          "bytes": 242
         },
         {
           "w": 256,
           "h": 256,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-256x256.png",
-          "bytes": 749
+          "bytes": 299
         },
         {
           "w": 500,
           "h": 500,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-500x500.png",
-          "bytes": 1773
+          "bytes": 661
         },
         {
           "w": 512,
           "h": 512,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-512x512.png",
-          "bytes": 1900
+          "bytes": 745
         },
         {
           "w": 1000,
           "h": 1000,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-1000x1000.png",
-          "bytes": 5432
+          "bytes": 1652
         },
         {
           "w": 1024,
           "h": 1024,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-1024x1024.png",
-          "bytes": 5783
+          "bytes": 1836
         },
         {
           "w": 2000,
           "h": 2000,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-2000x2000.png",
-          "bytes": 19085
+          "bytes": 4374
         },
         {
           "w": 2048,
           "h": 2048,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-2048x2048.png",
-          "bytes": 21452
+          "bytes": 4778
         },
         {
           "w": 4096,
           "h": 4096,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-4096x4096.png",
-          "bytes": 75811
+          "bytes": 13979
         },
         {
           "w": 5000,
           "h": 5000,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-5000x5000.png",
-          "bytes": 110009
+          "bytes": 19234
         },
         {
           "w": 8192,
           "h": 8192,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-8192x8192.png",
-          "bytes": 275655
+          "bytes": 45143
         },
         {
           "w": 10000,
           "h": 10000,
           "url": "/branding/generated/icon-pink/thingtime-icon-pink-10000x10000.png",
-          "bytes": 405589
+          "bytes": 70677
+        }
+      ]
+    },
+    {
+      "slug": "logo-rainbow",
+      "name": "Rainbow sweep",
+      "group": "fun",
+      "aspect": {
+        "cols": 27,
+        "rows": 5
+      },
+      "svg": {
+        "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow.svg",
+        "bytes": 2290
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-10x2.png",
+          "bytes": 191
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-16x3.png",
+          "bytes": 261
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-32x6.png",
+          "bytes": 599
+        },
+        {
+          "w": 50,
+          "h": 9,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-50x9.png",
+          "bytes": 819
+        },
+        {
+          "w": 64,
+          "h": 12,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-64x12.png",
+          "bytes": 875
+        },
+        {
+          "w": 100,
+          "h": 19,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-100x19.png",
+          "bytes": 977
+        },
+        {
+          "w": 128,
+          "h": 24,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-128x24.png",
+          "bytes": 1032
+        },
+        {
+          "w": 200,
+          "h": 37,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-200x37.png",
+          "bytes": 960
+        },
+        {
+          "w": 256,
+          "h": 47,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-256x47.png",
+          "bytes": 990
+        },
+        {
+          "w": 500,
+          "h": 93,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-500x93.png",
+          "bytes": 1107
+        },
+        {
+          "w": 512,
+          "h": 95,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-512x95.png",
+          "bytes": 579
+        },
+        {
+          "w": 1000,
+          "h": 185,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-1000x185.png",
+          "bytes": 868
+        },
+        {
+          "w": 1024,
+          "h": 190,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-1024x190.png",
+          "bytes": 904
+        },
+        {
+          "w": 2000,
+          "h": 370,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-2000x370.png",
+          "bytes": 1669
+        },
+        {
+          "w": 2048,
+          "h": 379,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-2048x379.png",
+          "bytes": 2332
+        },
+        {
+          "w": 4096,
+          "h": 759,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-4096x759.png",
+          "bytes": 5237
+        },
+        {
+          "w": 5000,
+          "h": 926,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-5000x926.png",
+          "bytes": 7697
+        },
+        {
+          "w": 8192,
+          "h": 1517,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-8192x1517.png",
+          "bytes": 16906
+        },
+        {
+          "w": 10000,
+          "h": 1852,
+          "url": "/branding/generated/logo-rainbow/thingtime-logo-rainbow-10000x1852.png",
+          "bytes": 23642
+        }
+      ]
+    },
+    {
+      "slug": "logo-square-sunset",
+      "name": "Sunset square",
+      "group": "fun",
+      "aspect": {
+        "cols": 24,
+        "rows": 24
+      },
+      "svg": {
+        "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset.svg",
+        "bytes": 2321
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 10,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-10x10.png",
+          "bytes": 231
+        },
+        {
+          "w": 16,
+          "h": 16,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-16x16.png",
+          "bytes": 226
+        },
+        {
+          "w": 32,
+          "h": 32,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-32x32.png",
+          "bytes": 357
+        },
+        {
+          "w": 50,
+          "h": 50,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-50x50.png",
+          "bytes": 862
+        },
+        {
+          "w": 64,
+          "h": 64,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-64x64.png",
+          "bytes": 437
+        },
+        {
+          "w": 100,
+          "h": 100,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-100x100.png",
+          "bytes": 813
+        },
+        {
+          "w": 128,
+          "h": 128,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-128x128.png",
+          "bytes": 507
+        },
+        {
+          "w": 200,
+          "h": 200,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-200x200.png",
+          "bytes": 599
+        },
+        {
+          "w": 256,
+          "h": 256,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-256x256.png",
+          "bytes": 727
+        },
+        {
+          "w": 500,
+          "h": 500,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-500x500.png",
+          "bytes": 1521
+        },
+        {
+          "w": 512,
+          "h": 512,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-512x512.png",
+          "bytes": 1280
+        },
+        {
+          "w": 1000,
+          "h": 1000,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-1000x1000.png",
+          "bytes": 2548
+        },
+        {
+          "w": 1024,
+          "h": 1024,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-1024x1024.png",
+          "bytes": 2749
+        },
+        {
+          "w": 2000,
+          "h": 2000,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-2000x2000.png",
+          "bytes": 6851
+        },
+        {
+          "w": 2048,
+          "h": 2048,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-2048x2048.png",
+          "bytes": 7347
+        },
+        {
+          "w": 4096,
+          "h": 4096,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-4096x4096.png",
+          "bytes": 22951
+        },
+        {
+          "w": 5000,
+          "h": 5000,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-5000x5000.png",
+          "bytes": 35990
+        },
+        {
+          "w": 8192,
+          "h": 8192,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-8192x8192.png",
+          "bytes": 85169
+        },
+        {
+          "w": 10000,
+          "h": 10000,
+          "url": "/branding/generated/logo-square-sunset/thingtime-logo-square-sunset-10000x10000.png",
+          "bytes": 121402
+        }
+      ]
+    },
+    {
+      "slug": "logo-outline",
+      "name": "Outline",
+      "group": "fun",
+      "aspect": {
+        "cols": 108,
+        "rows": 20
+      },
+      "svg": {
+        "url": "/branding/generated/logo-outline/thingtime-logo-outline.svg",
+        "bytes": 9346
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-10x2.png",
+          "bytes": 191
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-16x3.png",
+          "bytes": 253
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-32x6.png",
+          "bytes": 545
+        },
+        {
+          "w": 50,
+          "h": 9,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-50x9.png",
+          "bytes": 880
+        },
+        {
+          "w": 64,
+          "h": 12,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-64x12.png",
+          "bytes": 887
+        },
+        {
+          "w": 100,
+          "h": 19,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-100x19.png",
+          "bytes": 1313
+        },
+        {
+          "w": 128,
+          "h": 24,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-128x24.png",
+          "bytes": 1272
+        },
+        {
+          "w": 200,
+          "h": 37,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-200x37.png",
+          "bytes": 1502
+        },
+        {
+          "w": 256,
+          "h": 47,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-256x47.png",
+          "bytes": 1558
+        },
+        {
+          "w": 500,
+          "h": 93,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-500x93.png",
+          "bytes": 1713
+        },
+        {
+          "w": 512,
+          "h": 95,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-512x95.png",
+          "bytes": 1140
+        },
+        {
+          "w": 1000,
+          "h": 185,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-1000x185.png",
+          "bytes": 1449
+        },
+        {
+          "w": 1024,
+          "h": 190,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-1024x190.png",
+          "bytes": 1584
+        },
+        {
+          "w": 2000,
+          "h": 370,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-2000x370.png",
+          "bytes": 2778
+        },
+        {
+          "w": 2048,
+          "h": 379,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-2048x379.png",
+          "bytes": 3429
+        },
+        {
+          "w": 4096,
+          "h": 759,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-4096x759.png",
+          "bytes": 6423
+        },
+        {
+          "w": 5000,
+          "h": 926,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-5000x926.png",
+          "bytes": 8972
+        },
+        {
+          "w": 8192,
+          "h": 1517,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-8192x1517.png",
+          "bytes": 18243
+        },
+        {
+          "w": 10000,
+          "h": 1852,
+          "url": "/branding/generated/logo-outline/thingtime-logo-outline-10000x1852.png",
+          "bytes": 24832
+        }
+      ]
+    },
+    {
+      "slug": "logo-square-arcade",
+      "name": "Arcade square",
+      "group": "fun",
+      "aspect": {
+        "cols": 48,
+        "rows": 48
+      },
+      "svg": {
+        "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade.svg",
+        "bytes": 5649
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 10,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-10x10.png",
+          "bytes": 235
+        },
+        {
+          "w": 16,
+          "h": 16,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-16x16.png",
+          "bytes": 361
+        },
+        {
+          "w": 32,
+          "h": 32,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-32x32.png",
+          "bytes": 610
+        },
+        {
+          "w": 50,
+          "h": 50,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-50x50.png",
+          "bytes": 1273
+        },
+        {
+          "w": 64,
+          "h": 64,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-64x64.png",
+          "bytes": 913
+        },
+        {
+          "w": 100,
+          "h": 100,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-100x100.png",
+          "bytes": 1777
+        },
+        {
+          "w": 128,
+          "h": 128,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-128x128.png",
+          "bytes": 1184
+        },
+        {
+          "w": 200,
+          "h": 200,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-200x200.png",
+          "bytes": 1784
+        },
+        {
+          "w": 256,
+          "h": 256,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-256x256.png",
+          "bytes": 1468
+        },
+        {
+          "w": 500,
+          "h": 500,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-500x500.png",
+          "bytes": 2668
+        },
+        {
+          "w": 512,
+          "h": 512,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-512x512.png",
+          "bytes": 2024
+        },
+        {
+          "w": 1000,
+          "h": 1000,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-1000x1000.png",
+          "bytes": 3711
+        },
+        {
+          "w": 1024,
+          "h": 1024,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-1024x1024.png",
+          "bytes": 3521
+        },
+        {
+          "w": 2000,
+          "h": 2000,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-2000x2000.png",
+          "bytes": 7769
+        },
+        {
+          "w": 2048,
+          "h": 2048,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-2048x2048.png",
+          "bytes": 8268
+        },
+        {
+          "w": 4096,
+          "h": 4096,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-4096x4096.png",
+          "bytes": 23882
+        },
+        {
+          "w": 5000,
+          "h": 5000,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-5000x5000.png",
+          "bytes": 37501
+        },
+        {
+          "w": 8192,
+          "h": 8192,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-8192x8192.png",
+          "bytes": 86188
+        },
+        {
+          "w": 10000,
+          "h": 10000,
+          "url": "/branding/generated/logo-square-arcade/thingtime-logo-square-arcade-10000x10000.png",
+          "bytes": 122397
+        }
+      ]
+    },
+    {
+      "slug": "logo-glitch",
+      "name": "Glitch",
+      "group": "fun",
+      "aspect": {
+        "cols": 112,
+        "rows": 20
+      },
+      "svg": {
+        "url": "/branding/generated/logo-glitch/thingtime-logo-glitch.svg",
+        "bytes": 16332
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-10x2.png",
+          "bytes": 191
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-16x3.png",
+          "bytes": 274
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-32x6.png",
+          "bytes": 648
+        },
+        {
+          "w": 50,
+          "h": 9,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-50x9.png",
+          "bytes": 1156
+        },
+        {
+          "w": 64,
+          "h": 11,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-64x11.png",
+          "bytes": 1349
+        },
+        {
+          "w": 100,
+          "h": 18,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-100x18.png",
+          "bytes": 1567
+        },
+        {
+          "w": 128,
+          "h": 23,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-128x23.png",
+          "bytes": 1987
+        },
+        {
+          "w": 200,
+          "h": 36,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-200x36.png",
+          "bytes": 1975
+        },
+        {
+          "w": 256,
+          "h": 46,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-256x46.png",
+          "bytes": 2503
+        },
+        {
+          "w": 500,
+          "h": 89,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-500x89.png",
+          "bytes": 3747
+        },
+        {
+          "w": 512,
+          "h": 91,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-512x91.png",
+          "bytes": 3534
+        },
+        {
+          "w": 1000,
+          "h": 179,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-1000x179.png",
+          "bytes": 4818
+        },
+        {
+          "w": 1024,
+          "h": 183,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-1024x183.png",
+          "bytes": 4868
+        },
+        {
+          "w": 2000,
+          "h": 357,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-2000x357.png",
+          "bytes": 7381
+        },
+        {
+          "w": 2048,
+          "h": 366,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-2048x366.png",
+          "bytes": 7375
+        },
+        {
+          "w": 4096,
+          "h": 731,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-4096x731.png",
+          "bytes": 17805
+        },
+        {
+          "w": 5000,
+          "h": 893,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-5000x893.png",
+          "bytes": 24569
+        },
+        {
+          "w": 8192,
+          "h": 1463,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-8192x1463.png",
+          "bytes": 54442
+        },
+        {
+          "w": 10000,
+          "h": 1786,
+          "url": "/branding/generated/logo-glitch/thingtime-logo-glitch-10000x1786.png",
+          "bytes": 77254
+        }
+      ]
+    },
+    {
+      "slug": "logo-square-confetti",
+      "name": "Confetti square",
+      "group": "fun",
+      "aspect": {
+        "cols": 48,
+        "rows": 48
+      },
+      "svg": {
+        "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti.svg",
+        "bytes": 7272
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 10,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-10x10.png",
+          "bytes": 442
+        },
+        {
+          "w": 16,
+          "h": 16,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-16x16.png",
+          "bytes": 363
+        },
+        {
+          "w": 32,
+          "h": 32,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-32x32.png",
+          "bytes": 657
+        },
+        {
+          "w": 50,
+          "h": 50,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-50x50.png",
+          "bytes": 1557
+        },
+        {
+          "w": 64,
+          "h": 64,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-64x64.png",
+          "bytes": 979
+        },
+        {
+          "w": 100,
+          "h": 100,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-100x100.png",
+          "bytes": 2102
+        },
+        {
+          "w": 128,
+          "h": 128,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-128x128.png",
+          "bytes": 1261
+        },
+        {
+          "w": 200,
+          "h": 200,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-200x200.png",
+          "bytes": 2175
+        },
+        {
+          "w": 256,
+          "h": 256,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-256x256.png",
+          "bytes": 1581
+        },
+        {
+          "w": 500,
+          "h": 500,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-500x500.png",
+          "bytes": 4179
+        },
+        {
+          "w": 512,
+          "h": 512,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-512x512.png",
+          "bytes": 2178
+        },
+        {
+          "w": 1000,
+          "h": 1000,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-1000x1000.png",
+          "bytes": 4126
+        },
+        {
+          "w": 1024,
+          "h": 1024,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-1024x1024.png",
+          "bytes": 3645
+        },
+        {
+          "w": 2000,
+          "h": 2000,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-2000x2000.png",
+          "bytes": 7920
+        },
+        {
+          "w": 2048,
+          "h": 2048,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-2048x2048.png",
+          "bytes": 8413
+        },
+        {
+          "w": 4096,
+          "h": 4096,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-4096x4096.png",
+          "bytes": 24052
+        },
+        {
+          "w": 5000,
+          "h": 5000,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-5000x5000.png",
+          "bytes": 37971
+        },
+        {
+          "w": 8192,
+          "h": 8192,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-8192x8192.png",
+          "bytes": 86947
+        },
+        {
+          "w": 10000,
+          "h": 10000,
+          "url": "/branding/generated/logo-square-confetti/thingtime-logo-square-confetti-10000x10000.png",
+          "bytes": 123335
+        }
+      ]
+    },
+    {
+      "slug": "logo-dissolve",
+      "name": "Pixel dust",
+      "group": "fun",
+      "aspect": {
+        "cols": 107,
+        "rows": 20
+      },
+      "svg": {
+        "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve.svg",
+        "bytes": 9870
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-10x2.png",
+          "bytes": 191
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-16x3.png",
+          "bytes": 269
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-32x6.png",
+          "bytes": 565
+        },
+        {
+          "w": 50,
+          "h": 9,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-50x9.png",
+          "bytes": 795
+        },
+        {
+          "w": 64,
+          "h": 12,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-64x12.png",
+          "bytes": 970
+        },
+        {
+          "w": 100,
+          "h": 19,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-100x19.png",
+          "bytes": 1253
+        },
+        {
+          "w": 128,
+          "h": 24,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-128x24.png",
+          "bytes": 1285
+        },
+        {
+          "w": 200,
+          "h": 37,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-200x37.png",
+          "bytes": 1895
+        },
+        {
+          "w": 256,
+          "h": 48,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-256x48.png",
+          "bytes": 1624
+        },
+        {
+          "w": 500,
+          "h": 93,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-500x93.png",
+          "bytes": 2801
+        },
+        {
+          "w": 512,
+          "h": 96,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-512x96.png",
+          "bytes": 2321
+        },
+        {
+          "w": 1000,
+          "h": 187,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-1000x187.png",
+          "bytes": 4308
+        },
+        {
+          "w": 1024,
+          "h": 191,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-1024x191.png",
+          "bytes": 4568
+        },
+        {
+          "w": 2000,
+          "h": 374,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-2000x374.png",
+          "bytes": 7237
+        },
+        {
+          "w": 2048,
+          "h": 383,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-2048x383.png",
+          "bytes": 7818
+        },
+        {
+          "w": 4096,
+          "h": 766,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-4096x766.png",
+          "bytes": 18101
+        },
+        {
+          "w": 5000,
+          "h": 935,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-5000x935.png",
+          "bytes": 9964
+        },
+        {
+          "w": 8192,
+          "h": 1531,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-8192x1531.png",
+          "bytes": 56999
+        },
+        {
+          "w": 10000,
+          "h": 1869,
+          "url": "/branding/generated/logo-dissolve/thingtime-logo-dissolve-10000x1869.png",
+          "bytes": 81605
+        }
+      ]
+    },
+    {
+      "slug": "logo-bounce",
+      "name": "Bounce",
+      "group": "fun",
+      "aspect": {
+        "cols": 27,
+        "rows": 5
+      },
+      "svg": {
+        "url": "/branding/generated/logo-bounce/thingtime-logo-bounce.svg",
+        "bytes": 2290
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-10x2.png",
+          "bytes": 191
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-16x3.png",
+          "bytes": 286
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-32x6.png",
+          "bytes": 518
+        },
+        {
+          "w": 50,
+          "h": 9,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-50x9.png",
+          "bytes": 688
+        },
+        {
+          "w": 64,
+          "h": 12,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-64x12.png",
+          "bytes": 722
+        },
+        {
+          "w": 100,
+          "h": 19,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-100x19.png",
+          "bytes": 762
+        },
+        {
+          "w": 128,
+          "h": 24,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-128x24.png",
+          "bytes": 791
+        },
+        {
+          "w": 200,
+          "h": 37,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-200x37.png",
+          "bytes": 789
+        },
+        {
+          "w": 256,
+          "h": 47,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-256x47.png",
+          "bytes": 818
+        },
+        {
+          "w": 500,
+          "h": 93,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-500x93.png",
+          "bytes": 940
+        },
+        {
+          "w": 512,
+          "h": 95,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-512x95.png",
+          "bytes": 529
+        },
+        {
+          "w": 1000,
+          "h": 185,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-1000x185.png",
+          "bytes": 785
+        },
+        {
+          "w": 1024,
+          "h": 190,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-1024x190.png",
+          "bytes": 822
+        },
+        {
+          "w": 2000,
+          "h": 370,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-2000x370.png",
+          "bytes": 1584
+        },
+        {
+          "w": 2048,
+          "h": 379,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-2048x379.png",
+          "bytes": 2131
+        },
+        {
+          "w": 4096,
+          "h": 759,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-4096x759.png",
+          "bytes": 5019
+        },
+        {
+          "w": 5000,
+          "h": 926,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-5000x926.png",
+          "bytes": 7467
+        },
+        {
+          "w": 8192,
+          "h": 1517,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-8192x1517.png",
+          "bytes": 16682
+        },
+        {
+          "w": 10000,
+          "h": 1852,
+          "url": "/branding/generated/logo-bounce/thingtime-logo-bounce-10000x1852.png",
+          "bytes": 23414
+        }
+      ]
+    },
+    {
+      "slug": "icon-seasons",
+      "name": "Four seasons",
+      "group": "fun",
+      "aspect": {
+        "cols": 15,
+        "rows": 3
+      },
+      "svg": {
+        "url": "/branding/generated/icon-seasons/thingtime-icon-seasons.svg",
+        "bytes": 1005
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 2,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-10x2.png",
+          "bytes": 149
+        },
+        {
+          "w": 16,
+          "h": 3,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-16x3.png",
+          "bytes": 245
+        },
+        {
+          "w": 32,
+          "h": 6,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-32x6.png",
+          "bytes": 288
+        },
+        {
+          "w": 50,
+          "h": 10,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-50x10.png",
+          "bytes": 348
+        },
+        {
+          "w": 64,
+          "h": 13,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-64x13.png",
+          "bytes": 498
+        },
+        {
+          "w": 100,
+          "h": 20,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-100x20.png",
+          "bytes": 348
+        },
+        {
+          "w": 128,
+          "h": 26,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-128x26.png",
+          "bytes": 501
+        },
+        {
+          "w": 200,
+          "h": 40,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-200x40.png",
+          "bytes": 391
+        },
+        {
+          "w": 256,
+          "h": 51,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-256x51.png",
+          "bytes": 382
+        },
+        {
+          "w": 500,
+          "h": 100,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-500x100.png",
+          "bytes": 530
+        },
+        {
+          "w": 512,
+          "h": 102,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-512x102.png",
+          "bytes": 500
+        },
+        {
+          "w": 1000,
+          "h": 200,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-1000x200.png",
+          "bytes": 807
+        },
+        {
+          "w": 1024,
+          "h": 205,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-1024x205.png",
+          "bytes": 995
+        },
+        {
+          "w": 2000,
+          "h": 400,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-2000x400.png",
+          "bytes": 1674
+        },
+        {
+          "w": 2048,
+          "h": 410,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-2048x410.png",
+          "bytes": 1923
+        },
+        {
+          "w": 4096,
+          "h": 819,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-4096x819.png",
+          "bytes": 4816
+        },
+        {
+          "w": 5000,
+          "h": 1000,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-5000x1000.png",
+          "bytes": 7521
+        },
+        {
+          "w": 8192,
+          "h": 1638,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-8192x1638.png",
+          "bytes": 17375
+        },
+        {
+          "w": 10000,
+          "h": 2000,
+          "url": "/branding/generated/icon-seasons/thingtime-icon-seasons-10000x2000.png",
+          "bytes": 24645
+        }
+      ]
+    },
+    {
+      "slug": "monogram",
+      "name": "Monogram",
+      "group": "fun",
+      "aspect": {
+        "cols": 7,
+        "rows": 3
+      },
+      "svg": {
+        "url": "/branding/generated/monogram/thingtime-monogram.svg",
+        "bytes": 614
+      },
+      "pngs": [
+        {
+          "w": 10,
+          "h": 4,
+          "url": "/branding/generated/monogram/thingtime-monogram-10x4.png",
+          "bytes": 199
+        },
+        {
+          "w": 16,
+          "h": 7,
+          "url": "/branding/generated/monogram/thingtime-monogram-16x7.png",
+          "bytes": 237
+        },
+        {
+          "w": 32,
+          "h": 14,
+          "url": "/branding/generated/monogram/thingtime-monogram-32x14.png",
+          "bytes": 274
+        },
+        {
+          "w": 50,
+          "h": 21,
+          "url": "/branding/generated/monogram/thingtime-monogram-50x21.png",
+          "bytes": 199
+        },
+        {
+          "w": 64,
+          "h": 27,
+          "url": "/branding/generated/monogram/thingtime-monogram-64x27.png",
+          "bytes": 200
+        },
+        {
+          "w": 100,
+          "h": 43,
+          "url": "/branding/generated/monogram/thingtime-monogram-100x43.png",
+          "bytes": 286
+        },
+        {
+          "w": 128,
+          "h": 55,
+          "url": "/branding/generated/monogram/thingtime-monogram-128x55.png",
+          "bytes": 296
+        },
+        {
+          "w": 200,
+          "h": 86,
+          "url": "/branding/generated/monogram/thingtime-monogram-200x86.png",
+          "bytes": 349
+        },
+        {
+          "w": 256,
+          "h": 110,
+          "url": "/branding/generated/monogram/thingtime-monogram-256x110.png",
+          "bytes": 404
+        },
+        {
+          "w": 500,
+          "h": 214,
+          "url": "/branding/generated/monogram/thingtime-monogram-500x214.png",
+          "bytes": 603
+        },
+        {
+          "w": 512,
+          "h": 219,
+          "url": "/branding/generated/monogram/thingtime-monogram-512x219.png",
+          "bytes": 460
+        },
+        {
+          "w": 1000,
+          "h": 429,
+          "url": "/branding/generated/monogram/thingtime-monogram-1000x429.png",
+          "bytes": 853
+        },
+        {
+          "w": 1024,
+          "h": 439,
+          "url": "/branding/generated/monogram/thingtime-monogram-1024x439.png",
+          "bytes": 1264
+        },
+        {
+          "w": 2000,
+          "h": 857,
+          "url": "/branding/generated/monogram/thingtime-monogram-2000x857.png",
+          "bytes": 3023
+        },
+        {
+          "w": 2048,
+          "h": 878,
+          "url": "/branding/generated/monogram/thingtime-monogram-2048x878.png",
+          "bytes": 3246
+        },
+        {
+          "w": 4096,
+          "h": 1755,
+          "url": "/branding/generated/monogram/thingtime-monogram-4096x1755.png",
+          "bytes": 6118
+        },
+        {
+          "w": 5000,
+          "h": 2143,
+          "url": "/branding/generated/monogram/thingtime-monogram-5000x2143.png",
+          "bytes": 15524
+        },
+        {
+          "w": 8192,
+          "h": 3511,
+          "url": "/branding/generated/monogram/thingtime-monogram-8192x3511.png",
+          "bytes": 36567
+        },
+        {
+          "w": 10000,
+          "h": 4286,
+          "url": "/branding/generated/monogram/thingtime-monogram-10000x4286.png",
+          "bytes": 52050
         }
       ]
     }
@@ -537,9 +2089,12 @@
   "presskit": [
     {
       "slug": "og-card",
-      "name": "Open Graph card",
-      "description": "Link-preview card — wordmark on white with the Thingtime rainbow.",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "wordmark",
       "surface": "light",
+      "name": "Open Graph card · Wordmark · Light",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-1200x630.png",
@@ -547,79 +2102,597 @@
     },
     {
       "slug": "og-card-dark",
-      "name": "Open Graph card · Dark",
-      "description": "The same link-preview card on Thingtime ink.",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "wordmark",
       "surface": "dark",
+      "name": "Open Graph card · Wordmark · Dark",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
       "w": 1200,
       "h": 630,
       "url": "/branding/presskit/thingtime-og-card-dark-1200x630.png",
       "bytes": 5978
     },
     {
-      "slug": "banner",
-      "name": "Social banner",
-      "description": "Wide header for X/Twitter and community pages.",
+      "slug": "og-card-square-light",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "square",
       "surface": "light",
+      "name": "Open Graph card · Square · Light",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
+      "w": 1200,
+      "h": 630,
+      "url": "/branding/presskit/thingtime-og-card-square-light-1200x630.png",
+      "bytes": 5823
+    },
+    {
+      "slug": "og-card-square-dark",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "square",
+      "surface": "dark",
+      "name": "Open Graph card · Square · Dark",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
+      "w": 1200,
+      "h": 630,
+      "url": "/branding/presskit/thingtime-og-card-square-dark-1200x630.png",
+      "bytes": 5895
+    },
+    {
+      "slug": "og-card-icon-light",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Open Graph card · Icon · Light",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
+      "w": 1200,
+      "h": 630,
+      "url": "/branding/presskit/thingtime-og-card-icon-light-1200x630.png",
+      "bytes": 4896
+    },
+    {
+      "slug": "og-card-icon-dark",
+      "kind": "og-card",
+      "kindName": "Open Graph card",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Open Graph card · Icon · Dark",
+      "description": "Link-preview card with the Thingtime rainbow underline.",
+      "w": 1200,
+      "h": 630,
+      "url": "/branding/presskit/thingtime-og-card-icon-dark-1200x630.png",
+      "bytes": 4905
+    },
+    {
+      "slug": "banner",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "Social banner · Wordmark · Light",
+      "description": "Wide header for X/Twitter and community pages.",
       "w": 1500,
       "h": 500,
       "url": "/branding/presskit/thingtime-banner-1500x500.png",
       "bytes": 5536
     },
     {
-      "slug": "linkedin-banner",
-      "name": "LinkedIn banner",
-      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "slug": "banner-wordmark-dark",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "Social banner · Wordmark · Dark",
+      "description": "Wide header for X/Twitter and community pages.",
+      "w": 1500,
+      "h": 500,
+      "url": "/branding/presskit/thingtime-banner-wordmark-dark-1500x500.png",
+      "bytes": 5594
+    },
+    {
+      "slug": "banner-square-light",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "square",
       "surface": "light",
+      "name": "Social banner · Square · Light",
+      "description": "Wide header for X/Twitter and community pages.",
+      "w": 1500,
+      "h": 500,
+      "url": "/branding/presskit/thingtime-banner-square-light-1500x500.png",
+      "bytes": 5516
+    },
+    {
+      "slug": "banner-square-dark",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "square",
+      "surface": "dark",
+      "name": "Social banner · Square · Dark",
+      "description": "Wide header for X/Twitter and community pages.",
+      "w": 1500,
+      "h": 500,
+      "url": "/branding/presskit/thingtime-banner-square-dark-1500x500.png",
+      "bytes": 5565
+    },
+    {
+      "slug": "banner-icon-light",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Social banner · Icon · Light",
+      "description": "Wide header for X/Twitter and community pages.",
+      "w": 1500,
+      "h": 500,
+      "url": "/branding/presskit/thingtime-banner-icon-light-1500x500.png",
+      "bytes": 4524
+    },
+    {
+      "slug": "banner-icon-dark",
+      "kind": "banner",
+      "kindName": "Social banner",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Social banner · Icon · Dark",
+      "description": "Wide header for X/Twitter and community pages.",
+      "w": 1500,
+      "h": 500,
+      "url": "/branding/presskit/thingtime-banner-icon-dark-1500x500.png",
+      "bytes": 4532
+    },
+    {
+      "slug": "linkedin-banner",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "LinkedIn banner · Wordmark · Light",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
       "w": 1584,
       "h": 396,
       "url": "/branding/presskit/thingtime-linkedin-banner-1584x396.png",
       "bytes": 4357
     },
     {
+      "slug": "linkedin-banner-wordmark-dark",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "LinkedIn banner · Wordmark · Dark",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "w": 1584,
+      "h": 396,
+      "url": "/branding/presskit/thingtime-linkedin-banner-wordmark-dark-1584x396.png",
+      "bytes": 4406
+    },
+    {
+      "slug": "linkedin-banner-square-light",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "square",
+      "surface": "light",
+      "name": "LinkedIn banner · Square · Light",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "w": 1584,
+      "h": 396,
+      "url": "/branding/presskit/thingtime-linkedin-banner-square-light-1584x396.png",
+      "bytes": 4843
+    },
+    {
+      "slug": "linkedin-banner-square-dark",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "square",
+      "surface": "dark",
+      "name": "LinkedIn banner · Square · Dark",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "w": 1584,
+      "h": 396,
+      "url": "/branding/presskit/thingtime-linkedin-banner-square-dark-1584x396.png",
+      "bytes": 4881
+    },
+    {
+      "slug": "linkedin-banner-icon-light",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "icon",
+      "surface": "light",
+      "name": "LinkedIn banner · Icon · Light",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "w": 1584,
+      "h": 396,
+      "url": "/branding/presskit/thingtime-linkedin-banner-icon-light-1584x396.png",
+      "bytes": 3994
+    },
+    {
+      "slug": "linkedin-banner-icon-dark",
+      "kind": "linkedin-banner",
+      "kindName": "LinkedIn banner",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "LinkedIn banner · Icon · Dark",
+      "description": "Company-page cover at LinkedIn’s exact ratio.",
+      "w": 1584,
+      "h": 396,
+      "url": "/branding/presskit/thingtime-linkedin-banner-icon-dark-1584x396.png",
+      "bytes": 3985
+    },
+    {
       "slug": "social-square",
-      "name": "Social square",
-      "description": "Pastel rainbow square for feeds and profile posts.",
-      "surface": "gradient",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "Social square · Wordmark · Light",
+      "description": "Rainbow-framed square for feeds and profile posts.",
       "w": 1080,
       "h": 1080,
       "url": "/branding/presskit/thingtime-social-square-1080x1080.png",
       "bytes": 37106
     },
     {
-      "slug": "wallpaper",
-      "name": "Desktop wallpaper",
-      "description": "Ink wallpaper with voxel confetti, 1080p.",
+      "slug": "social-square-wordmark-dark",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "wordmark",
       "surface": "dark",
+      "name": "Social square · Wordmark · Dark",
+      "description": "Rainbow-framed square for feeds and profile posts.",
+      "w": 1080,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-social-square-wordmark-dark-1080x1080.png",
+      "bytes": 47879
+    },
+    {
+      "slug": "social-square-square-light",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "square",
+      "surface": "light",
+      "name": "Social square · Square · Light",
+      "description": "Rainbow-framed square for feeds and profile posts.",
+      "w": 1080,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-social-square-square-light-1080x1080.png",
+      "bytes": 37292
+    },
+    {
+      "slug": "social-square-square-dark",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "square",
+      "surface": "dark",
+      "name": "Social square · Square · Dark",
+      "description": "Rainbow-framed square for feeds and profile posts.",
+      "w": 1080,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-social-square-square-dark-1080x1080.png",
+      "bytes": 48110
+    },
+    {
+      "slug": "social-square-icon-light",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Social square · Icon · Light",
+      "description": "Rainbow-framed square for feeds and profile posts.",
+      "w": 1080,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-social-square-icon-light-1080x1080.png",
+      "bytes": 36025
+    },
+    {
+      "slug": "social-square-icon-dark",
+      "kind": "social-square",
+      "kindName": "Social square",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Social square · Icon · Dark",
+      "description": "Rainbow-framed square for feeds and profile posts.",
+      "w": 1080,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-social-square-icon-dark-1080x1080.png",
+      "bytes": 46735
+    },
+    {
+      "slug": "wallpaper-wordmark-light",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "Desktop wallpaper · Wordmark · Light",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
+      "w": 1920,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-wallpaper-wordmark-light-1920x1080.png",
+      "bytes": 13686
+    },
+    {
+      "slug": "wallpaper",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "Desktop wallpaper · Wordmark · Dark",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
       "w": 1920,
       "h": 1080,
       "url": "/branding/presskit/thingtime-wallpaper-1920x1080.png",
       "bytes": 13936
     },
     {
-      "slug": "wallpaper-4k",
-      "name": "Desktop wallpaper · 4K",
-      "description": "The same ink + confetti wallpaper at 4K.",
+      "slug": "wallpaper-square-light",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "square",
+      "surface": "light",
+      "name": "Desktop wallpaper · Square · Light",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
+      "w": 1920,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-wallpaper-square-light-1920x1080.png",
+      "bytes": 14608
+    },
+    {
+      "slug": "wallpaper-square-dark",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "square",
       "surface": "dark",
+      "name": "Desktop wallpaper · Square · Dark",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
+      "w": 1920,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-wallpaper-square-dark-1920x1080.png",
+      "bytes": 14872
+    },
+    {
+      "slug": "wallpaper-icon-light",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Desktop wallpaper · Icon · Light",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
+      "w": 1920,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-wallpaper-icon-light-1920x1080.png",
+      "bytes": 13764
+    },
+    {
+      "slug": "wallpaper-icon-dark",
+      "kind": "wallpaper",
+      "kindName": "Desktop wallpaper",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Desktop wallpaper · Icon · Dark",
+      "description": "Voxel-confetti desktop wallpaper, 1080p.",
+      "w": 1920,
+      "h": 1080,
+      "url": "/branding/presskit/thingtime-wallpaper-icon-dark-1920x1080.png",
+      "bytes": 13856
+    },
+    {
+      "slug": "wallpaper-4k-wordmark-light",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "Desktop wallpaper · 4K · Wordmark · Light",
+      "description": "The same confetti wallpaper at 4K.",
+      "w": 3840,
+      "h": 2160,
+      "url": "/branding/presskit/thingtime-wallpaper-4k-wordmark-light-3840x2160.png",
+      "bytes": 41961
+    },
+    {
+      "slug": "wallpaper-4k",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "Desktop wallpaper · 4K · Wordmark · Dark",
+      "description": "The same confetti wallpaper at 4K.",
       "w": 3840,
       "h": 2160,
       "url": "/branding/presskit/thingtime-wallpaper-4k-3840x2160.png",
       "bytes": 42483
     },
     {
-      "slug": "wallpaper-phone",
-      "name": "Phone wallpaper",
-      "description": "Icon-centred ink wallpaper for phones.",
+      "slug": "wallpaper-4k-square-light",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "square",
+      "surface": "light",
+      "name": "Desktop wallpaper · 4K · Square · Light",
+      "description": "The same confetti wallpaper at 4K.",
+      "w": 3840,
+      "h": 2160,
+      "url": "/branding/presskit/thingtime-wallpaper-4k-square-light-3840x2160.png",
+      "bytes": 42838
+    },
+    {
+      "slug": "wallpaper-4k-square-dark",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "square",
       "surface": "dark",
+      "name": "Desktop wallpaper · 4K · Square · Dark",
+      "description": "The same confetti wallpaper at 4K.",
+      "w": 3840,
+      "h": 2160,
+      "url": "/branding/presskit/thingtime-wallpaper-4k-square-dark-3840x2160.png",
+      "bytes": 43233
+    },
+    {
+      "slug": "wallpaper-4k-icon-light",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Desktop wallpaper · 4K · Icon · Light",
+      "description": "The same confetti wallpaper at 4K.",
+      "w": 3840,
+      "h": 2160,
+      "url": "/branding/presskit/thingtime-wallpaper-4k-icon-light-3840x2160.png",
+      "bytes": 41980
+    },
+    {
+      "slug": "wallpaper-4k-icon-dark",
+      "kind": "wallpaper-4k",
+      "kindName": "Desktop wallpaper · 4K",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Desktop wallpaper · 4K · Icon · Dark",
+      "description": "The same confetti wallpaper at 4K.",
+      "w": 3840,
+      "h": 2160,
+      "url": "/branding/presskit/thingtime-wallpaper-4k-icon-dark-3840x2160.png",
+      "bytes": 42301
+    },
+    {
+      "slug": "wallpaper-phone-wordmark-light",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "wordmark",
+      "surface": "light",
+      "name": "Phone wallpaper · Wordmark · Light",
+      "description": "Voxel-confetti wallpaper for phones.",
+      "w": 1170,
+      "h": 2532,
+      "url": "/branding/presskit/thingtime-wallpaper-phone-wordmark-light-1170x2532.png",
+      "bytes": 20484
+    },
+    {
+      "slug": "wallpaper-phone-wordmark-dark",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "Phone wallpaper · Wordmark · Dark",
+      "description": "Voxel-confetti wallpaper for phones.",
+      "w": 1170,
+      "h": 2532,
+      "url": "/branding/presskit/thingtime-wallpaper-phone-wordmark-dark-1170x2532.png",
+      "bytes": 20722
+    },
+    {
+      "slug": "wallpaper-phone-square-light",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "square",
+      "surface": "light",
+      "name": "Phone wallpaper · Square · Light",
+      "description": "Voxel-confetti wallpaper for phones.",
+      "w": 1170,
+      "h": 2532,
+      "url": "/branding/presskit/thingtime-wallpaper-phone-square-light-1170x2532.png",
+      "bytes": 20416
+    },
+    {
+      "slug": "wallpaper-phone-square-dark",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "square",
+      "surface": "dark",
+      "name": "Phone wallpaper · Square · Dark",
+      "description": "Voxel-confetti wallpaper for phones.",
+      "w": 1170,
+      "h": 2532,
+      "url": "/branding/presskit/thingtime-wallpaper-phone-square-dark-1170x2532.png",
+      "bytes": 20847
+    },
+    {
+      "slug": "wallpaper-phone-icon-light",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "icon",
+      "surface": "light",
+      "name": "Phone wallpaper · Icon · Light",
+      "description": "Voxel-confetti wallpaper for phones.",
+      "w": 1170,
+      "h": 2532,
+      "url": "/branding/presskit/thingtime-wallpaper-phone-icon-light-1170x2532.png",
+      "bytes": 19751
+    },
+    {
+      "slug": "wallpaper-phone",
+      "kind": "wallpaper-phone",
+      "kindName": "Phone wallpaper",
+      "logo": "icon",
+      "surface": "dark",
+      "name": "Phone wallpaper · Icon · Dark",
+      "description": "Voxel-confetti wallpaper for phones.",
       "w": 1170,
       "h": 2532,
       "url": "/branding/presskit/thingtime-wallpaper-phone-1170x2532.png",
       "bytes": 19986
     },
     {
-      "slug": "app-tile",
-      "name": "App tile",
-      "description": "Icon on white — ready for app grids and avatars.",
+      "slug": "app-tile-wordmark-light",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "wordmark",
       "surface": "light",
+      "name": "App tile · Wordmark · Light",
+      "description": "Square tile, ready for app grids and avatars.",
+      "w": 1024,
+      "h": 1024,
+      "url": "/branding/presskit/thingtime-app-tile-wordmark-light-1024x1024.png",
+      "bytes": 6682
+    },
+    {
+      "slug": "app-tile-wordmark-dark",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "wordmark",
+      "surface": "dark",
+      "name": "App tile · Wordmark · Dark",
+      "description": "Square tile, ready for app grids and avatars.",
+      "w": 1024,
+      "h": 1024,
+      "url": "/branding/presskit/thingtime-app-tile-wordmark-dark-1024x1024.png",
+      "bytes": 6741
+    },
+    {
+      "slug": "app-tile-square-light",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "square",
+      "surface": "light",
+      "name": "App tile · Square · Light",
+      "description": "Square tile, ready for app grids and avatars.",
+      "w": 1024,
+      "h": 1024,
+      "url": "/branding/presskit/thingtime-app-tile-square-light-1024x1024.png",
+      "bytes": 6671
+    },
+    {
+      "slug": "app-tile-square-dark",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "square",
+      "surface": "dark",
+      "name": "App tile · Square · Dark",
+      "description": "Square tile, ready for app grids and avatars.",
+      "w": 1024,
+      "h": 1024,
+      "url": "/branding/presskit/thingtime-app-tile-square-dark-1024x1024.png",
+      "bytes": 6727
+    },
+    {
+      "slug": "app-tile",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "icon",
+      "surface": "light",
+      "name": "App tile · Icon · Light",
+      "description": "Square tile, ready for app grids and avatars.",
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-1024x1024.png",
@@ -627,9 +2700,12 @@
     },
     {
       "slug": "app-tile-dark",
-      "name": "App tile · Dark",
-      "description": "Icon on Thingtime ink for dark surfaces.",
+      "kind": "app-tile",
+      "kindName": "App tile",
+      "logo": "icon",
       "surface": "dark",
+      "name": "App tile · Icon · Dark",
+      "description": "Square tile, ready for app grids and avatars.",
       "w": 1024,
       "h": 1024,
       "url": "/branding/presskit/thingtime-app-tile-dark-1024x1024.png",
@@ -637,13 +2713,29 @@
     },
     {
       "slug": "confetti-pattern",
-      "name": "Confetti pattern",
-      "description": "Voxel confetti field — backgrounds, slides, wrapping paper.",
+      "kind": "confetti-pattern",
+      "kindName": "Confetti pattern",
+      "logo": null,
       "surface": "light",
+      "name": "Confetti pattern · Light",
+      "description": "Voxel confetti field — backgrounds, slides, wrapping paper.",
       "w": 2048,
       "h": 2048,
       "url": "/branding/presskit/thingtime-confetti-pattern-2048x2048.png",
       "bytes": 38000
+    },
+    {
+      "slug": "confetti-pattern-dark",
+      "kind": "confetti-pattern",
+      "kindName": "Confetti pattern",
+      "logo": null,
+      "surface": "dark",
+      "name": "Confetti pattern · Dark",
+      "description": "Voxel confetti field — backgrounds, slides, wrapping paper.",
+      "w": 2048,
+      "h": 2048,
+      "url": "/branding/presskit/thingtime-confetti-pattern-dark-2048x2048.png",
+      "bytes": 39055
     }
   ]
 }

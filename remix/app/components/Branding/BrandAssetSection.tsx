@@ -3,12 +3,14 @@ import React from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { downloadBrandExport } from './brandingExport';
-import { buildLogoSvg } from './logoMatrix';
-import type { LogoColourMap, LogoMatrix } from './logoMatrix';
+import { BRAND_SURFACES, brandPngUrl, brandSvgUrl, buildVariantSvg } from './logoVariants';
+import type { BrandLogoVariant, BrandSurfaceKey } from './logoVariants';
 
-// One full-width brand section per logo variant (branding redesign of
-// claude-todo/08 §3): big clean preview, ready-made file grid from the
-// committed manifest, and a tucked-away custom exporter with per-side padding.
+// One brand section per logo cut (branding redesign of claude-todo/08 §3):
+// a clean preview on the chosen background, ready-made files straight from
+// the committed manifests, and two tucked-away disclosures — the full size
+// ladder and a custom exporter with per-side padding. `compact` is the same
+// section at gallery density for the fun cuts.
 
 type ManifestPng = { w: number; h: number; url: string; bytes: number };
 export type ManifestVariant = {
@@ -18,11 +20,15 @@ export type ManifestVariant = {
   svg: { url: string; bytes: number };
   pngs: ManifestPng[];
 };
+// brandingSurfaces.generated.json: the light/dark ladders as [w, h, bytes].
+export type ManifestSurface = { aspect: { cols: number; rows: number }; svgBytes: number; pngs: number[][] };
+export type ManifestSurfaces = Partial<Record<'light' | 'dark', ManifestSurface>>;
 
 const MONO = 'var(--tt-font-mono, "JetBrains Mono", monospace)';
 const HEAD = 'var(--tt-font-heading, "Space Grotesk", sans-serif)';
 
-const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+export const formatBytes = (bytes: number) =>
+  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 export const Eyebrow = ({ children }: { children: React.ReactNode }) => (
   <Text fontFamily={MONO} fontSize="11px" fontWeight={600} letterSpacing="0.16em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
@@ -61,18 +67,22 @@ const QuietButton = (props: React.ComponentProps<typeof Button>) => (
 );
 
 // Design-language segmented control (Prism): soft container, white active pill.
-const Segmented = <T extends string>({
+// `onPanel` swaps the container for a translucent tint so the control still
+// reads when it sits on a surface-alt preview panel.
+export const Segmented = <T extends string>({
   options,
   value,
   onChange,
-  label
+  label,
+  onPanel = false
 }: {
   options: Array<{ value: T; label: string }>;
   value: T;
   onChange: (next: T) => void;
   label: string;
+  onPanel?: boolean;
 }) => (
-  <Flex role="group" aria-label={label} bg="var(--tt-surface-alt, #f1f1f3)" borderRadius="11px" p="3px" width="fit-content">
+  <Flex role="group" aria-label={label} bg={onPanel ? 'rgba(128,128,140,.16)' : 'var(--tt-surface-alt, #f1f1f3)'} borderRadius="11px" p="3px" width="fit-content" maxW="100%">
     {options.map((option) => {
       const active = option.value === value;
       return (
@@ -80,6 +90,7 @@ const Segmented = <T extends string>({
           as="button"
           type="button"
           key={option.value}
+          aria-pressed={active}
           onClick={() => onChange(option.value)}
           px="12px"
           height="30px"
@@ -87,6 +98,7 @@ const Segmented = <T extends string>({
           fontSize="13px"
           fontWeight={600}
           fontFamily="inherit"
+          whiteSpace="nowrap"
           color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-muted, #9a9aa6)'}
           bg={active ? 'var(--tt-card, #fff)' : 'transparent'}
           boxShadow={active ? '0 1px 2px rgba(0,0,0,.06)' : 'none'}
@@ -141,34 +153,59 @@ const NumberBox = ({
   />
 );
 
-const BACKGROUNDS: Array<{ value: string; label: string }> = [
-  { value: 'transparent', label: 'Transparent' },
-  { value: '#ffffff', label: 'White' },
-  { value: '#16161a', label: 'Ink' }
-];
+const Chevron = ({ open }: { open: boolean }) => (
+  <Box as="span" ml="8px" transform={open ? 'rotate(180deg)' : 'none'} transition="transform 160ms ease" aria-hidden>
+    ⌄
+  </Box>
+);
+
+const SURFACE_OPTIONS = BRAND_SURFACES.map((surface) => ({ value: surface.key, label: surface.label }));
+// The custom exporter bakes a CSS colour, so its options carry the colour itself.
+const EXPORT_BACKGROUNDS = BRAND_SURFACES.map((surface) => ({ value: surface.colour ?? 'transparent', label: surface.label }));
+
+const FileChip = ({ href, title, label, children }: { href: string; title: string; label: string; children: React.ReactNode }) => (
+  <Flex
+    as="a"
+    href={href}
+    download
+    flexDir="column"
+    alignItems="center"
+    gap="6px"
+    px="12px"
+    py="10px"
+    borderRadius="12px"
+    _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+    transition="background 140ms ease"
+    title={title}
+  >
+    <Flex height="40px" alignItems="center">
+      {children}
+    </Flex>
+    <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
+      {label}
+    </Text>
+  </Flex>
+);
 
 export const BrandAssetSection = ({
+  variant,
   eyebrow,
-  title,
-  description,
-  slug,
-  matrix,
-  colourMap,
   manifest,
-  alt
+  surfaces,
+  compact = false
 }: {
+  variant: BrandLogoVariant;
   eyebrow: string;
-  title: string;
-  description: string;
-  slug: string;
-  matrix: LogoMatrix;
-  colourMap: LogoColourMap;
   manifest?: ManifestVariant;
-  // Descriptive alt text for image search; defaults to `Thingtime <title> logo`.
-  alt?: string;
+  surfaces?: ManifestSurfaces;
+  compact?: boolean;
 }) => {
   const lopu = useLopu();
-  const [panel, setPanel] = React.useState<'light' | 'dark'>('light');
+  const { slug, title, description, matrix, colourMap } = variant;
+  const [surface, setSurface] = React.useState<BrandSurfaceKey>('transparent');
+  const [sizesOpen, setSizesOpen] = React.useState(false);
+  // the ladder is ~20 thumbnails per cut: mount it the first time it opens
+  const [sizesMounted, setSizesMounted] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [format, setFormat] = React.useState<'svg' | 'png'>('png');
   const [width, setWidth] = React.useState(1024);
@@ -176,11 +213,23 @@ export const BrandAssetSection = ({
   const [perSide, setPerSide] = React.useState(false);
   const [pads, setPads] = React.useState({ top: 0, right: 0, bottom: 0, left: 0 });
   const [background, setBackground] = React.useState('transparent');
+  const [canvas, setCanvas] = React.useState<'framed' | 'tight'>('framed');
   const [busy, setBusy] = React.useState(false);
 
-  const { svg, columns, rows } = React.useMemo(() => buildLogoSvg({ matrix, colourMap }), [matrix, colourMap]);
-  const previewUri = React.useMemo(() => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, [svg]);
-  const horizontal = columns > rows;
+  const art = React.useMemo(() => buildVariantSvg(variant), [variant]);
+  const shown = React.useMemo(() => buildVariantSvg(variant, surface), [variant, surface]);
+  const previewUri = React.useMemo(() => `data:image/svg+xml;utf8,${encodeURIComponent(shown.svg)}`, [shown.svg]);
+
+  // The committed files for the chosen background, in one shape.
+  const files = React.useMemo(() => {
+    if (surface === 'transparent') return manifest ? { svg: manifest.svg, pngs: manifest.pngs } : null;
+    const entry = surfaces?.[surface];
+    if (!entry) return null;
+    return {
+      svg: { url: brandSvgUrl(slug, surface), bytes: entry.svgBytes },
+      pngs: entry.pngs.map(([w, h, bytes]) => ({ w, h, bytes, url: brandPngUrl(slug, surface, w, h) }))
+    };
+  }, [manifest, surfaces, slug, surface]);
 
   const padding = perSide ? pads : { top: padAll, right: padAll, bottom: padAll, left: padAll };
 
@@ -194,7 +243,9 @@ export const BrandAssetSection = ({
         format,
         width,
         padding,
-        background: background === 'transparent' ? undefined : background
+        background: background === 'transparent' ? undefined : background,
+        trim: variant.trim || canvas === 'tight',
+        mergeRuns: variant.unit > 1
       });
       lopu({ title: 'Exported ✨', description: filename, status: 'success' });
     } catch (err) {
@@ -210,86 +261,107 @@ export const BrandAssetSection = ({
 
   const copySvgCode = async () => {
     try {
-      await navigator.clipboard.writeText(svg);
+      await navigator.clipboard.writeText(shown.svg);
       lopu({ title: 'SVG copied 🌈', description: 'The SVG code is on your clipboard.', status: 'success' });
     } catch {
       lopu({ title: 'Copy failed', description: 'Your browser blocked clipboard access 🥺', status: 'error' });
     }
   };
 
-  const defaultPng = manifest?.pngs.find((png) => png.w === 1024) ?? manifest?.pngs[manifest.pngs.length - 1];
+  const defaultPng = files?.pngs.find((png) => png.w === 1024) ?? files?.pngs[files.pngs.length - 1];
+  // Ladder chips link to every size, but only the small files are shown as
+  // themselves (so a 10px file looks 10px); anything larger borrows one small
+  // thumbnail rather than making the browser decode a 10000px bitmap to draw
+  // a 32px chip.
+  const chipThumb = files?.pngs.find((png) => png.w >= 128) ?? files?.pngs[files.pngs.length - 1];
+  const chipFrame: React.CSSProperties =
+    surface === 'transparent' ? {} : { borderRadius: '3px', boxShadow: '0 0 0 1px rgba(128,128,140,.28)' };
   // Crawlable preview: search engines never index data: URIs, so the hero
   // <img> points at the committed PNG (SVG fallback) whenever the ready-made
-  // manifest has this variant; the client-built SVG only covers custom
-  // matrices that have no generated file. Both render identical pixels.
-  const previewSrc = defaultPng?.url ?? manifest?.svg.url ?? previewUri;
-  const previewAlt = alt ?? `Thingtime ${title} logo`;
+  // manifest has this cut; the client-built SVG only covers anything without
+  // a generated file. Both render identical pixels.
+  const previewSrc = defaultPng?.url ?? files?.svg.url ?? previewUri;
+  const surfaceLabel = BRAND_SURFACES.find((entry) => entry.key === surface)?.label ?? 'Transparent';
+  const fileNoun = surface === 'transparent' ? 'transparent' : `${surfaceLabel.toLowerCase()}-background`;
+  const previewAlt = surface === 'transparent' ? variant.alt : `${variant.alt}, on a ${surfaceLabel.toLowerCase()} background`;
+
+  // Preview size: the artwork keeps one size whichever background is chosen;
+  // a backdrop only adds its breathing room around it (within the panel caps).
+  const artMaxW = compact ? 400 : 640;
+  const artMaxH = variant.trim ? (compact ? 132 : 208) : compact ? 200 : 340;
+  const fileMaxW = compact ? 440 : 760;
+  const fileMaxH = compact ? 200 : 340;
+  const artWidth = Math.min(artMaxW, artMaxH * (art.totalColumns / art.totalRows));
+  const previewWidth = Math.round(
+    Math.min(artWidth * (shown.totalColumns / art.totalColumns), fileMaxH * (shown.totalColumns / shown.totalRows), fileMaxW)
+  );
 
   return (
-    <Box as="section" id={slug} pt={{ base: '72px', md: '112px' }}>
+    <Box as="section" id={slug} pt={compact ? 0 : { base: '72px', md: '112px' }}>
       <Eyebrow>{eyebrow}</Eyebrow>
       <Heading
-        as="h2"
+        as={compact ? 'h3' : 'h2'}
         fontFamily={HEAD}
         fontWeight={700}
         letterSpacing="-0.025em"
-        fontSize="clamp(28px, 3.4vw, 42px)"
+        fontSize={compact ? 'clamp(21px, 2.2vw, 26px)' : 'clamp(28px, 3.4vw, 42px)'}
         color="var(--tt-ink, #16161a)"
-        mt="10px"
+        mt={compact ? '8px' : '10px'}
       >
         {title}
       </Heading>
-      <Text mt="12px" mb={{ base: '20px', md: '28px' }} maxW="620px" fontSize={{ base: '15px', md: '16px' }} lineHeight={1.65} color="var(--tt-text, #5a5a66)">
+      <Text
+        mt={compact ? '8px' : '12px'}
+        mb={compact ? '16px' : { base: '20px', md: '28px' }}
+        maxW="620px"
+        fontSize={compact ? '14.5px' : { base: '15px', md: '16px' }}
+        lineHeight={1.65}
+        color="var(--tt-text, #5a5a66)"
+      >
         {description}
       </Text>
 
       {/* Preview: one soft panel, no borders, no checkerboards — the asset is the hero. */}
       <Flex
-        position="relative"
+        flexDir="column"
         alignItems="center"
-        justifyContent="center"
-        borderRadius={{ base: '20px', md: '28px' }}
-        minH={{ base: '220px', md: '360px' }}
-        py={{ base: '48px', md: '72px' }}
-        px={{ base: '24px', md: '48px' }}
-        bg={panel === 'light' ? 'var(--tt-surface-alt, #f5f5f7)' : '#16161c'}
-        transition="background 200ms ease"
+        borderRadius={compact ? '20px' : { base: '20px', md: '28px' }}
+        // gallery panels share one height so a row of cards lines up
+        minH={compact ? { base: '220px', md: '320px' } : { base: '220px', md: '360px' }}
+        pt={compact ? '14px' : { base: '14px', md: '20px' }}
+        pb={compact ? '40px' : { base: '48px', md: '72px' }}
+        px={compact ? '20px' : { base: '20px', md: '48px' }}
+        bg="var(--tt-surface-alt, #f5f5f7)"
       >
-        <img
-          src={previewSrc}
-          alt={previewAlt}
-          width={defaultPng?.w ?? columns}
-          height={defaultPng?.h ?? rows}
-          style={{
-            imageRendering: 'pixelated',
-            width: horizontal ? 'min(100%, 640px)' : 'min(46%, 208px)',
-            display: 'block'
-          }}
-        />
-        <Flex position="absolute" top={{ base: '14px', md: '20px' }} right={{ base: '14px', md: '20px' }} gap="8px" aria-label="Preview surface">
-          {(['light', 'dark'] as const).map((mode) => (
-            <Box
-              as="button"
-              type="button"
-              key={mode}
-              aria-label={`Preview on ${mode} surface`}
-              aria-pressed={panel === mode}
-              onClick={() => setPanel(mode)}
-              width="22px"
-              height="22px"
-              borderRadius="full"
-              bg={mode === 'light' ? '#ffffff' : '#16161a'}
-              boxShadow={panel === mode ? '0 0 0 2px var(--tt-rainbow-4, #47b5e6)' : 'inset 0 0 0 1px rgba(128,128,140,.35)'}
-              transition="box-shadow 140ms ease"
-            />
-          ))}
+        <Flex width="100%" justifyContent="flex-end">
+          <Segmented label={`${title} background`} options={SURFACE_OPTIONS} value={surface} onChange={setSurface} onPanel />
+        </Flex>
+        <Flex flex="1" width="100%" alignItems="center" justifyContent="center" pt={compact ? '24px' : { base: '28px', md: '36px' }}>
+          <img
+            src={previewSrc}
+            alt={previewAlt}
+            width={defaultPng?.w ?? shown.totalColumns}
+            height={defaultPng?.h ?? shown.totalRows}
+            data-testid={`preview-${slug}`}
+            style={{
+              // integer-scaled voxels stay crisp; the fine-grained cuts and
+              // the solid-background files look better smoothly downscaled
+              imageRendering: surface === 'transparent' && variant.unit === 1 ? 'pixelated' : 'auto',
+              width: `${previewWidth}px`,
+              maxWidth: '100%',
+              height: 'auto',
+              display: 'block',
+              borderRadius: surface === 'transparent' ? 0 : compact ? '12px' : '16px',
+              boxShadow: surface === 'transparent' ? 'none' : '0 1px 3px rgba(20,20,40,.10), 0 18px 44px -24px rgba(20,20,40,.35)'
+            }}
+          />
         </Flex>
       </Flex>
 
-      {/* Primary downloads + the tucked-away custom exporter trigger. */}
-      <Flex mt="18px" gap="10px" alignItems="center" flexWrap="wrap">
-        <PrimaryButton as="a" href={manifest?.svg.url} download data-testid={`download-svg-${slug}`}>
-          Download SVG
+      {/* Primary downloads for the chosen background + the two disclosures. */}
+      <Flex mt={compact ? '14px' : '18px'} gap={compact ? '8px' : '10px'} alignItems="center" flexWrap="wrap">
+        <PrimaryButton as="a" href={files?.svg.url} download px={compact ? 4 : 5} data-testid={`download-svg-${slug}`}>
+          {compact ? 'SVG ↓' : 'Download SVG'}
         </PrimaryButton>
         {defaultPng ? (
           <PrimaryButton
@@ -300,20 +372,92 @@ export const BrandAssetSection = ({
             color="var(--tt-ink, #16161a)"
             boxShadow="inset 0 0 0 1px #e2e2e6"
             _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+            px={compact ? 4 : 5}
             data-testid={`download-png-${slug}`}
           >
             PNG · {defaultPng.w}px
           </PrimaryButton>
         ) : null}
-        <QuietButton onClick={copySvgCode}>Copy SVG code</QuietButton>
+        <QuietButton onClick={copySvgCode} px={compact ? 3 : 4}>
+          {compact ? 'Copy SVG' : 'Copy SVG code'}
+        </QuietButton>
         <Box flex="1" />
-        <QuietButton onClick={() => setExportOpen((open) => !open)} aria-expanded={exportOpen} data-testid={`custom-export-toggle-${slug}`}>
-          Custom export
-          <Box as="span" ml="8px" transform={exportOpen ? 'rotate(180deg)' : 'none'} transition="transform 160ms ease" aria-hidden>
-            ⌄
-          </Box>
+        {files ? (
+          <QuietButton
+            onClick={() => {
+              setSizesMounted(true);
+              setSizesOpen((open) => !open);
+            }}
+            aria-expanded={sizesOpen}
+            px={compact ? 3 : 4}
+            data-testid={`sizes-toggle-${slug}`}
+          >
+            All sizes
+            <Chevron open={sizesOpen} />
+          </QuietButton>
+        ) : null}
+        <QuietButton
+          onClick={() => setExportOpen((open) => !open)}
+          aria-expanded={exportOpen}
+          aria-label={`Custom export for ${title}`}
+          px={compact ? 3 : 4}
+          data-testid={`custom-export-toggle-${slug}`}
+        >
+          {compact ? 'Custom' : 'Custom export'}
+          <Chevron open={exportOpen} />
         </QuietButton>
       </Flex>
+
+      {/* Ready-made ladder — real committed files, so they're linkable + indexable. */}
+      {files ? (
+        <Collapse in={sizesOpen} animateOpacity>
+          {sizesMounted ? (
+            <Box mt="16px" p={{ base: '12px', md: '16px' }} borderRadius="16px" bg="var(--tt-surface, #fafafb)">
+              <Text fontFamily={MONO} fontSize="11px" fontWeight={600} letterSpacing="0.14em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" mb="8px" px="12px">
+                Ready-made sizes · {surfaceLabel}
+              </Text>
+              {/* One line of SVG, one line of PNGs — each chip labelled
+                  format · dimensions · filesize. */}
+              <Flex flexDir="column" rowGap="6px">
+                <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
+                  <FileChip href={files.svg.url} title={`Scalable SVG · ${formatBytes(files.svg.bytes)}`} label={`SVG · scalable · ${formatBytes(files.svg.bytes)}`}>
+                    <img
+                      src={files.svg.url}
+                      alt={`Thingtime ${variant.name} logo — scalable ${fileNoun} SVG`}
+                      loading="lazy"
+                      decoding="async"
+                      style={{ maxHeight: '32px', maxWidth: '84px', display: 'block', ...chipFrame }}
+                    />
+                  </FileChip>
+                </Flex>
+                <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
+                  {files.pngs.map((png) => {
+                    const thumb = chipThumb && png.w > chipThumb.w ? chipThumb : png;
+                    return (
+                      <FileChip
+                        key={png.url}
+                        href={png.url}
+                        title={`PNG · ${png.w}×${png.h} · ${formatBytes(png.bytes)}`}
+                        label={`PNG · ${png.w}×${png.h} · ${formatBytes(png.bytes)}`}
+                      >
+                        <img
+                          src={thumb.url}
+                          alt={`Thingtime ${variant.name} logo — ${png.w}×${png.h} ${fileNoun} PNG`}
+                          width={thumb.w}
+                          height={thumb.h}
+                          loading="lazy"
+                          decoding="async"
+                          style={{ maxHeight: '32px', maxWidth: '84px', width: 'auto', height: 'auto', display: 'block', ...chipFrame }}
+                        />
+                      </FileChip>
+                    );
+                  })}
+                </Flex>
+              </Flex>
+            </Box>
+          ) : null}
+        </Collapse>
+      ) : null}
 
       <Collapse in={exportOpen} animateOpacity>
         <Flex mt="16px" p={{ base: '16px', md: '20px' }} borderRadius="16px" bg="var(--tt-surface, #fafafb)" gap={{ base: '16px', md: '24px' }} flexWrap="wrap" alignItems="flex-end">
@@ -331,6 +475,19 @@ export const BrandAssetSection = ({
           <Field label="Width px">
             <NumberBox ariaLabel="Export width in pixels" value={width} onChange={setWidth} min={1} max={10000} />
           </Field>
+          {variant.trim ? null : (
+            <Field label="Canvas">
+              <Segmented
+                label="Export canvas"
+                value={canvas}
+                onChange={setCanvas}
+                options={[
+                  { value: 'framed', label: 'Square' },
+                  { value: 'tight', label: 'Trimmed' }
+                ]}
+              />
+            </Field>
+          )}
           <Field label={perSide ? 'Padding px · sides' : 'Padding px'}>
             <Flex gap="8px" alignItems="center" flexWrap="wrap">
               {perSide ? (
@@ -366,83 +523,13 @@ export const BrandAssetSection = ({
             </Flex>
           </Field>
           <Field label="Background">
-            <Segmented label="Export background" value={background} onChange={setBackground} options={BACKGROUNDS} />
+            <Segmented label="Export background" value={background} onChange={setBackground} options={EXPORT_BACKGROUNDS} />
           </Field>
           <PrimaryButton onClick={runExport} isLoading={busy} data-testid={`custom-export-download-${slug}`}>
             Download
           </PrimaryButton>
         </Flex>
       </Collapse>
-
-      {/* Ready-made ladder — real committed files, so they're linkable + indexable. */}
-      {manifest ? (
-        <Box mt={{ base: '28px', md: '36px' }}>
-          <Text fontFamily={MONO} fontSize="11px" fontWeight={600} letterSpacing="0.14em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" mb="12px">
-            Ready-made sizes
-          </Text>
-          {/* One line of SVG variations, one line of PNGs — each chip labelled
-              format · dimensions · filesize. */}
-          <Flex flexDir="column" rowGap="6px">
-            <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
-              <Flex
-                as="a"
-                href={manifest.svg.url}
-                download
-                flexDir="column"
-                alignItems="center"
-                gap="6px"
-                px="12px"
-                py="10px"
-                borderRadius="12px"
-                _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-                transition="background 140ms ease"
-                title={`Scalable SVG · ${formatBytes(manifest.svg.bytes)}`}
-              >
-                <Flex height="40px" alignItems="center">
-                  <img src={manifest.svg.url} alt={`Thingtime ${title} logo — scalable SVG`} loading="lazy" decoding="async" style={{ maxHeight: '32px', maxWidth: '84px', display: 'block' }} />
-                </Flex>
-                <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
-                  SVG · scalable · {formatBytes(manifest.svg.bytes)}
-                </Text>
-              </Flex>
-            </Flex>
-            <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
-              {manifest.pngs.map((png) => (
-                <Flex
-                  key={png.url}
-                  as="a"
-                  href={png.url}
-                  download
-                  flexDir="column"
-                  alignItems="center"
-                  gap="6px"
-                  px="12px"
-                  py="10px"
-                  borderRadius="12px"
-                  _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-                  transition="background 140ms ease"
-                  title={`PNG · ${png.w}×${png.h} · ${formatBytes(png.bytes)}`}
-                >
-                  <Flex height="40px" alignItems="center">
-                    <img
-                      src={png.url}
-                      alt={`Thingtime ${title} logo — ${png.w}×${png.h} transparent PNG`}
-                      width={png.w}
-                      height={png.h}
-                      loading="lazy"
-                      decoding="async"
-                      style={{ maxHeight: '32px', maxWidth: '84px', width: 'auto', height: 'auto', display: 'block' }}
-                    />
-                  </Flex>
-                  <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
-                    PNG · {png.w}×{png.h} · {formatBytes(png.bytes)}
-                  </Text>
-                </Flex>
-              ))}
-            </Flex>
-          </Flex>
-        </Box>
-      ) : null}
     </Box>
   );
 };
