@@ -1,4 +1,4 @@
-import { attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
+import { attachmentSourceLivePhoto, attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
@@ -286,7 +286,7 @@ export const useAttachmentUploads = (
 					// A native preview is a bounded thumbnail, never the original file.
 					const preview = await attachmentSourcePreview(file).catch(() => null);
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
-					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview) });
+					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview), previewContentType: preview.type });
 				}
 				if (convertHeic && !prepareLocalImage && !isAttachmentSourceFile(file) && isHeicImage(file)) {
 					file = await prepareHeicImage(file);
@@ -322,6 +322,7 @@ export const useAttachmentUploads = (
 							filename: file.name,
 							contentType: file.type || 'application/octet-stream',
 							sizeBytes: file.size,
+							...(attachmentSourceLivePhoto(existing?.sourceFile || file) ? { livePhoto: attachmentSourceLivePhoto(existing?.sourceFile || file) } : {}),
 							...(purpose === 'post' ? {} : { purpose })
 						},
 						{ ...desktop?.scope, signal: controller.signal }

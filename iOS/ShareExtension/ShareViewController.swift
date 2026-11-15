@@ -18,6 +18,11 @@ final class ShareViewController: UIViewController, WKNavigationDelegate, WKUIDel
     private var batchId: UUID?
     private var origin: URL?
     private var generation = UUID()
+    private var renderCheck: Task<Void, Never>?
+    private var currentNavigation: WKNavigation?
+    private var committedNavigation: WKNavigation?
+    private var slowImportNotice: Task<Void, Never>?
+    private var importWarning: String?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -71,6 +76,12 @@ final class ShareViewController: UIViewController, WKNavigationDelegate, WKUIDel
         progressView.progress = 0; progressView.isHidden = false
         retryButton.isHidden = true; cancelButton.isEnabled = true
         let token = ShareImportCancellation(); cancellation = token
+        slowImportNotice?.cancel()
+        slowImportNotice = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard let self, !Task.isCancelled, self.generation == attempt, self.saving else { return }
+            self.messageLabel.text = "Preparing the original media is taking longer than usual. You can keep waiting or Cancel."
+        }
         let items = extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
         let sources = items.flatMap { $0.attachments ?? [] }.map { ProviderShareItem(provider: $0) }
         let text = items.compactMap { $0.attributedContentText?.string }.filter { !$0.isEmpty }
@@ -84,17 +95,32 @@ final class ShareViewController: UIViewController, WKNavigationDelegate, WKUIDel
                     }
                 }
                 guard generation == attempt else { return }
+                slowImportNotice?.cancel()
                 saving = false; batchId = id
+                importWarning = try? ShareComposerMetadata.read(from: ShareInbox.shared().composerDirectory(id: id)).warnings?.joined(separator: "\n")
                 showComposer()
             } catch is CancellationError {
+                guard generation == attempt else { return }
+                slowImportNotice?.cancel()
                 saving = false
                 extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
-            } catch { saving = false; showError(error.localizedDescription) }
+            } catch {
+                guard generation == attempt else { return }
+                slowImportNotice?.cancel()
+                saving = false; showError(error.localizedDescription)
+            }
         }
     }
     private func showComposer() {
         guard let origin, let batchId, let target = ShareComposerSession.composerURL(origin: origin, requestId: batchId) else { return }
-        if let webView { status.isHidden = false; progressView.isHidden = true; messageLabel.text = "Opening your post…"; retryButton.isHidden = true; webView.load(URLRequest(url: target)); return }
+        renderCheck?.cancel()
+        if let webView {
+            status.isHidden = false; progressView.isHidden = true; messageLabel.text = importWarning ?? "Opening your post…"; retryButton.isHidden = true
+            committedNavigation = nil
+            currentNavigation = webView.load(URLRequest(url: target))
+            watchComposer(webView)
+            return
+        }
         let bridge = ShareComposerBridge(origin: origin, requestId: batchId)
         bridge.onComplete = { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) }
         self.bridge = bridge
@@ -112,20 +138,46 @@ final class ShareViewController: UIViewController, WKNavigationDelegate, WKUIDel
             webView.leadingAnchor.constraint(equalTo: webContainer.leadingAnchor), webView.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor),
             webView.topAnchor.constraint(equalTo: webContainer.topAnchor), webView.bottomAnchor.constraint(equalTo: webContainer.bottomAnchor)
         ])
-        progressView.isHidden = true; messageLabel.text = "Opening your post…"
-        webView.load(URLRequest(url: target))
+        progressView.isHidden = true; messageLabel.text = importWarning ?? "Opening your post…"
+        committedNavigation = nil
+        currentNavigation = webView.load(URLRequest(url: target))
+        watchComposer(webView)
+    }
+    private func watchComposer(_ webView: WKWebView) {
+        renderCheck = Task { @MainActor [weak self, weak webView] in
+            for _ in 0..<30 {
+                guard let self, let webView, !Task.isCancelled, self.webView === webView else { return }
+                guard let navigation = self.currentNavigation, self.committedNavigation === navigation else {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
+                let rendered = (try? await webView.evaluateJavaScript("Boolean(document.body && document.body.innerText.trim().length > 0)")) as? Bool == true
+                guard self.currentNavigation === navigation else { return }
+                if rendered {
+                    self.status.isHidden = true
+                    self.titleLabel.text = "Thingtime"
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.showError("The post composer did not appear. Your shared content is safe on this device. Try Again to reopen it.")
+        }
+    }
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if self.webView === webView, currentNavigation === navigation { committedNavigation = navigation }
     }
     private func showError(_ message: String) {
         status.isHidden = false; progressView.isHidden = true
         messageLabel.text = message; retryButton.isHidden = false; cancelButton.isEnabled = true
         UIAccessibility.post(notification: .announcement, argument: message)
     }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { status.isHidden = true; titleLabel.text = "Thingtime" }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { showError("Couldn’t open your post. Your shared content is safe on this device. Try again when connected.") }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { /* The SPA may still be an empty white shell. The bounded render check owns readiness. */ }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { renderCheck?.cancel(); showError("Couldn’t open your post. Your shared content is safe on this device. Try again when connected.") }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         if (error as NSError).code != NSURLErrorCancelled { self.webView(webView, didFail: navigation, withError: error) }
     }
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { showError("The composer was interrupted. Your shared content is safe. Try again to continue.") }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { renderCheck?.cancel(); showError("The composer was interrupted. Your shared content is safe. Try again to continue.") }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url, url.user == nil, url.password == nil,
               url.scheme == "https" || (origin.map { ShareComposerSession.origin(url) == ShareComposerSession.origin($0) } == true) else { decisionHandler(.cancel); return }
@@ -138,8 +190,14 @@ final class ShareViewController: UIViewController, WKNavigationDelegate, WKUIDel
     }
     @objc private func retryTapped() { if batchId != nil { showComposer() } else { startPreparing() } }
     @objc private func cancelTapped() {
-        if saving { cancellation?.cancel(); cancelButton.isEnabled = false }
+        if saving {
+            generation = UUID()
+            saving = false
+            slowImportNotice?.cancel()
+            cancellation?.cancel()
+            extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
+        }
         else { extensionContext?.completeRequest(returningItems: nil) } // Keep the durable draft for recovery.
     }
-    deinit { cancellation?.cancel() }
+    deinit { cancellation?.cancel(); renderCheck?.cancel(); slowImportNotice?.cancel() }
 }

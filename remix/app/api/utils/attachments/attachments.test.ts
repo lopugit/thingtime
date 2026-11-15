@@ -554,6 +554,46 @@ test('stable requestId makes reservation and MPU creation idempotent while rejec
 	assert.equal(creates, 2);
 });
 
+test('Live Photo upload metadata is purpose-bound, validated and fenced on retry', async () => {
+ const stored = new Map<string, AttachmentDoc>();
+ const store: any = {
+  listExpiredOwned: async () => [], getById: async (id: string) => stored.get(id) || null,
+  reservePending: async (input: any) => {
+   const doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId, crystal: input.crystal,
+    objectSizeBytes: input.crystal.size, objectKey: input.objectKey,
+    attachmentRequestFingerprint: input.requestFingerprint, attachmentExpiresAt: input.expiresAt });
+   stored.set(input.id, doc); return doc;
+  },
+  setUploadId: async (_ownerId: string, id: string, uploadId: string) => {
+   const doc = { ...stored.get(id)!, uploadId }; stored.set(id, doc); return doc;
+  }
+ };
+ const service = createAttachmentService({ store, getS3: () => noopS3(), now: () => now, customMongoActive: () => false });
+ const livePhoto = { pairId: '166b6596-37e9-4f51-b589-cf90c912d54d', role: 'photo' };
+ const request = { requestId: 'pair-request', filename: 'still.jpeg', contentType: 'image/jpeg', sizeBytes: 42, livePhoto };
+ const first = await service.start('user-1', request);
+ assert.equal(first.ok, true);
+ assert.deepEqual(await service.start('user-1', request), first);
+ const saved = stored.get(attachmentIdForRequest('user-1', request.requestId));
+ assert.deepEqual(saved?.crystal.livePhoto, livePhoto);
+ assert.deepEqual(await service.start('user-1', { ...request, livePhoto: { ...livePhoto, role: 'motion' } }),
+  { ok: false, status: 400, error: 'Live Photo pairing requires supported image and motion uploads' });
+ const changedPair = await service.start('user-1', { ...request, livePhoto: { ...livePhoto, pairId: '266b6596-37e9-4f51-b589-cf90c912d54d' } });
+ assert.equal(changedPair.ok, false);
+ if (!changedPair.ok) assert.equal(changedPair.status, 409);
+ for (const invalid of [
+  { ...request, purpose: 'profile' }, { ...request, contentType: 'text/html' }, { ...request, contentType: 'image/heic' },
+  { ...request, livePhoto: { pairId: 'bad', role: 'photo' } }
+ ]) {
+  const result = await service.start('user-1', invalid);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 400);
+ }
+ const savedFile = await service.start('user-1', { ...request, purpose: 'file', requestId: 'pair-file-request' });
+ assert.equal(savedFile.ok, true);
+ assert.deepEqual(stored.get(attachmentIdForRequest('user-1', 'pair-file-request'))?.crystal.livePhoto, livePhoto);
+});
+
 test('concurrent stable start aborts its redundant MPU and returns the persisted winner plan', async () => {
 	const reserved = attachmentDoc({
 		shareId: 'stable-race-id',

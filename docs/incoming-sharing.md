@@ -19,9 +19,32 @@ cannot exceed what the source application actually offers. Files retain original
 bytes; an image thumbnail is only a preview. Relative directories and Live Photo
 resources remain distinct.
 
+Live Photos carry optional `livePhoto: { pairId, role: "photo" | "motion" }`
+metadata from one successfully exported native resource pair through the normal
+attachment upload and read paths. Pairing never relies on filenames. Feed and
+lightbox viewers combine only an unambiguous authorized pair: holding the photo
+plays its motion, releasing or scrolling restores the still, and a short tap
+opens the viewer. The original image and motion file remain downloadable.
+Older uploads without pairing metadata remain separate attachments.
+For HEIC originals, native intake keeps the original file unchanged and generates
+a bounded JPEG display copy from the same still resource. Only that display copy
+and the original motion are paired; the HEIC original remains separately downloadable.
+
+When a sender advertises Live Photo support but cannot vend its resources, the
+importer tries its other supported representations. A readable still is kept
+with an explicit motion-unavailable warning in the composer; it is never labelled
+as a playable Live Photo. Missing originals remain a reported source limitation.
+The native composer waits for rendered content after navigation and offers
+recovery if the document stays empty or its web process is interrupted.
+
 The web bridge supplies lazy file sources to the ordinary multipart uploader.
 Each native read is at most 256 KiB; this is a processing chunk, not a total-size limit. Image previews use a bounded 640-pixel JPEG,
-not a full-file base64 transfer. Existing upload approval, purpose, quota,
+not a full-file base64 transfer. Video previews are bounded first-frame images;
+their MIME type keeps the composer from treating a JPEG poster as a video file.
+Browser video thumbnails seek a small offset while paused so Safari paints a
+frame. Sharp image variants load as soon as their tile enters view; a stalled
+variant falls back to the original and failed originals expose retry feedback.
+Existing upload approval, purpose, quota,
 moderation, authorization and exact-version content checks still apply.
 
 Message uses normal Messenger recipient selection, conversation view and Send.
@@ -62,7 +85,8 @@ long values introduced here.
 
 ## Contracts and recovery
 
-The native `thingtimeShare` bridge negotiates version 1.0.0 and exact origin /
+The native `thingtimeShare` bridge advertises version 1.1.0 (compatible with the
+client's 1.0.0 minimum) and negotiates exact origin /
 request identity before reading content. Only the main frame at that origin may
 call it. File reads use opaque IDs within that batch, never arbitrary paths.
 Submission state is bound to the account, origin, destination and operation.

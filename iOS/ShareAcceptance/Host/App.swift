@@ -45,8 +45,8 @@ final class FixtureController: UIViewController {
     @objc func seedLivePhoto() {
         Task { @MainActor in
             let label = UILabel(frame: CGRect(x: 20, y: 380, width: 350, height: 160))
-            label.numberOfLines = 0; view.addSubview(label)
-            do { let id = try await LivePhotoFixture.seed(); label.text = "Live Photo seeded: " + id; label.accessibilityIdentifier = "live-photo-seeded" }
+            label.numberOfLines = 0; label.text = "Requesting Photos access…"; label.accessibilityIdentifier = "live-photo-progress"; view.addSubview(label)
+            do { let id = try await LivePhotoFixture.seed { label.text = $0 }; label.text = "Live Photo seeded: " + id; label.accessibilityIdentifier = "live-photo-seeded" }
             catch { label.text = "Live Photo failed: \(error)"; label.accessibilityIdentifier = "live-photo-failed" }
         }
     }
