@@ -35,8 +35,10 @@ try {
 		} catch { response.writeHead(404); response.end(); }
 	});
 	server.listen(port, '127.0.0.1'); await once(server, 'listening');
-	const { chromium } = process.env.TT_PLAYWRIGHT_MODULE ? await import(process.env.TT_PLAYWRIGHT_MODULE) : require('playwright');
-	browser = await chromium.launch({ headless: true, chromiumSandbox: true });
+	const runtime = process.env.TT_PLAYWRIGHT_MODULE ? await import(process.env.TT_PLAYWRIGHT_MODULE) : require('playwright');
+	const browserName = process.env.TT_PLAYWRIGHT_BROWSER || 'chromium';
+	assert.ok(['chromium', 'webkit'].includes(browserName), 'Use chromium or webkit');
+	browser = await runtime[browserName].launch({ headless: true, ...(browserName === 'chromium' ? { chromiumSandbox: true } : {}) });
 	for (const [name, viewport] of [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
 		const page = await browser.newPage({ viewport, hasTouch: name === 'mobile' });
 		const errors = []; page.on('pageerror', (error) => errors.push(error.message));
@@ -63,6 +65,9 @@ try {
 		if (name === 'mobile') {
 			await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 			assert.equal(await page.getByTestId('opens').textContent(), '2');
+			// Chromium exposes trusted long-touch input through CDP. WebKit still
+			// exercises touch tap, held pointer playback, keyboard and mobile layout.
+			if (browserName === 'chromium') {
 			const touch = await page.context().newCDPSession(page);
 			const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
 			await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
@@ -71,6 +76,7 @@ try {
 			await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 			await page.waitForFunction(() => document.querySelector('[data-live-photo] video')?.paused);
 			assert.equal(await page.getByTestId('opens').textContent(), '2');
+			}
 		}
 		await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 		await page.waitForFunction(() => document.querySelector('[data-live-photo] video')?.paused);
