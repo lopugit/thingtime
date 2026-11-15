@@ -1,6 +1,9 @@
 import { PdfViewer } from './PdfDocument';
 import { isPdfAttachment } from './pdfPresentation';
 import { ProgressiveImage } from './ProgressiveImage';
+import { VideoPreview } from './VideoPreview';
+import { LivePhoto } from './LivePhoto';
+import { presentVisualMedia, type PresentedMedia } from './livePhotoPresentation';
 import React from 'react';
 import { SharedMediaProvider, useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -253,7 +256,7 @@ const PostAttachmentsGallery = ({
 	const [lightbox, setLightbox] = React.useState<{ open: boolean; index: number }>({ open: false, index: 0 });
 	if (!normalized.length) return null;
 
-	const visualMedia = normalized.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
+	const visualMedia = presentVisualMedia(normalized);
 	const audio = normalized.filter((attachment) => attachment.mediaKind === 'audio');
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
 	// "Download all" only earns its row once there are two or more stored files;
@@ -268,23 +271,24 @@ const PostAttachmentsGallery = ({
 	// media unblurred and steps through them with arrow keys, so leaving them in
 	// would walk a viewer onto media they never consented to see. Attachment
 	// order is otherwise untouched; revealing restores its original position.
-	const lightboxMedia = visualMedia.filter((attachment) => !(attachment.nsfw === true && !revealedIds.has(attachment.id)));
+	const lightboxMedia = visualMedia.filter(({ attachment, motion }) => !([attachment, motion].some((item) => item?.nsfw === true && !revealedIds.has(item.id))));
 
-	const tile = (attachment: PublicAttachment, index: number, tileSx: Record<string, unknown>, fill: boolean) => {
+	const tile = ({ attachment, motion }: PresentedMedia, index: number, tileSx: Record<string, unknown>, fill: boolean) => {
 		// Server-tagged NSFW media stays shielded until this render's consent
 		// click. A shielded tile is deliberately inert rather than a zoom button:
 		// the lightbox renders the image unblurred, so it must not be reachable
 		// before the viewer opts in. Revealing turns it back into a normal tile.
-		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
+		const shielded = [attachment, motion].some((item) => item?.nsfw === true && !revealedIds.has(item.id));
 		const image = attachment.mediaKind === 'video' ? (
-			<Box as="video" src={mediaUrl(attachmentMediaSrc(attachment))} aria-label={attachment.title || attachmentDisplayName(attachment)}
-				muted playsInline preload="metadata" width="100%" display="block" objectFit="cover" pointerEvents="none"
+			<VideoPreview src={mediaUrl(attachmentMediaSrc(attachment))} label={attachment.title || attachmentDisplayName(attachment)}
+				width="100%" display="block" objectFit="cover" pointerEvents="none"
 				{...(fill ? { height: '100%', position: 'absolute' as const, inset: 0 } : { aspectRatio: '4 / 3', maxHeight: compact ? '360px' : '640px' })}
 				background="var(--tt-ink, #16161a)" />
 		) : (
 			<ProgressiveImage
 				src={mediaUrl(attachmentMediaSrc(attachment))}
 				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
+				retryControl={false}
 				loading="lazy"
 				width="100%"
 				display="block"
@@ -296,13 +300,13 @@ const PostAttachmentsGallery = ({
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
 		);
-		const interactiveProps = shielded
+		const interactiveProps = shielded || motion
 			? {}
 			: {
 				as: 'button' as const,
 				type: 'button' as const,
 				'aria-label': `View ${attachment.title || attachmentDisplayName(attachment)}`,
-				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxMedia.indexOf(attachment)) })
+				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxMedia.findIndex((item) => item.attachment.id === attachment.id)) })
 			};
 		return (
 			<Box
@@ -321,10 +325,14 @@ const PostAttachmentsGallery = ({
 						name={attachment.title || attachmentDisplayName(attachment)}
 						compact={compact}
 						fill={fill}
-						onReveal={() => reveal(attachment.id)}
+						onReveal={() => { reveal(attachment.id); if (motion) reveal(motion.id); }}
 					>
 						{image}
 					</NsfwShield>
+				) : motion ? (
+					<LivePhoto stillSrc={mediaUrl(attachmentMediaSrc(attachment))} motionSrc={mediaUrl(attachmentMediaSrc(motion))}
+						label={attachment.title || attachmentDisplayName(attachment)} compact={compact} fill={fill}
+						onOpen={() => setLightbox({ open: true, index: Math.max(0, lightboxMedia.findIndex((item) => item.attachment.id === attachment.id)) })} />
 				) : (
 					image
 				)}
@@ -362,12 +370,12 @@ const PostAttachmentsGallery = ({
 	};
 
 	// rows mode: pre-compute each image's (row, index) placement in attachment order
-	const rowChunks: { attachment: PublicAttachment; index: number }[][] = [];
+	const rowChunks: { entry: PresentedMedia; index: number }[][] = [];
 	if (layout.mode === 'rows' && visualMedia.length) {
 		let cursor = 0;
 		for (const size of mediaLayoutRows(visualMedia.length, layout.pattern || [1])) {
 			const start = cursor;
-			rowChunks.push(visualMedia.slice(start, start + size).map((attachment, offset) => ({ attachment, index: start + offset })));
+			rowChunks.push(visualMedia.slice(start, start + size).map((entry, offset) => ({ entry, index: start + offset })));
 			cursor = start + size;
 		}
 	}
@@ -384,7 +392,7 @@ const PostAttachmentsGallery = ({
 						alignItems: 'start'
 					}}
 				>
-					{visualMedia.map((attachment, index) => tile(attachment, index, {}, false))}
+					{visualMedia.map((entry, index) => tile(entry, index, {}, false))}
 				</Box>
 			)}
 
@@ -392,8 +400,8 @@ const PostAttachmentsGallery = ({
 				<Flex flexDirection="column" rowGap="6px">
 					{rowChunks.map((row, rowIndex) => (
 						<Flex key={rowIndex} columnGap="6px">
-							{row.map(({ attachment, index }) =>
-								tile(attachment, index, { flex: '1 1 0', minWidth: 0, aspectRatio: rowAspectRatio(row.length) }, true)
+							{row.map(({ entry, index }) =>
+								tile(entry, index, { flex: '1 1 0', minWidth: 0, aspectRatio: rowAspectRatio(row.length) }, true)
 							)}
 						</Flex>
 					))}
@@ -402,10 +410,10 @@ const PostAttachmentsGallery = ({
 
 			{visualMedia.length > 0 && layout.mode === 'grid' && (
 				<Box display="grid" gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`} gap="6px" sx={{ gridAutoFlow: 'row' }}>
-					{visualMedia.map((attachment, index) => {
-						const span = spanFor(layout, attachment.id);
+					{visualMedia.map((entry, index) => {
+						const span = spanFor(layout, entry.attachment.id);
 						return tile(
-							attachment,
+							entry,
 							index,
 							{
 								gridColumn: `span ${spanColumns(span, gridColumns)}`,

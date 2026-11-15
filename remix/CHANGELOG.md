@@ -160,6 +160,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-15: Repair iOS Photos share fallback and blank-composer recovery;
+  retain Live Photo image/motion pairing for hold-to-play, show native video
+  posters and recover stalled image previews. — Codex (AI)
+
 - 2026-11-13: Save private Messenger message/request notifications in canonical
   bell/history with Character attribution, content-free previews, muted-history
   handling, retry deduplication and bounded post-commit delivery. **Codex (AI)**

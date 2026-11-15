@@ -5,9 +5,16 @@ import ImageIO
 
 /// Makes its own photo/movie pair. No existing library asset is read.
 enum LivePhotoFixture {
-    static func seed() async throws -> String {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+    static func seed(progress: @escaping @MainActor (String) -> Void) async throws -> String {
+        // simctl can pre-authorize a synthetic fixture without presenting a
+        // prompt. The async request can remain pending on a fresh simulator
+        // even though that grant is already effective, so read it first.
+        let existingStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        let status = existingStatus == .authorized || existingStatus == .limited
+            ? existingStatus
+            : await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard status == .authorized || status == .limited else { throw NSError(domain: "ShareAcceptance", code: 1) }
+        await progress("Creating the Live Photo fixture…")
         let id = UUID().uuidString
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(id)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -52,6 +59,7 @@ enum LivePhotoFixture {
         }
         video.markAsFinished(); await writer.finishWriting()
         guard writer.status == .completed else { throw writer.error! }
+        await progress("Saving the fixture to Photos…")
         var localID = ""
         try await PHPhotoLibrary.shared().performChanges {
             let request = PHAssetCreationRequest.forAsset()

@@ -71,7 +71,14 @@ try {
  const owner = await register('incoming-share-owner'), recipient = await register('incoming-share-recipient');
  await stop(server); server = start(process.execPath, [join(source, '.output/server/index.mjs')], { ADMIN_USERNAMES: 'incoming-share-owner' }); await ready(server);
  const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
- assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.chats-messages'].version, '1.4.0');
+ assert.equal(manifest.origin, origin);
+ for (const [feature, minimum] of Object.entries({ 'api.chats-messages': [1, 8, 0], 'api.attachment-uploads': [1, 12, 0],
+  'api.attachment-upload-complete': [1, 9, 0], 'api.things': [1, 69, 0] })) {
+  const actual = String(manifest.features[feature]?.version || '').split('.').map(Number);
+  assert.equal(actual.length, 3, `${feature} must publish a semantic version`);
+  assert.equal(actual[0], minimum[0], `${feature} has an incompatible major`);
+  assert(actual[1] > minimum[1] || (actual[1] === minimum[1] && actual[2] >= minimum[2]), `${feature} is older than the incoming share contract`);
+ }
  const chat = (await api('/api/v1/chats', { chatType: 'dm', memberIds: [recipient.data.user.id] }, owner.cookie)).data.chat;
  assert(chat.id);
  const vite = start(process.execPath, ['--input-type=module', '-e', `import {createServer} from 'vite'; const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${ports.web},strictPort:true}});await server.listen();`], { NODE_ENV: 'development' }, source);
@@ -114,16 +121,28 @@ async function browserAcceptance() {
   const bytes = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="${colour}"/></svg>`).render().asPng();
   batches[0].files.push({ id: `photo-${index}`, name: `photo-${index}.png`, relativePath: '', type: 'image/png', bytes: bytes.toString('base64') });
  }
+ // Browser fixture pairing is explicit, like the native same-asset import.
+ // Keep the original HEIC as an ordinary file, and pair a displayable JPEG
+ // derivative with a tiny playable MP4. This exercises magic-byte verification.
+ const livePhotoPairId = randomUUID();
+ batches[0].files.push({ id: 'live-original', name: 'live-original.heic', relativePath: '', type: 'image/heic',
+  bytes: (await readFile(new URL('./media-acceptance/fixtures/colors-no-alpha.heic', import.meta.url))).toString('base64') });
+ batches[0].files.push({ id: 'live-still', name: 'live-still.jpeg', relativePath: '', type: 'image/jpeg',
+  bytes: (await readFile(new URL('./fixtures/live-photo-still.jpeg', import.meta.url))).toString('base64'),
+  livePhoto: { pairId: livePhotoPairId, role: 'photo' } });
+ batches[0].files.push({ id: 'live-motion', name: 'live-motion.mp4', relativePath: '', type: 'video/mp4',
+  bytes: (await readFile(new URL('./fixtures/live-photo-motion.mp4', import.meta.url))).toString('base64'),
+  livePhoto: { pairId: livePhotoPairId, role: 'motion' } });
  batches.push({ id: randomUUID(), destination: 'directories', text: '', files: [], directories: ['Only folders/empty'] });
  for (const batch of batches.filter(item => item.destination !== 'directories')) batch.files.push({ id: 'empty-file', name: 'empty.unknown', relativePath: '', type: 'application/octet-stream', bytes: '' });
  if (process.env.SHARE_COMPOSER_SCOPE === 'post-keyboard') { batches[0].text = 'Keyboard action reachability\nUnicode: café 🌏'; batches[0].files = []; }
  if (process.env.SHARE_COMPOSER_SCOPE === 'contexts-keyboard') for (const batch of batches) { batch.text = 'Keyboard context draft'; batch.files = []; }
  await context.addInitScript(({ batches, ownerId }) => {
-  window.thingtimeShare = { version: '1.0.0', request: async body => {
+  window.thingtimeShare = { version: '1.1.0', request: async body => {
    const requestId = new URLSearchParams(location.search).get('requestId'), batch = batches.find(item => item.id === requestId);
    if (!batch) throw Error('Fixture request mismatch');
    const key = 'fixture-submission-' + batch.id;
-   if (body.method === 'manifest') return { version: '1.0.0', origin: location.origin, requestId, maxChunkBytes: 262144 };
+   if (body.method === 'manifest') return { version: '1.1.0', origin: location.origin, requestId, maxChunkBytes: 262144 };
    if (body.accountId !== ownerId || body.requestId !== batch.id) throw Error('Fixture scope mismatch');
    let submission = JSON.parse(sessionStorage.getItem(key) || 'null');
    if (body.method === 'getIncomingShare') return { id: batch.id, accountId: ownerId, apiOrigin: location.origin, text: batch.text, directories: batch.directories, submission, attachments: batch.files.map(file => ({ ...file, size: atob(file.bytes).length })) };
@@ -237,7 +256,22 @@ async function browserAcceptance() {
     await page.waitForFunction(() => window.__incomingShareOutcome?.destination === 'post', undefined, { timeout: 90000 });
     assert.equal(responses.filter(row => row.path === '/api/v1/attachments/uploads').length, beforeRecovery, 'Recovery must not reupload original files');
     const saved = await api(`/api/v1/things?id=${batch.id}`);
-    assert.equal(saved.post.text, batch.text); assert.equal(saved.post.attachments.length, batch.files.length); assert.equal(saved.post.mediaLayout.pattern.length, 27); checks.push({ destination: 'post', id: saved.post.id, attachmentIds: saved.post.attachments.map(file => file.id), lostReceiptRecoveryVerified: true });
+    assert.equal(saved.post.text, batch.text); assert.equal(saved.post.attachments.length, batch.files.length); assert.equal(saved.post.mediaLayout.pattern.length, 27);
+    const pair = saved.post.attachments.filter(file => file.livePhoto?.pairId === livePhotoPairId);
+    assert.deepEqual(pair.map(file => file.livePhoto.role).sort(), ['motion', 'photo']);
+    const heic = saved.post.attachments.find(file => file.name === 'live-original.heic');
+    assert(heic); assert.equal(heic.mediaKind, 'file'); assert.equal(heic.livePhoto, undefined);
+    const originalHeic = await context.request.get(fixture.apiOrigin + `/api/v1/attachments/content?id=${heic.id}`);
+    assert(originalHeic.ok()); assert.deepEqual(await originalHeic.body(), Buffer.from(batches[0].files.find(file => file.id === 'live-original').bytes, 'base64'));
+    assert.equal(pair.find(file => file.livePhoto.role === 'photo')?.mediaKind, 'image');
+    assert.equal(pair.find(file => file.livePhoto.role === 'motion')?.mediaKind, 'video');
+    for (const part of pair) {
+     const source = batch.files.find(file => file.livePhoto?.role === part.livePhoto.role);
+     const original = await context.request.get(fixture.apiOrigin + `/api/v1/attachments/content?id=${part.id}`);
+     assert(original.ok()); assert.deepEqual(await original.body(), Buffer.from(source.bytes, 'base64'));
+    }
+    checks.push({ destination: 'post', id: saved.post.id, attachmentIds: saved.post.attachments.map(file => file.id), livePhotoPairId,
+     livePhotoRoles: pair.map(file => file.livePhoto.role), originalBytesVerified: true, lostReceiptRecoveryVerified: true });
    } else if (batch.destination === 'message') {
     await page.getByText('incoming-share-recipient', { exact: true }).last().click();
     const textarea = page.locator('textarea:visible').last(); await textarea.waitFor({ timeout: 30000 }); await textarea.focus();
