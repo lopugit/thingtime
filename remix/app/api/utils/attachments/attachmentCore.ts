@@ -46,6 +46,9 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// An explicit same-source Live Photo pair. Only authorized attachment
+	// projections carry it; a filename or matching timestamp is never evidence.
+	livePhoto?: { pairId: string; role: 'photo' | 'motion' };
 	filenamePreview?: string;
 	// owner-authored presentation metadata for the media's own Thing page and
 	// lightbox — optional, absent on legacy attachments, never empty strings
@@ -69,6 +72,19 @@ export type AttachmentPublicMetadata = {
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id' | 'pending' | 'nsfw'>;
+
+export const canonicalLivePhoto = (value: unknown): AttachmentCrystal['livePhoto'] | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const raw = value as Record<string, unknown>;
+	if (Object.keys(raw).length !== 2 || typeof raw.pairId !== 'string' ||
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw.pairId) ||
+		(raw.role !== 'photo' && raw.role !== 'motion')) return null;
+	return { pairId: raw.pairId.toLowerCase(), role: raw.role };
+};
+
+export const visibleLivePhoto = (crystal: AttachmentCrystal): AttachmentCrystal['livePhoto'] | undefined =>
+	crystal.livePhoto && ((crystal.livePhoto.role === 'photo' && crystal.mediaKind === 'image') ||
+		(crystal.livePhoto.role === 'motion' && crystal.mediaKind === 'video')) ? crystal.livePhoto : undefined;
 
 export type AttachmentAnnotationPatch = {
 	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
@@ -404,6 +420,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 	if (description.ok === false) return description;
 	const filenamePreview = sanitizeAttachmentLine(raw.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, 'filename preview');
 	if (filenamePreview.ok === false) return filenamePreview;
+	const livePhoto = raw.livePhoto === undefined ? undefined : canonicalLivePhoto(raw.livePhoto);
+	if (livePhoto === null) return { ok: false, error: 'Attachment Live Photo metadata is invalid' };
 
 	return {
 		ok: true,
@@ -414,6 +432,7 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 			// Always derive this from the normalized content type. A caller cannot
 			// label HTML/SVG/arbitrary bytes as inline-safe image or video content.
 			mediaKind: attachmentMediaKindForContentType(contentType),
+			...(livePhoto ? { livePhoto } : {}),
 			...(filenamePreview.value ? { filenamePreview: filenamePreview.value } : {}),
 			// blank owner text is stored as ABSENT, never as an empty string
 			...(title.value ? { title: title.value } : {}),
@@ -446,7 +465,7 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
 // Owner-authored presentation text plus the server-written sniffed container
 // type; each is validated below before a crystal counts as canonical.
-const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType']);
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType', 'livePhoto']);
 // Linked crystals swap detectedContentType (a stored-bytes sniff) for the
 // external url; every other key keeps the base hygiene.
 const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'filenamePreview', 'title', 'description']);
@@ -511,7 +530,10 @@ export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | 
 		raw.mediaKind === sanitized.crystal.mediaKind &&
 		raw.title === sanitized.crystal.title &&
 		raw.description === sanitized.crystal.description &&
-		raw.filenamePreview === sanitized.crystal.filenamePreview
+		raw.filenamePreview === sanitized.crystal.filenamePreview &&
+		(raw.livePhoto === undefined || (typeof raw.livePhoto === 'object' && raw.livePhoto !== null &&
+			(raw.livePhoto as { pairId?: unknown }).pairId === sanitized.crystal.livePhoto?.pairId &&
+			(raw.livePhoto as { role?: unknown }).role === sanitized.crystal.livePhoto?.role))
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
@@ -529,7 +551,8 @@ export const applyAttachmentAnnotationPatch = (value: unknown, patch: Attachment
 		contentType: before.contentType,
 		title: patch.title === undefined ? before.title : patch.title,
 		description: patch.description === undefined ? before.description : patch.description,
-		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview
+		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview,
+		livePhoto: before.livePhoto
 	});
 	if (!sanitized.ok) return sanitized;
 	return {
@@ -571,10 +594,13 @@ export const toAttachmentPublicMetadata = (
 	if (typeof id !== 'string' || !id || !canonical) return null;
 	const status = (moderation as { status?: unknown } | null | undefined)?.status;
 	if (status === 'blocked') return null;
+	const { livePhoto: _claimedPair, ...other } = canonical;
+	const livePhoto = visibleLivePhoto(canonical);
+	const publicCrystal = { ...other, ...(livePhoto ? { livePhoto } : {}) };
 	if (status === 'pending') {
-		return options.ownerView === true ? { id, ...canonical, pending: true as const } : null;
+		return options.ownerView === true ? { id, ...publicCrystal, pending: true as const } : null;
 	}
-	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
+	return { id, ...publicCrystal, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 
 // The owner-chosen display position, stamped on each bound attachment thing at

@@ -14,6 +14,8 @@ import {
 	formatAttachmentBytes,
 } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
+import type { PresentedMedia } from './livePhotoPresentation';
+import { LivePhoto } from './LivePhoto';
 
 // Click-to-view lightbox for a post's visual attachments. Arrow keys / edge
 // buttons move through the gallery, "Open" deeplinks to the media's own
@@ -23,7 +25,7 @@ import type { PublicAttachment } from './attachmentTypes';
 const MUTED = 'rgba(255, 255, 255, 0.72)';
 
 export type MediaLightboxProps = {
-	attachments: PublicAttachment[];
+	attachments: PresentedMedia[];
 	index: number;
 	isOpen: boolean;
 	onClose: () => void;
@@ -42,7 +44,8 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 	}, [isOpen, index]);
 
 	const count = attachments.length;
-	const attachment = attachments[Math.min(Math.max(current, 0), Math.max(count - 1, 0))];
+	const entry = attachments[Math.min(Math.max(current, 0), Math.max(count - 1, 0))];
+	const attachment = entry?.attachment;
 
 	React.useEffect(() => setVideoFailed(false), [attachment?.id, isOpen]);
 
@@ -125,6 +128,17 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 							_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
 							borderRadius="999px"
 						/>
+						{entry.motion ? <IconButton
+							as="a"
+							href={mediaUrl(attachmentContentUrl(entry.motion.id, true))}
+							download={entry.motion.name}
+							aria-label={`Download Live Photo motion ${attachmentDisplayName(entry.motion)}`}
+							title="Download Live Photo motion"
+							icon={<Download size={16} />}
+							size="sm" variant="ghost" color={MUTED}
+							_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
+							borderRadius="999px"
+						/> : null}
 						{onDownloadAll ? (
 							<IconButton
 								// offered whenever the gallery has an archive (two or more stored
@@ -177,7 +191,11 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 								}}
 							/>
 						)}
-						{attachment.mediaKind === 'video' ? (
+						{entry.motion ? (
+							<LivePhoto key={`${attachment.id}:${isOpen}`} stillSrc={mediaUrl(attachmentMediaSrc(attachment))}
+								motionSrc={mediaUrl(attachmentMediaSrc(entry.motion))}
+								label={attachment.title || attachmentDisplayName(attachment)} lightbox />
+						) : attachment.mediaKind === 'video' ? (
 							videoFailed ? <Text color="white" textAlign="center">This browser cannot play this video. Use Download to open the original file.</Text> :
 							<Box as="video" key={attachment.id} src={mediaUrl(attachmentMediaSrc(attachment))}
 								aria-label={attachment.title || attachmentDisplayName(attachment)} controls playsInline preload="metadata"

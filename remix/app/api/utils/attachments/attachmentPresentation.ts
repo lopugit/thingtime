@@ -1,4 +1,4 @@
-import { isCanonicalAttachmentContentType } from './attachmentCore';
+import { isCanonicalAttachmentContentType, visibleLivePhoto } from './attachmentCore';
 import type { AttachmentCrystal, AttachmentMediaKind } from './attachmentCore';
 
 export const ATTACHMENT_INLINE_CONTENT_TYPES = new Set([
@@ -79,5 +79,6 @@ export const attachmentPublicProjection = (id: string, crystal: AttachmentCrysta
 	size: crystal.size,
 	contentType: crystal.contentType,
 	mediaKind: crystal.mediaKind,
+	...(visibleLivePhoto(crystal) ? { livePhoto: visibleLivePhoto(crystal) } : {}),
 	...(crystal.detectedContentType ? { detectedContentType: crystal.detectedContentType } : {})
 });

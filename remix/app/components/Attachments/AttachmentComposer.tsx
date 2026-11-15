@@ -1,5 +1,6 @@
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { uploadFileTypes } from './attachmentFileTypes';
+import { VideoPreview } from './VideoPreview';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import {
@@ -97,9 +98,9 @@ const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' 
 	return undefined;
 };
 
-const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
+export const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
 	const kind = uploadMediaKind(upload);
-	if (kind === 'image' && upload.previewUrl) {
+	if ((kind === 'image' || upload.previewContentType?.startsWith('image/')) && upload.previewUrl) {
 		return (
 			<Image
 				src={upload.previewUrl}
@@ -114,17 +115,13 @@ const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) =
 	}
 	if (kind === 'video' && upload.previewUrl) {
 		return (
-			<Box
-				as="video"
+			<VideoPreview
 				src={upload.previewUrl}
-				aria-label={`Preview of ${upload.file.name}`}
+				label={`Preview of ${upload.file.name}`}
 				width="100%"
 				height="100%"
 				objectFit="cover"
 				background="var(--tt-ink, #16161a)"
-				muted
-				playsInline
-				preload="metadata"
 			/>
 		);
 	}

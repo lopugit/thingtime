@@ -2,6 +2,7 @@ import Foundation
 import Photos
 import UIKit
 import UniformTypeIdentifiers
+import ImageIO
 
 /// Kept injectable so fallback ordering and temporary-file lifetime are testable.
 protocol ShareItemSource {
@@ -173,6 +174,15 @@ final class ShareImportCancellation: @unchecked Sendable {
 }
 
 final class ShareItemImporter {
+    struct SavedItem {
+        let type: String?
+        var livePhotos: [String: ShareLivePhotoPart] = [:]
+        var warning: String?
+        init(_ type: String? = nil, livePhotos: [String: ShareLivePhotoPart] = [:], warning: String? = nil) {
+            self.type = type; self.livePhotos = livePhotos; self.warning = warning
+        }
+    }
+    static let stillOnlyWarning = "This Live Photo was saved as a still image because the source did not provide its motion video. The original source was not changed."
     enum Failure: LocalizedError {
         case noRepresentation, livePhotoResources, item(Int)
         var errorDescription: String? {
@@ -195,6 +205,8 @@ final class ShareItemImporter {
         do {
             var textPaths: [String] = []
             var supplementalTextPaths: [String] = []
+            var livePhotos: [String: ShareLivePhotoPart] = [:]
+            var warnings: [String] = []
             let total = sources.count + additionalText.count
             guard total > 0 else { throw ShareInbox.Failure.empty }
             for (index, source) in sources.enumerated() {
@@ -202,7 +214,10 @@ final class ShareItemImporter {
                 let directory = batch.payload.appendingPathComponent("Item \(index + 1)", isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 do {
-                    if let type = try await save(source, into: directory),
+                    let saved = try await save(source, into: directory)
+                    for (name, part) in saved.livePhotos { livePhotos["Item \(index + 1)/" + name] = part }
+                    if let warning = saved.warning { warnings.append(warning) }
+                    if let type = saved.type,
                        !source.registeredTypeIdentifiers.contains(where: { UTType($0)?.conforms(to: .fileURL) == true }),
                        UTType(type)?.conforms(to: .plainText) == true || type == UTType.text.identifier || (UTType(type)?.conforms(to: .url) == true && UTType(type)?.conforms(to: .fileURL) != true) {
                         let candidates = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey])
@@ -212,7 +227,15 @@ final class ShareItemImporter {
                     }
                 }
                 catch is CancellationError { throw CancellationError() }
+                catch Failure.livePhotoResources where source.suppliesLivePhoto && total > 1 {
+                    warnings.append("Item \(index + 1) could not be read from the source and was not saved. Other shared items were kept.")
+                    try? FileManager.default.removeItem(at: directory)
+                }
                 catch Failure.livePhotoResources { throw Failure.livePhotoResources }
+                catch Failure.noRepresentation where source.suppliesLivePhoto && total > 1 {
+                    warnings.append("Item \(index + 1) could not be read from the source and was not saved. Other shared items were kept.")
+                    try? FileManager.default.removeItem(at: directory)
+                }
                 catch { throw Failure.item(index + 1) }
                 progress(index + 1, total)
             }
@@ -226,14 +249,14 @@ final class ShareItemImporter {
             }
             try cancellation.check()
             if let composerOrigin {
-                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths, supplementalTextPaths: supplementalTextPaths, providerContainers: sources.indices.map { "Item \($0 + 1)" }).write(to: batch.directory)
+                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths, supplementalTextPaths: supplementalTextPaths, providerContainers: sources.indices.map { "Item \($0 + 1)" }, livePhotos: livePhotos, warnings: warnings).write(to: batch.directory)
             }
             try inbox.commit(batch)
             return batch.id
         } catch { inbox.rollback(batch); throw error }
     }
-    private func save(_ source: ShareItemSource, into directory: URL) async throws -> String? {
-        if source.suppliesLivePhoto {
+    private func save(_ source: ShareItemSource, into directory: URL, allowLivePhoto: Bool = true) async throws -> SavedItem {
+        if allowLivePhoto && source.suppliesLivePhoto {
             do {
                 let photo: PHLivePhoto = try await withCheckedThrowingContinuation { continuation in
                     cancellation.track(source.livePhoto { photo, error in
@@ -243,18 +266,44 @@ final class ShareItemImporter {
                 }
                 try cancellation.check()
                 let resources = PHAssetResource.assetResources(for: photo)
-                guard resources.contains(where: { [.photo, .fullSizePhoto, .alternatePhoto].contains($0.type) }),
-                      resources.contains(where: { [.pairedVideo, .fullSizePairedVideo].contains($0.type) }) else { throw Failure.livePhotoResources }
-                for resource in resources {
+                let still = resources.first { [.photo, .fullSizePhoto].contains($0.type) }
+                    ?? resources.first { $0.type == .alternatePhoto }
+                let motion = resources.first { [.pairedVideo, .fullSizePairedVideo].contains($0.type) }
+                guard let still else { throw Failure.livePhotoResources }
+                let photoFile = inbox.uniqueURL(in: directory, suggestedName: still.originalFilename)
+                try await saveResource(still, to: photoFile)
+                guard let motion else { return SavedItem(warning: Self.stillOnlyWarning) }
+                let video = inbox.uniqueURL(in: directory, suggestedName: motion.originalFilename)
+                do { try await saveResource(motion, to: video) }
+                catch is CancellationError { throw CancellationError() }
+                catch {
+                    try? FileManager.default.removeItem(at: video)
                     try cancellation.check()
-                    let destination = inbox.uniqueURL(in: directory, suggestedName: resource.originalFilename)
-                    try await saveResource(resource, to: destination)
+                    if Self.isLocalWriteFailure(error) { throw error }
+                    let domain = (error as NSError).domain
+                    guard error is Failure || domain == "PHPhotosErrorDomain" || domain == NSURLErrorDomain else { throw error }
+                    return SavedItem(warning: Self.stillOnlyWarning)
                 }
-                return nil
+                return try Self.pairSavedLivePhoto(photoFile: photoFile, videoFile: video, inbox: inbox, directory: directory)
             } catch is CancellationError { throw CancellationError() }
-            catch { throw Failure.livePhotoResources }
+            catch {
+                try cancellation.check()
+                if Self.isLocalWriteFailure(error) { throw error }
+                let domain = (error as NSError).domain
+                guard error is Failure || domain == "PHPhotosErrorDomain" || domain == NSURLErrorDomain || domain == NSItemProvider.errorDomain else { throw error }
+                try clear(directory)
+                // A Photos provider may expose a still but deny its typed Live
+                // Photo object. Exhaust its ordinary representations before
+                // declaring this item unreadable.
+                var fallback = try await save(source, into: directory, allowLivePhoto: false)
+                fallback.warning = Self.stillOnlyWarning
+                return fallback
+            }
         }
-        let types = Array(NSOrderedSet(array: source.registeredTypeIdentifiers)) as? [String] ?? []
+        let advertised = Array(NSOrderedSet(array: source.registeredTypeIdentifiers)) as? [String] ?? []
+        let types = allowLivePhoto ? advertised : advertised.filter {
+            $0 != UTType.livePhoto.identifier && UTType($0)?.conforms(to: .image) == true
+        }
         // Provider ordering expresses fidelity. Exhaust each type before degrading
         // to another advertised type; custom/future UTIs remain eligible.
         for type in types {
@@ -265,16 +314,16 @@ final class ShareItemImporter {
             // unarchive unknown byte blobs or turn transport archives into files.
             if (UTType(type)?.conforms(to: .plainText) == true || type == UTType.text.identifier),
                !types.contains(where: { UTType($0)?.conforms(to: .fileURL) == true }) {
-                do { try await saveItem(source, type: type, into: directory); return type }
-                catch { try cancellation.check(); try clear(directory) }
+                do { try await saveItem(source, type: type, into: directory); return SavedItem(type) }
+                catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
             }
             // UIKit's image-object representation is a keyed archive, not a
             // portable image file. Decode only through the typed public loader.
             if type == "com.apple.uikit.image" || type == UTType.image.identifier {
                 // UIActivityViewController's legacy provider may deny the newer
                 // class-loader probe while loadItem still returns UIImage.
-                do { try await saveItem(source, type: type, into: directory); return type }
-                catch { try cancellation.check(); try clear(directory) }
+                do { try await saveItem(source, type: type, into: directory); return SavedItem(type) }
+                catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
                 guard source.suppliesImage else { continue }
                 do {
                     let image: UIImage = try await withCheckedThrowingContinuation { continuation in
@@ -285,8 +334,8 @@ final class ShareItemImporter {
                     try cancellation.check()
                     guard let png = image.pngData() else { throw Failure.noRepresentation }
                     try png.write(to: directory.appendingPathComponent("Shared image.png"), options: .atomic)
-                    return type
-                } catch { try cancellation.check(); try clear(directory); continue }
+                    return SavedItem(type)
+                } catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory); continue }
             }
             if !isURL {
                 do {
@@ -297,13 +346,13 @@ final class ShareItemImporter {
                             if let error { continuation.resume(throwing: error) } else { continuation.resume() }
                         }))
                     }
-                    return type
-                } catch { try cancellation.check(); try clear(directory) }
+                    return SavedItem(type)
+                } catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
             } else {
                 // public.file-url describes a reference, not the referenced file's
                 // bytes. Resolve the typed URL while its callback is still valid.
-                do { try await saveItem(source, type: type, into: directory); return type }
-                catch { try cancellation.check(); try clear(directory) }
+                do { try await saveItem(source, type: type, into: directory); return SavedItem(type) }
+                catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
                 if UTType(type)?.conforms(to: .fileURL) == true { continue }
             }
             do {
@@ -319,14 +368,63 @@ final class ShareItemImporter {
                 } else {
                     try data.write(to: directory.appendingPathComponent(Self.filename(source, type: type, fallback: "Shared item")), options: .atomic)
                 }
-                return type
-            } catch { try cancellation.check(); try clear(directory) }
+                return SavedItem(type)
+            } catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
             if !isURL {
-                do { try await saveItem(source, type: type, into: directory); return type }
-                catch { try cancellation.check(); try clear(directory) }
+                do { try await saveItem(source, type: type, into: directory); return SavedItem(type) }
+                catch { try cancellation.check(); if Self.isLocalWriteFailure(error) { throw error }; try clear(directory) }
             }
         }
+        if !allowLivePhoto && source.suppliesImage {
+            let image: UIImage = try await withCheckedThrowingContinuation { continuation in
+                cancellation.track(source.image { image, error in
+                    if let image { continuation.resume(returning: image) }
+                    else { continuation.resume(throwing: error ?? Failure.noRepresentation) }
+                })
+            }
+            try cancellation.check()
+            guard let png = image.pngData() else { throw Failure.noRepresentation }
+            try png.write(to: directory.appendingPathComponent("Shared image.png"), options: .atomic)
+            return SavedItem(UTType.png.identifier)
+        }
         throw Failure.noRepresentation
+    }
+    private static func isLocalWriteFailure(_ error: Error) -> Bool {
+        if error is ShareInbox.Failure { return true }
+        let error = error as NSError
+        return (error.domain == NSCocoaErrorDomain && (512...1023).contains(error.code)) || error.domain == NSPOSIXErrorDomain
+    }
+    static func pairSavedLivePhoto(photoFile: URL, videoFile: URL, inbox: ShareInbox, directory: URL) throws -> SavedItem {
+        var pairedPhoto = photoFile
+        let stillType = UTType(filenameExtension: photoFile.pathExtension)
+        if stillType?.conforms(to: .jpeg) != true && stillType?.conforms(to: .png) != true {
+            // Keep original bytes as an ordinary attachment; metadata may only
+            // name a browser-readable derivative from the same saved resource.
+            let jpeg = inbox.uniqueURL(in: directory, suggestedName: "Live Photo.jpg")
+            guard try makeJPEG(from: photoFile, to: jpeg) else {
+                return SavedItem(warning: "The original photo and motion video were saved separately because a compatible still preview could not be made.")
+            }
+            pairedPhoto = jpeg
+        }
+        let pairId = UUID().uuidString
+        return SavedItem(livePhotos: [pairedPhoto.lastPathComponent: ShareLivePhotoPart(pairId: pairId, role: "photo"),
+                                      videoFile.lastPathComponent: ShareLivePhotoPart(pairId: pairId, role: "motion")])
+    }
+    static func makeJPEG(from original: URL, to destination: URL) throws -> Bool {
+        guard let source = CGImageSourceCreateWithURL(original as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2560,
+                kCGImageSourceShouldCache: false
+              ] as CFDictionary),
+              let output = CGImageDestinationCreateWithURL(destination as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(output, image, [kCGImageDestinationLossyCompressionQuality: 0.92] as CFDictionary)
+        guard CGImageDestinationFinalize(output) else {
+            try? FileManager.default.removeItem(at: destination)
+            return false
+        }
+        return ((try FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0) > 0
     }
     private func saveItem(_ source: ShareItemSource, type: String, into directory: URL) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -399,6 +497,9 @@ final class ShareItemImporter {
             if progress.isCancelled { manager.cancelDataRequest(request) }
         }
         try cancellation.check()
+        guard ((try FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0) > 0 else {
+            throw Failure.livePhotoResources
+        }
     }
     private func clear(_ directory: URL) throws {
         for item in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) { try FileManager.default.removeItem(at: item) }

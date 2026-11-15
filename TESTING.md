@@ -176,6 +176,23 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 
 ## iOS incoming share sheet
 
+- [ ] Share a mixed batch containing a provider that advertises a Live Photo but
+      refuses its typed representation. Verify supported fallbacks, exact retained
+      bytes and an explicit still-only/missing-item warning; never silently mark
+      incomplete content as a complete Live Photo. Cancel must remove staging.
+- [ ] Import a complete Live Photo and publish through the real attachment API.
+      Compare pair IDs and roles in exact readback. Press/hold and release in feed
+      and lightbox at desktop/mobile widths; short tap opens the viewer, scrolling
+      cancels playback, keyboard works, and no delayed playback starts after release.
+      Missing, duplicate or inaccessible partners must stay independent files.
+- [ ] Check native video posters, browser video first frames, sharp images after
+      lazy scrolling, a stalled image variant, original failure/retry and changed
+      image identity. Run `share-media-previews.browser.mjs` and the Live Photo
+      browser regression. Scroll the whole page and inspect opened lightboxes.
+- [ ] Simulate a navigation that finishes with an empty document and a terminated
+      web process. The native share sheet must offer recovery and preserve its
+      durable source instead of leaving a blank white screen.
+
 - [ ] Build the complete XcodeGen `Thingtime` scheme. Verify that the installed
       phone app embeds `ThingtimeShare.appex`, its principal class and production
       activation predicate, and that app/extension share the intended App Group.

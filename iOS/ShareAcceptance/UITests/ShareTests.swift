@@ -63,6 +63,8 @@ final class ShareTests: XCTestCase {
         let offered = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); offered.name = "photos-live-photo-thingtime-offered"; offered.lifetime = .keepAlways; add(offered)
         target.tap()
         XCTAssertTrue(photos.webViews.firstMatch.waitForExistence(timeout: 30), photos.debugDescription)
+        XCTAssertTrue(photos.webViews.staticTexts["New post"].firstMatch.waitForExistence(timeout: 30),
+                      "A web view with no rendered composer is a blank share sheet: \(photos.debugDescription)")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = "composer-photos-live-photo"; shot.lifetime = .keepAlways; add(shot)
         photos.buttons["Cancel"].firstMatch.tap()
         XCUIApplication(bundleIdentifier: "com.thingtime.appletime").launch()

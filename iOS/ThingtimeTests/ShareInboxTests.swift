@@ -4,6 +4,8 @@ import UIKit
 import Darwin
 import Network
 import WebKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import Thingtime
 
 final class ShareInboxTests: XCTestCase {
@@ -247,17 +249,98 @@ final class ShareInboxTests: XCTestCase {
         }
         let source = ProviderShareItem(provider: provider)
         XCTAssertTrue(source.suppliesLivePhoto, "Advertised legacy Live Photo intent must not depend on canLoadObject")
-        try await ShareItemImporter(inbox: inbox).save([source]) { _, _ in }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([source], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let incoming = try session.incoming(accountId: "test-owner")
+        let attachments = try XCTUnwrap(incoming["attachments"] as? [[String: Any]])
+        XCTAssertEqual(attachments.count, 2)
+        let parts = try attachments.map { try XCTUnwrap($0["livePhoto"] as? [String: String]) }
+        XCTAssertEqual(Set(parts.compactMap { $0["role"] }), Set(["photo", "motion"]))
+        XCTAssertEqual(Set(parts.compactMap { $0["pairId"] }).count, 1)
+        XCTAssertNotNil(UUID(uuidString: try XCTUnwrap(parts[0]["pairId"])))
+        XCTAssertEqual(incoming["warnings"] as? [String], [])
         let content = try sharedFiles().map { try Data(contentsOf: $0) }
         XCTAssertEqual(content.count, 2)
         XCTAssertTrue(content.contains(try Data(contentsOf: photo)))
         XCTAssertTrue(content.contains(try Data(contentsOf: video)))
     }
-    func testMissingLivePhotoResourcesNeverFallsBackToStillImage() async throws {
+    func testMissingLivePhotoMotionFallsBackToStillWithVisibleWarning() async throws {
         let source = StubShareItem(types: ["com.apple.live-photo", "public.jpeg"])
         source.suppliesLivePhoto = true
-        do { try await ShareItemImporter(inbox: inbox).save([source]) { _, _ in }; XCTFail("Expected failure") } catch { }
-        XCTAssertEqual(source.calls, ["livePhoto"])
+        let still = Data([0xff, 0xd8, 0xff, 0xd9])
+        source.dataLoader = { _, completion in completion(still, nil) }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([source], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let incoming = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(incoming["warnings"] as? [String], [ShareItemImporter.stillOnlyWarning])
+        let attachment = try XCTUnwrap((incoming["attachments"] as? [[String: Any]])?.first)
+        XCTAssertNil(attachment["livePhoto"])
+        XCTAssertEqual(try sharedFiles().compactMap { try? Data(contentsOf: $0) }.first, still)
+        XCTAssertEqual(source.calls.first, "livePhoto")
+    }
+    func testUnreadableLivePhotoDoesNotDiscardOtherSharedItems() async throws {
+        let live = StubShareItem(types: ["com.apple.live-photo"])
+        live.suppliesLivePhoto = true
+        let other = StubShareItem(types: ["public.data"])
+        other.dataLoader = { _, completion in completion(Data([1, 2, 3]), nil) }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([live, other], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let incoming = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual((incoming["attachments"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((incoming["warnings"] as? [String])?.count, 1)
+        XCTAssertEqual(try sharedFiles().compactMap { try? Data(contentsOf: $0) }.first, Data([1, 2, 3]))
+    }
+    func testLocalWriteFailureInLivePhotoFallbackRollsBackMixedShare() async throws {
+        let live = StubShareItem(types: [UTType.livePhoto.identifier, UTType.jpeg.identifier])
+        live.suppliesLivePhoto = true
+        live.fileLoader = { _, _, completion in completion(CocoaError(.fileWriteOutOfSpace)) }
+        let other = StubShareItem(types: [UTType.data.identifier])
+        other.dataLoader = { _, completion in completion(Data([1, 2, 3]), nil) }
+        do {
+            try await ShareItemImporter(inbox: inbox).save([live, other]) { _, _ in }
+            XCTFail("A local disk error must not be reported as one unreadable Live Photo")
+        } catch is CancellationError { XCTFail("Expected the write failure") }
+        catch { }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Inbox/ready").path))
+    }
+    func testNonBrowserStillGetsBoundedJPEGWithoutChangingOriginal() throws {
+        let jpeg = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "live-photo", withExtension: "jpg"))
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(jpeg as CFURL, nil))
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let original = root.appendingPathComponent("original.tiff")
+        let writer = try XCTUnwrap(CGImageDestinationCreateWithURL(original as CFURL, UTType.tiff.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(writer, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(writer))
+        let bytes = try Data(contentsOf: original)
+        let preview = root.appendingPathComponent("paired.jpg")
+        XCTAssertTrue(try ShareItemImporter.makeJPEG(from: original, to: preview))
+        let output = try XCTUnwrap(CGImageSourceCreateWithURL(preview as CFURL, nil))
+        XCTAssertEqual(CGImageSourceGetType(output) as String?, UTType.jpeg.identifier)
+        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(output, 0, nil) as? [String: Any])
+        XCTAssertLessThanOrEqual((properties[kCGImagePropertyPixelWidth as String] as? Int) ?? Int.max, 2560)
+        XCTAssertLessThanOrEqual((properties[kCGImagePropertyPixelHeight as String] as? Int) ?? Int.max, 2560)
+        XCTAssertEqual(try Data(contentsOf: original), bytes)
+        let movie = root.appendingPathComponent("motion.mov")
+        try Data([1, 2, 3]).write(to: movie)
+        let pairing = try ShareItemImporter.pairSavedLivePhoto(photoFile: original, videoFile: movie, inbox: inbox, directory: root)
+        XCTAssertNil(pairing.warning)
+        XCTAssertEqual(Set(pairing.livePhotos.values.map(\.role)), Set(["photo", "motion"]))
+        XCTAssertTrue(pairing.livePhotos.keys.contains(where: { $0.hasSuffix(".jpg") }))
+        XCTAssertEqual(try Data(contentsOf: original), bytes)
+    }
+    func testUndecodableLivePhotoStillKeepsOriginalFilesWithoutPairMetadata() throws {
+        let photo = root.appendingPathComponent("original.heic")
+        let movie = root.appendingPathComponent("motion.mov")
+        try Data("unreadable image bytes".utf8).write(to: photo)
+        try Data([1, 2, 3]).write(to: movie)
+        let pairing = try ShareItemImporter.pairSavedLivePhoto(photoFile: photo, videoFile: movie, inbox: inbox, directory: root)
+        XCTAssertTrue(pairing.livePhotos.isEmpty)
+        XCTAssertNotNil(pairing.warning)
+        XCTAssertEqual(try Data(contentsOf: photo), Data("unreadable image bytes".utf8))
+        XCTAssertEqual(try Data(contentsOf: movie), Data([1, 2, 3]))
     }
     func testShippedActivationAcceptsCustomTypesManyAttachmentsAndTextButRejectsEmpty() throws {
         let plugin = Bundle.main.bundleURL.appendingPathComponent("PlugIns/ThingtimeShare.appex/Info.plist")
@@ -541,7 +624,7 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertEqual(original.compactMap { $0["id"] as? String }, next.compactMap { $0["id"] as? String })
         XCTAssertEqual(draft["directories"] as? [String], ["Item 2", "Item 10", "folder", "folder/empty"])
     }
-    func testComposerThumbnailIsBoundedAndOriginalRemainsUnchanged() throws {
+    func testComposerThumbnailIsBoundedAndOriginalRemainsUnchanged() async throws {
         let origin = URL(string: "https://thingtime.com")!
         let batch = try inbox.begin()
         let bytes = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 1600, height: 1000)).image { context in
@@ -553,7 +636,8 @@ final class ShareInboxTests: XCTestCase {
         let session = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
         let draft = try session.incoming(accountId: "test-owner")
         let fileId = try XCTUnwrap((draft["attachments"] as? [[String: Any]])?.first?["id"] as? String)
-        let thumbnail = try XCTUnwrap(session.thumbnail(accountId: "test-owner", fileId: fileId, maxDimension: 640))
+        let generated = try await session.thumbnail(accountId: "test-owner", fileId: fileId, maxDimension: 640)
+        let thumbnail = try XCTUnwrap(generated)
         let preview = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(thumbnail["base64"] as? String)))
         XCTAssertLessThanOrEqual(preview.count, 512 * 1024)
         let image = try XCTUnwrap(UIImage(data: preview))
@@ -564,6 +648,23 @@ final class ShareInboxTests: XCTestCase {
             original.append(try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String))))
         }
         XCTAssertEqual(original, bytes)
+    }
+    func testComposerGeneratesVideoPreviewWithoutChangingMotionBytes() async throws {
+        let movie = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "live-photo", withExtension: "mov"))
+        let original = try Data(contentsOf: movie)
+        let origin = URL(string: "https://thingtime.com")!
+        let batch = try inbox.begin()
+        try original.write(to: batch.payload.appendingPathComponent("motion.mov"))
+        try ShareComposerMetadata(origin: ShareComposerSession.origin(origin), textPaths: []).write(to: batch.directory)
+        try inbox.commit(batch)
+        let session = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let attachment = try XCTUnwrap((session.incoming(accountId: "test-owner")["attachments"] as? [[String: Any]])?.first)
+        let fileId = try XCTUnwrap(attachment["id"] as? String)
+        let generated = try await session.thumbnail(accountId: "test-owner", fileId: fileId, maxDimension: 320)
+        let preview = try XCTUnwrap(generated)
+        XCTAssertEqual(preview["type"] as? String, "image/jpeg")
+        XCTAssertNotNil(UIImage(data: try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(preview["base64"] as? String)))))
+        XCTAssertEqual(try Data(contentsOf: inbox.composerDirectory(id: batch.id).appendingPathComponent("payload/motion.mov")), original)
     }
 
     @MainActor
@@ -600,7 +701,7 @@ final class ShareInboxTests: XCTestCase {
         webView.load(URLRequest(url: try XCTUnwrap(ShareComposerSession.composerURL(origin: origin, requestId: id))))
         await fulfillment(of: [loaded], timeout: 20)
         let manifest = try await webView.callAsyncJavaScript("return await window.thingtimeShare.request({method:'manifest'});", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
-        XCTAssertEqual(manifest?["version"] as? String, "1.0.0")
+        XCTAssertEqual(manifest?["version"] as? String, "1.1.0")
         XCTAssertEqual(manifest?["maxChunkBytes"] as? Int, ShareComposerSession.maxChunkBytes)
         let arguments: [String: Any] = ["requestId": id.uuidString, "accountId": "test-owner"]
         let payload = try await webView.callAsyncJavaScript("return await window.thingtimeShare.request({method:'getIncomingShare',requestId,accountId});", arguments: arguments, in: nil, contentWorld: .page) as? [String: Any]

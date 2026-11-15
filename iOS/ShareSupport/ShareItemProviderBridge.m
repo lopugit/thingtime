@@ -6,6 +6,10 @@
                      completion:(void (^)(PHLivePhoto *, NSError *))completion {
     [provider loadItemForTypeIdentifier:UTTypeLivePhoto.identifier options:nil
                      completionHandler:(NSItemProviderCompletionHandler)^(PHLivePhoto *photo, NSError *error) {
+        if (photo && ![photo isKindOfClass:PHLivePhoto.class]) {
+            completion(nil, [NSError errorWithDomain:@"Thingtime.ShareProvider" code:2 userInfo:nil]);
+            return;
+        }
         completion(photo, error);
     }];
 }
