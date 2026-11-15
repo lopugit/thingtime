@@ -7373,3 +7373,11 @@ path rules are owner-bound encrypted records; no new provider key is needed.
 Without the vault key, existing unmigrated settings remain readable, but
 saving or deleting settings returns an unavailable error before external
 credential operations. No secret belongs in repository configuration.
+
+### Receive macOS system shares
+
+The signed Thingtime Mac app includes a Sharing extension for text, URLs, images
+and files. It opens the same New post / Message / Save to Things composer used
+on iOS with the current desktop session. Pending shares can be reopened from
+File → Resume shared content or Saved shares. See [macOS sharing](docs/macos-sharing.md)
+for activation, local retention, fork-safe signing setup and verification.

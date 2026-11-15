@@ -58,6 +58,7 @@ const {
 
 const { DesktopFolderSync, readAccount: verifyLocationAccount } = require('./lib/folder-sync.cjs');
 const { DesktopAttachmentUpload } = require('./lib/attachment-upload.cjs');
+const { incomingShareId, PendingShareStore, NativeShareProcess, IncomingShareSession } = require('./lib/incoming-share.cjs');
 const { SyncWindowLease } = require('./lib/sync-window.cjs');
 const { DesktopFileExport } = require('./lib/file-export.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
@@ -94,6 +95,10 @@ let appOrigin = null;
 let activeContentOrigin = null;
 let webBuildMetadata = null;
 let mainWindow = null;
+const incomingShareWindows = new Map();
+const pendingIncomingShares = new Set();
+let incomingSharesReady = false;
+const pendingShareStore = new PendingShareStore(path.join(app.getPath('userData'), 'pending-shares.json'));
 let sessionHash = null;
 let aiConnectorsPromise = null;
 let desktopSettings = null;
@@ -421,6 +426,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
+ closeIncomingShares();
 	invalidateDesktopProviderAuthority();
 	desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
@@ -1697,6 +1703,7 @@ async function configureLocalRuntime(event, request) {
 }
 async function configureLocalRuntimeGuarded(event, request) {
  requireLocalRuntimeSender(event);
+ closeIncomingShares();
  await localRuntime.configure(request, () => passwordProvider.disconnect());
  return getDesktopInfo();
 }
@@ -1821,6 +1828,7 @@ function createApplicationMenu() {
           }
         ]
       : []),
+    { label: 'File', submenu: incomingShareRecoveryMenu() },
     {
       label: 'Thingtime',
       submenu: [
@@ -1855,6 +1863,72 @@ function rendererPartition() {
  const target = activeAccountEndpoint();
  return sessionAuthority.partition(target, { local: Boolean(localRuntime?.runningEnabled), databaseIdentity: localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '' });
 }
+function incomingShareRecoveryMenu() {
+ let rows;
+ try { rows = pendingShareStore.list(new URL(activeAccountEndpoint()).origin); }
+ catch { return [{ label: 'Resume shared content (recovery unavailable)', enabled: false }]; }
+ if (!rows.length) return [{ label: 'Resume shared content', enabled: false }];
+ return [{ label: 'Resume shared content', click: () => receiveIncomingShare('thingtime-share://incoming/' + rows[0].id) },
+  { label: 'Saved shares', submenu: rows.map(row => ({ label: new Date(row.createdAt).toLocaleString() + ' · ' + row.id.slice(0, 8),
+   click: () => receiveIncomingShare('thingtime-share://incoming/' + row.id) })) }];
+}
+function closeIncomingShares(onlyBound = false) {
+ for (const state of incomingShareWindows.values()) { if (onlyBound && !state.session.accountId) continue; state.session.close(); state.upload.invalidate(); if (!state.window.isDestroyed()) state.window.destroy(); }
+ if (!onlyBound) incomingShareWindows.clear();
+}
+function receiveIncomingShare(raw) {
+ const id = incomingShareId(raw); if (!id || process.platform !== 'darwin' || (parallelDevMode && process.env.THINGTIME_SHARE_TEST_MODE !== '1')) return;
+ if (!incomingSharesReady) { pendingIncomingShares.add(id); return; }
+ try { openIncomingShare(id); } catch { dialog.showErrorBox('Thingtime share unavailable', 'The signed sharing helper could not open this saved share. Your shared content remains on this Mac. Reinstall the current Thingtime app and retry sharing.'); }
+}
+function openIncomingShare(id) {
+ const existing = incomingShareWindows.get(id);
+ if (existing && !existing.window.isDestroyed()) { existing.window.show(); existing.window.focus(); return; }
+ if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+ const endpoint = new URL(activeAccountEndpoint()).origin;
+ pendingShareStore.add(id, endpoint);
+ createApplicationMenu();
+ // A later incoming share stays in recovery while the current composer retains
+ // its edits. Never stack modal composers or discard an unfinished draft.
+ const currentShare = [...incomingShareWindows.values()].find(state => !state.window.isDestroyed());
+ if (currentShare) { currentShare.window.show(); currentShare.window.focus(); return; }
+ const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'dist', 'native');
+ const executable = path.join(resources, 'ThingtimeShareBridge');
+ const settings = JSON.parse(fs.readFileSync(path.join(resources, 'thingtime-share.json'), 'utf8'));
+ if (typeof settings.appGroup !== 'string' || !/^[A-Za-z0-9.-]+$/.test(settings.appGroup)) throw Error('Sharing configuration unavailable.');
+ let testRoot;
+ if (parallelDevMode) {
+  if (process.env.THINGTIME_SHARE_TEST_MODE !== '1' || settings.testing !== true || settings.appGroup !== 'group.com.thingtime.share-test.mac-share-extension' || typeof settings.testRoot !== 'string' || !path.isAbsolute(settings.testRoot)) throw Error('An isolated synthetic share fixture is required.');
+  const profile = fs.realpathSync(app.getPath('userData')), root = fs.lstatSync(settings.testRoot);
+  testRoot = fs.realpathSync(settings.testRoot);
+  if (root.isSymbolicLink() || !root.isDirectory() || root.uid !== process.getuid() || (root.mode & 0o077) !== 0 ||
+      testRoot !== settings.testRoot || !testRoot.startsWith(profile + path.sep)) throw Error('Share fixtures must stay inside this private development profile.');
+ } else if (settings.testing === true || settings.testRoot !== undefined) throw Error('Synthetic sharing is unavailable in the installed app.');
+ fs.accessSync(executable, fs.constants.X_OK);
+ const origin = appOrigin;
+ const window = new BrowserWindow({ parent: mainWindow, modal: true, width: 740, height: 840, minWidth: 360, minHeight: 480,
+  show: false, title: 'Share to Thingtime', backgroundColor: '#ffffff',
+  webPreferences: { partition: rendererPartition(), contextIsolation: true, nodeIntegration: false, sandbox: true,
+   preload: path.join(__dirname, 'preload.cjs'), additionalArguments: ['--thingtime-incoming-share'] } });
+ const native = new NativeShareProcess({ executable, appGroup: settings.appGroup, requestId: id, origin, endpoint, testRoot });
+ const shareSession = new IncomingShareSession({ requestId: id, window, origin, endpoint,
+  context: () => ({ origin: appOrigin, endpoint: new URL(activeAccountEndpoint()).origin }), verifyAccount: verifyLocationAccount, native });
+ const upload = new DesktopAttachmentUpload({ context: () => ({ enabled: !desktopServicesClosing, window, appOrigin: origin, apiOrigin: endpoint }) });
+ const state = { window, session: shareSession, upload }; incomingShareWindows.set(id, state);
+ window.on('closed', () => { shareSession.close(); upload.invalidate(); incomingShareWindows.delete(id); });
+ window.webContents.on('render-process-gone', () => { shareSession.close(); upload.invalidate(); });
+ window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+ window.webContents.on('will-navigate', (event, rawUrl) => {
+  const url = new URL(rawUrl);
+  if (url.origin !== origin || !['/share', '/login', '/register', '/forgot-password'].includes(url.pathname)) event.preventDefault();
+ });
+ ensureWindowVisible(window);
+ void loadWindow(window, origin + '/share?requestId=' + id, { isClosing: () => desktopServicesClosing || window.isDestroyed(),
+  onError: () => { dialog.showErrorBox('Thingtime share unavailable', 'The share dialog could not load. Your content remains saved on this Mac.'); } });
+}
+app.on('open-url', (event, url) => { if (incomingShareId(url)) { event.preventDefault(); receiveIncomingShare(url); } });
+app.on('before-quit', closeIncomingShares);
+
 function createWindow() {
   if (desktopServicesClosing || desktopServicesClosed) return;
 	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
@@ -1894,7 +1968,7 @@ function createWindow() {
   const folderCookies = mainWindow.webContents.session.cookies;
   const folderAccountChanged = (_event, cookie) => {
     if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts' || cookie.name === 'tt_mongo') invalidateDesktopProviderAuthority();
-    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts' || cookie.name === 'tt_mongo') { closeIncomingShares(true); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
   };
   folderCookies.on('changed', folderAccountChanged);
   mainWindow.on('closed', () => {
@@ -1935,7 +2009,20 @@ function createWindow() {
 }
 
 ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
-ipcMain.handle('thingtime-desktop:attachment-upload', (event, request) => desktopAttachmentUpload.request(event, request));
+ipcMain.handle('thingtime-desktop:incoming-share', (event, request) => {
+ const state = [...incomingShareWindows.values()].find(item => item.window.webContents === event.sender);
+ if (!state) throw Error('Open the selected Thingtime share dialog.');
+ return state.session.request(event, request).then(result => {
+  if (request?.method === 'complete' && result?.ok === true) {
+   pendingShareStore.remove(state.session.requestId, state.session.endpoint); createApplicationMenu();
+  }
+  return result;
+ });
+});
+ipcMain.handle('thingtime-desktop:attachment-upload', (event, request) => {
+ const state = [...incomingShareWindows.values()].find(item => item.window.webContents === event.sender);
+ return (state?.upload || desktopAttachmentUpload).request(event, request);
+});
 ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
 ipcMain.handle('thingtime-desktop:folder-sync-active', (event, request) => syncWindowLease.set(event, request));
 
@@ -2064,7 +2151,8 @@ const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    for (const argument of argv || []) if (incomingShareId(argument)) receiveIncomingShare(argument);
     if (!mainWindow) {
       if (appOrigin) createWindow();
       return;
@@ -2089,6 +2177,10 @@ if (!singleInstanceLock) {
 			createWindow();
       await passwordProvider.start()?.catch(() => { console.warn('The native password bridge could not start.'); });
       createApplicationMenu();
+      incomingSharesReady = true;
+      for (const argument of process.argv) if (incomingShareId(argument)) pendingIncomingShares.add(incomingShareId(argument));
+      for (const id of pendingIncomingShares) receiveIncomingShare('thingtime-share://incoming/' + id);
+      pendingIncomingShares.clear();
       if (!(parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN)) void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
         desktopSettingsLastError = error instanceof Error ? error.message : String(error);
         console.warn('Unable to check Thingtime API endpoint compatibility', error);

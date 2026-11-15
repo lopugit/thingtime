@@ -87,3 +87,7 @@ if (process.argv?.includes('--thingtime-native-password-approval')) {
 		electron: process.versions.electron
 	}
 });
+
+if (process.argv?.includes('--thingtime-incoming-share')) contextBridge.exposeInMainWorld('thingtimeShare', Object.freeze({
+ version: '1.0.0', request: body => ipcRenderer.invoke('thingtime-desktop:incoming-share', body)
+}));
