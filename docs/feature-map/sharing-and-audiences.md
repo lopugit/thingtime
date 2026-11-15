@@ -107,3 +107,10 @@ dependency reads, read-only Actions, copies and exports working for newly saved
 Webpages/Components without changing their audiences. Run the fork-core and
 capability suites, then verify original/thumbnail media on a real anonymous
 saved page, including denial for private roots.
+
+Group audience reads now include the group owner as an implicit member and
+validate explicit membership rows against an existing group with the same owner.
+This keeps private Character-authored platform logs readable by the administrator
+who owns their audience group and rejects orphaned memberships after deletion.
+Run `socialLimits.test.mts` and the built `platform-reporting-acceptance.mjs`
+fixture for the owner/member/stranger and group-removal boundaries.

@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-15: Restore Opus 5.5 reasoning controls and preselect the saved AI
+  waterfall matching its current context. Add optional Character usernames and
+  private scheduled-run reporting with administrator audience controls and
+  delivery readback. See [PR 1533](../PRs/1533-ai-waterfall-catalogue-platform-logs.md). **Codex (AI)**
+
 - 2026-11-15: Check the current session in the background while its error screen
   is shown, then reload the same full URL after a valid session response.
   Preserve manual recovery, reject redirects/HTML/health-only responses and

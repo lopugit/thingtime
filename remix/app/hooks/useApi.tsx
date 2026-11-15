@@ -514,7 +514,10 @@ export function useApi() {
       }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			prConflictResolverModelWaterfall: useCallback(async () => {
+        await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.2.0');
+        return getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall');
+      }, []),
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
 			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
 			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
@@ -671,7 +674,7 @@ export function useApi() {
       ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => {
-          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
+          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.2.0');
           return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
         },
         [asyncFetcher]

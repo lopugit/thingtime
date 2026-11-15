@@ -18,7 +18,7 @@ export async function initializeBackupWorkflow(jobId: string, dispatchId: string
 	});
 }
 
-export async function runBackupJobStep(jobId: string, runId: string): Promise<{ stopped: boolean; delayMs: number }> {
+export async function runBackupJobStep(jobId: string, runId: string): Promise<{ stopped: boolean; delayMs: number; terminalStatus?: 'completed' | 'failed' | 'cancelled' }> {
 	'use step';
 	const { requireGatewayDatabaseAccess, withGatewayWork, runAdmittedGatewayWork } = await import('../deployment/environmentGateway');
 	return withGatewayWork(async () => {
@@ -27,11 +27,15 @@ export async function runBackupJobStep(jobId: string, runId: string): Promise<{ 
 			const { backupJobs } = await import('./backupJobs');
 			const { runBackupEngineStep } = await import('./backupEngine.server');
 			const claim = await backupJobs.claim(jobId, runId);
-			if (!claim.lease) return { stopped: claim.delayMs === 0, delayMs: claim.delayMs };
+			if (!claim.lease) return { stopped: claim.delayMs === 0, delayMs: claim.delayMs,
+				...(claim.delayMs === 0 ? { terminalStatus: claim.status === 'completed' ? 'completed' as const
+					: claim.status === 'needs-attention' ? 'failed' as const : 'cancelled' as const } : {}) };
 			try {
 				const outcome = await backupJobs.withLease(claim.lease, context => runBackupEngineStep(context));
 				await backupJobs.finish(claim.lease, outcome);
-				return { stopped: outcome.kind !== 'continue', delayMs: outcome.kind === 'continue' ? Math.max(0, Math.min(60_000, outcome.delayMs ?? 0)) : 0 };
+				return { stopped: outcome.kind !== 'continue', delayMs: outcome.kind === 'continue' ? Math.max(0, Math.min(60_000, outcome.delayMs ?? 0)) : 0,
+					...(outcome.kind === 'complete' ? { terminalStatus: 'completed' as const }
+						: outcome.kind === 'pause' ? { terminalStatus: 'failed' as const } : {}) };
 			} catch {
 				// Never replay an uncertain provider action here. The engine's next
 				// explicit retry must recover its original immutable receipts.

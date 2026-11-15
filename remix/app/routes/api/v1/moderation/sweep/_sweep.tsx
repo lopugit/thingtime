@@ -1,3 +1,4 @@
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 // GET /api/v1/moderation/sweep — scheduled moderation safety net (Vercel
 // Cron, CRON_SECRET bearer, same contract as /api/v1/attachments/cleanup).
 // One bounded pass per call:
@@ -57,6 +58,7 @@ export const createModerationSweepLoader = (overrides: Partial<SweepDependencies
 			const continuationRunId = shouldContinueModerationSweep(text, attachments)
 				? await dependencies.startContinuation()
 				: null;
+      recordScheduledPassResult('/api/v1/moderation/sweep',{text,attachments,continuationRunId});
 			return json({ ok: true, text, attachments, continuationRunId });
 		});
 };

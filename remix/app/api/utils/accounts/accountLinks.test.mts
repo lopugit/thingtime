@@ -11,7 +11,7 @@ mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedE
   getHomeThingsCollection: async () => home,
   getThingsCollection: async () => { throw Error('Account links must never trust the selected content plane'); }
 } });
-const { userCanManageApp, userOwnsLinkedAccount } = await import('./accountLinks');
+const { userCanManageApp, userOwnsLinkedAccount, fenceOwnedAccountLink } = await import('./accountLinks');
 const app = { shareId: 'app-root', ownerId: 'owner', crystal: { clientId: 'client' } };
 
 beforeEach(() => { present = true; touchWins = true; homeReads = 0; touches.length = 0; });
@@ -37,4 +37,23 @@ test('transactional app changes touch the exact authority row and fail after a c
   assert.equal(await userCanManageApp('manager', app, session), false);
   present = false;
   assert.equal(await userCanManageApp('manager', app, session), false);
+});
+
+
+test('owned-account fences use protected canonical roots in the caller transaction and fail on unlink', async () => {
+  const session = { inTransaction: () => true };
+  assert.equal(await fenceOwnedAccountLink('manager', 'owner', session, 'token'), true);
+  const touch = touches[0];
+  assert.equal(touch.options.session, session);
+  assert.equal(touch.filter._id, 'authority-link');
+  assert.equal(touch.filter.ownerId, 'manager');
+  assert.equal(touch.filter['crystal.userId'], 'manager');
+  assert.equal(touch.filter['crystal.targetId'], 'owner');
+  assert.equal(touch.filter['crystal.linkKind'], 'account');
+  assert.match(touch.update.$set.authorizationFence, /^token:[a-f0-9-]{36}$/);
+  touchWins = false;
+  assert.equal(await fenceOwnedAccountLink('manager', 'owner', session, 'token'), false);
+  present = false;
+  assert.equal(await fenceOwnedAccountLink('manager', 'owner', session, 'token'), false);
+  await assert.rejects(fenceOwnedAccountLink('manager', 'owner', {}, 'token'), /active transaction/);
 });

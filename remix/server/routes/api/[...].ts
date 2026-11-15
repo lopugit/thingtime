@@ -1,3 +1,5 @@
+import { platformScheduledRunSink } from '../../../app/api/utils/automation/platformReporting';
+import { createScheduledRunReporter } from '../../../app/api/utils/automation/scheduledRunReporting';
 import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
 import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
@@ -22,6 +24,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/admin/platform-reporting': () => import('../../../app/routes/api/v1/admin/platform-reporting/_platform-reporting'),
   'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
@@ -397,6 +400,9 @@ const normalizeResponse = (value: unknown) => {
   return jsonResponse(value ?? null);
 };
 
+// The private-post sink is supplied by the platform reporting integration.
+const reportScheduledRequest = createScheduledRunReporter({ sink: platformScheduledRunSink });
+
 export default defineHandler(async (event) => {
   // srvx attaches its socket-close listener lazily when signal is first read.
   // Observe it before any asynchronous route work, including failures.
@@ -564,7 +570,7 @@ export default defineHandler(async (event) => {
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
       try {
-        return normalizeResponse(await handler({ request: event.req }));
+        return reportScheduledRequest(event.req, '/api/' + path, async () => normalizeResponse(await handler({ request: event.req })));
       } finally {
         // Source/queue transactions have finished before the recovery worker
         // opens its own transaction. Durable jobs also survive a lost request.

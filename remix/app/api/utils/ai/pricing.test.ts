@@ -34,6 +34,7 @@ test('every catalog model carries a price and the table has no stray ids', () =>
   // the documented multiples
   const opus = getAiModelPricing('claude-opus-5')!;
   assert.deepEqual(opus, { inputPerM: 5, outputPerM: 25, cacheReadPerM: 0.5, cacheWritePerM: 6.25, estimated: false });
+  assert.deepEqual(getAiModelPricing('claude-opus-5-5'), { inputPerM: 4, outputPerM: 20, cacheReadPerM: 0.2, cacheWritePerM: 5, estimated: false });
   assert.equal(getAiModelPricing('claude-sonnet-5')!.estimated, false);
   assert.equal(getAiModelPricing('claude-haiku-4-5')!.inputPerM, 1);
   // a row priced from its sibling says so
