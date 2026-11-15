@@ -21,7 +21,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   press kit, and a studio that builds new pictures from size, logo, background,
   pattern and seed with PNG/SVG download. One rectangle-list scene engine
   (`brandScenes.ts`) paints the committed files, the studio canvas and the
-  SVG. The sitemap lists the new pictures. **Claude (AI)**
+  SVG. The sitemap lists the new pictures. See
+  [the PR note](../PRs/1537-codex-branding-artwork-wordmark-imagery-studio--branding-artwork-matched-wordmark-96-ready-to-post-pictures-imagery-studio.md).
+  **Claude (AI)**
 - 2026-11-15: `/branding` gains the square two-line logo, a transparent /
   light / dark background for every cut (SVG plus the full PNG ladder), ten
   fun cuts and a press kit covering every format × logo × background. One
