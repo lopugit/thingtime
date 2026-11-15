@@ -155,7 +155,7 @@ const NumberBox = ({
   />
 );
 
-const Chevron = ({ open }: { open: boolean }) => (
+export const Chevron = ({ open }: { open: boolean }) => (
   <Box as="span" ml="8px" transform={open ? 'rotate(180deg)' : 'none'} transition="transform 160ms ease" aria-hidden>
     ⌄
   </Box>

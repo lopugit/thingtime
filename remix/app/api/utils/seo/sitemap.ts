@@ -11,6 +11,7 @@
 // offline generator can exercise the whole response path without MongoDB.
 
 import brandingAssetsJson from '../../../components/Branding/brandingAssets.generated.json';
+import brandingImageryJson from '../../../components/Branding/brandingImagery.generated.json';
 import {
 	PAGED_SITEMAP_SECTIONS,
 	SITEMAP_MAX_PAGES,
@@ -30,7 +31,7 @@ import {
 	type SitemapUrl
 } from './sitemapCore';
 
-const brandingAssets = brandingAssetsJson as BrandingAssetsManifest;
+const brandingAssets: BrandingAssetsManifest = { ...(brandingAssetsJson as BrandingAssetsManifest), imagery: brandingImageryJson.items };
 
 export type SitemapPage = { urls: SitemapUrl[] };
 

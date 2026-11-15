@@ -65,7 +65,7 @@ test('the stacked lock-up is the owner’s two-line artwork, voxel for voxel', (
     '#59bdff': 'h',
     '#ed1c24': 'r',
     '#00b7ef': 'c',
-    '#ffa3b1': 'n',
+    '#ffa9dd': 'n',
     '#6f3198': 'g',
     '#a8e61d': 'l',
     '#9c5a3c': 'b',
