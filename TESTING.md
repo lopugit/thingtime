@@ -2971,30 +2971,54 @@ email whose link points at the attacker.
       (≥1280px) and mobile (375px); no horizontal scrollbar at either size and
       no borders/cards/checkerboard grids anywhere — previews sit on soft
       panels only.
-- [ ] Every variant section (wordmark, icon, both pink cuts) shows its live
-      SVG preview; the light/dark panel dots swap the preview surface.
+- [ ] Six full-width sections (wordmark, square, icon and their three pink
+      cuts) and the ten-card "Fun cuts" gallery each show their preview. Every
+      cut comes from the `logoVariants.ts` registry; the square is the
+      two-line lock-up centred on a 24×24 voxel canvas and matches the owner's
+      artwork (first i red over cyan, second cyan over red).
+- [ ] The Transparent / Light / Dark switch on every cut swaps the preview,
+      "Download SVG", "PNG · 1024px", "Copy SVG code" and the size ladder to
+      that background. Light/dark files carry two voxels of padding around a
+      trimmed cut and none around a square; transparent cuts stay trimmed.
 - [ ] "Download SVG" and "PNG · 1024px" point at real committed files under
-      `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
-      grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
-      wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
-- [ ] Ready-made sizes render as two lines — the SVG line
-      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
-      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
-      scroll at 375px.
-- [ ] Custom export: format PNG/SVG, any width, padding all-sides and
-      per-side, background transparent/white/ink — downloads a file named
-      `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
-      Lopu success toast (errors also route through Lopu, never `alert`).
-- [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
-    test:branding` passes (trim + padding + pixel-size unit tests).
-- [ ] Press kit grid renders all generated marketing images; the portrait
+      `/branding/generated/<slug>/thingtime-<slug>[-light|-dark]…` (200s, not
+      client blobs); wordmark sizes keep the 27:5 trimmed aspect
+      (e.g. 1024×190) and squares stay 1:1.
+- [ ] "All sizes" is collapsed on first render and mounts its chips only when
+      opened. It shows the SVG line (`SVG · scalable · <size>`) above the PNG
+      line, every chip labelled `PNG · <W>×<H> · <KB/MB>` and linking to its
+      own file; chips above 128px reuse the 128px thumbnail (the Network tab
+      shows no 8192px/10000px image request on open) and wrap without
+      horizontal scroll at 375px.
+- [ ] Custom export (collapsed by default): format PNG/SVG, any width, padding
+      all-sides and per-side, background transparent/light/dark — downloads a
+      file named `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding,
+      and fires a Lopu success toast (errors also route through Lopu, never
+      `alert`). Square cuts add a Canvas control: Square keeps the frame,
+      Trimmed exports the tight 14:8 lock-up.
+- [ ] In the two-column gallery (≥992px) the cards in a row share one panel
+      height and each button row stays on one line at 1280px.
+- [ ] `npm --prefix remix run test:branding` passes: artwork, registry,
+      transforms, backgrounds, trim/padding, and the checks that the committed
+      manifests match the registry and every promised file exists on disk.
+- [ ] Press kit: the Logo (Wordmark / Square / Icon) and Background (Light /
+      Dark) selectors swap all nine tiles in place and each Download link
+      follows; the confetti pattern ignores the logo choice. The portrait
       phone wallpaper previews as a centre crop and must not stretch its grid
-      row (no giant empty gap beside it).
+      row. File names published before the matrix existed (for example
+      `thingtime-og-card-1200x630.png`) still resolve.
 - [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
-- [ ] After changing `logoMatrix.ts` matrices/colours, re-run
+- [ ] After changing `logoMatrix.ts` or `logoVariants.ts`, re-run
       `npm --prefix remix run branding-assets` and commit the refreshed
-      `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
-      when nothing changed).
+      `remix/public/branding/`, `brandingAssets.generated.json` and
+      `brandingSurfaces.generated.json` (byte-stable when nothing changed;
+      about 20 s). If the encoder itself changes, decode old and new files and
+      compare pixels before committing.
+- [ ] A plain local dev stack without a signing secret answers
+      `503 LOCAL_API_NOT_CONFIGURED` and never paints `/branding`. Check the
+      page against an isolated stack (disposable replica set, random
+      `JWT_SECRET`, `THINGTIME_DATA_ENV=development`), never by pointing local
+      dev at a shared database.
 
 ## Brand logo SEO — robots.txt, sitemap, Organization JSON-LD (`remix/app/api/utils/seo/`, `remix/app/api/utils/meta/brandIdentity.ts`)
 
@@ -3011,8 +3035,9 @@ email whose link points at the attacker.
       `public, max-age=300, s-maxage=3600, stale-while-revalidate=86400`.
 - [ ] `?section=static` lists only paths the shell also marks `index, follow`
       (`indexablePaths.ts`) and carries `<image:image>` entries for
-      `/branding/generated/<slug>/…-1024x….png` + `.svg` for all four variants,
-      every press-kit image, and the icon + wordmark on `/`. Each image URL
+      `/branding/generated/<slug>/…-1024x….png` + `.svg` for every cut in
+      the branding manifest (transparent files), every press-kit image, and
+      the icon + wordmark on `/`. Each image URL
       returns `200 image/*`.
 - [ ] `?section=posts&page=1` contains only `/post/<id>` permalinks that an
       anonymous `GET /api/v1/things?id=<id>` can read; create a friends-only or
@@ -3042,10 +3067,10 @@ email whose link points at the attacker.
       (200, square ≥112px), a wordmark `image`, `sameAs` links, and
       `@graph[0].publisher` pointing at it. Validate with Google's Rich Results
       Test / Schema.org validator — no warnings on the Organization node.
-- [ ] `/branding` in a browser: the four hero previews are `<img>` elements
-      whose `src` is a committed `/branding/generated/<slug>/…-1024x….png`
-      (not a `data:` URI) with descriptive `alt`; the light/dark panel toggle
-      still swaps the surface; the custom exporter still works.
+- [ ] `/branding` in a browser: every preview is an `<img>` whose `src` is a
+      committed `/branding/generated/<slug>/…-1024x….png` (not a `data:` URI)
+      with descriptive `alt`; the background switch points it at the matching
+      light/dark file; the custom exporter still works.
 - [ ] Landing page (`/`, `/welcome`) and any `<Logo icon theme="nature" />`
       spot: DevTools shows a real `<img src="/branding/generated/icon/…png">`
       exactly underneath the voxel grid with identical bounds (no visible

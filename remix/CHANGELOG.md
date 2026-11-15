@@ -12,6 +12,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-15: `/branding` gains the square two-line logo, a transparent /
+  light / dark background for every cut (SVG plus the full PNG ladder), ten
+  fun cuts and a press kit covering every format × logo × background. One
+  registry (`logoVariants.ts`) drives the page, the generator and the tests;
+  ladder PNGs are palette-encoded (pixel-identical, far smaller). Local
+  checks need an isolated stack: without a signing secret the dev API answers
+  `503 LOCAL_API_NOT_CONFIGURED`. See
+  [the PR note](../PRs/1534-claude-thingtime-branding-resources-349adb--branding-square-logo-light-dark-backgrounds-ten-fun-cuts.md).
+  **Claude (AI)**
 - 2026-11-12: Harden authorized-part refusal, scoped policy-edit wake and draft-safe
   legacy recovery; hide redundant unsupported iOS resource controls.
 - 2026-11-12: Preserve all unsaved upload-policy fields across independent input
