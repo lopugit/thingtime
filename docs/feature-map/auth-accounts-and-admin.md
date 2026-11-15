@@ -575,3 +575,15 @@ Account-link administration is home-pinned; co-manager writes fence the exact
 current link in the transaction. Account/session writers own migration and
 revocation boundaries. Run `test:acl:relational`, desktop OAuth and account-link
 authorization tests. See [relational access](../relational-access.md).
+
+## Session error recovery
+
+`components/Layout/RootRecovery.tsx` runs `utils/sessionRecovery.ts` while its
+error screen is mounted. It probes the existing `/api/root-data` session GET
+with the current query and validates its root contract before reloading the
+current full URL. `hooks/backgroundRefresh.ts` coalesces probes, slows failures
+and hidden-tab polling, and wakes on focus/online. A tab-local non-sensitive
+reload guard prevents rapid boot/reload loops; thirty seconds of stable
+successful `root.tsx` rendering clears it. Recovery never invokes the
+temporary-account POST or other actions.
+Run `test:root-data` and `test:hooks`; use TESTING.md's session read checklist.
