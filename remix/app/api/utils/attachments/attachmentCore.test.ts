@@ -91,6 +91,20 @@ test('attachment metadata is canonical, hygienic, and derives a safe media kind'
 	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 42 }), null);
 });
 
+test('Live Photo pairing is canonical and visible only for verified matching media kinds', () => {
+ const pairId = '166b6596-37e9-4f51-b589-cf90c912d54d';
+ const photo = { name: 'still.jpeg', size: 42, contentType: 'image/jpeg', mediaKind: 'image', livePhoto: { pairId, role: 'photo' } };
+ assert.deepEqual(toAttachmentPublicMetadata('still', photo)?.livePhoto, { pairId, role: 'photo' });
+ const annotated = applyAttachmentAnnotationPatch(photo, { title: 'Edited' });
+ assert.equal(annotated.ok, true);
+ if (annotated.ok) assert.deepEqual(annotated.crystal.livePhoto, { pairId, role: 'photo' });
+ assert.equal(toAttachmentPublicMetadata('still', { ...photo, contentType: 'application/octet-stream', mediaKind: 'file' })?.livePhoto, undefined);
+ assert.equal(toAttachmentPublicMetadata('still', { ...photo, contentType: 'video/quicktime', mediaKind: 'video' })?.livePhoto, undefined);
+ for (const livePhoto of [{ pairId: 'bad', role: 'photo' }, { pairId, role: 'other' }, { pairId, role: 'photo', extra: true }]) {
+  assert.equal(sanitizeAttachmentPublicMetadata({ ...photo, livePhoto }).ok, false);
+ }
+});
+
 test('every lifecycle state remains a valid billable attachment envelope', () => {
 	for (const attachmentState of ATTACHMENT_STATES) {
 		assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState })), 42, attachmentState);

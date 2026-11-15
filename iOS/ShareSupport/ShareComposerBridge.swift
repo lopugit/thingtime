@@ -71,7 +71,17 @@ final class ShareComposerBridge: NSObject, WKScriptMessageHandlerWithReply {
                     guard let fileId = body["fileId"] as? String, let dimension = body["maxDimension"] as? NSNumber,
                           CFGetTypeID(dimension) != CFBooleanGetTypeID(), dimension.doubleValue > 0, dimension.doubleValue <= 640,
                           dimension.doubleValue.rounded() == dimension.doubleValue else { throw ShareComposerSession.Failure.invalidRequest }
-                    result = try session.thumbnail(accountId: account, fileId: fileId, maxDimension: dimension.intValue) as Any? ?? NSNull()
+                    let reply = ShareThumbnailReply(replyHandler)
+                    let task = Task {
+                        do {
+                            let value = try await session.thumbnail(accountId: account, fileId: fileId, maxDimension: dimension.intValue)
+                            reply.send(value ?? NSNull(), nil)
+                        } catch { reply.send(nil, error.localizedDescription) }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                        if reply.send(NSNull(), nil) { task.cancel() }
+                    }
+                    return
                 case "beginSubmission", "recordOutcome":
                     guard let destination = body["destination"] as? String, let operationId = body["operationId"] as? String,
                           body["targetId"] == nil || body["targetId"] is String,
@@ -91,5 +101,20 @@ final class ShareComposerBridge: NSObject, WKScriptMessageHandlerWithReply {
                 }
             } catch { DispatchQueue.main.async { replyHandler(nil, error.localizedDescription) } }
         }
+    }
+}
+
+private final class ShareThumbnailReply: @unchecked Sendable {
+    private let lock = NSLock()
+    private var sent = false
+    private let handler: (Any?, String?) -> Void
+    init(_ handler: @escaping (Any?, String?) -> Void) { self.handler = handler }
+    @discardableResult func send(_ value: Any?, _ error: String?) -> Bool {
+        lock.lock()
+        if sent { lock.unlock(); return false }
+        sent = true
+        lock.unlock()
+        DispatchQueue.main.async { self.handler(value, error) }
+        return true
     }
 }

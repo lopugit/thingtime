@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createAttachmentSourceFile, attachmentSourcePreview, readAttachmentSlice } from '../Attachments/attachmentFileSource';
+import { createAttachmentSourceFile, attachmentSourceLivePhoto, attachmentSourcePreview, readAttachmentSlice } from '../Attachments/attachmentFileSource';
 import { dedupeSelectedFiles } from '../Attachments/attachmentUiCore';
 import { incomingShareRequestId, readIncomingShare, type IncomingShareBridge } from './incomingShare';
 const id = '165b6596-37e9-4f51-b589-cf90c912d54d', origin = 'https://thingtime.example', accountId = 'account';
@@ -64,6 +64,38 @@ test('same-name files in separate folders or with separate native IDs are retain
  const files = [make('first', 'a/same.bin'), make('second', 'b/same.bin'), make('third', 'b/same.bin')];
  assert.equal(dedupeSelectedFiles([], files).length, 3);
  assert.equal(dedupeSelectedFiles([], [files[0], files[0]]).length, 1);
+});
+
+test('explicit Live Photo parts retain one native pair through lazy file sources', async () => {
+ const { bridge } = mock(); const request = bridge.request;
+ const pairId = '166b6596-37e9-4f51-b589-cf90c912d54d';
+ bridge.request = async body => body.method === 'getIncomingShare' ? {
+  id, accountId, apiOrigin: origin, text: '', warnings: [], attachments: [
+   { id: 'original', name: 'original.heic', type: 'image/heic', size: 10 },
+   { id: 'photo', name: 'still.jpeg', type: 'image/jpeg', size: 10, livePhoto: { pairId, role: 'photo' } },
+   { id: 'motion', name: 'motion.mov', type: 'video/quicktime', size: 10, livePhoto: { pairId, role: 'motion' } }
+  ]
+ } : request(body);
+ const draft = await readIncomingShare(bridge, id, accountId, origin, new AbortController().signal);
+ assert.deepEqual(draft.files.map(attachmentSourceLivePhoto), [undefined, { pairId, role: 'photo' }, { pairId, role: 'motion' }]);
+ assert.deepEqual(draft.warnings, []);
+ bridge.request = async body => body.method === 'getIncomingShare' ? {
+  id, accountId, apiOrigin: origin, text: '', warnings: ['Motion was unavailable; sharing the still photo.'],
+  attachments: [{ id: 'photo', name: 'still.jpeg', type: 'image/jpeg', size: 10 }]
+ } : request(body);
+ const fallback = await readIncomingShare(bridge, id, accountId, origin, new AbortController().signal);
+ assert.equal(attachmentSourceLivePhoto(fallback.files[0]), undefined);
+ assert.equal(fallback.warnings.length, 1);
+});
+
+test('malformed, mismatched, duplicate and incomplete native pair metadata is refused', async () => {
+ const { bridge } = mock(); const request = bridge.request;
+ const pairId = '166b6596-37e9-4f51-b589-cf90c912d54d';
+ const photo = { id: 'one', name: 'still.jpeg', type: 'image/jpeg', size: 10, livePhoto: { pairId, role: 'photo' } };
+ for (const attachments of [[photo], [photo, { ...photo, id: 'two' }], [{ ...photo, type: 'text/html' }], [{ ...photo, type: 'image/heic' }], [{ ...photo, livePhoto: { pairId: 'bad', role: 'photo' } }]]) {
+  bridge.request = async body => body.method === 'getIncomingShare' ? { id, accountId, apiOrigin: origin, text: '', attachments } : request(body);
+  await assert.rejects(readIncomingShare(bridge, id, accountId, origin, new AbortController().signal), /Live Photo/);
+ }
 });
 
 test('native capability negotiation accepts compatible patch and minor upgrades', async () => {

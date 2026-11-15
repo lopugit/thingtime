@@ -4,6 +4,13 @@ import Darwin
 import ImageIO
 import UIKit
 import CryptoKit
+import AVFoundation
+
+struct ShareLivePhotoPart: Codable {
+    let pairId: String
+    let role: String
+    var json: [String: String] { ["pairId": pairId, "role": role] }
+}
 
 /// Private draft, retry and receipt data kept beside the original payload.
 /// Never store authentication credentials or session material here.
@@ -13,6 +20,9 @@ struct ShareComposerMetadata: Codable {
     var supplementalTextPaths: [String]?
     /// Generated provider namespaces are not user-supplied directories.
     var providerContainers: [String]?
+    /// Paths are generated inside this batch from one verified PHLivePhoto resource set.
+    var livePhotos: [String: ShareLivePhotoPart]?
+    var warnings: [String]?
     var accountId: String?
     var completed = false
     var submission: ShareComposerSubmission?
@@ -45,7 +55,7 @@ struct ShareComposerSubmission: Codable {
 /// A lease on exactly one committed share. All file access is descriptor-relative;
 /// web callers receive opaque IDs and bounded chunks, never filesystem paths.
 final class ShareComposerSession {
-    static let version = "1.0.0"
+    static let version = "1.1.0"
     static let maxChunkBytes = 256 * 1024
     enum Failure: LocalizedError {
         case unavailable, identity, invalidRequest, busy
@@ -145,7 +155,11 @@ final class ShareComposerSession {
         }
         let providerContainers = Set(metadata.providerContainers ?? [])
         return ["id": id.uuidString, "accountId": accountId, "apiOrigin": origin,
-                "text": text.joined(separator: "\n\n"), "attachments": entries.filter { !inlinePaths.contains($0.path) }.map(\.json),
+                "text": text.joined(separator: "\n\n"), "attachments": entries.filter { !inlinePaths.contains($0.path) }.map { entry in
+                    var value = entry.json
+                    if let part = metadata.livePhotos?[entry.path] { value["livePhoto"] = part.json }
+                    return value
+                }, "warnings": metadata.warnings ?? [],
                 "directories": directories.filter { !providerContainers.contains($0) }, "submission": metadata.submission?.json as Any? ?? NSNull()]
     }
     func read(accountId: String, fileId: String, offset: UInt64, length: Int) throws -> [String: Any] {
@@ -162,10 +176,36 @@ final class ShareComposerSession {
         guard count > 0 || next == entry.size else { throw Failure.unavailable }
         return ["base64": bytes.base64EncodedString(), "nextOffset": next, "eof": next == entry.size]
     }
-    func thumbnail(accountId: String, fileId: String, maxDimension: Int) throws -> [String: Any]? {
+    func thumbnail(accountId: String, fileId: String, maxDimension: Int) async throws -> [String: Any]? {
         let metadata = try metadata(accountId: accountId)
         guard metadata.accountId == accountId, indexed, maxDimension > 0, maxDimension <= 640,
               let entry = entries.first(where: { $0.id == fileId }) else { throw Failure.invalidRequest }
+        if UTType(filenameExtension: (entry.path as NSString).pathExtension)?.conforms(to: .movie) == true {
+            // The index was made from descriptor-relative reads. Verify the file
+            // again before giving AVFoundation its private batch URL.
+            let descriptor = try openFile(path: entry.path)
+            defer { close(descriptor) }
+            var original = stat()
+            guard fstat(descriptor, &original) == 0 else { throw Failure.unavailable }
+            let asset = AVURLAsset(url: directory.appendingPathComponent("payload/" + entry.path))
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
+            let image = try await withTaskCancellationHandler {
+                try await generator.image(at: .zero).image
+            } onCancel: {
+                generator.cancelAllCGImageGeneration()
+            }
+            try Task.checkCancellation()
+            guard try self.metadata(accountId: accountId).accountId == accountId else { throw Failure.identity }
+            // AVFoundation takes a URL, so reject a replaced or symlinked path
+            // before releasing bytes from its asynchronous read.
+            let current = try openFile(path: entry.path)
+            defer { close(current) }
+            var latest = stat()
+            guard fstat(current, &latest) == 0, latest.st_dev == original.st_dev, latest.st_ino == original.st_ino else { throw Failure.unavailable }
+            return Self.jpegThumbnail(image)
+        }
         let reader = ShareThumbnailReader(descriptor: try openFile(path: entry.path))
         let info = Unmanaged.passRetained(reader).toOpaque()
         var callbacks = CGDataProviderDirectCallbacks(version: 0, getBytePointer: nil, releaseBytePointer: nil,
@@ -193,6 +233,9 @@ final class ShareComposerSession {
                 kCGImageSourceThumbnailMaxPixelSize: maxDimension,
                 kCGImageSourceShouldCacheImmediately: true
               ] as CFDictionary) else { return nil }
+        return Self.jpegThumbnail(image)
+    }
+    private static func jpegThumbnail(_ image: CGImage) -> [String: Any]? {
         for quality in [0.75, 0.45, 0.2] {
             if let data = UIImage(cgImage: image).jpegData(compressionQuality: quality), data.count <= 512 * 1024 {
                 return ["base64": data.base64EncodedString(), "type": "image/jpeg"]

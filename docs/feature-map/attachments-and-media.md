@@ -126,6 +126,15 @@ Run that suite on both platforms and Rust workspace tests; see `TESTING.md`
 
 ## Incoming shares
 
+Live Photo pairing uses `attachments/attachmentCore.ts` and the normal attachment
+metadata contract, native `ShareComposerSession` descriptors and lazy source
+files. The image/motion identity survives upload, projection and private copy.
+`LivePhoto`/gallery presentation consumes only complete authorized pairs;
+`VideoPreview` and `ProgressiveImage` handle paused frames and bounded image
+fallback. Run `test:attachments`, `test:share-media-previews:browser`,
+`test:live-photo-playback:browser` and native importer/session tests. Real Photos share
+provider and physical-device acceptance remain separate from synthetic fixtures.
+
 The iOS system Share extension hosts the ordinary `/share` web composer through
 `iOS/ShareSupport/ShareComposerBridge.swift`. `components/IncomingShare/` verifies
 the exact native request, account and origin; `attachmentFileSource.ts` supplies

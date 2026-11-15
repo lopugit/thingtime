@@ -985,10 +985,15 @@ export function useApi() {
 							contentType: string;
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
+							livePhoto?: { pairId: string; role: 'photo' | 'motion' };
 						},
 						options?: ThingRequestOptions
 					) => {
 						await requireSharedContentCapability('api.attachment-uploads', options);
+						if (args?.livePhoto) {
+							await requireThingtimeCapability('api.attachment-uploads', '1.12.0', options?.expectedApiOrigin ?? window.location.origin);
+							await requireThingtimeCapability('api.attachment-upload-complete', '1.9.0', options?.expectedApiOrigin ?? window.location.origin);
+						}
             await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{
@@ -996,7 +1001,8 @@ export function useApi() {
 								filename: args?.filename,
 								contentType: args?.contentType,
 								sizeBytes: args?.sizeBytes,
-								...(args?.purpose ? { purpose: args.purpose } : {})
+								...(args?.purpose ? { purpose: args.purpose } : {}),
+								...(args?.livePhoto ? { livePhoto: args.livePhoto } : {})
 							},
 							{
 								action: '/api/v1/attachments/uploads',

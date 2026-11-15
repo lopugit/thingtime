@@ -31,6 +31,7 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	livePhoto?: { pairId: string; role: 'photo' | 'motion' };
 	// owner-selected display label; the original upload name remains immutable
 	filenamePreview?: string;
 	// owner-authored presentation text (media page + lightbox); absent = none
@@ -59,6 +60,7 @@ export type ComposerAttachmentUpload = {
 	// Selection identity survives HEIC normalization for duplicate detection.
 	sourceFile?: File;
 	previewUrl: string | null;
+	previewContentType?: string;
 	status: AttachmentUploadStatus;
 	progress: number;
 	uploadId: string | null;

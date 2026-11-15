@@ -84,7 +84,8 @@ export const copyStoredAttachment = async (
 			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
 		}
 		const copyRequestId = requestId || deps.uuid();
-		const started = await deps.start(viewer.id, { requestId: copyRequestId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
+		const started = await deps.start(viewer.id, { requestId: copyRequestId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose,
+			...(source.crystal.livePhoto && source.crystal.contentType !== 'application/octet-stream' ? { livePhoto: source.crystal.livePhoto } : {}) });
 		if (!started.ok) throw started;
 		if (typeof started.upload.id !== 'string') throw new Error('Copy upload is unavailable');
 		cleanupId = started.upload.id;
