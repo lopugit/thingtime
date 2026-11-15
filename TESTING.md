@@ -1411,6 +1411,19 @@ persisted; every check is client-side.
 
 ## Session read recovery
 
+- [ ] Leave the session error screen open after failed root reads (including a
+  generic route error). Restore `/api/root-data`: a credentialed, uncached GET
+  with the current query must return real session JSON before the browser
+  reloads the same full URL, including its fragment. No POST/action is replayed.
+  A redirect, HTML shell, health JSON, malformed JSON or HTTP error must keep
+  the screen and manual controls usable. Check focus/reconnect, hidden-tab
+  recovery, timeout, unmount cleanup and no overlapping probes.
+- [ ] Keep bootstrap failing after a healthy probe: repeated automatic reloads
+  slow from 30 seconds to five minutes across reloads, then permit eventual
+  recovery. Thirty seconds of stable successful app rendering clears the guard.
+  With session storage blocked, automatic reload stays off and Try again/Reload
+  page still work.
+
 - [ ] Keep an unsaved draft and an expanded panel open, fail both background
   `/api/root-data` reads, and return to the tab: the same page and component
   instances remain mounted. Restore connectivity: data refreshes without reload.
