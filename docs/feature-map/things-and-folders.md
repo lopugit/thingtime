@@ -1,5 +1,12 @@
 # Things and folders
 
+Builder saves negotiate `api.things` 1.69.1 / `api.things-update` 1.30.1.
+The canonical Webpage sanitizer retains empty text/HTML placeholders and complete
+text; cleared optional values use their empty/default semantics. Local Timeline
+drafts omit undefined object properties before strict JSON validation, without
+mutating the editor or weakening wire validation. Cover with `test:timeline`,
+`test:schemas`, `test:webpages` and `test:api-capabilities`.
+
 The default private Debug folder has protected root uniqueness and a
 `libraryHidden` marker: omitted from normal root/sidebar listings, available to
 exact owner Things/MCP reads. Its relational accounted `device-diagnostic`

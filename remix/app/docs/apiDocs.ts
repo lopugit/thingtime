@@ -9794,8 +9794,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.69.0',
-    contractVersion: '1.69.0',
+    featureVersion: '1.69.1',
+    contractVersion: '1.69.1',
 
 
     group: 'things',
@@ -9805,6 +9805,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.69.1 accepts empty or cleared Webpage text/HTML blocks and preserves complete text without truncation. Access checks and render sanitization remain enforced. ' +
       'Version 1.67 accepts optional tt-pdf document and tt-pdf-page canvas element blocks with individually editable child controls. Canonical src media references use existing dependency/ACL/copy traversal; PDF scripts and annotations do not execute. ' +
       'Version 1.66 combines complete relational ACL and audience projections with saved Component/Webpage source input retention; writes and reads preserve current-root authorization and generation checks. ' +
       'Version 1.65 accepts saved Component/Webpage source retainOnInputChange for explicitly listed non-ID input names; source authority and input identity remain fenced. ' +
@@ -10109,7 +10110,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ],
-    notes: ['Version 1.51.0 removes the application JSON body-size ceiling for authenticated Post and Data writes after authorization and rate admission.', "Version1.50 stores reusable tt-rich-text fields/read views, context-enabled tt-menu editable target/content/trigger slots, generic map marker scale/zoom/grouping presentation, and typed Action descriptors without a fixed input-count ceiling. Schema/ACL/JSON/resource-budget validation is unchanged.",
+    notes: ['Version 1.69.1 accepts empty or cleared text/HTML blocks and preserves complete text without truncation. Optional null values retain their existing empty/default semantics; access checks and render sanitization remain enforced.', 'Version 1.51.0 removes the application JSON body-size ceiling for authenticated Post and Data writes after authorization and rate admission.', "Version1.50 stores reusable tt-rich-text fields/read views, context-enabled tt-menu editable target/content/trigger slots, generic map marker scale/zoom/grouping presentation, and typed Action descriptors without a fixed input-count ceiling. Schema/ACL/JSON/resource-budget validation is unchanged.",
 
       'DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.',
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
@@ -11950,14 +11951,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.30.0',
-    contractVersion: '1.30.0',
+    featureVersion: '1.30.1',
+    contractVersion: '1.30.1',
 
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Version 1.30 accepts the same editable tt-pdf / tt-pdf-page element blocks under ordinary CAS, media dependency and ACL validation.', 'Version 1.29.0 validates and preserves saved Component/Webpage source retainOnInputChange for existing non-ID input names.', 'Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.30.1 accepts empty or cleared text/HTML blocks and preserves complete text without truncation. Optional null values retain their existing empty/default semantics; access checks and render sanitization remain enforced.', 'Version 1.30 accepts the same editable tt-pdf / tt-pdf-page element blocks under ordinary CAS, media dependency and ACL validation.', 'Version 1.29.0 validates and preserves saved Component/Webpage source retainOnInputChange for existing non-ID input names.', 'Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
       'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
@@ -13844,13 +13845,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.20.0',
-    featureVersion: '1.20.0',
+    contractVersion: '1.20.1',
+    featureVersion: '1.20.1',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
-    notes: ['Version 1.20 preserves saved source retainOnInputChange through authorized Webpage/Component resolution.', "Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.20.1 accepts empty or cleared text/HTML blocks and preserves complete text without truncation. Optional null values retain their existing empty/default semantics; access checks and render sanitization remain enforced.', 'Version 1.20 preserves saved source retainOnInputChange through authorized Webpage/Component resolution.', "Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
       'Version 1.20 preserves source retainOnInputChange for explicitly listed non-ID filter inputs without changing source authority. ' +
       'Version 1.19 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +

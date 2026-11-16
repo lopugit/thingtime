@@ -70,6 +70,44 @@ test('an invalid capture cannot later claim a successful flush', async () => {
  await assert.rejects(recorder.flush()); assert.equal((await store.pending()).length, 0); await backend.close();
 });
 
+test('cleared optional Builder fields survive the save barrier and IndexedDB reload', async () => {
+ const factory = new IDBFactory(); const backend = new IndexedDbTimelineBackend(factory);
+ const store = new TimelineLocalStore(scope, backend);
+ const recorder = new TimelineDraftRecorder(store, 'page-1', 'draft-cleared', 'client-1');
+ const snapshot = (text: string) => ({ adapter: 'webpage-draft', version: 1, value: {
+  crystal: { blocks: [{ id: 'box', type: 'container', children: [
+   { id: 'text', type: 'text', text, html: undefined, css: { color: undefined, padding: '14px' } }
+  ] }] }, baseUpdatedAt: null
+ } });
+ const before = snapshot('Before'); const after = snapshot('After');
+ const id = await recorder.capture(before, after, 'Edit page'); await recorder.flush();
+ assert.ok(Object.prototype.hasOwnProperty.call(after.value.crystal.blocks[0].children[0], 'html'), 'the editor object is untouched');
+ after.value.crystal.blocks[0].children[0].text = 'Later unsaved edit';
+ await backend.close();
+ const reopened = new IndexedDbTimelineBackend(factory);
+ const saved = await new TimelineLocalStore(scope, reopened).draft('page-1', 'draft-cleared');
+ assert.equal(saved?.id, id);
+ assert.deepEqual(saved?.before, JSON.parse(JSON.stringify(before)));
+ assert.deepEqual(saved?.after, JSON.parse(JSON.stringify(snapshot('After'))));
+ assert.deepEqual(parseTimelineEvent(saved), saved, 'saved events still satisfy strict wire validation');
+ assert.throws(() => parseTimelineEvent({ ...saved, after: snapshot('Raw editor state') }), /JSON values/);
+ await reopened.close();
+});
+
+test('draft normalization still refuses lossy values without executing accessors', async () => {
+ const backend = new IndexedDbTimelineBackend(new IDBFactory()); const store = new TimelineLocalStore(scope, backend);
+ let getterCalls = 0;
+ const getter = { get html() { getterCalls++; return undefined; } };
+ const cycle: any = {}; cycle.self = cycle;
+ for (const value of [{ text: NaN }, { text: () => 'no' }, [undefined], Array(1), getter, cycle, new Date()]) {
+  const recorder = new TimelineDraftRecorder(store, 'page-1', 'draft-invalid', 'client-1');
+  assert.throws(() => recorder.capture(null, { adapter: 'webpage-draft', version: 1, value }, 'Invalid'));
+  await assert.rejects(recorder.flush());
+ }
+ assert.equal(getterCalls, 0); assert.equal((await store.pending()).length, 0);
+ await backend.close();
+});
+
 const openDatabase = (factory: IDBFactory, name: string, version?: number, upgrade?: (db: IDBDatabase) => void): Promise<IDBDatabase> => new Promise((resolve, reject) => {
  const request = factory.open(name, version); request.onupgradeneeded = () => upgrade?.(request.result);
  request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
