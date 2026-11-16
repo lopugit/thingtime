@@ -5,6 +5,11 @@ import type { SourceInputValue } from '~/schemas/sourceInputs';
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
 
+export const BUILDER_SAVE_REQUIREMENTS = {
+	'api.things': '1.69.1',
+	'api.things-update': '1.30.1'
+} as const;
+
 export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html' | 'element' | 'collection' | 'condition';
 export type WebpageContainerDirection = 'column' | 'row' | 'grid';
 export type WebpageTextStyle = 'body' | 'heading' | 'eyebrow';

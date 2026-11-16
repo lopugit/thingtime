@@ -181,6 +181,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-16: Fix Builder saves after clearing optional fields: local history
+  omits undefined object properties, empty text/HTML blocks remain saveable,
+  and text is no longer truncated at 2,000 characters. Preserve strict wire
+  validation, access checks and safe rendering. **Codex (AI)**
+
 - 2026-11-15: Bundle a macOS Sharing extension and scoped desktop handoff to the
   existing iOS share composer, with durable pending shares, account/endpoint
   fencing, native window dismissal and signed-package verification. Preserve

@@ -1,3 +1,7 @@
+## Builder cleared-field save regression
+
+- [ ] Edit nested Builder text (which clears its optional rich HTML), clear optional styling, then immediately Save. Verify the Timeline draft and server page retain the text, media references and remaining styling after reload. Repeat edits and Save; undefined optional object properties must not block history capture. Save empty text and HTML blocks, null/cleared optional fields, and text longer than 2,000 characters; exact-ID readback and reload must retain every block and the complete text. Invalid values, getters and undefined array entries must still be rejected without claiming a saved draft.
+
 ## Private device diagnostics
 
 - [ ] Full-owner sign-in provisions one hidden private Debug folder across concurrent retries; accounting/storage failure preserves successful auth and is explicit through diagnostics. Normal root/sidebar lists omit it; exact owner Things/MCP reads work. Anonymous, another owner, device bearer history reads, generic share/edit and spoofed device/owner fields must fail. Parent ACL changes must never expose event children.

@@ -1,5 +1,6 @@
 import { captureComponentBindings, type ComponentBindings } from './componentBindings.ts';
-import { parseTimelineEvent, timelineScopeKey, type TimelineEvent } from './contract.ts';
+import { parseTimelineEvent, timelineScopeKey, TIMELINE_EVENT_JSON_BUDGET, type TimelineEvent } from './contract.ts';
+import { copyBoundedJson } from '../utils/boundedJson.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 
 /** Serializes a draft's local writes. Failed writes remain queued with their
@@ -20,10 +21,14 @@ export class TimelineDraftRecorder {
 	}
 	capture(before: unknown, after: unknown, label: string, components?: ComponentBindings): Promise<string | null> {
 		let event: TimelineEvent;
-		try { event = parseTimelineEvent({
+		try {
+			// Match the editor's JSON save semantics for cleared optional fields,
+			// without invoking getters/toJSON or dropping other invalid values.
+			const snapshots = copyBoundedJson({ before, after }, TIMELINE_EVENT_JSON_BUDGET, 'Draft snapshot', { omitUndefinedObjectProperties: true }) as Record<string, unknown>;
+			event = parseTimelineEvent({
 			formatVersion: 1, id: this.uuid(), ownerId: this.ownerId, actorId: this.ownerId,
 			thingId: this.thingId, branchId: this.branchId, parentIds: this.head ? [this.head] : [], operationId: this.uuid(),
-			source: 'client', clientId: this.clientId, occurredAt: this.now(), mode: 'draft', operation: 'update', label, before, after, dependencies: this.dependencies
+			source: 'client', clientId: this.clientId, occurredAt: this.now(), mode: 'draft', operation: 'update', label, before: snapshots.before, after: snapshots.after, dependencies: this.dependencies
 		});
 		if (components !== undefined) {
 			const captured = captureComponentBindings(event, components, this.bindingEvents, () => this.uuid());
