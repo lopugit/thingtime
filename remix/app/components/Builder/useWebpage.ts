@@ -3,7 +3,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
 import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
-import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
+import { BUILDER_SAVE_REQUIREMENTS, requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -403,6 +403,9 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				// Empty/cleared blocks and complete text must reach a compatible write gate.
+				const writeFeature = resolved?.source === 'user' && page ? 'api.things-update' : 'api.things';
+				await requireThingtimeCapability(writeFeature, BUILDER_SAVE_REQUIREMENTS[writeFeature]);
 				if (usesComponentArgumentBindings(blocks)) await requireThingtimeCapability('api.webpages-resolve', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve']);
 				else if (usesSourceInputReferences(blocks)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
 				else if (usesPageCollections(blocks)) await requireThingtimeCapability('api.webpages-resolve', PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve']);

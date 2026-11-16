@@ -1456,7 +1456,6 @@ export const MAX_WEBPAGE_BLOCKS = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_BLOCK_ID_CHARS = 40;
 export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
-export const MAX_WEBPAGE_TEXT_CHARS = 2000;
 export const MAX_WEBPAGE_BLOCKS_BYTES = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_ROUTE_CHARS = 120;
 export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html', 'element', 'collection', 'condition'] as const;
@@ -5852,14 +5851,14 @@ const sanitizeWebpageBlock = (
 		}
 		block.align = align;
 	}
-	if (raw.maxWidth !== undefined && raw.maxWidth !== null) {
+	if (raw.maxWidth !== undefined && raw.maxWidth !== null && raw.maxWidth !== '') {
 		const maxWidth = Number(raw.maxWidth);
 		if (!Number.isInteger(maxWidth) || maxWidth < 120 || maxWidth > 1680) {
 			return fail(400, `Block ${id} maxWidth must be 120–1680`);
 		}
 		block.maxWidth = maxWidth;
 	}
-	if (raw.css !== undefined && raw.css !== null) {
+	if (raw.css !== undefined && raw.css !== null && raw.css !== '') {
 		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
 			return fail(400, `Block ${id} css must be an object of css property → value`);
 		}
@@ -5987,8 +5986,7 @@ const sanitizeWebpageBlock = (
 	if (type === 'text') {
 		const text = typeof raw.text === 'string' ? raw.text : '';
 		const html = typeof raw.html === 'string' ? raw.html : '';
-		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
-		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
+		block.text = text;
 		if (html.trim()) {
 			// Rich WYSIWYG HTML goes through the sanitizing renderer.
 			block.html = html;
@@ -6037,7 +6035,6 @@ const sanitizeWebpageBlock = (
 
 	if (type === 'html') {
 		const html = typeof raw.html === 'string' ? raw.html : '';
-		if (!html.trim()) return fail(400, `Block ${id} needs html`);
 		// stored verbatim, never rendered raw: the client parses it into the
 		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
 		block.html = html;

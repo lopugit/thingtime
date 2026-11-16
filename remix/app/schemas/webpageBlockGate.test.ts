@@ -112,10 +112,25 @@ test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 't2', type: 'text', text: 'hi', tag: 'iframe' }]).ok, false);
 });
 
-test('HTML source remains complete and a blank HTML block is refused', () => {
+test('HTML source remains complete and empty HTML is a valid editable placeholder', () => {
 	assert.equal(page([{ id: 'h1', type: 'html', html: 'a'.repeat(22_000) }]).ok, true);
-	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, false);
+	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, true);
 	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(22_000) }]).ok, true);
+});
+
+test('empty, null and cleared optional Builder values save without losing content', () => {
+	for (const empty of ['', null, undefined]) {
+		const blocks = okBlocks(page([
+			{ id: 'text', type: 'text', text: empty, html: empty, css: empty, href: empty, maxWidth: empty === '' ? undefined : empty },
+			{ id: 'html', type: 'html', html: empty },
+			{ id: 'media', type: 'media', src: empty, alt: empty },
+			{ id: 'container', type: 'container', children: empty === '' ? undefined : empty }
+		]));
+		assert.equal(blocks[0].text, ''); assert.equal(blocks[1].html, '');
+		assert.equal(blocks[2].src, ''); assert.deepEqual(blocks[3].children, []);
+	}
+	const text = 'Long editable text 🌈\n'.repeat(1500);
+	assert.equal(okBlocks(page([{ id: 'long-text', type: 'text', text }]))[0].text, text);
 });
 
 // previewBg is drawn on /p/<id>, where the viewer is not the author, so it has

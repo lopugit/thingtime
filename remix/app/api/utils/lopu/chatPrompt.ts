@@ -22,7 +22,6 @@ import {
   MAX_WEBPAGE_BLOCK_ID_CHARS,
   MAX_WEBPAGE_BLOCKS,
   MAX_WEBPAGE_BLOCKS_BYTES,
-  MAX_WEBPAGE_TEXT_CHARS,
   SCHEMA_FIELD_TYPES,
   WEBPAGE_BLOCK_ALIGNS,
   WEBPAGE_BLOCK_TYPES,
@@ -108,7 +107,7 @@ const grammars = (): string => {
     '### Webpage blocks\n' +
     `Block types: ${WEBPAGE_BLOCK_TYPES.join(' | ')}. Caps: ${MAX_WEBPAGE_BLOCKS} blocks, depth ${MAX_WEBPAGE_BLOCK_DEPTH}, ${MAX_WEBPAGE_BLOCKS_BYTES} bytes serialised; ` +
     `ids are unique lowercase-dashed slugs ≤ ${MAX_WEBPAGE_BLOCK_ID_CHARS} chars; page names ≤ ${MAX_SCHEMA_NAME_CHARS} chars.\n` +
-    '- `{ id, type: "text", text (≤ ' + MAX_WEBPAGE_TEXT_CHARS + ' chars), style: ' + WEBPAGE_TEXT_STYLES.join(' | ') + ', tag?: ' + WEBPAGE_TEXT_TAGS.join(' | ') + ', href?: https:// or site-relative or mailto:/tel: (a styled text with href IS a button) }`\n' +
+    '- `{ id, type: "text", text, style: ' + WEBPAGE_TEXT_STYLES.join(' | ') + ', tag?: ' + WEBPAGE_TEXT_TAGS.join(' | ') + ', href?: https:// or site-relative or mailto:/tel: (a styled text with href IS a button) }`\n' +
     '- `{ id, type: "container", direction: ' + WEBPAGE_CONTAINER_DIRECTIONS.join(' | ') + ', gap?: number (spacing units), columns?: number (grid), children: [blocks] }` — the only block that holds children\n' +
     '- `{ id, type: "component", component: "<componentKey or thing id>", args?: { argName: scalar }, source?: { action: "<actionKey>", inputs?: {}, refresh?: "load" | "manual" | "interval" } }` (source binds the action result into the template as `result`)\n' +
     '- `{ id, type: "media", media: "image" | "video" | "audio", src: https:// or site-relative, alt? }`\n' +
