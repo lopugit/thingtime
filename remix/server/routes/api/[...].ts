@@ -1,3 +1,4 @@
+import { dispatchScheduledRequest } from '../../../app/api/utils/automation/scheduledDispatch';
 import { platformScheduledRunSink } from '../../../app/api/utils/automation/platformReporting';
 import { createScheduledRunReporter } from '../../../app/api/utils/automation/scheduledRunReporting';
 import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
@@ -24,6 +25,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/admin/job-schedules': () => import('../../../app/routes/api/v1/admin/job-schedules/_job-schedules'),
   'v1/admin/platform-reporting': () => import('../../../app/routes/api/v1/admin/platform-reporting/_platform-reporting'),
   'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
@@ -49,6 +51,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/webpages/seed-demos': () => import('../../../app/routes/api/v1/admin/webpages/seed-demos/_seed-demos'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/deployment-profiles': () => import('../../../app/routes/api/v1/admin/ci/deployment-profiles/_deployment-profiles'),
   'v1/admin/ci/preview-retention': () => import('../../../app/routes/api/v1/admin/ci/preview-retention/_preview-retention'),
   'v1/admin/ci/previews': () => import('../../../app/routes/api/v1/admin/ci/previews/_previews'),
   'v1/admin/ci/stacks/chat': () => import('../../../app/routes/api/v1/admin/ci/stacks/chat/_chat'),
@@ -92,6 +95,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
+  'v1/integrations/ci/deployment-profiles': () => import('../../../app/routes/api/v1/integrations/ci/deployment-profiles/_deployment-profiles'),
   'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/ci/progress': () => import('../../../app/routes/api/v1/integrations/ci/progress/_progress'),
@@ -566,11 +570,13 @@ export default defineHandler(async (event) => {
       const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
       if (identityFailure) return identityFailure;
       if (event.req.headers.has('X-Thingtime-Background-Id')) {
+        if (event.req.headers.has('X-Thingtime-Schedule-Time')) return new Response(null, { status: 403 });
         const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
       try {
-        return reportScheduledRequest(event.req, '/api/' + path, async () => normalizeResponse(await handler({ request: event.req })));
+        return dispatchScheduledRequest(event.req, '/api/' + path, request =>
+          reportScheduledRequest(request, '/api/' + path, async () => normalizeResponse(await handler({ request }))));
       } finally {
         // Source/queue transactions have finished before the recovery worker
         // opens its own transaction. Durable jobs also survive a lost request.

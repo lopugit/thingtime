@@ -1,11 +1,14 @@
 import { defineMiddleware } from 'nitro/h3';
 
+import { pilotBuild } from '../../app/api/utils/deployment/pilotBuild';
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
 import { admitGatewayWork, GatewayUnavailable } from '../../app/api/utils/deployment/environmentGateway';
 import { withIndexReadinessRequest } from '../../app/api/utils/mongodb/collections';
 import { environmentGatewayIngress, gatewayFailure, isGatewayDataPath } from '../utils/environmentGateway';
 
 export default defineMiddleware(async (event, next) => {
-  const dataPath = isGatewayDataPath(new URL(event.req.url).pathname);
+  const pathname = new URL(event.req.url).pathname;
+  const dataPath = isGatewayDataPath(pathname) || (!!pilotBuild() && pathname === THINGTIME_CAPABILITY_MANIFEST_PATH);
   // Static and follower traffic must never keep a demoted owner's pools alive.
   let lease: Awaited<ReturnType<typeof admitGatewayWork>> | undefined;
   const end = () => lease?.end();

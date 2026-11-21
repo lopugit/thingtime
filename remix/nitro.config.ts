@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import { selectPilotBuild } from './app/api/utils/deployment/pilotBuild';
 import { defineNitroConfig } from 'nitro/config';
 import { generateRoutePreviews } from './scripts/generate-route-previews.mjs';
 
@@ -27,6 +28,7 @@ const desktopMiddleware = /^node[_-]middleware$/.test(process.env.NITRO_PRESET ?
 
 export default defineNitroConfig({
   serverDir: 'server',
+  replace: { __THINGTIME_DEPLOYMENT_PILOT__: JSON.stringify(selectPilotBuild(process.env)) },
   // Electron owns the HTTP socket; Nitro's middleware preset assumes another
   // host serves public assets unless explicitly enabled. Keep cloud defaults.
   ...(desktopMiddleware ? { serveStatic: true } : {}),

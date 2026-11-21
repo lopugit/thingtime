@@ -1,3 +1,4 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
@@ -5,7 +6,7 @@ import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { syncAiProviderModels } from '~/api/utils/ai/modelSync';
 
 export const createAiModelSyncLoader =
-	(dependencies = { secret: () => process.env.CRON_SECRET, sync: syncAiProviderModels }) =>
+	(dependencies = { secret: () => scheduledJobSecret(), sync: syncAiProviderModels }) =>
 	async ({ request }: { request: Request }) =>
 		withAdminPrivateResponse(async () => {
 			if (request.method !== 'GET') return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET' } });

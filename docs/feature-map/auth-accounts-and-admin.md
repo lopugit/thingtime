@@ -607,3 +607,15 @@ reload guard prevents rapid boot/reload loops; thirty seconds of stable
 successful `root.tsx` rendering clears it. Recovery never invokes the
 temporary-account POST or other actions.
 Run `test:root-data` and `test:hooks`; use TESTING.md's session read checklist.
+
+Scheduled jobs in Admin use the editable `JobScheduleSettings` document,
+`api.admin-job-schedules` and home database settings. The scheduler and signed
+GitHub dispatch use the same registered job paths and one atomic UTC-day claim.
+The default digest is weekly on Sunday. All other defaults run daily.
+
+The Admin deployment profile editor uses separate editable blocks in
+`Admin/deploymentProfileBlocks.ts`. The home-plane store in
+`ciControl/deploymentProfiles.ts` protects each destination and revision.
+`admin/ci/deployment-profiles` requires the active administrator, while
+`integrations/ci/deployment-profiles` is a purpose-bound, signed controller
+read. Register both through the API docs and Nitro catch-all.

@@ -1,10 +1,11 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { deviceObservations } from '~/api/utils/devices/deviceObservations';
 import { observationResponse, observationHeaders } from '~/api/utils/devices/deviceObservationResponses';
 export const createObservationCleanupLoader =
-	(deps = { secret: () => process.env.CRON_SECRET, sweep: deviceObservations.sweep }) =>
+	(deps = { secret: () => scheduledJobSecret(), sweep: deviceObservations.sweep }) =>
 	async ({ request }: { request: Request }) =>
 		observationResponse(async () => {
 			if (request.method !== 'GET') throw json({ ok: false, error: 'Method not allowed' }, { status: 405 });

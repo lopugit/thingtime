@@ -1,11 +1,14 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
+import { pilotBuild, type PilotBuild } from '../../app/api/utils/deployment/pilotBuild';
+import { isDeploymentProfileId } from '../../app/api/utils/ciControl/deploymentProfilesCore';
+import { authenticatePilot, isPilotGateway, PILOT_GATEWAY, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, PILOT_VERSION, TRUSTED_SOURCE_HEADER } from './deploymentPilot';
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { ROBOTS_PATH } from '../../app/api/utils/seo/sitemapCore';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, withGatewayWork, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { gatewayAuthority, readGatewayManifest, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, withGatewayWork, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -55,7 +58,7 @@ const cleanHeaders = (source: Headers) => {
   const headers = new Headers(source);
   // RFC 9110 Connection can nominate additional hop-by-hop fields.
   for (const name of (headers.get('connection') || '').split(',').map(value => value.trim()).filter(Boolean)) headers.delete(name);
-  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded' || name === VERCEL_PROTECTION_BYPASS_HEADER || name === 'x-vercel-set-bypass-cookie') headers.delete(name);
+  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded' || name === VERCEL_PROTECTION_BYPASS_HEADER || name === 'x-vercel-set-bypass-cookie' || name === 'x-vercel-oidc-token' || name === TRUSTED_SOURCE_HEADER) headers.delete(name);
   for (const name of HOP_HEADERS) headers.delete(name);
   return headers;
 };
@@ -73,21 +76,26 @@ export const restoreGatewayRequest = (request: Request, settings: GatewaySetting
       relay.method !== request.method || relay.path !== url.pathname + url.search || !Number.isFinite(relay.at) ||
       Math.abs(now - relay.at) > MAX_RELAY_AGE_MS || relay.headers !== digestHeaders(request.headers, url.pathname)) return null;
     const origin = gatewayOrigin(relay.origin);
-    const original = new URL(origin); original.pathname = url.pathname; original.search = url.search;
-    const headers = cleanHeaders(request.headers);
-    headers.set('x-forwarded-host', original.host);
-    headers.set('x-forwarded-proto', original.protocol.slice(0, -1));
-    const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, signal: request.signal };
-    if (!['GET', 'HEAD'].includes(request.method) && request.body) { init.body = request.body; init.duplex = 'half'; }
-    const restored = new Request(original, init);
-    // srvx attaches platform runtime and waitUntil to its lazy ServerRequest.
-    // Auth gets a native URL/body while Nitro retains the original transport.
-    const transport = request as Request & { runtime?: unknown; context?: unknown; waitUntil?: (work: Promise<unknown>) => void };
-    Object.assign(restored, { runtime: transport.runtime, context: transport.context,
-      ...(transport.waitUntil ? { waitUntil: transport.waitUntil.bind(request) } : {}) });
-    return restored;
+    return restoreOriginalOrigin(request, origin);
   } catch { return null; }
 };
+
+function restoreOriginalOrigin(request: Request, origin: string) {
+  const url = new URL(request.url);
+  const original = new URL(origin); original.pathname = url.pathname; original.search = url.search;
+  const headers = cleanHeaders(request.headers);
+  headers.set('x-forwarded-host', original.host);
+  headers.set('x-forwarded-proto', original.protocol.slice(0, -1));
+  const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, signal: request.signal };
+  if (!['GET', 'HEAD'].includes(request.method) && request.body) { init.body = request.body; init.duplex = 'half'; }
+  const restored = new Request(original, init);
+  // srvx attaches platform runtime and waitUntil to its lazy ServerRequest.
+  // Auth gets a native URL/body while Nitro retains the original transport.
+  const transport = request as Request & { runtime?: unknown; context?: unknown; waitUntil?: (work: Promise<unknown>) => void };
+  Object.assign(restored, { runtime: transport.runtime, context: transport.context,
+    ...(transport.waitUntil ? { waitUntil: transport.waitUntil.bind(request) } : {}) });
+  return restored;
+}
 
 const forwardResponse = (request: Request, upstream: Response) => {
   const headers = cleanHeaders(upstream.headers);
@@ -102,23 +110,23 @@ const forwardResponse = (request: Request, upstream: Response) => {
   return new Response(body, { status: upstream.status, statusText: upstream.statusText, headers });
 };
 
+function supportsOperation(request: Request, manifest: Awaited<ReturnType<typeof readGatewayManifest>>) {
+  const url = new URL(request.url);
+  const doc = apiEndpointDocs.find(doc => doc.endpoint === url.pathname || doc.docsEndpoint === url.pathname);
+  if (!doc) return false;
+  const feature = `api.${doc.id}`;
+  const method = request.method === 'HEAD' ? 'GET' : request.method;
+  return capabilitySatisfies(manifest.features[feature]?.version, doc.featureVersion || doc.contractVersion) &&
+    manifest.operations.some(operation => operation.feature === feature && operation.path === url.pathname && operation.methods.includes(method));
+}
+
 export const proxyEnvironmentRequest = async (request: Request, authority: NonNullable<Awaited<ReturnType<typeof gatewayAuthority.current>>>) => {
   if (request.headers.has(GATEWAY_RELAY_HEADER) || request.headers.has(SIGNATURE_HEADER)) return gatewayFailure(508, 'ENVIRONMENT_GATEWAY_LOOP');
   const { settings, manifest } = authority;
   const url = new URL(request.url);
   if (!permittedSourceOrigins(settings).has(url.origin)) return gatewayFailure(421, 'ENVIRONMENT_GATEWAY_ORIGIN');
   if (crossSiteMutation(request)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
-  const doc = apiEndpointDocs.find(doc => doc.endpoint === url.pathname || doc.docsEndpoint === url.pathname);
-  if (doc) {
-    const required = doc.featureVersion || doc.contractVersion;
-    const method = request.method === 'HEAD' ? 'GET' : request.method;
-    if (!capabilitySatisfies(manifest.features[`api.${doc.id}`]?.version, required) ||
-      !manifest.operations.some(operation => operation.feature === `api.${doc.id}` && operation.path === url.pathname && operation.methods.includes(method)))
-      return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
-  } else {
-    // Unknown branch routes must not be silently executed on an older backend.
-    return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
-  }
+  if (!supportsOperation(request, manifest)) return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
   const headers = cleanHeaders(request.headers);
   const payload = Buffer.from(JSON.stringify({ version: 1, hop: 1, environment: settings.environment, target: settings.origin,
     origin: url.origin, path: url.pathname + url.search, method: request.method, at: Date.now(), headers: digestHeaders(headers, url.pathname) })).toString('base64url');
@@ -139,10 +147,72 @@ export const proxyEnvironmentRequest = async (request: Request, authority: NonNu
   }
 };
 
+// Keep only public discovery metadata, scoped to the fixed preview authority.
+// Tokens and application responses never enter this cache.
+let pilotManifest: { value: Awaited<ReturnType<typeof readGatewayManifest>>; expires: number } | undefined;
+async function readPilotManifest(token: string) {
+  if (pilotManifest && Date.now() < pilotManifest.expires) return pilotManifest.value;
+  const discovery = await fetch(PILOT_GATEWAY + THINGTIME_CAPABILITY_MANIFEST_PATH, {
+    headers: { [TRUSTED_SOURCE_HEADER]: token }, redirect: 'error', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(5000)
+  });
+  const manifest = await readGatewayManifest(discovery);
+  if (manifest.schemaVersion !== 1 || manifest.origin !== PILOT_GATEWAY || manifest.gateway?.environment !== 'preview' ||
+      manifest.gateway?.origin !== PILOT_GATEWAY || !manifest.gateway.deploymentId || !Array.isArray(manifest.operations) ||
+      !capabilitySatisfies(manifest.features?.['api.environment-gateway']?.version, PILOT_VERSION)) throw new Error('Incompatible preview gateway');
+  pilotManifest = { value: manifest, expires: Date.now() + 5000 };
+  return manifest;
+}
+
+// The dedicated project is enrolled only for the existing nonproduction data
+// authority. Authenticate the workload independently of the user's normal session.
+export async function proxyPilotRequest(request: Request, pilot: PilotBuild): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.origin !== pilot.origin) return gatewayFailure(421, 'ENVIRONMENT_GATEWAY_ORIGIN');
+  if (crossSiteMutation(request)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
+  const token = request.headers.get('x-vercel-oidc-token');
+  if (!token || token.length > 16384) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
+  const manifest = await readPilotManifest(token);
+  if (url.pathname === THINGTIME_CAPABILITY_MANIFEST_PATH) {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD, OPTIONS' } });
+    const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'If-None-Match' };
+    // A pilot never advertises itself as a database owner.
+    return new Response(request.method === 'GET' ? JSON.stringify({ ...manifest, origin: pilot.origin, gateway: null }) : null,
+      { status: request.method === 'OPTIONS' ? 204 : 200, headers });
+  }
+  if (!supportsOperation(request, manifest)) return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
+  const headers = cleanHeaders(request.headers);
+  headers.set(TRUSTED_SOURCE_HEADER, token);
+  headers.set(PILOT_OIDC_HEADER, token);
+  headers.set(PILOT_PROFILE_HEADER, pilot.profileId);
+  const target = new URL(PILOT_GATEWAY);
+  target.pathname = url.pathname;
+  target.search = url.search;
+  const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, redirect: 'manual', cache: 'no-store', signal: request.signal };
+  if (!['GET', 'HEAD'].includes(request.method) && request.body) { init.body = request.body; init.duplex = 'half'; }
+  return forwardResponse(request, await fetch(target, init));
+}
+
 export const environmentGatewayIngress = async (request: Request): Promise<Response | Request | null> => {
   try {
+    const pilot = pilotBuild();
+    if (pilot) return proxyPilotRequest(request, pilot).catch(() => gatewayFailure());
+    const pilotId = request.headers.get(PILOT_PROFILE_HEADER);
+    const token = request.headers.get(PILOT_OIDC_HEADER);
     const settings = getGatewaySettings();
     const relayed = request.headers.has(GATEWAY_RELAY_HEADER) || request.headers.has(SIGNATURE_HEADER);
+    if (pilotId !== null || token !== null) {
+      if (!settings || !isDeploymentProfileId(pilotId) || !token || relayed || !isPilotGateway(settings) ||
+          getMongoConnectionMode() !== 'proxy' || new URL(request.url).origin !== PILOT_GATEWAY ||
+          !(await gatewayAuthority.current())?.owner || request.headers.has('x-tt-mongo-url') ||
+          /(?:^|;)\s*tt_mongo=/.test(request.headers.get('cookie') || '')) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
+      const { getDeploymentProfile } = await import('../../app/api/utils/ciControl/deploymentProfiles');
+      const profile = await withGatewayWork(() => getDeploymentProfile(pilotId));
+      if (!profile || !await authenticatePilot(token, profile)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
+      const restored = restoreOriginalOrigin(request, profile.testOrigin);
+      if (crossSiteMutation(restored)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
+      return restored;
+    }
     if (!settings) return relayed ? gatewayFailure(403, 'ENVIRONMENT_GATEWAY_RELAY') : null;
     const authority = await gatewayAuthority.current();
     if (!authority) return gatewayFailure();
@@ -161,6 +231,7 @@ export const environmentGatewayIngress = async (request: Request): Promise<Respo
 /** SPA shells remain local. Only their owner-side public metadata lookup holds
  * a database lease; proxy followers render generic metadata without a DB dial. */
 export const withGatewayShellWork = async <T>(work: () => Promise<T>, fallback: () => T): Promise<T> => {
+  if (pilotBuild()) return fallback();
   const authority = await gatewayAuthority.current();
   if (authority && !authority.owner && getMongoConnectionMode() === 'proxy') return fallback();
   return withGatewayWork(work);

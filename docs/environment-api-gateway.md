@@ -291,3 +291,49 @@ proof that an already submitted server operation stopped instantaneously.
 Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
+
+## Parallel Hobby frontend with database-backed enrollment
+
+A protected GitHub build may set `THINGTIME_PILOT_PROFILE_ID` and
+`THINGTIME_PILOT_ORIGIN`. These two **nonsecret build inputs** compile the
+profile identifier and exact HTTPS `.vercel.app` test alias into the server.
+Keep both unset for ordinary builds. The pilot needs zero user-configured
+Vercel project or deployment environment variables. Its application handlers
+and configuration remain on the preview data authority. Its local server
+cannot open a MongoDB connection. It has no cron schedules.
+
+Use a dedicated Vercel project whose production deployments only the approved
+publisher can create. Disable Git source builds. Verify the project’s immutable
+team and project IDs, enrolled alias, OIDC team issuer, and deploy permissions
+before enabling its parallel profile. An OIDC identity authenticates a
+**project and environment**. It does not attest an individual Git commit or
+deployment ID. Restricted publisher access and the controller’s independent
+source/deployment verification remain necessary.
+
+On the preview gateway, enable the same profile in its own database. The
+gateway requires its fixed preview origin, current gateway ownership, a
+development data environment with the development authority and a
+nonproduction federation ID. Independently verify its actual database and
+credentials are distinct from production. A profile saved in a separate
+production database cannot grant access on this gateway.
+
+For Vercel-protected preview ingress, configure a Trusted Sources external
+service restricted to the exact Hobby team issuer, audience, project subject,
+immutable owner/project IDs and intended preview target. See
+[Vercel Trusted Sources](https://vercel.com/changelog/trusted-sources-for-deployment-protection)
+and [OIDC claims](https://vercel.com/docs/oidc/reference). The frontend sends
+the short-lived provider identity only to the fixed preview gateway over TLS.
+The server verifies the signature, claims and the enabled database record
+before normal user authorization. The pilot cannot select another MongoDB URL.
+
+Verify the exact public test alias manifest reports its own origin and a null
+gateway. An anonymous GET of `/api/v1/health/mongodb` must report a connected
+non-custom database whose identity matches the independently checked preview
+authority. Disable the profile and verify that same probe is refused. Compare
+only redacted outcomes. Platform SSO redirects on the preflight indicate the
+edge does not accept the configured caller.
+
+This setup depends on an independently running preview owner. Retiring the
+old project also requires an independently bootstrapped replacement for each
+data authority, including its database authentication and vault key. A pilot
+deployment alone cannot take ownership of production.

@@ -367,3 +367,64 @@ test('gateway relay replaces spoofed bypass headers and never reflects the secre
     else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
   }
 }));
+
+test('parallel configuration and workload identities are bound to the enrolled test project and isolated preview gateway', async () => {
+  const { generateKeyPair, SignJWT } = await import('jose');
+  const { authenticatePilot, isPilotGateway, PILOT_GATEWAY } = await import('./deploymentPilot');
+  const { selectPilotBuild } = await import('../../app/api/utils/deployment/pilotBuild');
+  const profile = { id: 'hobby-test', teamSlug: 'test-team', teamId: 'team_1', projectName: 'demo', projectId: 'prj_1',
+    mode: 'parallel' as const, enabled: true, label: 'Hobby', testOrigin: 'https://demo-example.vercel.app' };
+  assert.deepEqual(selectPilotBuild({}), null);
+  assert.throws(() => selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id }));
+  assert.throws(() => selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: 'https://thingtime.com' }));
+  assert.deepEqual(selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: profile.testOrigin }),
+    { profileId: profile.id, origin: profile.testOrigin });
+  const settings = { origin: PILOT_GATEWAY, environment: 'preview', deploymentId: 'preview', secret: 'unused' };
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development' }), true);
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'production' }), false);
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development', THINGTIME_FEDERATION_ID: 'production' }), false);
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const sign = (claims = {}, expiry = '10m') => new SignJWT({ owner: profile.teamSlug, project: profile.projectName,
+    project_id: profile.projectId, owner_id: profile.teamId, environment: 'production', ...claims }).setProtectedHeader({ alg: 'RS256' })
+    .setAudience('https://vercel.com/test-team').setIssuer('https://oidc.vercel.com/test-team')
+    .setSubject('owner:test-team:project:demo:environment:production').setIssuedAt().setExpirationTime(expiry).sign(privateKey);
+  const token = await sign();
+  const key = async () => publicKey;
+  assert.equal(await authenticatePilot(token, profile, key), true);
+  assert.equal(await authenticatePilot(token, { ...profile, enabled: false }, key), false);
+  assert.equal(await authenticatePilot(token, { ...profile, mode: 'primary' }, key), false);
+  for (const claims of [{ project_id: 'prj_2' }, { owner_id: 'team_2' }, { environment: 'preview' }])
+    assert.equal(await authenticatePilot(await sign(claims), profile, key), false);
+  assert.equal(await authenticatePilot(await sign({}, '-1h'), profile, key), false);
+});
+
+test('pilot uses only the exact preview gateway and keeps the Vercel identity separate from user authorization', async t => {
+  const { proxyPilotRequest } = await import('./environmentGateway');
+  const { PILOT_GATEWAY, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, TRUSTED_SOURCE_HEADER } = await import('./deploymentPilot');
+  const pilot = { profileId: 'pilot', origin: 'https://aligned-hobby.vercel.app' };
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string | URL, init: RequestInit) => {
+    calls.push(String(url));
+    assert.equal(new URL(url).origin, PILOT_GATEWAY);
+    const headers = new Headers(init.headers);
+    assert.equal(headers.get(TRUSTED_SOURCE_HEADER), 'synthetic.workload');
+    assert.equal(headers.get('x-vercel-oidc-token'), null);
+    if (String(url).endsWith('/.well-known/thingtime-capabilities.json')) {
+      const manifest = thingtimeCapabilityManifest(PILOT_GATEWAY);
+      return Response.json({ ...manifest, gateway: { origin: PILOT_GATEWAY, environment: 'preview', deploymentId: 'preview' } });
+    }
+    assert.equal(headers.get('authorization'), 'Bearer synthetic-user');
+    assert.equal(headers.get(PILOT_OIDC_HEADER), 'synthetic.workload');
+    assert.equal(headers.get(PILOT_PROFILE_HEADER), pilot.profileId);
+    return new Response('ok', { headers: { [PILOT_OIDC_HEADER]: 'never-forward', [TRUSTED_SOURCE_HEADER]: 'never-forward' } });
+  });
+  const req = (url: string) => new Request(url, { headers: { authorization: 'Bearer synthetic-user', 'x-vercel-oidc-token': 'synthetic.workload',
+    [TRUSTED_SOURCE_HEADER]: 'visitor-input', [PILOT_PROFILE_HEADER]: 'visitor-input' } });
+  assert.equal((await proxyPilotRequest(req('https://other.test/api/v1/things'), pilot)).status, 421);
+  assert.equal(calls.length, 0);
+  const response = await proxyPilotRequest(req(pilot.origin + '/api/v1/things'), pilot);
+  assert.equal(await response.text(), 'ok');
+  assert.equal(response.headers.get(PILOT_OIDC_HEADER), null);
+  assert.equal(response.headers.get(TRUSTED_SOURCE_HEADER), null);
+  assert.equal(calls.length, 2);
+});

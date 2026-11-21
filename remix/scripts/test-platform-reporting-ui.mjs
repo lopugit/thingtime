@@ -27,6 +27,21 @@ try {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
     const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     try {
+      await page.goto(origin + '/?jobs=1');
+      const schedule = page.getByRole('region', { name: 'Scheduled jobs' });
+      await schedule.getByLabel('Job', { exact: true }).selectOption('email-weekly-summary');
+      await schedule.getByText('Once each Sunday.').waitFor();
+      await schedule.getByLabel('Start hour (UTC)').selectOption('19');
+      await schedule.getByLabel('Enable schedule').uncheck();
+      await schedule.getByRole('button', { name: 'Save schedule' }).click();
+      await schedule.getByText('Schedule saved.').waitFor();
+      await schedule.getByRole('button', { name: 'Reload saved schedule' }).click();
+      await page.waitForFunction(() => document.querySelector('section[aria-label="Scheduled jobs"]')?.getAttribute('aria-busy') !== 'true');
+      assert.equal(await schedule.getByLabel('Start hour (UTC)').inputValue(), '19');
+      assert.equal(await schedule.getByLabel('Enable schedule').isChecked(), false);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.screenshot({ path: join(evidence, label + '-schedules.png'), fullPage: true });
       await page.goto(origin);
       await page.getByText('Reporting is unconfigured and disabled.', { exact: true }).waitFor();
       await page.getByLabel('Owning account username', { exact: true }).fill('@thingtime');
@@ -80,7 +95,7 @@ try {
       await page.waitForTimeout(350);
       assert.equal(await page.getByLabel('Owning account username', { exact: true }).count(), 0);
       assert.equal((await page.evaluate(() => window.platformReportingFixture.snapshot())).saves, 1);
-      results.push({ label, width, checks: ['unconfigured disabled', 'exact actor and profile resolution', 'save/readback', 'draft-preserving reload', 'revision conflict', 'uncertain group creation does not duplicate', 'individual Builder blocks', 'top/bottom overflow', 'identity abort'] });
+      results.push({ label, width, checks: ['scheduled job edit/save/readback', 'weekly cadence', 'unconfigured disabled', 'exact actor and profile resolution', 'save/readback', 'draft-preserving reload', 'revision conflict', 'uncertain group creation does not duplicate', 'individual Builder blocks', 'top/bottom overflow', 'identity abort'] });
     } catch (error) { await page.screenshot({path:join(evidence, `${label}-failure.png`),fullPage:true}); console.error(JSON.stringify({errors,body:await page.locator('body').innerText()})); throw error; } finally { await context.close(); }
   }
   const refusal = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
