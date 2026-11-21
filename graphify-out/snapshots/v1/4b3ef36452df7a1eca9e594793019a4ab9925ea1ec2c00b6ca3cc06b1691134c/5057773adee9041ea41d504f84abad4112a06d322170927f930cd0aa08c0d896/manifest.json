@@ -15126,9 +15126,9 @@
     "semantic_hash": "3b312b758b867c00f529567883fccba5"
   },
   "remix/app/components/Lopu/recordingsCapabilities.test.ts": {
-    "mtime": 1795226811.822649,
-    "seen": 1795278587.4786031,
-    "ast_hash": "caabf5fab29c5c4dd992b122c3ea51d8",
+    "mtime": 1795279509.5318177,
+    "seen": 1795279569.1112509,
+    "ast_hash": "1defc0f019a25a23709829b0ec3b4731",
     "semantic_hash": ""
   },
   "remix/app/components/Lopu/recordingsCapabilities.ts": {
