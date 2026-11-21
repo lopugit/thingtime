@@ -1,0 +1,94 @@
+name: Publish parallel Vercel profiles
+on:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: thingtime-parallel-vercel-main
+  cancel-in-progress: false
+jobs:
+  discover:
+    if: github.repository == 'lopugit/thingtime' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.list.outputs.targets }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - id: list
+        run: node .github/scripts/deployment-profiles.mjs
+        env:
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+  build:
+    needs: discover
+    if: needs.discover.outputs.targets != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(needs.discover.outputs.targets) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+          corepack pnpm --dir remix install --frozen-lockfile
+          node scripts/vercel-build.mjs
+          tar -czf "$RUNNER_TEMP/prebuilt.tgz" .vercel/output
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: production
+          VERCEL_TARGET_ENV: production
+          VERCEL_GIT_COMMIT_REF: main
+          VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
+          THINGTIME_PILOT_PROFILE_ID: ${{ matrix.profile.id }}
+          THINGTIME_PILOT_ORIGIN: ${{ matrix.profile.testOrigin }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: parallel-${{ matrix.profile.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prebuilt.tgz
+          retention-days: 1
+          if-no-files-found: error
+  publish:
+    needs: [discover, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(needs.discover.outputs.targets) }}
+    environment: vercel-deployment-${{ matrix.profile.id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: parallel-${{ matrix.profile.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/artifact
+      - run: |
+          python3 .github/scripts/extract-vercel-prebuilt.py "$RUNNER_TEMP/artifact/prebuilt.tgz" "$RUNNER_TEMP/prebuilt"
+          npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+      - run: node .github/scripts/publish-parallel.mjs
+        env:
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          VERCEL_DEPLOY_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          SOURCE_SHA: ${{ github.sha }}
+          PROFILE_ID: ${{ matrix.profile.id }}
+          TEST_ORIGIN: ${{ matrix.profile.testOrigin }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel

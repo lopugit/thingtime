@@ -144,6 +144,7 @@ jobs:
       PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -282,6 +283,7 @@ jobs:
       PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
       PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
       PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -415,6 +417,7 @@ jobs:
       head_sha: ${{ steps.plan.outputs.head_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
     env:
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -520,6 +523,7 @@ jobs:
       issues: write
       pull-requests: read
     env:
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}

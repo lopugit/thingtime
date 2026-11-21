@@ -942,3 +942,31 @@ canonical current-head/trust/liveness check refreshes the policy and proves an
 open, non-draft same-repository PR, with pruning explicitly false and inactive
 expiry explicitly null. Any changed or uncertain predicate retains the full
 sweep. Normal publication and closed-PR cleanup are unchanged.
+
+## Parallel Vercel deployments
+
+The product's main-branch listener calls the protected parallel publisher on a
+push or manual dispatch. Enable the repository variable
+`THINGTIME_DEPLOYMENT_PROFILES_ENABLED=true` after checking production exposes
+`api.integration-ci-deployment-profiles` 1.x. Register a parallel profile in
+Thingtime Admin and enroll it on the preview data authority. The existing
+publisher continues using its original target until an administrator saves a
+disabled `legacy` profile for that exact target. Disabling publishing stops
+future builds; it does not remove production domains or decommission a server.
+
+For each test profile create a dedicated GitHub environment
+`vercel-deployment-<profile-id>`, restrict deployment branches to `main`,
+and set its team-scoped `VERCEL_DEPLOY_TOKEN` secret and independent
+`VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_ID`, and
+`VERCEL_PROJECT_NAME` variables. The destination must have no Git connection,
+no user-defined Vercel environment variables, and only project-owned
+`vercel.app` domains. Configure the Vercel team-specific OIDC issuer and
+enroll the project for access to the preview gateway as described in the
+product runbook. The publisher rechecks the saved target and latest main
+revision before assigning the test alias. Personal tokens, database URLs and
+vault keys must stay out of project configuration and build artifacts.
+
+The hourly GitHub scheduler asks the production API to run due jobs over
+signed HTTPS requests. UTC schedules and execution claims live in Thingtime.
+HTTP 204 indicates a skipped dispatch. Check the product job's execution
+history for completed runs. The controller never prints the response body.

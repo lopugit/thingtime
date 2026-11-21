@@ -1,3 +1,4 @@
+import { legacyEnabled } from './deployment-profiles.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { readPreviewRetentionPolicy } from './preview-retention-policy.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
@@ -194,6 +195,7 @@ async function prepare() {
   const event = JSON.parse(await readFile(required('GITHUB_EVENT_PATH'), 'utf8'));
   const source = sourceFromEvent(required('GITHUB_EVENT_NAME'), event, process.env.SOURCE_REF);
   if (source.skip || source.branch === 'github-actions') return output({ should_build: 'false' });
+  if (!await legacyEnabled()) return output({ should_build: 'false', should_publish: 'false' });
   const plan = await context(source.branch, process.env.TARGET_ENVIRONMENT || 'auto');
   if (source.sha && plan.sha !== source.sha) return output({ should_build: 'false' });
   if (process.env.BUILD_ONLY === 'true') {
@@ -269,6 +271,7 @@ async function smoke(url, { api = true, signal } = {}) {
 }
 
 export async function publish({ runtimeLogs = checkRuntimeLogs, aliasVerifier = verifyAlias } = {}) {
+  if (!await legacyEnabled()) return;
   const branch = required('SOURCE_REF');
   const plan = await context(branch, required('TARGET_ENVIRONMENT'));
   if (plan.sha !== required('SOURCE_SHA') || plan.target.id !== (process.env.TARGET_ID || '')) {
