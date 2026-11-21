@@ -1,3 +1,7 @@
+## 2026-11-21 — Database-managed deployment targets and daily job dispatch
+
+- Add a parallel prebuilt publisher for dedicated Vercel test projects and a protected dispatcher for Thingtime job schedules. The existing production publisher can honor a saved deployment profile.
+
 ## 2026-11-14 — Align retained artifact download authority
 
 - Use the existing protected-controller credential, with the existing built-in
