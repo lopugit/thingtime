@@ -17,7 +17,7 @@ test('observation operations are deliberately versioned in both origin-scoped ma
 	const manifest = thingtimeCapabilityManifest(origin);
 	const map = readFileSync(new URL('../../../../server/routes/api/[...].ts', import.meta.url), 'utf8');
 	for (const [id, [path, methods]] of Object.entries(endpoints)) {
-		const version = id === 'devices-observations-cleanup' ? '1.1.0' : '1.0.0';
+		const version = id === 'devices-observations-cleanup' ? '1.2.0' : '1.0.0';
 		const doc = apiEndpointDocs.find((d) => d.id === id);
 		assert.equal(doc?.featureVersion, version);
 		assert.equal(doc?.contractVersion, version);
@@ -39,5 +39,5 @@ test('durable observation content and the leased cleanup cursor keep protected, 
 	assert.equal((DEVICE_CONTROL_THINGTIME as readonly string[]).includes('device-observation'), false);
 	assert.ok((DEVICE_CONTROL_THINGTIME as readonly string[]).includes('device-observation-cleanup'));
 	const config = JSON.parse(readFileSync(new URL('../../../../../vercel.json', import.meta.url), 'utf8'));
-	assert.ok(config.crons.some((c) => c.path === '/api/v1/devices/observations/cleanup' && c.schedule === '*/15 * * * *'));
+	assert.ok(config.crons.some((c) => c.path === '/api/v1/devices/observations/cleanup' && c.schedule === '15 6 * * *'));
 });

@@ -1076,7 +1076,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		endpoint: '/api/v1/peers/sync',
 		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
 		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
-			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
+			'The scheduler can start this production route once per UTC day after the configured hour. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
 		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
 		methods: ['GET'],
 		steps: [
@@ -6721,7 +6721,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
 			'Version 1.3 retains shared exact bytes while an eligible sync reference exists; only final-reference cleanup can purge and refund those bytes. ' +
       'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
-      'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
+      'The scheduler can start this bounded, idempotent GET once per UTC day after the configured hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
 			'There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
@@ -6826,9 +6826,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
 		featureVersion: '1.3.0',
-		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
+		summary: 'Internal daily starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
 		detail: 'Authenticated scheduled invocations optionally publish private lifecycle posts through the configured platform Character and administrator audience group. HTTP completion does not claim separately dispatched work finished. ' +
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
+			'The scheduler can start this bounded, idempotent GET once per UTC day after the configured hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
 			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
