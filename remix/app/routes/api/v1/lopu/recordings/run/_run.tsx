@@ -1,3 +1,4 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
@@ -12,7 +13,7 @@ import { runUserStorageRecovery } from '~/api/utils/storage/userStorageRecovery'
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const cronAuthorized = (request: Request) => {
-	const secret = process.env.CRON_SECRET?.trim();
+	const secret = scheduledJobSecret()?.trim();
 	if (!secret) return false;
 	const provided = Buffer.from(request.headers.get('authorization') || '');
 	const expected = Buffer.from(`Bearer ${secret}`);

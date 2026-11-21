@@ -1,3 +1,4 @@
+import { readControllerRequestBody } from '~/api/utils/ciControl/controllerRequestBody';
 import { json } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { getPreviewRetention } from '~/api/utils/ciControl/previewRetention';
@@ -9,23 +10,8 @@ export const createControllerPreviewRetentionHandler = (deps: Dependencies) => (
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   const secret = deps.secret();
   if (!secret) return json({ ok: false, error: 'Controller authentication is unavailable.' }, { status: 503 });
-  if (Number(request.headers.get('content-length')) > 4096) return json({ ok: false, error: 'Request too large' }, { status: 413 });
-  // A missing or false Content-Length must not allow an unsigned caller to
-  // buffer an unbounded stream before authentication.
-  const reader = request.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  if (reader) for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    received += value.byteLength;
-    if (received > 4096) {
-      await reader.cancel().catch(() => {});
-      return json({ ok: false, error: 'Request too large' }, { status: 413 });
-    }
-    chunks.push(value);
-  }
-  const raw = Buffer.concat(chunks, received).toString('utf8');
+  const raw = await readControllerRequestBody(request);
+  if (raw instanceof Response) return raw;
   if (!verifyCiProviderRouteSignature(raw, request.headers.get('x-thingtime-ci-signature'), secret)) return json({ ok: false, error: 'Invalid controller signature.' }, { status: 403 });
   const repository = deps.repository();
   let body: unknown;

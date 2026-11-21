@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { pilotBuild } from './pilotBuild';
 import { mongoConnectionPolicy } from './mongoConnectionPolicy';
 
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
@@ -54,6 +55,7 @@ export const getMongoConnectionMode = (env: Record<string, string | undefined> =
 /** Vercel builds default to the gateway. Local/desktop standalone runtimes retain
  * their direct connection; partial deployment configuration always fails closed. */
 export const getGatewaySettings = (env: Record<string, string | undefined> = process.env): GatewaySettings | null => {
+  if (pilotBuild()) throw new GatewayUnavailable(); // A parallel frontend never opens a MongoDB pool.
   const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET',
     'THINGTIME_GATEWAY_DEPLOYMENT_ID', 'THINGTIME_GATEWAY_SOURCE_ORIGINS'];
   getMongoConnectionMode(env);
@@ -76,7 +78,7 @@ export const gatewayDescriptor = (env: Record<string, string | undefined> = proc
   return descriptor;
 };
 
-const readManifest = async (response: Response) => {
+export const readGatewayManifest = async (response: Response) => {
   if (!response.ok || !response.body) throw new GatewayUnavailable();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -120,7 +122,7 @@ export const createGatewayAuthority = (options: {
 
           });
           if (response.url && response.url !== new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin).href) throw new GatewayUnavailable();
-          const manifest = response.status === 304 && previous?.etag ? previous.value : await readManifest(response);
+          const manifest = response.status === 304 && previous?.etag ? previous.value : await readGatewayManifest(response);
           if (manifest.schemaVersion !== 1 || manifest.origin !== selected.origin ||
             manifest.gateway?.origin !== selected.origin || manifest.gateway.environment !== selected.environment ||
             typeof manifest.gateway.deploymentId !== 'string' || !manifest.gateway.deploymentId ||

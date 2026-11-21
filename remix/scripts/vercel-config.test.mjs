@@ -82,30 +82,30 @@ test('Vercel cron path and schedule pairs are unique', () => {
 
 test('scheduled processing, cleanup, sync, and notification jobs are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
-		{ path: '/api/v1/auth/invites/expire', schedule: '11 * * * *' },
+		{ path: '/api/v1/auth/invites/expire', schedule: '11 0 * * *' },
 		{
 			path: '/api/v1/lopu/recordings/run',
-			schedule: '*/5 * * * *'
+			schedule: '5 1 * * *'
 		},
 		{
 			path: '/api/v1/attachments/cleanup',
-			schedule: '17 * * * *'
+			schedule: '17 2 * * *'
 		},
 		{
 			path: '/api/v1/moderation/sweep',
-			schedule: '29 * * * *'
+			schedule: '29 3 * * *'
 		},
 		{
 			path: '/api/v1/peers/sync',
-			schedule: '*/5 * * * *'
+			schedule: '5 4 * * *'
 		},
 		{
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
 		},
 		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' },
-		{ path: '/api/v1/backups/run', schedule: '*/5 * * * *' },
-		{ path: '/api/v1/devices/observations/cleanup', schedule: '*/15 * * * *' }
+		{ path: '/api/v1/backups/run', schedule: '5 5 * * *' },
+		{ path: '/api/v1/devices/observations/cleanup', schedule: '15 6 * * *' }
 	]);
 });
 
