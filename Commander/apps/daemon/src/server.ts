@@ -681,7 +681,11 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       const credential = active ? credentials.get(active) : undefined;
       if (!credential)
         return json(response, 401, { error: 'Unlock or sign in to the active Thingtime account first' });
-      const settings = await thingtime.sync(credential, state.settings);
+      const settings = await thingtime.syncAccount(
+        credential,
+        state.settings,
+        state.accounts.find((account) => account.id === active),
+      );
       await store.setSettings(settings, { markCloudChanges: false });
       return json(response, 200, { settings, syncedAt: new Date().toISOString() });
     }
