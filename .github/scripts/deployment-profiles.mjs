@@ -33,7 +33,7 @@ export async function profiles(env = process.env, fetcher = fetch) {
   if (!data.ok || data.repository !== repository || !Array.isArray(data.profiles)) throw new Error('Invalid deployment profile response');
   const seen = new Set();
   for (const p of data.profiles) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(p.id) || p.id.length > 63 || seen.has(p.id) ||
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(p.id) || ('vercel-deployment-' + p.id).length > 255 || seen.has(p.id) ||
         typeof p.enabled !== 'boolean' || p.mode !== (p.id === 'legacy' ? 'primary' : 'parallel') ||
         !/^team_[A-Za-z0-9]+$/.test(p.teamId) || !/^prj_[A-Za-z0-9]+$/.test(p.projectId) ||
         (p.mode === 'parallel' && !/^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(p.testOrigin))) {

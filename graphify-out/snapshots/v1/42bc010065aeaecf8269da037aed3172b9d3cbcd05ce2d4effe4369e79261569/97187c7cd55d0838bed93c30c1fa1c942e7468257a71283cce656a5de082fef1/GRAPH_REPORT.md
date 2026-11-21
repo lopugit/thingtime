@@ -1,17 +1,17 @@
 # Graph Report - thingtime  (2026-11-21)
 
 ## Corpus Check
-- 127 files · ~304,256 words
+- 127 files · ~304,446 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
 ## Summary
-- 1577 nodes · 3948 edges · 83 communities (76 shown, 7 thin omitted)
+- 1577 nodes · 3953 edges · 79 communities (73 shown, 6 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 54 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8c9c8bfa`
+- Built from commit: `c01d18d6`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -30,7 +30,7 @@
 - runSelfTest
 - lopu-model-waterfall.mjs
 - orphan-preview-cleanup.mjs
-- ref_node_fs
+- ref_node_path
 - resolve-pr-conflicts-routing-contract.mjs
 - main
 - lopu-pr-status.mjs
@@ -41,15 +41,15 @@
 - native-compile-ci.py
 - codeql-open-pr-backfill.mjs
 - reconcile
-- ref_node_os
+- feature-stack-progress.mjs
 - lopu-pr-lifecycle.test.mjs
 - preview-environment-refresh.test.mjs
 - `github-actions` — the CI control plane
-- storage-release-gate.mjs
+- electron-release-gates.test.mjs
 - merge-main-develop-sync-pr.mjs
 - promotion-worker-contract.sh
 - Control-plane regression checklist
-- ref_node_path
+- feature-stack-waterfall.test.mjs
 - supervise
 - ref_node_child_process
 - rebase-related-edits.test.mjs
@@ -65,14 +65,13 @@
 - codeql-polling.test.mjs
 - cleanup
 - Protected unsigned native compilation
-- codeql-upload-recovery.test.mjs
+- ref_node_test
 - codeql-quota-diagnostics.test.mjs
 - start.sh
 - ref_node_assert
 - verify-promotion-source-authority.sh
 - PR #1294 — Remove orphan Vercel previews and reject pre-gateway source
 - PR #609 — Restore Lopu and preview admission
-- preview-publication-timing.mjs
 - PR #506 — Auto-merge resolved main to develop sync PR
 - PR #603 — Admin preview publisher controller
 - PR #637: Safe cooperative handover for Lopu reviews
@@ -84,18 +83,15 @@
 - PR #534 — Feature Stack progress heartbeat controller
 - PR #642: Discoverable preview status and missed-build repair
 - [Unreleased]
-- environment-gateway-policy.mjs
 - rebase-ownership-routing-contract.sh
 - resolve-canonical-instruction-type-conflicts.sh
 - PR 1499: Protected deployment checks and reviewed preview retirement
 - 1225-codex-gateway-publisher-policy-publish-controlled-environment-gateway-owners.md
 - 781-codex-stack-progress-chat-controller-answer-feature-stack-status-questions.md
 - codex-gateway-alias-propagation-standard-preview-target.md
-- ref_node_url
 - preview-recovery.test.mjs
 - PR #634: Lopu comment admission and idempotent preview writes
-- electron-pr-release-contract.mjs
-- protected-deployment-fetch.mjs
+- ref_node_fs
 - rebase-index-fingerprint.test.mjs
 - Working on it
 
@@ -126,7 +122,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (83 total, 7 thin omitted)
+## Communities (79 total, 6 thin omitted)
 
 ### Community 0 - "promote-features-to-main.mjs"
 Cohesion: 0.05
@@ -137,8 +133,8 @@ Cohesion: 0.08
 Nodes (62): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assignAlias(), boundedInteger(), cleanupDeploymentIssue(), cleanupEnvironment(), commentBody() (+54 more)
 
 ### Community 2 - "deploy-vercel-prebuilt.mjs"
-Cohesion: 0.17
-Nodes (32): applyOutputPolicy(), visit(), assertGatewaySource(), assertPreviewOpen(), compatibilityAliasCandidates(), context(), deploymentIssue(), exec (+24 more)
+Cohesion: 0.06
+Nodes (76): applyOutputPolicy(), visit(), assertGatewaySource(), assertPreviewOpen(), compatibilityAliasCandidates(), context(), deploymentArgs(), deploymentIssue() (+68 more)
 
 ### Community 3 - "graphify-cas.mjs"
 Cohesion: 0.09
@@ -180,9 +176,9 @@ Nodes (31): models, exportBundle(), fetchBundle(), legacyCredentials(), main(), 
 Cohesion: 0.15
 Nodes (26): ACTIVE, assertPreviewHasOpenPullRequest(), completeInventory(), deploymentLane(), idOf(), missing(), openBranchPullRequests(), previewIdentity() (+18 more)
 
-### Community 14 - "ref_node_fs"
-Cohesion: 0.11
-Nodes (10): allowed, workflow, allowed(), evaluate, expression, main, workflow, postPublishRefRace() (+2 more)
+### Community 14 - "ref_node_path"
+Cohesion: 0.15
+Nodes (8): allowed, workflow, answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT, safeRunContext(), serveRunChat(), script
 
 ### Community 15 - "resolve-pr-conflicts-routing-contract.mjs"
 Cohesion: 0.13
@@ -224,9 +220,9 @@ Nodes (23): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), analysisSnap
 Cohesion: 0.18
 Nodes (32): assertCurrentPullRequest(), assertTrustedPullRequestStack(), assignAliasVerified(), cleanupClosedPrResources(), cleanupComment(), cleanupDeployments(), cleanupPrResources(), createGithubDeployment() (+24 more)
 
-### Community 25 - "ref_node_os"
-Cohesion: 0.16
-Nodes (17): answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT, safeRunContext(), serveRunChat(), githubJobs(), githubStackPullRequests(), postProgress() (+9 more)
+### Community 25 - "feature-stack-progress.mjs"
+Cohesion: 0.27
+Nodes (12): githubJobs(), githubStackPullRequests(), postProgress(), progressSnapshot(), reconcile(), recoveryPayload(), run(), selfTest() (+4 more)
 
 ### Community 26 - "lopu-pr-lifecycle.test.mjs"
 Cohesion: 0.18
@@ -240,9 +236,9 @@ Nodes (15): fail(), reconcilePublicationRetention(), refreshAutomationCredential
 Cohesion: 0.14
 Nodes (14): Commander signed releases, Desktop and Recovery release pipeline, Environment gateways for future product builds, Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off, Lopu principal repository manager, macOS signing and build identity (+6 more)
 
-### Community 29 - "storage-release-gate.mjs"
-Cohesion: 0.24
-Nodes (19): checkRuntimeLogs(), checkStorageManifest(), checkStorageReadiness(), exec, failure(), logLimit, monitor(), productionOrigin (+11 more)
+### Community 29 - "electron-release-gates.test.mjs"
+Cohesion: 0.40
+Nodes (5): allowed(), evaluate, expression, main, workflow
 
 ### Community 30 - "merge-main-develop-sync-pr.mjs"
 Cohesion: 0.22
@@ -256,8 +252,8 @@ Nodes (17): BASE_REF, BASE_SHA, compute_plan_hash(), GITHUB_OUTPUT, PLAN_HASH, P
 Cohesion: 0.11
 Nodes (18): CodeQL quota diagnostics (2026-11-14), Configured cross-provider waterfall, Control-plane regression checklist, Cooperative review handover, Durable CodeQL SARIF upload (2026-11-14), Event feedback and CI cancellation, Exact configured workflow model orders, Explicit stack model and endpoint waterfall (+10 more)
 
-### Community 33 - "ref_node_path"
-Cohesion: 0.30
+### Community 33 - "feature-stack-waterfall.test.mjs"
+Cohesion: 0.32
 Nodes (14): canonicalFeatureStackPlan(), decodeFeatureStackPlan(), exactKeys(), featureStackId(), git(), selfTest(), validateWaterfall(), verifyFeatureStackHistory() (+6 more)
 
 ### Community 34 - "supervise"
@@ -320,9 +316,9 @@ Nodes (7): cleanup(), command(), detach_watchdog_io(), process_inventory(), publ
 Cohesion: 0.25
 Nodes (6): Admission and entry point, Darwin credential verification and trusted failures, Enforced network policy and cleanup, Protected unsigned native compilation, Trust boundary, Validation and acceptance
 
-### Community 49 - "codeql-upload-recovery.test.mjs"
-Cohesion: 0.22
-Nodes (5): helper, observedBuiltinTokenQuota, program, sha, workflow
+### Community 49 - "ref_node_test"
+Cohesion: 0.12
+Nodes (7): helper, observedBuiltinTokenQuota, program, sha, workflow, createPublicationStageTimer(), stages
 
 ### Community 50 - "codeql-quota-diagnostics.test.mjs"
 Cohesion: 0.32
@@ -388,10 +384,6 @@ Nodes (4): Changes, Evidence and cause, PR #642: Discoverable preview status and
 Cohesion: 0.50
 Nodes (4): Added, Changed, Fixed, [Unreleased]
 
-### Community 68 - "environment-gateway-policy.mjs"
-Cohesion: 0.22
-Nodes (12): deploymentArgs(), gatewayDeploymentIssue(), gatewayMetadata(), gatewayPolicy(), gatewayPolicyVersion, gatewayPublisherEnvironment(), gatewayRuntimeArgs(), gatewayRuntimeEnvironment() (+4 more)
-
 ### Community 69 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
@@ -404,10 +396,6 @@ Nodes (3): resolve-canonical-instruction-type-conflicts.sh script, stage_record(
 Cohesion: 0.50
 Nodes (3): PR 1499: Protected deployment checks and reviewed preview retirement, Result, Verification and limits
 
-### Community 76 - "ref_node_url"
-Cohesion: 0.24
-Nodes (10): legacyEnabled(), matchesTarget(), origin, profiles(), requireOperation(), env, manifest, row (+2 more)
-
 ### Community 77 - "preview-recovery.test.mjs"
 Cohesion: 0.33
 Nodes (7): publishPreviewNotifications(), previewWorkActive(), reconcilePreviewInventory(), recoveryAttempt(), recoverySourceIssue(), now, source
@@ -416,13 +404,9 @@ Nodes (7): publishPreviewNotifications(), previewWorkActive(), reconcilePreviewI
 Cohesion: 0.33
 Nodes (5): Behavior, Evidence and scope, PR #634: Lopu comment admission and idempotent preview writes, Rollout, Validation
 
-### Community 79 - "electron-pr-release-contract.mjs"
-Cohesion: 0.50
-Nodes (4): assertPrReleaseContract(), count(), here, workflow
-
-### Community 80 - "protected-deployment-fetch.mjs"
-Cohesion: 0.60
-Nodes (3): createProtectedDeploymentFetch(), env, fixture()
+### Community 79 - "ref_node_fs"
+Cohesion: 0.22
+Nodes (6): assertPrReleaseContract(), count(), here, workflow, postPublishRefRace(), snapshot
 
 ### Community 81 - "rebase-index-fingerprint.test.mjs"
 Cohesion: 0.80
@@ -435,7 +419,7 @@ Nodes (5): Discoverable preview status and recovery, Missing-build wildcard page
 ## Knowledge Gaps
 - **28 isolated node(s):** `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR`, `BASE_REF`, `BASE_SHA` (+23 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 477 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -450,7 +434,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Should `deploy-admin-pr-previews.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.08005427408412483 - nodes in this community are weakly interconnected._
+- **Should `deploy-vercel-prebuilt.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.06002239641657335 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.08735733099209833 - nodes in this community are weakly interconnected._
-- **Should `NativeCompileBoundaryTests` be split into smaller, more focused modules?**
-  _Cohesion score 0.05012531328320802 - nodes in this community are weakly interconnected._

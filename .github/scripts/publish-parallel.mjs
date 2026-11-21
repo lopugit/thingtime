@@ -4,7 +4,8 @@ import { mkdir, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { profiles, matchesTarget } from './deployment-profiles.mjs';
-import { applyOutputPolicy } from './deploy-vercel-prebuilt.mjs';
+import { reconcileGatewayAliases } from './environment-gateway-policy.mjs';
+import { applyOutputPolicy, verifyAlias } from './deploy-vercel-prebuilt.mjs';
 
 export async function publishParallel(env = process.env, fetcher = fetch) {
   const token = env.VERCEL_DEPLOY_TOKEN;
@@ -22,7 +23,8 @@ export async function publishParallel(env = process.env, fetcher = fetch) {
     const u = new URL(path, 'https://api.vercel.com');
     u.searchParams.set('teamId', p.teamId);
     const r = await fetcher(u, { ...init, redirect: 'error', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, signal: AbortSignal.timeout(30000) });
-    if (!r.ok) throw new Error('Vercel project check failed: HTTP ' + r.status);
+    if (!r.ok) throw Object.assign(new Error('Vercel project check failed: HTTP ' + r.status), { status: r.status });
+    if (r.status === 204) return null;
     return r.json();
   };
   const assertProject = async () => {
@@ -58,11 +60,39 @@ export async function publishParallel(env = process.env, fetcher = fetch) {
   await checkProfile();
   await assertProject();
   const alias = new URL(testOrigin).hostname;
-  await vercel('/v2/deployments/' + deployment.id + '/aliases', { method: 'POST', body: JSON.stringify({ alias }) });
-  const saved = await vercel('/v4/aliases/' + alias);
-  if (saved.deploymentId !== deployment.id) throw new Error('Test alias readback failed');
-  const response = await fetcher(testOrigin + '/.well-known/thingtime-capabilities.json', { redirect: 'error', signal: AbortSignal.timeout(30000) });
-  if (!response.ok || (await response.json()).origin !== testOrigin) throw new Error('Test origin manifest did not verify');
+  const read = async name => {
+    let entry;
+    try { entry = await vercel('/v4/aliases/' + name); }
+    catch (error) { if (error.status === 404) return null; throw error; }
+    const owner = entry.projectId || (await vercel('/v13/deployments/' + entry.deploymentId)).projectId;
+    if (owner !== p.projectId) throw new Error('Test alias belongs to another project');
+    return entry;
+  };
+  const publicJson = async (origin, path, signal) => {
+    const r = await fetcher(origin + path, { redirect: 'error', signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('Public acceptance failed: HTTP ' + r.status);
+    return r.json();
+  };
+  await reconcileGatewayAliases({
+    names: [alias], deploymentId: deployment.id, read,
+    assign: (name, id) => vercel('/v2/deployments/' + id + '/aliases', { method: 'POST', body: JSON.stringify({ alias: name }) }),
+    remove: async name => {
+      const entry = await read(name);
+      if (entry?.deploymentId === deployment.id) await vercel('/v2/aliases/' + entry.uid, { method: 'DELETE' });
+    },
+    verify: () => verifyAlias(async ({ signal }) => {
+      const manifest = await publicJson(testOrigin, '/.well-known/thingtime-capabilities.json', signal);
+      if (manifest.origin !== testOrigin || manifest.gateway !== null ||
+          !/^1\.(?:[3-9]|[1-9]\d+)\.\d+$/.test(manifest.features?.['api.environment-gateway']?.version) ||
+          !manifest.operations?.some(op => op.path === '/api/v1/health/mongodb' && op.methods?.includes('GET'))) {
+        throw new Error('Pilot gateway capability did not verify');
+      }
+      const [pilot, live] = await Promise.all([testOrigin, 'https://thingtime.com'].map(
+        origin => publicJson(origin, '/api/v1/health/mongodb', signal)));
+      if ([pilot, live].some(db => db.connected !== true || db.custom !== false || !Number.isFinite(db.pingMs) || !db.host || !db.dbName) ||
+          (pilot.host === live.host && pilot.dbName === live.dbName)) throw new Error('Independent database identity did not verify');
+    })
+  });
   await appendFile(env.GITHUB_STEP_SUMMARY, 'Published ' + sha + ' to ' + testOrigin + '\n');
 }
 
