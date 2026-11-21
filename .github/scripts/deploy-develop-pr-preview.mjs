@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { legacyEnabled } from './deployment-profiles.mjs';
 import { refreshRequest, validateRefreshIncumbent, validateRefreshArtifacts, validateRefreshReceipt, refreshAutomationCredential, executeRefreshPublisher, reconcilePublicationRetention } from './preview-environment-refresh.mjs';
 import { timePublicationStage } from './preview-publication-timing.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
@@ -2763,6 +2764,7 @@ const main = async () => {
 		await runSelfTest();
 		return;
 	}
+	if (!await legacyEnabled()) return;
 	if (process.argv.includes('--prepare')) {
 		await prepareBuildPlan();
 		return;

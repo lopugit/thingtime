@@ -1,0 +1,22 @@
+name: Dispatch Thingtime scheduled jobs
+on:
+  workflow_call:
+    secrets:
+      THINGTIME_CI_ROUTER_SECRET:
+        required: true
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    if: github.repository == 'lopugit/thingtime' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    concurrency: thingtime-production-scheduled-jobs
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - run: node .github/scripts/scheduled-jobs.mjs
+        env:
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}

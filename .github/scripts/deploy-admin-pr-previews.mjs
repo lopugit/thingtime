@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { legacyEnabled } from './deployment-profiles.mjs';
 import { fetchProtectedDeployment } from './protected-deployment-fetch.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
@@ -769,6 +770,8 @@ const runSelfTest = async () => {
 
 if (process.argv.includes('--self-test')) {
 	runSelfTest().catch((error) => { console.error(error.message); process.exitCode = 1; });
+} else if (!await legacyEnabled()) {
+	console.log('Publishing to the legacy project is disabled');
 } else if (process.argv.includes('--prepare')) {
 	prepareAdminBuild().catch((error) => {
 		console.error(error instanceof Error ? error.message : 'Admin PR preview preparation failed');
