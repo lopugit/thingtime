@@ -7381,3 +7381,8 @@ and files. It opens the same New post / Message / Save to Things composer used
 on iOS with the current desktop session. Pending shares can be reopened from
 File → Resume shared content or Saved shares. See [macOS sharing](docs/macos-sharing.md)
 for activation, local retention, fork-safe signing setup and verification.
+
+For a second Vercel project with no configured environment variables, use the
+[parallel deployment setup](docs/environment-api-gateway.md#parallel-hobby-frontend-with-database-backed-enrollment).
+The protected GitHub publisher builds for an enrolled test alias. Its API calls
+use the project's Vercel workload identity and the existing preview authority.

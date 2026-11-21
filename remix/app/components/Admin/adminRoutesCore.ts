@@ -6,6 +6,7 @@ export const ADMIN_TABS = [
   { slug: 'ci-control', label: 'CI Control' },
   { slug: 'mongodb-connections', label: 'MongoDB connections' },
   { slug: 'preview-retention', label: 'Preview retention' },
+  { slug: 'deployment-profiles', label: 'Deployment profiles' },
   { slug: 'external-integrations', label: 'External integrations' },
   { slug: 'marketing', label: 'Marketing' },
   { slug: 'ai-providers', label: 'AI Providers' },

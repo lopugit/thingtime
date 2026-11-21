@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-11-10
+Last updated: 2026-11-21
 
 ## Project
 
@@ -17,6 +17,31 @@ Last updated: 2026-11-10
   `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` and are
   served from the nearest edge PoP (`x-vercel-cache: HIT`); authed requests
   never use `anon=1` URLs, so they can never hit those cache entries.
+
+## Parallel test projects
+
+Open Admin → Deployment profiles to add a target, edit its label or test alias,
+or disable publishing. A parallel profile uses its own Vercel project with an
+existing `vercel.app` domain. Its GitHub environment is
+`vercel-deployment-<profile-id>`. The publisher validates that environment’s
+team and project IDs separately from the saved profile before deploying.
+Enable the repository variable `THINGTIME_DEPLOYMENT_PROFILES_ENABLED` after
+the production profile API is live. The protected controller README describes
+the per-target deployment credential and branch policy.
+
+The pilot uses Vercel workload identity and the existing preview data gateway.
+Its deployment includes only a profile ID and test origin as build metadata.
+See [environment gateway enrollment](docs/environment-api-gateway.md) for
+the required trust and database isolation checks. Keep the existing project
+operational while it owns a gateway. Disabling a publisher stops new uploads.
+Retirement also requires independent hosting for the database and vault
+bootstrap, verification on the replacement, and deliberate production-domain
+cutover.
+
+Admin → Settings → Scheduled jobs controls the enabled state and earliest UTC hour for
+each job. The GitHub dispatcher checks hourly. A shared database claim keeps
+both the dispatcher and the legacy native schedules to one run per due UTC
+day. The parallel test publisher omits native cron jobs.
 
 ## Repository-root build contract
 
@@ -57,7 +82,7 @@ Last updated: 2026-11-10
   required `s3:PutObjectTagging` action used by tagged multipart initiation.
 - Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
   record its value here). Root `vercel.json` invokes
-  `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
+  `GET /api/v1/attachments/cleanup` daily at 02:17 UTC; Vercel sends the
   exact `Authorization: Bearer <CRON_SECRET>` header automatically. The route
   has no cookie, PAT, app-token, or service-account fallback, processes at most
   1,000 cleanup intents with a 25-second wall-clock budget, and leaves failed
@@ -134,7 +159,7 @@ alias would bypass a hostname-only ingress fence.
   The same development values are assigned to the `develop` Custom Environment
   and generic Preview; Production keeps separate values.
 - Vercel Cron invokes Production deployments only. Develop cleanup is therefore
-  targeted at minute 17 every hour by a dedicated AWS EventBridge API
+  targeted daily at 02:17 UTC by a dedicated AWS EventBridge API
   Destination using the develop `CRON_SECRET`; its IAM invocation role is
   limited to that one destination. The app route still rejects missing, wrong,
   user, PAT, and service-account credentials.

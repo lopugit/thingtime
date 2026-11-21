@@ -1,0 +1,12 @@
+name: Thingtime scheduled jobs
+on:
+  schedule:
+    - cron: '13 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    uses: lopugit/thingtime/.github/workflows/thingtime-scheduled-jobs.yml@github-actions
+    secrets:
+      THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}

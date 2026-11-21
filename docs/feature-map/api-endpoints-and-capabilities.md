@@ -1184,3 +1184,16 @@ verified effort snapshots atomically, and `modelsCore.ts` resolves current
 choices against those snapshots. Incomplete metadata/public-doc fallback retains
 the prior options; enabled policy and stored user defaults are preserved.
 Run `test:ai-models` and `test:api-capabilities`.
+
+The Admin scheduled jobs document uses `api.admin-job-schedules` 1.0.0 to
+read or update one registered policy on the home database. In the API
+dispatcher, `automation/scheduledDispatch.ts` verifies signed controller GETs
+or the existing cron bearer before `jobSchedules.ts` reserves the UTC day.
+The same claim covers both wakeup sources. Unauthenticated requests retain the
+route’s ordinary authorization checks. Run the automation tests and the
+desktop/mobile platform reporting UI fixture for changes to this flow.
+
+The environment gateway 1.3.0 adds an optional enrolled Vercel workload relay.
+Its build inputs, preview-only data boundary and production cutover dependency
+are documented in [the environment gateway runbook](../environment-api-gateway.md).
+Run `test:environment-gateway` and `test:api-capabilities` from Remix.

@@ -547,7 +547,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.health-nitro'], '1.3.2');
-	assert.equal(manifest.features['api.lopu-recordings-run'], '1.7.0');
+	assert.equal(manifest.features['api.lopu-recordings-run'], '1.8.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
@@ -740,7 +740,7 @@ test('agent testing and task installation negotiate their additive contracts', (
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
     ['api.health-nitro', '1.3.2', '1.2.0'],
-    ['api.lopu-recordings-run', '1.7.0', '1.5.0'],
+    ['api.lopu-recordings-run', '1.8.0', '1.5.0'],
     ['api.webpages-suites-install', '1.6.0', '1.4.0']
   ]) {
     assert.equal(legacy.features[feature], minimum);
@@ -969,7 +969,7 @@ test('mobile pairing requirements are advertised by both manifests and reject de
 
 test('backup retention advertises owner-only holds and deferred cleanup together', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	for (const [id, version] of [['attachment-content', '1.19.0'], ['attachment-upload-abort', '1.3.0'], ['attachment-delete', '1.3.0'], ['attachment-cleanup', '1.4.0']]) {
+	for (const [id, version] of [['attachment-content', '1.19.0'], ['attachment-upload-abort', '1.3.0'], ['attachment-delete', '1.3.0'], ['attachment-cleanup', '1.5.0']]) {
 		assert.equal(legacy.features['api.' + id], version);
 		assert.equal(manifest.features['api.' + id].version, version);
 	}
@@ -1347,12 +1347,12 @@ test('private platform reporting registers scheduled lifecycle and chosen Charac
   const source = createApiCapabilitiesManifest(Object.keys(routeModules));
   const runtime = thingtimeCapabilityManifest('https://reporting.example');
   const versions = {
-    'api.admin-platform-reporting': '1.0.0', 'api.auth-characters': '1.3.0',
-    'api.auth-invites-expire': '1.1.0', 'api.lopu-recordings-run': '1.7.0',
-    'api.attachment-cleanup': '1.4.0', 'api.moderation-sweep': '1.2.0',
-    'api.peers-sync': '1.1.0', 'api.notifications-email-weekly-summary': '1.1.0',
-    'api.ai-models-sync': '1.3.0', 'api.backup-dispatch': '1.1.0',
-    'api.devices-observations-cleanup': '1.1.0', 'api.groups': '1.2.1'
+    'api.admin-job-schedules': '1.0.0', 'api.admin-platform-reporting': '1.0.0', 'api.auth-characters': '1.3.0',
+    'api.auth-invites-expire': '1.2.0', 'api.lopu-recordings-run': '1.8.0',
+    'api.attachment-cleanup': '1.5.0', 'api.moderation-sweep': '1.3.0',
+    'api.peers-sync': '1.2.0', 'api.notifications-email-weekly-summary': '1.2.0',
+    'api.ai-models-sync': '1.4.0', 'api.backup-dispatch': '1.2.0',
+    'api.devices-observations-cleanup': '1.2.0', 'api.groups': '1.2.1'
   };
   for (const [feature, version] of Object.entries(versions)) {
     assert.equal(source.features[feature], version, feature);

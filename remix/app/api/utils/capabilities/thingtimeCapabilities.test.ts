@@ -10,9 +10,9 @@ import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
 test('combined gateway budget and handover corrections retain the conditional manifest contract', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.2.3');
+  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.3.0');
   const feature = thingtimeCapabilityManifest('https://gateway.example').features['api.environment-gateway'];
-  assert.equal(feature.version, '1.2.3');
+  assert.equal(feature.version, '1.3.0');
   const endpoint = apiEndpointDocs.find(doc => doc.id === 'environment-gateway')!;
   assert.deepEqual(endpoint.methods, ['GET', 'HEAD', 'OPTIONS']);
 });
@@ -196,7 +196,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
   assert.equal(manifest.features['api.health-nitro']?.version, '1.3.2');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.7.0');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.8.0');
   assert.equal(manifest.features['api.health-mongodb']?.version, '1.0.4');
   for (const feature of ['api.mongodb-status', 'api.mongodb-status-data']) {
     assert.equal(manifest.features[feature]?.version, '1.0.1');
@@ -226,7 +226,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.5.0');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.7.0');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.8.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
   assert.equal(manifest.features['api.attachment-content']?.version, '1.19.0');

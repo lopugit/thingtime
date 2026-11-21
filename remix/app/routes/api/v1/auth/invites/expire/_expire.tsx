@@ -1,10 +1,11 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { expireInvites } from '~/api/utils/invites/invites';
 export const loader = async ({ request }: { request: Request }) => {
 	const headers = { 'Cache-Control': 'no-store' };
-	const secret = process.env.CRON_SECRET;
+	const secret = scheduledJobSecret();
 	if (!secret) return json({ ok: false, error: 'Invite expiry is not configured.' }, { status: 503, headers });
 	const supplied = Buffer.from(request.headers.get('Authorization') || '');
 	const expected = Buffer.from(`Bearer ${secret}`);

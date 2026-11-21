@@ -26,6 +26,7 @@ import {
 } from '@chakra-ui/react';
 
 import { MongoConnectionInventory } from './MongoConnectionInventory';
+import { DeploymentProfileSettings } from './DeploymentProfileSettings';
 import { PreviewRetentionSettings } from './PreviewRetentionSettings';
 import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
@@ -1032,6 +1033,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <PreviewRetentionSettings key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
+            <DeploymentProfileSettings key={user.id} />
           </TabPanel>
           <TabPanel px={0}>
             <IntegrationManager />

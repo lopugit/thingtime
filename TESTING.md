@@ -16828,3 +16828,34 @@ including loading/retry, selection preservation and bottom-of-page controls.
 - For publishing/saving acceptance, use a disposable test account and isolated
   backend; read the exact result back through the real API. Failed/uncertain
   submission retries retain the original operation identity and payload.
+
+### Administrator job schedules
+
+In Admin → Scheduled jobs, edit a job’s enabled state and UTC hour, save, reload,
+and confirm the stored value. Repeat in a narrow viewport and check an edit from
+a stale administrator tab is refused. With synthetic credentials and data, send
+two overlapping authenticated scheduled requests after the selected hour. Expect
+one execution and one HTTP 204. Check disabled, before-hour and already-claimed
+jobs return 204. The weekly digest must remain restricted to Sunday. Verify
+unsigned requests never claim a job. A failure after admission keeps the UTC-day
+claim to protect irreversible work; inspect run logs before manual recovery.
+
+### Parallel Vercel deployment profiles
+
+- Open Admin → Deployment profiles on Home as an administrator. Add a disabled
+  parallel profile using the intended Vercel team ID, project ID and exact test
+  alias. Save, reload, edit its name, then enable and disable publication.
+  Compare each readback with the protected controller's signed policy read.
+- Edit the same profile in two sessions. A stale save must preserve the newer
+  revision. Reject duplicate project identities, invalid test aliases,
+  impersonated admin headers and signed reads for a different repository or
+  purpose. Disabled profiles remain visible after reload.
+- Check narrow and wide layouts, editing individual label, field, list and
+  button blocks. Switch accounts during a save and check that scoped data
+  clears. A disabled test publisher must leave existing domains in place.
+
+- [ ] With the parallel project configured, verify the pilot URL, workload
+  identity and preview database using the checks in
+  [the gateway runbook](docs/environment-api-gateway.md). Check a wrong project,
+  disabled profile, custom database selection and cross-site write remain
+  refused. Confirm zero user-configured Vercel env vars and zero pilot crons.

@@ -181,6 +181,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-21: Added admin controls for scheduled jobs and Vercel deployment profiles. Eight jobs default to daily and the Sunday summary keeps its weekly cadence. A parallel profile can serve a test alias through the preview gateway without project environment variables. — Codex (AI)
+
 - 2026-11-16: Fix Builder saves after clearing optional fields: local history
   omits undefined object properties, empty text/HTML blocks remain saveable,
   and text is no longer truncated at 2,000 characters. Preserve strict wire

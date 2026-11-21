@@ -1,3 +1,4 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { json, readJsonBody } from '~/api/http';
 
@@ -12,7 +13,7 @@ import { sendWeeklySummaryEmails } from '~/api/utils/notifications/weeklySummary
 // a retried cron or an admin run after the cron never double-sends.
 
 const hasCronSecret = (request: Request) => {
-  const secret = process.env.CRON_SECRET?.trim();
+  const secret = scheduledJobSecret()?.trim();
   if (!secret) return false;
   const header = request.headers.get('authorization') || '';
   return header === `Bearer ${secret}`;

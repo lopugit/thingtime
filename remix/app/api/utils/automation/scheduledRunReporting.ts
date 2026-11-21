@@ -3,19 +3,9 @@ import { scheduledRunExecution, sanitizeScheduledRunSummary, type ScheduledRunSu
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 export { currentScheduledRunCorrelation, recordScheduledPassResult, type ScheduledRunCorrelation, type ScheduledRunSummary } from './scheduledRunContext';
 
-// Fixed executable jobs, not user-supplied paths, names, or payloads. Keep the
-// exact set covered against vercel.json so new scheduled routes cannot vanish.
-export const SCHEDULED_HTTP_JOBS = [
-  { path: '/api/v1/auth/invites/expire', name: 'Expire invitations' },
-  { path: '/api/v1/lopu/recordings/run', name: 'Process recordings and scheduled work' },
-  { path: '/api/v1/attachments/cleanup', name: 'Clean up attachments' },
-  { path: '/api/v1/moderation/sweep', name: 'Sweep moderation' },
-  { path: '/api/v1/peers/sync', name: 'Synchronize peers' },
-  { path: '/api/v1/notifications/email/weekly-summary', name: 'Send weekly email summaries' },
-  { path: '/api/v1/ai/models/sync', name: 'Synchronize AI model catalogue' },
-  { path: '/api/v1/backups/run', name: 'Dispatch backup recovery' },
-  { path: '/api/v1/devices/observations/cleanup', name: 'Clean up device observations' }
-] as const;
+import { SCHEDULED_HTTP_JOBS } from './scheduledJobs';
+import { scheduledJobSecret } from './scheduledJobSecret';
+export { SCHEDULED_HTTP_JOBS } from './scheduledJobs';
 
 export type ScheduledRunStatus = 'started' | 'completed' | 'failed' | 'cancelled';
 export type ScheduledRunEvent = {
@@ -59,7 +49,7 @@ export const createScheduledRunReporter = (dependencies: {
   const now = dependencies.now ?? (() => new Date());
   return async (request: Pick<Request, 'method' | 'headers' | 'signal'>, path: string, handler: () => Promise<Response>): Promise<Response> => {
     const job = SCHEDULED_HTTP_JOBS.find((entry) => entry.path === path);
-    if (!job || !isScheduledCronAuthorized(request, (dependencies.getSecret ?? (() => process.env.CRON_SECRET))())) return handler();
+    if (!job || !isScheduledCronAuthorized(request, (dependencies.getSecret ?? scheduledJobSecret)())) return handler();
     const runId = (dependencies.runId ?? randomUUID)();
     const startedAt = now().toISOString();
     let finished = false;
