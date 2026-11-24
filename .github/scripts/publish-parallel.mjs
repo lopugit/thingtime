@@ -47,10 +47,26 @@ export async function publishParallel(env = process.env, fetcher = fetch) {
   if (!deployment) {
     let stdout;
     try {
-      ({ stdout } = await promisify(execFile)(env.VERCEL_CLI_PATH, ['deploy','--prebuilt','--prod','--skip-domain','--archive=tgz','--yes','--scope',p.teamSlug,'--cwd',directory,'--meta','thingtimeParallelProfile=' + id,'--meta','githubCommitSha=' + sha], {
+      ({ stdout } = await promisify(execFile)(env.VERCEL_CLI_PATH, ['deploy','--prebuilt','--prod','--skip-domain','--archive=tgz','--yes','--cwd',directory,'--meta','thingtimeParallelProfile=' + id,'--meta','githubCommitSha=' + sha], {
         env: { PATH: env.PATH, HOME: env.HOME, VERCEL_ORG_ID: p.teamId, VERCEL_PROJECT_ID: p.projectId, VERCEL_TOKEN: token }, timeout: 900000
       }));
-    } catch { throw new Error('Parallel prebuilt upload failed; inspect the target project deployment log'); }
+    } catch (error) {
+      // Report recognized CLI failures without emitting credentials or raw provider output.
+      const stderr = String(error.stderr || '');
+      const categories = [
+        [/scope-not-|access to the specified account/i, 'CLI account scope unavailable'],
+        [/not authorized|not have access|permission|forbidden/i, 'project credential permission denied'],
+        [/size|too large|exceeds.*limit/i, 'artifact exceeds provider limit'],
+        [/root directory|rootDirectory/i, 'project root directory mismatch'],
+        [/runtime|node.js version/i, 'function runtime rejected'],
+        [/built with target environment/i, 'prebuilt target environment mismatch'],
+        [/no prebuilt output/i, 'prebuilt output missing'],
+        [/Hobby/i, 'Hobby plan constraint'],
+        [/invalid token|login|log in/i, 'CLI authentication failed'],
+      ];
+      const reason = categories.find(([pattern]) => pattern.test(stderr))?.[1] || 'see target deployment events';
+      throw new Error('Parallel prebuilt upload failed: ' + reason);
+    }
     const u = new URL(stdout.trim());
     if (u.protocol !== 'https:' || !u.hostname.endsWith('.vercel.app')) throw new Error('Unexpected upload URL');
     deployment = await vercel('/v13/deployments/' + u.hostname);
