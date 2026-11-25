@@ -7476,9 +7476,9 @@
     "semantic_hash": "a901b6947a1e73f50efb8f5d7a8dffa4"
   },
   "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": {
-    "mtime": 1795599391.0717597,
-    "seen": 1795599508.6912131,
-    "ast_hash": "dd68a5dd98c0d617828f72a7003d63b4",
+    "mtime": 1795641675.6451664,
+    "seen": 1795641859.287318,
+    "ast_hash": "280bfcc0856a3657615fbd000980ce97",
     "semantic_hash": ""
   },
   "remix/app/api/utils/capabilities/thingtimeCapabilities.ts": {
@@ -17442,9 +17442,9 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1795610333.8034894,
-    "seen": 1795611411.405195,
-    "ast_hash": "bb744cc47147180a51b5a25d6905b9d6",
+    "mtime": 1795641661.0448365,
+    "seen": 1795641859.34884,
+    "ast_hash": "87cadaa84cbeb553f8a10a4beb35926e",
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocsMarkdown.ts": {
@@ -26148,10 +26148,10 @@
     "semantic_hash": "ba540c90911c1a8b43c8dcbb1bf10d8b"
   },
   "remix/server/handlers/thingtime-capabilities.ts": {
-    "mtime": 1795496223.2307153,
-    "seen": 1795599508.694039,
-    "ast_hash": "d7c994bdf82d75cb456ee717e099f82d",
-    "semantic_hash": "d7c994bdf82d75cb456ee717e099f82d"
+    "mtime": 1795641630.4745834,
+    "seen": 1795641859.401833,
+    "ast_hash": "bbe6f906e5fc91eca6ea194fb319af34",
+    "semantic_hash": ""
   },
   "remix/server/middleware/environment-gateway.ts": {
     "mtime": 1795599391.0861764,
@@ -29100,9 +29100,9 @@
     "semantic_hash": "5935a79a6033f4540a084131c4badb54"
   },
   "TESTING.md": {
-    "mtime": 1795611278.1339402,
-    "seen": 1795611411.473856,
-    "ast_hash": "b866ae062b4f7c12d3472a86f3eff458",
+    "mtime": 1795641698.3957045,
+    "seen": 1795641859.416116,
+    "ast_hash": "bffd8cf2b48d8bb97c8ac74cd0545a77",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -29880,9 +29880,9 @@
     "semantic_hash": "a0f092e7daf77051d12c99fda93258b6"
   },
   "docs/environment-api-gateway.md": {
-    "mtime": 1795599391.0396192,
-    "seen": 1795599508.694579,
-    "ast_hash": "88e854348cd0fc61967c76589794eb6f",
+    "mtime": 1795641690.8874428,
+    "seen": 1795641859.420204,
+    "ast_hash": "e68f926b0d55235d8368866255c8249b",
     "semantic_hash": ""
   },
   "docs/feature-map/README.md": {
@@ -30192,9 +30192,9 @@
     "semantic_hash": "206103177ef24727b10304e655440e4c"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1795611278.130027,
-    "seen": 1795611411.4796622,
-    "ast_hash": "9639212ec5b18d00d998f2537f769733",
+    "mtime": 1795641704.3034556,
+    "seen": 1795641859.42193,
+    "ast_hash": "1165cc55cccbd5fb156ec23533c32d84",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -38226,10 +38226,10 @@
     "semantic_hash": "798c20d3a5a5cd770957352518af8314"
   },
   "remix/server/handlers/thingtime-capabilities.test.ts": {
-    "mtime": 1795496223.2305,
-    "seen": 1795599508.694039,
-    "ast_hash": "3a81154e170cfc2173062995c5414eb0",
-    "semantic_hash": "3a81154e170cfc2173062995c5414eb0"
+    "mtime": 1795641651.8680935,
+    "seen": 1795641859.4018319,
+    "ast_hash": "da33835111c90f70530813464d7b48c2",
+    "semantic_hash": ""
   },
   "PRs/1494-thing-browser-path-pins-add-parent-path-scoped-pins.md": {
     "mtime": 1795496223.3506007,
