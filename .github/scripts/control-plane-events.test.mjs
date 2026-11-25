@@ -9,6 +9,8 @@ import { classifyConversation, classifyQueuedConversation, hasAutomationMarker }
 
 const workflow = readFileSync(new URL('../workflows/resolve-pr-conflicts.yml', import.meta.url), 'utf8');
 const ci = readFileSync(new URL('../workflows/control-plane-ci.yml', import.meta.url), 'utf8');
+// The detector sources its changed-file hydration from this helper.
+const filesHelper = readFileSync(new URL('./pr-files-inventory.sh', import.meta.url), 'utf8');
 const marker = '<!-- thingtime-develop-pr-preview -->';
 const event = (body, patch = {}) => ({ action: 'created', issue: { pull_request: {} }, comment: { id: 5541425923, user: { type: 'User', login: 'lopugit' }, body }, changes: { body: { from: '' } }, ...patch });
 
@@ -151,15 +153,15 @@ test('detector bounds GraphQL work per page without truncating the inventory', (
 });
 
 test('expensive diffs cannot poison the shared PR metadata inventory', () => {
-  const inventory = workflow.split('          all_open_prs() {')[1].split('          complete_large_pr_files()')[0];
+  const inventory = workflow.split('          all_open_prs() {')[1].split('          . .github/scripts/pr-files-inventory.sh')[0];
   assert.doesNotMatch(inventory, /files\(first:|changedFiles/);
   assert.match(inventory, /filesIncomplete:true/);
-  assert.match(workflow, /select\(\.filesIncomplete == true or/);
-  assert.match(workflow, /filesIncomplete:false/);
+  assert.match(filesHelper, /select\(\.filesIncomplete == true or/);
+  assert.match(filesHelper, /filesIncomplete:false/);
 });
 
 test('an unavailable diff preserves incomplete state while another PR hydrates', () => {
-  const helper = workflow.slice(workflow.indexOf('          complete_large_pr_files() {'), workflow.indexOf('          query() {')).replace(/^          /gm, '');
+  const helper = filesHelper;
   const temp = mkdtempSync(join(tmpdir(), 'pr-inventory-'));
   try {
     const script = `set -euo pipefail
@@ -169,7 +171,7 @@ test('an unavailable diff preserves incomplete state while another PR hydrates',
     }
     ${helper}
     complete_large_pr_files '[{"number":1,"files":[],"filesTotal":0,"filesIncomplete":true},{"number":2,"files":[],"filesTotal":0,"filesIncomplete":true}]'`;
-    const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,REPO:'owner/repo'}});
+    const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,GITHUB_OUTPUT:'',LOPU_PR_FILES_CACHE:join(temp,'files-cache.json'),RUNNER_TEMP:temp,REPO:'owner/repo'}});
     assert.equal(result.status,0,result.stderr);
     const rows = JSON.parse(result.stdout);
     assert.equal(rows[0].filesIncomplete,true);
@@ -186,14 +188,14 @@ test('an unavailable diff preserves incomplete state while another PR hydrates',
 // unrelated PR whose pull_request_target started it. An advisory enrichment
 // must yield the step's clock back, and must say which PRs it dropped.
 test('an exhausted changed-file budget defers the rest instead of the whole scan', () => {
-  const helper = workflow.slice(workflow.indexOf('          complete_large_pr_files() {'), workflow.indexOf('          query() {')).replace(/^          /gm, '');
+  const helper = filesHelper;
   const temp = mkdtempSync(join(tmpdir(), 'pr-inventory-'));
   const inventory = '[{"number":1,"files":[],"filesTotal":0,"filesIncomplete":true},{"number":2,"files":[],"filesTotal":0,"filesIncomplete":true}]';
   const run = (deadline) => spawnSync('bash', ['-c', `set -euo pipefail
     gh_read_retry() { echo '[[{"filename":"app.ts"}]]'; }
     ${helper}
     complete_large_pr_files '${inventory}'`],
-    {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,REPO:'owner/repo',FILES_INVENTORY_DEADLINE_SECONDS:deadline}});
+    {encoding:'utf8',env:{...process.env,GITHUB_OUTPUT:'',LOPU_PR_FILES_CACHE:join(temp,'files-cache.json'),RUNNER_TEMP:temp,REPO:'owner/repo',FILES_INVENTORY_DEADLINE_SECONDS:deadline}});
   try {
     // A deadline already behind the step clock hydrates nothing, stays green,
     // and leaves every row in the explicit state a read failure produces.
