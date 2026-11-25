@@ -53,6 +53,9 @@ jobs:
       - name: Validate shared API budget deferral in resolver and stack handoffs
         run: node --test .github/scripts/gh-budget-deferral.test.mjs
 
+      - name: Validate the stuck Lopu run sweeper
+        run: node --test .github/scripts/lopu-stuck-run-sweeper.test.mjs
+
       - name: Validate JavaScript syntax
         run: |
           set -euo pipefail

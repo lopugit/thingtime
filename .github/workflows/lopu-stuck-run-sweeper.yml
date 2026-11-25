@@ -1,0 +1,49 @@
+name: Lopu stuck run sweeper implementation
+
+# Frees Lopu's serialized agent-fleet lane. A fleet job running past an hour
+# is cancelled, then force-cancelled if GitHub ignores the cancel. A batch
+# that keeps failing is stopped, and ghost runs are cleared. See
+# .github/scripts/lopu-stuck-run-sweeper.mjs. The main-branch listener of the
+# same name schedules it.
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Log decisions without cancelling anything
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: lopu-stuck-run-sweeper
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts/lopu-stuck-run-sweeper.mjs
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Cancel stuck Lopu fleet runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWEEPER_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+        run: node .github/scripts/lopu-stuck-run-sweeper.mjs

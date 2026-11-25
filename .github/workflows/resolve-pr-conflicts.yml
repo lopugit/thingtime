@@ -4187,7 +4187,7 @@ jobs:
          || github.workflow_ref
          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
@@ -5594,7 +5594,7 @@ jobs:
       && inputs.pr_batch_b64 == ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
@@ -7601,7 +7601,7 @@ jobs:
           || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
       && inputs.branch == ''
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
