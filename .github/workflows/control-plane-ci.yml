@@ -50,6 +50,9 @@ jobs:
       - name: Validate quota-aware CodeQL ordering
         run: node --test .github/scripts/codeql-polling.test.mjs .github/scripts/codeql-quota-diagnostics.test.mjs .github/scripts/codeql-upload-recovery.test.mjs
 
+      - name: Validate shared API budget deferral in resolver and stack handoffs
+        run: node --test .github/scripts/gh-budget-deferral.test.mjs
+
       - name: Validate JavaScript syntax
         run: |
           set -euo pipefail
