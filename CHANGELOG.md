@@ -1,3 +1,7 @@
+## 2026-11-25 — Parallel environment publishing
+
+- Publish opt-in main, develop and eligible PR builds to separate aliases. Recheck the saved lane, trusted PR author and actor, source workflow run, GitHub SHA and Vercel destination before promotion. PR builds run separately from publishing credentials, and nonproduction acceptance never sends a project bypass to PR code.
+
 ## 2026-11-21 — Database-managed deployment targets and daily job dispatch
 
 - Add a parallel prebuilt publisher for dedicated Vercel test projects and a protected dispatcher for Thingtime job schedules. The existing production publisher can honor a saved deployment profile.

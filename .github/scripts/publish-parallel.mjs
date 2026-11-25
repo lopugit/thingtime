@@ -13,7 +13,7 @@ export async function publishParallel(env = process.env, fetcher = fetch) {
   if (!token || !/^[a-f0-9]{40}$/.test(sha) || env.GITHUB_REF !== 'refs/heads/main') throw new Error('Missing trusted publisher context');
   const checkProfile = async () => {
     const p = (await profiles(env, fetcher)).find(row => row.id === id);
-    if (!p?.enabled || p.mode !== 'parallel' || p.testOrigin !== testOrigin || !matchesTarget(p, env)) throw new Error('Enabled deployment profile must match its independent GitHub environment');
+    if (!p?.enabled || p.mode !== 'parallel' || p.pilotLanes?.includes('production') || p.testOrigin !== testOrigin || !matchesTarget(p, env)) throw new Error('Enabled legacy parallel profile must match its independent GitHub environment');
     const head = await fetcher('https://api.github.com/repos/lopugit/thingtime/git/ref/heads/main', { redirect: 'error', signal: AbortSignal.timeout(20000) });
     if (!head.ok || (await head.json()).object?.sha !== sha) throw new Error('Source no longer matches main');
     return p;
