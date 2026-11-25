@@ -20,12 +20,13 @@ const pulse = keyframes`
 
 // Compact MongoDB connection indicator for the footer. Fetches live status
 // through the Thingtime API and links out to the full status page.
-export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOrigin?: string }) => {
+export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOrigin?: string; enabled?: boolean }) => {
   const [status, setStatus] = React.useState<MongoConnectionStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshTick, setRefreshTick] = React.useState(0);
 
   React.useEffect(() => {
+    if (props.enabled === false) return;
     let isMounted = true;
 
     const xhr = new XMLHttpRequest();
@@ -69,7 +70,7 @@ export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOr
       isMounted = false;
       xhr.abort();
     };
-  }, [props.targetOrigin, refreshTick]);
+  }, [props.targetOrigin, refreshTick, props.enabled]);
 
   const refreshStatus = React.useCallback(() => {
     setStatus(null);
