@@ -9,15 +9,19 @@
 // the identical static shell with the same no-store headers; everything else,
 // including requests with no user-agent, still reaches the social controller.
 
+// Vercel matches a route's header condition against the whole header value,
+// so both patterns are anchored over the full user-agent. They behave the same
+// under substring matching too.
+//
 // A real browser engine. Crawlers often claim this prefix too, which is why the
 // unfurler pattern below is checked as well.
-export const BROWSER_USER_AGENT = '^Mozilla/5\\.0 ';
+export const BROWSER_USER_AGENT = '^Mozilla/5\\.0 .*$';
 
 // Link unfurlers, crawlers, preview fetchers and HTTP tools. Listed without
 // inline flags so the pattern means the same thing in every regex engine Vercel
 // might evaluate it with. A false positive only costs one function call; a false
 // negative would give that client a generic card, so the list errs wide.
-export const UNFURLER_USER_AGENT = [
+const UNFURLER_TOKENS = [
 	'[Bb]ot', '[Cc]rawl', '[Ss]pider', '[Ss]lurp', '[Pp]review', '[Ee]mbed', '[Ii]framely', '[Uu]nfurl',
 	'facebookexternalhit', 'Facebot', 'meta-external', 'WhatsApp', 'Telegram', 'Discord', 'Slack', 'Skype',
 	'vkShare', 'Pinterest', 'reddit', 'Tumblr', 'Mastodon', 'Bluesky', 'Cardyb', 'outbrain', '[Qq]uora',
@@ -26,6 +30,7 @@ export const UNFURLER_USER_AGENT = [
 	'Feedfetcher', 'Feedly', 'ChatGPT', 'GPTBot', 'OAI-', 'Claude', 'Perplexity', 'Bytespider', 'CCBot',
 	'ia_archiver', 'curl/', 'Wget', 'python', 'Go-http', 'Java/', 'okhttp', 'axios', 'node-fetch', 'undici'
 ].join('|');
+export const UNFURLER_USER_AGENT = `^.*(?:${UNFURLER_TOKENS}).*$`;
 
 // Route conditions that select a browser navigation.
 export const browserOnly = {
@@ -39,8 +44,10 @@ export function isBrowserOnlyRoute(route) {
 		JSON.stringify(route?.missing) === JSON.stringify(browserOnly.missing);
 }
 
-// Mirrors Vercel's evaluation of the two conditions, for tests and probes.
+// Mirrors Vercel's evaluation of the two conditions (a whole-value match), for
+// tests and probes.
+const wholeValue = (pattern) => new RegExp(`^(?:${pattern})$`);
 export function isBrowserUserAgent(userAgent) {
 	if (typeof userAgent !== 'string') return false;
-	return new RegExp(BROWSER_USER_AGENT).test(userAgent) && !new RegExp(UNFURLER_USER_AGENT).test(userAgent);
+	return wholeValue(BROWSER_USER_AGENT).test(userAgent) && !wholeValue(UNFURLER_USER_AGENT).test(userAgent);
 }
