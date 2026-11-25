@@ -70,11 +70,11 @@ const field = (name: keyof typeof PROFILE_FIELDS) =>
 	);
 const lane = (name: 'production' | 'development' | 'preview', title: string, hint: string) =>
 	el(name + '-lane', 'label', undefined, {}, [
-		el(name + '-lane-input', 'input', undefined, {
+		el(name + '-input', 'input', undefined, {
 			type: 'checkbox', checked: '{profiles.draft.lane' + name[0].toUpperCase() + name.slice(1) + '}',
 			disabled: '{profiles.busy}', ...action('profile.lane', { lane: name })
 		}),
-		el(name + '-lane-label', 'span', title + ' — ' + hint)
+		el(name + '-label', 'span', title + ' — ' + hint)
 	], { display: 'flex', gap: '8px', 'align-items': 'center', 'min-height': '44px' });
 export const DEPLOYMENT_PROFILE_BLOCKS: WebpageBlock[] = [
 	el(
