@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { decideRun, FORCE_GRACE_MS, JOB_LIMIT_MS, jobFamily, sweep } from "./lopu-stuck-run-sweeper.mjs";
 
@@ -67,4 +68,29 @@ test("sweep cancels through the API, honours dry run and defers on an exhausted 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test("both split all-branch jobs stay inside the sweeper's fleet-run scope", () => {
+  const workflow = readFileSync(new URL("../workflows/all-branch.yml", import.meta.url), "utf8");
+  const names = [...workflow.matchAll(/^  [A-Za-z0-9_-]+:\n    name: (.+)$/gm)].map((match) => match[1]);
+  assert.deepEqual(names, ["Lopu builds the all branch", "Lopu repairs the all-branch build"]);
+  const caller = readFileSync(new URL("../workflows/resolve-pr-conflicts.yml", import.meta.url), "utf8");
+  const callerName = /\n  maintain_all_branch:\n    name: (.+)\n/.exec(caller)?.[1];
+  assert.ok(callerName, "the Lopu manager still calls all-branch.yml from maintain_all_branch");
+  // Reusable-workflow runs report the caller's path and "<caller> / <job>" names.
+  for (const path of [".github/workflows/resolve-pr-conflicts.yml", ".github/workflows/all-branch.yml"]) {
+    for (const name of names) {
+      const hung = (age) => [job(`${callerName} / ${name}`, "in_progress", { started_at: ago(age) })];
+      assert.equal(decideRun(run({ path }), hung(JOB_LIMIT_MS - 60_000), NOW).action, "none");
+      assert.equal(decideRun(run({ path }), hung(JOB_LIMIT_MS), NOW).action, "cancel", `${name} is cancelled at the limit`);
+      assert.equal(decideRun(run({ path }), hung(JOB_LIMIT_MS + FORCE_GRACE_MS), NOW).action, "force-cancel", `${name} is force-cancelled`);
+    }
+  }
+  // A doctor waiting hours for the fleet behind its finished build job is
+  // waiting for the lane, not a ghost run.
+  const waiting = [
+    job(`${callerName} / ${names[0]}`, "completed", { conclusion: "success", completed_at: ago(5 * 3_600_000) }),
+    job(`${callerName} / ${names[1]}`, "queued"),
+  ];
+  assert.equal(decideRun(run({ updated_at: ago(5 * 3_600_000) }), waiting, NOW).action, "none");
 });
