@@ -1,7 +1,7 @@
 # Graph Report - quirky-brahmagupta-1e6ece  (2026-11-25)
 
 ## Corpus Check
-- 137 files · ~322,443 words
+- 137 files · ~322,797 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5fcf06f6`
+- Built from commit: `38861ba8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
