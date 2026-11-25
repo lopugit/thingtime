@@ -1,7 +1,7 @@
 # Graph Report - detector-files-inventory-cache-33d787  (2026-11-25)
 
 ## Corpus Check
-- 136 files · ~317,087 words
+- 136 files · ~317,441 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fa0c2757`
+- Built from commit: `4ac6d1fa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
