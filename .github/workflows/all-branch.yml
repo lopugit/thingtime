@@ -251,6 +251,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: remix/pnpm-lock.yaml
 
+      - name: Install the union's dependencies for round 1
+        if: steps.admit.outputs.proceed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-install
+
       # The doctor reuses the resolver's admin-configured model waterfall (one
       # dial governs both automations), validated against the same closed
       # allowlist so a compromised response can never inject CLI flags.

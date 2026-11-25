@@ -61,7 +61,8 @@
 // `check` run the union build (install → build:client → build:server) with
 // mechanical lockfile repair; `handoff --out DIR` export a failing union for
 // the doctor job; `doctor-admit --from DIR` restore it there (or stand down
-// when it is stale); `doctor-commit --round N` guard + commit the model's
+// when it is stale); `doctor-install` give round 1 the same node_modules the
+// build job's check had; `doctor-commit --round N` guard + commit the model's
 // working-tree edits; `doctor-record` note an exhausted doctor; `push` final
 // force-push (leased after `doctor-admit`) with the .github re-pin fallback
 // and summary.
@@ -415,6 +416,15 @@ export function assertAllBranchWorkflowContract(workflowText) {
     stepIndex("Admit the handoff and restore the failing union") !== -1 &&
       stepIndex("Admit the handoff and restore the failing union") < stepIndex("Load the build-doctor model waterfall"),
     "the doctor admits its handoff before any model is selected"
+  );
+  assert.ok(
+    stepIndex("Admit the handoff and restore the failing union") < stepIndex("Install the union's dependencies for round 1") &&
+      stepIndex("Install the union's dependencies for round 1") < stepIndex("Lopu build doctor round 1"),
+    "round 1 sees the same installed dependencies the build job's check had"
+  );
+  assert.match(
+    doctorSteps[stepIndex("Install the union's dependencies for round 1")]?.body ?? "",
+    /if: steps\.admit\.outputs\.proceed == 'true'\n\s*run: node control-plane\/\.github\/scripts\/build-all-branch\.mjs doctor-install\n/
   );
   assert.match(
     doctorSteps[stepIndex("Load the build-doctor model waterfall")]?.body ?? "",
@@ -1488,6 +1498,24 @@ function doctorAdmitMode(fromDir) {
   stepOutput("proceed", "true");
 }
 
+// Doctor job: reinstall the union's dependencies before round 1, so the model
+// reads the same node_modules it had when the build job ran this check in the
+// same job. Never writes BUILD_LOG (the model must read the build job's
+// failure) and never fails the job: the next re-check installs again anyway.
+function doctorInstallMode() {
+  requireAllBranchCheckout("doctor-install");
+  const result = spawnSync("corepack", ["pnpm", "--dir", "remix", "install", "--no-frozen-lockfile"], {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  console.log(output.split("\n").slice(-20).join("\n"));
+  if (result.status !== 0) {
+    console.log("::notice::The doctor's dependency install failed; round 1 runs without node_modules and the re-check installs again.");
+  }
+}
+
 // Guard and commit whatever the doctor model left in the working tree.
 function doctorCommitMode(round) {
   requireAllBranchCheckout("doctor-commit");
@@ -1673,6 +1701,7 @@ if (process.argv.includes("--self-test")) {
     else if (mode === "check") checkMode();
     else if (mode === "handoff") handoffMode(handoffDir);
     else if (mode === "doctor-admit") doctorAdmitMode(handoffDir);
+    else if (mode === "doctor-install") doctorInstallMode();
     else if (mode === "doctor-commit") {
       const flag = process.argv.indexOf("--round");
       doctorCommitMode(flag !== -1 && process.argv[flag + 1] ? process.argv[flag + 1] : "1");

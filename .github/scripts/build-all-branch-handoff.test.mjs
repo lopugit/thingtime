@@ -194,7 +194,11 @@ test("a failing union crosses from the build job to a fleet-only doctor job inta
       assert.equal(readState(doctor).lease, fx.previousAll);
     }
 
-    // Doctor A: a model edit, the guarded commit, the record and a leased push.
+    // Doctor A: dependencies for round 1 (the build log survives), a model
+    // edit, the guarded commit, the record and a leased push.
+    const install = ok(step(fx, doctorA, "doctor-install"));
+    assert.match(install.log, /installed/);
+    assert.match(readFileSync(join(doctorA, ".all-doctor/build.log"), "utf8"), /Duplicate identifier/);
     writeFileSync(join(doctorA, "app.txt"), "one (PR 1)\ntwo\nthree (PR 2, deduplicated)\n");
     const commit = ok(step(fx, doctorA, "doctor-commit", "--round", "1"));
     assert.equal(commit.outputs.committed, "true");
