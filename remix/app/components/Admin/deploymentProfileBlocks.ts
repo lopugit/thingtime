@@ -68,6 +68,14 @@ const field = (name: keyof typeof PROFILE_FIELDS) =>
 		],
 		stack
 	);
+const lane = (name: 'production' | 'development' | 'preview', title: string, hint: string) =>
+	el(name + '-lane', 'label', undefined, {}, [
+		el(name + '-lane-input', 'input', undefined, {
+			type: 'checkbox', checked: '{profiles.draft.lane' + name[0].toUpperCase() + name.slice(1) + '}',
+			disabled: '{profiles.busy}', ...action('profile.lane', { lane: name })
+		}),
+		el(name + '-lane-label', 'span', title + ' — ' + hint)
+	], { display: 'flex', gap: '8px', 'align-items': 'center', 'min-height': '44px' });
 export const DEPLOYMENT_PROFILE_BLOCKS: WebpageBlock[] = [
 	el(
 		'panel',
@@ -115,7 +123,14 @@ export const DEPLOYMENT_PROFILE_BLOCKS: WebpageBlock[] = [
 					[
 						el('form-heading', 'h3', '{profiles.formTitle}'),
 						...(['id', 'label', 'teamId', 'teamSlug', 'projectId', 'projectName'] as const).map(field),
-						when('alias-visible', 'profiles.parallel', [field('testOrigin')]),
+						when('alias-visible', 'profiles.parallel', [
+							field('testOrigin'),
+							el('lane-heading', 'h4', 'Enrolled data lanes'),
+							el('lane-help', 'p', 'Enable each lane only on its intended data authority. Production grants this project access to production data.'),
+							lane('production', 'Production', 'base alias; production API'),
+							lane('development', 'Development', 'dev alias; preview API'),
+							lane('preview', 'PR previews', 'PR aliases; preview API')
+						]),
 						el(
 							'enabled-field',
 							'label',

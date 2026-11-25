@@ -56,13 +56,10 @@ export const createThingtimeCapabilityChecker = (options: { source?: 'origin' | 
       manifestOrigin = expectedOrigin;
       manifestFetcher = transport?.fetch;
     }
-    // Native/scoped discovery reaches the selected API without account cookies.
-    // Same-origin web requests retain the browser's platform-protection cookie;
-    // the manifest itself contains no account data. Active API discovery still
-    // uses its fixed endpoint and refuses redirects in either case.
-
-    const omitCredentials = Boolean(transport) || expectedOrigin !== window.location.origin;
-    const scoped = activeApi || omitCredentials;
+    // Keep the platform-protection cookie only for this page's exact origin.
+    // Scoped transports always use the absolute endpoint and refuse redirects.
+    const omitCredentials = expectedOrigin !== window.location.origin;
+    const scoped = activeApi || Boolean(transport) || omitCredentials;
     const load = () => {
       const previousManifest = cachedManifest;
       const previousEtag = cachedEtag;

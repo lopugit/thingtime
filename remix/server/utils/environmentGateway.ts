@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { pilotBuild, type PilotBuild } from '../../app/api/utils/deployment/pilotBuild';
 import { isDeploymentProfileId } from '../../app/api/utils/ciControl/deploymentProfilesCore';
-import { authenticatePilot, isPilotGateway, PILOT_GATEWAY, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, PILOT_VERSION, TRUSTED_SOURCE_HEADER } from './deploymentPilot';
+import { authenticatePilot, enrolledPilotOrigin, isPilotGateway, isPilotLaneGateway, PILOT_GATEWAY, PILOT_LANE_HEADER, PILOT_PR_HEADER, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, PILOT_VERSION, TRUSTED_SOURCE_HEADER } from './deploymentPilot';
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
@@ -147,31 +147,34 @@ export const proxyEnvironmentRequest = async (request: Request, authority: NonNu
   }
 };
 
-// Keep only public discovery metadata, scoped to the fixed preview authority.
+// Keep only public discovery metadata, isolated by gateway origin.
 // Tokens and application responses never enter this cache.
-let pilotManifest: { value: Awaited<ReturnType<typeof readGatewayManifest>>; expires: number } | undefined;
-async function readPilotManifest(token: string) {
-  if (pilotManifest && Date.now() < pilotManifest.expires) return pilotManifest.value;
-  const discovery = await fetch(PILOT_GATEWAY + THINGTIME_CAPABILITY_MANIFEST_PATH, {
-    headers: { [TRUSTED_SOURCE_HEADER]: token }, redirect: 'error', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(5000)
+const pilotManifests = new Map<string, { value: Awaited<ReturnType<typeof readGatewayManifest>>; expires: number }>();
+async function readPilotManifest(token: string, lane?: PilotBuild['lane']) {
+  const gateway = lane === 'production' ? 'https://thingtime.com' : PILOT_GATEWAY;
+  const cached = pilotManifests.get(gateway);
+  if (cached && Date.now() < cached.expires) return cached.value;
+  const discovery = await fetch(gateway + THINGTIME_CAPABILITY_MANIFEST_PATH, {
+    headers: lane === 'production' ? {} : { [TRUSTED_SOURCE_HEADER]: token }, redirect: 'error', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(5000)
   });
   const manifest = await readGatewayManifest(discovery);
-  if (manifest.schemaVersion !== 1 || manifest.origin !== PILOT_GATEWAY || manifest.gateway?.environment !== 'preview' ||
-      manifest.gateway?.origin !== PILOT_GATEWAY || !manifest.gateway.deploymentId || !Array.isArray(manifest.operations) ||
-      !capabilitySatisfies(manifest.features?.['api.environment-gateway']?.version, PILOT_VERSION)) throw new Error('Incompatible preview gateway');
-  pilotManifest = { value: manifest, expires: Date.now() + 5000 };
+  if (manifest.schemaVersion !== 1 || manifest.origin !== gateway ||
+      manifest.gateway?.environment !== (lane === 'production' ? 'production' : 'preview') ||
+      manifest.gateway?.origin !== gateway || !manifest.gateway.deploymentId || !Array.isArray(manifest.operations) ||
+      !capabilitySatisfies(manifest.features?.['api.environment-gateway']?.version, lane ? '1.4.0' : PILOT_VERSION)) throw new Error('Incompatible pilot gateway');
+  pilotManifests.set(gateway, { value: manifest, expires: Date.now() + 5000 });
   return manifest;
 }
 
-// The dedicated project is enrolled only for the existing nonproduction data
-// authority. Authenticate the workload independently of the user's normal session.
+// This frontend has no database authority. The selected upstream authenticates
+// its workload independently of the user's normal session.
 export async function proxyPilotRequest(request: Request, pilot: PilotBuild): Promise<Response> {
   const url = new URL(request.url);
   if (url.origin !== pilot.origin) return gatewayFailure(421, 'ENVIRONMENT_GATEWAY_ORIGIN');
   if (crossSiteMutation(request)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
   const token = request.headers.get('x-vercel-oidc-token');
   if (!token || token.length > 16384) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
-  const manifest = await readPilotManifest(token);
+  const manifest = await readPilotManifest(token, pilot.lane);
   if (url.pathname === THINGTIME_CAPABILITY_MANIFEST_PATH) {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD, OPTIONS' } });
     const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'Access-Control-Allow-Origin': '*',
@@ -182,10 +185,12 @@ export async function proxyPilotRequest(request: Request, pilot: PilotBuild): Pr
   }
   if (!supportsOperation(request, manifest)) return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
   const headers = cleanHeaders(request.headers);
-  headers.set(TRUSTED_SOURCE_HEADER, token);
+  if (pilot.lane !== 'production') headers.set(TRUSTED_SOURCE_HEADER, token);
   headers.set(PILOT_OIDC_HEADER, token);
   headers.set(PILOT_PROFILE_HEADER, pilot.profileId);
-  const target = new URL(PILOT_GATEWAY);
+  if (pilot.lane) headers.set(PILOT_LANE_HEADER, pilot.lane);
+  if (pilot.prNumber) headers.set(PILOT_PR_HEADER, String(pilot.prNumber));
+  const target = new URL(pilot.lane === 'production' ? 'https://thingtime.com' : PILOT_GATEWAY);
   target.pathname = url.pathname;
   target.search = url.search;
   const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, redirect: 'manual', cache: 'no-store', signal: request.signal };
@@ -199,17 +204,27 @@ export const environmentGatewayIngress = async (request: Request): Promise<Respo
     if (pilot) return proxyPilotRequest(request, pilot).catch(() => gatewayFailure());
     const pilotId = request.headers.get(PILOT_PROFILE_HEADER);
     const token = request.headers.get(PILOT_OIDC_HEADER);
+    const laneHeader = request.headers.get(PILOT_LANE_HEADER);
+    const prHeader = request.headers.get(PILOT_PR_HEADER);
     const settings = getGatewaySettings();
     const relayed = request.headers.has(GATEWAY_RELAY_HEADER) || request.headers.has(SIGNATURE_HEADER);
-    if (pilotId !== null || token !== null) {
-      if (!settings || !isDeploymentProfileId(pilotId) || !token || relayed || !isPilotGateway(settings) ||
-          getMongoConnectionMode() !== 'proxy' || new URL(request.url).origin !== PILOT_GATEWAY ||
+    if (pilotId !== null || token !== null || laneHeader !== null || prHeader !== null) {
+      const lane = laneHeader === null ? null : ['production', 'development', 'preview'].includes(laneHeader) ? laneHeader as 'production' | 'development' | 'preview' : undefined;
+      const prNumber = prHeader === null ? undefined : /^[1-9][0-9]*$/.test(prHeader) ? Number(prHeader) : NaN;
+      const incomingOrigin = lane === 'production' ? 'https://thingtime.com' : PILOT_GATEWAY;
+      if (!settings || !isDeploymentProfileId(pilotId) || !token || relayed ||
+          !(lane === null ? isPilotGateway(settings) : lane && isPilotLaneGateway(settings, lane)) ||
+          getMongoConnectionMode() !== 'proxy' || new URL(request.url).origin !== incomingOrigin ||
           !(await gatewayAuthority.current())?.owner || request.headers.has('x-tt-mongo-url') ||
           /(?:^|;)\s*tt_mongo=/.test(request.headers.get('cookie') || '')) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
       const { getDeploymentProfile } = await import('../../app/api/utils/ciControl/deploymentProfiles');
       const profile = await withGatewayWork(() => getDeploymentProfile(pilotId));
-      if (!profile || !await authenticatePilot(token, profile)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
-      const restored = restoreOriginalOrigin(request, profile.testOrigin);
+      if (!profile || lane === undefined || !await authenticatePilot(token, profile, undefined, lane ?? undefined) ||
+          (lane === null && prHeader !== null) || (lane !== 'preview' && prHeader !== null) ||
+          (lane === 'preview' && (prNumber === undefined || !Number.isSafeInteger(prNumber) || prNumber <= 0))) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
+      const sourceOrigin = lane === null ? profile.testOrigin : enrolledPilotOrigin(profile, lane, prNumber);
+      if (!sourceOrigin) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_WORKLOAD');
+      const restored = restoreOriginalOrigin(request, sourceOrigin);
       if (crossSiteMutation(restored)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
       return restored;
     }

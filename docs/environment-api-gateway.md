@@ -337,3 +337,52 @@ This setup depends on an independently running preview owner. Retiring the
 old project also requires an independently bootstrapped replacement for each
 data authority, including its database authentication and vault key. A pilot
 deployment alone cannot take ownership of production.
+
+### Explicit parallel build lanes
+
+The protected controller may publish one enrolled parallel profile's source to
+three separate lanes. `production` serves the profile's base `.vercel.app`
+alias and relays documented API operations to `https://thingtime.com`.
+`development` serves the base tag plus `-dev.vercel.app`; `preview` serves
+`-pr-<number>.vercel.app`. Both nonproduction lanes relay to the existing
+`https://master.previews.thingtime.com` data authority. Long base tags are
+truncated with an eight-character SHA-256 tag digest before the suffix; the
+same canonical derivation is used by the build and ingress. The public
+`thingtime.com` domain is **not** moved by this change.
+
+The nonsecret build inputs are `THINGTIME_PILOT_PROFILE_ID`,
+`THINGTIME_PILOT_ALIAS` (the base alias), `THINGTIME_PILOT_ORIGIN` (the selected
+lane alias), and `THINGTIME_PILOT_LANE`. PR builds also set
+`THINGTIME_PILOT_PR_NUMBER`. A mismatched alias, PR number, Vercel target
+environment or partial configuration fails the build. Omitting the lane and
+alias preserves the original preview-only pilot. The frontend still has no
+database credentials or direct MongoDB connection.
+
+Each data authority has its own administrator-saved deployment profile in its
+own settings collection. Its optional `pilotLanes` array is an explicit
+per-profile enrollment; an absent array grants no new lane. On the production
+authority, verify the immutable Vercel team/project IDs and base alias, then
+enable only `production` for the exact intended profile through Admin →
+Deployment profiles or the revision-checked admin API. On the preview
+authority, independently enroll `development` and `preview` for that same
+project and alias. The gateway verifies its own data environment, current
+gateway ownership, enrolled lane and source alias before restoring the
+original request; normal user authentication and cross-site write checks still
+apply. A profile record on one authority cannot enroll a lane on another.
+
+Production deployments must carry the project's `environment:production`
+Vercel OIDC identity; development and PR deployments must carry
+`environment:preview`. The provider identity proves project and Vercel
+environment, not Git commit or deployment ID. The controller must verify
+immutable source and deployment metadata before aliasing, and only authorized
+publishers may create production deployments in this dedicated project.
+Trusted Sources on the protected preview gateway must permit the intended
+preview-environment project identity as well as any retained legacy pilot
+identity. Never infer data access from an alias assignment alone.
+
+The lane changes which **frontend source** is published. The current pilot
+relays documented API requests to the selected shared authority: a PR or
+development lane executes that authority's API handlers, not the branch's
+server handlers, and shares its preview database. The production lane executes
+the current production authority's API handlers and uses production data.
+This does not provide a per-PR database or branch-specific backend execution.

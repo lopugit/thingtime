@@ -353,7 +353,7 @@ test('Archive read gate rejects a 1.62 active API behind a 1.63 frontend and ret
   assert.equal(queries, 1);
 });
 
-test('same-origin active discovery keeps protection cookies while scoped discovery omits them', async t => {
+test('same-origin active discovery keeps protection cookies while foreign discovery omits them', async t => {
   const calls: string[] = [];
   const mock = t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push(String(url));
@@ -377,7 +377,7 @@ test('same-origin active discovery keeps protection cookies while scoped discove
     fetch: (async (_url, init) => { scopedCredentials = init?.credentials; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
     currentOrigin: () => 'https://thingtime.test'
   });
-  assert.equal(scopedCredentials, 'omit');
+  assert.equal(scopedCredentials, 'same-origin');
 });
 
 test('a completed manifest outlives its request deadline and has a deliberate freshness bound', async t => {
@@ -467,11 +467,11 @@ test('a completed scoped result survives later caller cancellation without relax
 });
 
 
-test('same-origin active API discovery retains platform cookies while foreign and scoped transports omit credentials', async t => {
+test('same-origin active API discovery retains platform cookies including scoped transports; foreign origins omit credentials', async t => {
   for (const [expectedOrigin, customTransport, credentials] of [
     ['https://thingtime.test', false, 'same-origin'],
     ['https://selected.test', false, 'omit'],
-    ['https://thingtime.test', true, 'omit'],
+    ['https://thingtime.test', true, 'same-origin'],
     ['https://selected.test', true, 'omit']
   ] as const) {
     const fetchMock = t.mock.method(globalThis, 'fetch', async (url, init) => {
@@ -489,7 +489,7 @@ test('same-origin active API discovery retains platform cookies while foreign an
 
 });
 
-test('same-origin active discovery keeps protection cookies while scoped discovery omits them', async t => {
+test('same-origin active discovery keeps protection cookies for scoped discovery', async t => {
   const calls: string[] = [];
   const mock = t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push(String(url));
@@ -513,5 +513,5 @@ test('same-origin active discovery keeps protection cookies while scoped discove
     fetch: (async (_url, init) => { scopedCredentials = init?.credentials; return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }); }) as typeof fetch,
     currentOrigin: () => 'https://thingtime.test'
   });
-  assert.equal(scopedCredentials, 'omit');
+  assert.equal(scopedCredentials, 'same-origin');
 });

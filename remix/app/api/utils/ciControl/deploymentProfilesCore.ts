@@ -8,6 +8,8 @@ export type DeploymentProfile = {
 	projectName: string;
 	testOrigin: string;
 	enabled: boolean;
+	/** Per-authority enrollment. Missing means the legacy preview-only pilot. */
+	pilotLanes?: ('production' | 'development' | 'preview')[];
 };
 export type SavedDeploymentProfile = DeploymentProfile & { revision: string };
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -28,6 +30,11 @@ export function parseDeploymentProfile(value: unknown): DeploymentProfile {
 	if (typeof p.projectName !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(p.projectName)) throw new TypeError('Enter the Vercel project name.');
 	if (typeof p.testOrigin !== 'string' || (mode === 'parallel' ? !origin.test(p.testOrigin) : p.testOrigin !== ''))
 		throw new TypeError('Parallel deployments require their exact HTTPS vercel.app alias.');
+	const lanes = p.pilotLanes;
+	if (lanes !== undefined && (!Array.isArray(lanes) || mode !== 'parallel' ||
+		lanes.some((lane) => !['production', 'development', 'preview'].includes(lane)) ||
+		new Set(lanes).size !== lanes.length))
+		throw new TypeError('Select distinct supported pilot lanes for a parallel profile.');
 	return {
 		id: p.id,
 		label: p.label.trim(),
@@ -37,7 +44,8 @@ export function parseDeploymentProfile(value: unknown): DeploymentProfile {
 		projectId: p.projectId,
 		projectName: p.projectName,
 		testOrigin: p.testOrigin,
-		enabled: p.enabled
+		enabled: p.enabled,
+		...(lanes === undefined ? {} : { pilotLanes: lanes as DeploymentProfile['pilotLanes'] })
 	};
 }
 

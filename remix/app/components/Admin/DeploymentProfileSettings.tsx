@@ -17,7 +17,8 @@ function emptyProfile(primary: boolean): DeploymentProfile {
 		teamSlug: '',
 		projectId: '',
 		projectName: '',
-		testOrigin: ''
+		testOrigin: '',
+		...(primary ? {} : { pilotLanes: [] })
 	};
 }
 function readSaved(row: SavedDeploymentProfile): SavedDeploymentProfile {
@@ -38,7 +39,7 @@ export function DeploymentProfileEditor({ scope, transport, dataPlane }: AdminSe
 	const request = React.useCallback(
 		async (signal: AbortSignal, body?: object) => {
 			if (dataPlane !== 'home') throw new Error('Select the Home data plane to manage deployment profiles.');
-			await requireThingtimeCapability('api.admin-ci-deployment-profiles', '1.0.0', expectedApiOrigin, { ...transport, signal });
+			await requireThingtimeCapability('api.admin-ci-deployment-profiles', '1.1.0', expectedApiOrigin, { ...transport, signal });
 			const response = await transport.fetch(new URL('/api/v1/admin/ci/deployment-profiles', expectedApiOrigin).href, {
 				method: body ? 'POST' : 'GET',
 				credentials: 'same-origin',
@@ -124,6 +125,15 @@ export function DeploymentProfileEditor({ scope, transport, dataPlane }: AdminSe
 			setDraft((d) => d && { ...d, [name]: value });
 		},
 		'profile.enable': ({ value }) => setDraft((d) => d && { ...d, enabled: value === true }),
+		'profile.lane': ({ inputs, value }) => {
+			const lane = inputs.lane;
+			if (lane !== 'production' && lane !== 'development' && lane !== 'preview') return;
+			const selectedLane: NonNullable<DeploymentProfile['pilotLanes']>[number] = lane;
+			setDraft((d) => d && d.mode === 'parallel' ? {
+				...d,
+				pilotLanes: value === true ? [...new Set([...(d.pilotLanes ?? []), selectedLane])] : (d.pilotLanes ?? []).filter((item) => item !== selectedLane)
+			} : d);
+		},
 		'profile.cancel': () => {
 			setDraft(null);
 			setOriginal(null);
@@ -135,9 +145,12 @@ export function DeploymentProfileEditor({ scope, transport, dataPlane }: AdminSe
 		rows: (profiles ?? []).map((p) => ({
 			...p,
 			destination: p.teamSlug + '/' + p.projectName,
-			status: [p.mode, p.enabled ? 'Enabled' : 'Disabled', p.testOrigin].filter(Boolean).join(' · ')
+			status: [p.mode, p.enabled ? 'Enabled' : 'Disabled', p.testOrigin,
+				p.pilotLanes?.length ? `Data lanes: ${p.pilotLanes.join(', ')}` : 'No explicit data lanes'].filter(Boolean).join(' · ')
 		})),
-		draft,
+		draft: draft && { ...draft, laneProduction: draft.pilotLanes?.includes('production') ?? false,
+			laneDevelopment: draft.pilotLanes?.includes('development') ?? false,
+			lanePreview: draft.pilotLanes?.includes('preview') ?? false },
 		busy,
 		status: draft ? 'Saving deployment profile…' : 'Loading deployment profiles…',
 		error,
