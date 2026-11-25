@@ -35076,9 +35076,9 @@
     "semantic_hash": "10e4e2da551cc84ba08bc45b559cf46d"
   },
   "iOS/Thingtime/Devices/MobileDeviceLocation.swift": {
-    "mtime": 1795610559.5348825,
-    "seen": 1795611411.323148,
-    "ast_hash": "a636ecdbb35542bec9b7dbc7ff1a781b",
+    "mtime": 1795613245.57166,
+    "seen": 1795613587.799566,
+    "ast_hash": "9e6a0e28d88e745513fefed20927536a",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Devices/MobileDeviceLocationBridge.swift": {
@@ -35136,10 +35136,10 @@
     "semantic_hash": "6616adac699ac700a6ccff91ca684711"
   },
   "iOS/ThingtimeTests/MobileDeviceLocationTests.swift": {
-    "mtime": 1795496223.2857883,
-    "seen": 1795599508.6907651,
-    "ast_hash": "8aecf58085dcc06304af6c538941a720",
-    "semantic_hash": "8aecf58085dcc06304af6c538941a720"
+    "mtime": 1795613256.896526,
+    "seen": 1795613587.8023639,
+    "ast_hash": "890683134b273b23fa8b27c191882fe6",
+    "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/DeviceAlerts.swift": {
     "mtime": 1795496223.3411038,
