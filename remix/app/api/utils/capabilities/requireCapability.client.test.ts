@@ -515,3 +515,27 @@ test('same-origin active discovery keeps protection cookies for scoped discovery
   });
   assert.equal(scopedCredentials, 'same-origin');
 });
+
+test('admin scoped transport reads protected same-origin manifest without forwarding credentials to another origin', async t => {
+  let calls = 0;
+  const browserFetch = t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls++;
+    assert.equal(String(url), 'https://thingtime.test' + THINGTIME_CAPABILITY_MANIFEST_PATH);
+    assert.equal(init?.credentials, 'same-origin');
+    assert.equal(init?.redirect, 'error');
+    assert.equal(new Headers(init?.headers).has('cookie'), false);
+    return Response.json(manifest());
+  });
+  let active = true;
+  const host = createFolderHostFetch({ origin: 'https://thingtime.test', localOrigin: 'https://thingtime.test',
+    ownerId: 'admin', expectedDataPlane: 'home', signal: new AbortController().signal,
+    check: () => { if (!active) throw new Error('Scope changed'); }, fetch: globalThis.fetch });
+  const transport = { fetch: host, currentOrigin: () => { if (!active) throw new Error('Scope changed'); return 'https://thingtime.test'; } };
+  const check = createThingtimeCapabilityChecker();
+  await check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', transport);
+  assert.equal(calls, 1);
+  active = false;
+  await assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://thingtime.test', transport), /Scope changed/);
+  assert.equal(calls, 1);
+  browserFetch.mock.restore();
+});
