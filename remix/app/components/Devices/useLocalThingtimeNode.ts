@@ -174,7 +174,7 @@ export const useLocalThingtimeNode = (
 		};
 		activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('focus', refreshAfterSettings);
 		activityEvents(document, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('visibilitychange', refreshAfterSettings);
-		const timer = activityInterval('timer:components/Devices/useLocalThingtimeNode:1', 'Local node status', refreshAfterSettings, 30_000);
+		const timer = activityInterval('timer:components/Devices/useLocalThingtimeNode:1', 'Local node status', refreshAfterSettings, 30_000, { local: true });
 		return () => {
 			clearActivityInterval(timer);
 			activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').removeEventListener('focus', refreshAfterSettings);
