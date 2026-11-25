@@ -73,6 +73,54 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	}
 });
 
+test('browser page loads take the static shell while unfurlers keep server-generated metadata', async (t) => {
+	const { isBrowserOnlyRoute, isBrowserUserAgent } = await import('./app-shell-routing.mjs');
+	const root = await fs.mkdtemp(join(tmpdir(), 'thingtime-shell-routes-'));
+	t.after(() => fs.rm(root, { recursive: true, force: true }));
+	const output = join(root, '.vercel/output');
+	await fs.mkdir(join(output, 'functions/__server.func'), { recursive: true });
+	await fs.writeFile(join(output, 'config.json'), JSON.stringify({ routes: [{ handle: 'filesystem' }, { src: '/api/(?:.*)', dest: '/api/[...]' }, { src: '/(?:.*)', dest: '/__server' }] }));
+	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
+	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
+	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const at = (predicate) => routes.findIndex(predicate);
+	const browserRoot = at(route => route.src === '^/$' && isBrowserOnlyRoute(route));
+	const socialRoot = at(route => route.src === '^/$' && route.dest === '/__server');
+	const browserShell = at(route => route.src === '^/(?:.*)$' && isBrowserOnlyRoute(route));
+	const socialCard = at(route => route.src === '^/social-card$');
+	const socialPages = at(route => route.src === '^/(?:.*)$' && route.dest === '/__server');
+	const api = at(route => route.src === '/api/(?:.*)');
+	assert.ok(browserRoot !== -1 && browserRoot < socialRoot, 'browser homepage loads must be matched before the social controller');
+	assert.ok(browserShell > api && browserShell > socialCard && browserShell < socialPages, 'browser pages sit after API and card routes, before social pages');
+	for (const index of [browserRoot, browserShell]) {
+		assert.equal(routes[index].dest, '/index.html');
+		assert.equal(routes[index].headers['Cache-Control'], 'private, no-store, max-age=0, must-revalidate');
+	}
+
+	const browsers = [
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15',
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0',
+		'Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Thingtime/1.0 Chrome/142.0.0.0 Electron/39.0.0 Safari/537.36'
+	];
+	const unfurlers = [
+		'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.4 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0',
+		'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
+		'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+		'LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)',
+		'WhatsApp/2.23.20.0',
+		'TelegramBot (like TwitterBot)',
+		'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)',
+		'curl/8.7.1',
+		'',
+		undefined
+	];
+	for (const ua of browsers) assert.equal(isBrowserUserAgent(ua), true, `browser: ${ua}`);
+	for (const ua of unfurlers) assert.equal(isBrowserUserAgent(ua), false, `unfurler: ${ua}`);
+});
+
 test('Vercel cron path and schedule pairs are unique', () => {
 	const crons = vercelConfig.crons ?? [];
 	const cronKeys = crons.map(({ path, schedule }) => `${path}\u0000${schedule}`);

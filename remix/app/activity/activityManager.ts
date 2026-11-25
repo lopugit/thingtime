@@ -1,7 +1,12 @@
+import { userPresence } from './userPresence';
+
 /** Explicit, device-local ownership of background work. No global timer or
  * EventTarget monkey-patching: disabling an entry invokes its real cleanup. */
 export type ActivityKind = 'polling' | 'schedule' | 'watcher' | 'listener' | 'event';
-export type ActivitySpec = { id: string; title: string; kind: ActivityKind; detail?: string; background?: boolean; essential?: boolean };
+/** `background` work keeps running while the window is hidden. `local` work
+ * (on-screen clocks, codes, device-local reads) keeps running while the user is
+ * idle; every other polling activity pauses until they interact again. */
+export type ActivitySpec = { id: string; title: string; kind: ActivityKind; detail?: string; background?: boolean; essential?: boolean; local?: boolean };
 export type ActivityRow = ActivitySpec & {
 	enabled: boolean;
 	instances: number;
@@ -17,7 +22,13 @@ type Store = Pick<Storage, 'getItem' | 'setItem'>;
 const KEY = 'tt-background-activities:v1';
 
 export function createActivityManager(
-	options: { storage?: () => Store | undefined; hidden?: () => boolean; now?: () => number; notify?: (callback: () => void) => void } = {}
+	options: {
+		storage?: () => Store | undefined;
+		hidden?: () => boolean;
+		idle?: () => boolean;
+		now?: () => number;
+		notify?: (callback: () => void) => void;
+	} = {}
 ) {
 	const definitions = new Map<string, ActivityRow>(),
 		instances = new Set<Instance>(),
@@ -58,7 +69,9 @@ export function createActivityManager(
 			: !owned.length
 			? 'Idle — no mounted owner'
 			: !row.running
-			? 'Waiting while this window is hidden'
+			? options.hidden?.() || !options.idle?.()
+				? 'Waiting while this window is hidden'
+				: 'Paused until you use Thingtime again'
 			: 'Active';
 		publish();
 	};
@@ -73,9 +86,13 @@ export function createActivityManager(
 			definitions.get(instance.spec.id)!.failures++;
 		}
 	};
+	// Network polling waits while nobody is using the window; it resumes (with an
+	// immediate catch-up, see activityInterval) on the next interaction.
+	const idlePaused = (spec: ActivitySpec) => spec.kind === 'polling' && !spec.background && !spec.local && !!options.idle?.();
 	const reconcile = (instance: Instance) => {
-		const shouldRun = (instance.spec.essential || !disabled.has(instance.spec.id)) && (instance.spec.background || !options.hidden?.());
-		if (!shouldRun) stop(instance, disabled.has(instance.spec.id) ? 'disabled' : 'hidden');
+		const paused = idlePaused(instance.spec);
+		const shouldRun = (instance.spec.essential || !disabled.has(instance.spec.id)) && (instance.spec.background || !options.hidden?.()) && !paused;
+		if (!shouldRun) stop(instance, disabled.has(instance.spec.id) ? 'disabled' : paused && !options.hidden?.() ? 'idle' : 'hidden');
 		else if (!instance.controller) {
 			instance.controller = new AbortController();
 			try {
@@ -195,6 +212,7 @@ export function createActivityManager(
 export const activityManager = createActivityManager({
 	storage: () => (typeof window === 'undefined' ? undefined : window.localStorage),
 	hidden: () => typeof document !== 'undefined' && document.hidden,
+	idle: () => userPresence()?.isIdle() ?? false,
 	// Coalesce UI notifications; this timer exists only while there are subscribers.
 	notify: (callback) => setTimeout(callback, 250)
 });
@@ -219,6 +237,17 @@ function lifecycle() {
 	);
 	activityManager.register(
 		{
+			id: 'activity.presence',
+			title: 'Pause updates while nobody is using Thingtime',
+			kind: 'listener',
+			essential: true,
+			background: true,
+			detail: 'Stops network polling after two minutes without interaction and refreshes on your next interaction.'
+		},
+		() => userPresence()?.subscribe(() => activityManager.visibilityChanged())
+	);
+	activityManager.register(
+		{
 			id: 'activity.preferences',
 			title: 'Activity preference changes',
 			kind: 'listener',
@@ -237,18 +266,36 @@ function lifecycle() {
 }
 let nextTimer = -1;
 const timers = new Map<number, () => void>();
+export type ActivityIntervalOptions = { background?: boolean; local?: boolean };
 /** Stable source IDs persist choices across mounts and app updates. Async
- * callbacks never overlap. Hidden windows release their actual interval. */
-export function activityInterval(id: string, title: string, callback: () => unknown, milliseconds: number, background = false): number {
+ * callbacks never overlap. Hidden windows release their actual interval, and
+ * so do idle ones unless the work is `local`. Restarting after either pause
+ * runs the callback at once, so returning users see current data. */
+export function activityInterval(
+	id: string,
+	title: string,
+	callback: () => unknown,
+	milliseconds: number,
+	options: boolean | ActivityIntervalOptions = false
+): number {
 	lifecycle();
+	const { background = false, local = false } = typeof options === 'boolean' ? { background: options } : options;
 	const token = nextTimer--;
 	let inFlight = false;
+	let starts = 0;
 	timers.set(
 		token,
 		activityManager.register(
-			{ id, title, kind: 'polling', detail: `Repeats every ${milliseconds / 1000} seconds while its view is active.`, background },
+			{
+				id,
+				title,
+				kind: 'polling',
+				detail: `Repeats every ${milliseconds / 1000} seconds while its view is ${local ? 'open' : 'in use'}.`,
+				background,
+				local
+			},
 			(signal) => {
-				const timer = globalThis.setInterval(() => {
+				const tick = () => {
 					if (inFlight || signal.aborted) return;
 					inFlight = true;
 					void activityManager
@@ -257,7 +304,10 @@ export function activityInterval(id: string, title: string, callback: () => unkn
 						.finally(() => {
 							inFlight = false;
 						});
-				}, milliseconds);
+				};
+				// The owner runs its own first load; later starts are resumes.
+				if (starts++ > 0) tick();
+				const timer = globalThis.setInterval(tick, milliseconds);
 				return () => globalThis.clearInterval(timer);
 			}
 		)

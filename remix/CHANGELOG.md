@@ -181,6 +181,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-25: Cut automatic server traffic. Browsers now get the page shell
+  straight from the CDN, and only link unfurlers and crawlers reach the social
+  metadata function, which served about 45K page loads a day. Network polling
+  pauses completely in hidden windows and after two minutes without
+  interaction, then refreshes on the user's next interaction; on-screen clocks
+  and codes keep running. Lopu checks background tasks every few seconds only
+  while one is running, otherwise at most once a minute. See
+  `NOTES/vercel-cost-reduction-2026-11-25.md`. **Claude (AI)**
+
 - 2026-11-21: Added admin controls for scheduled jobs and Vercel deployment profiles. Eight jobs default to daily and the Sunday summary keeps its weekly cadence. A parallel profile can serve a test alias through the preview gateway without project environment variables. — Codex (AI)
 
 - 2026-11-16: Fix Builder saves after clearing optional fields: local history
