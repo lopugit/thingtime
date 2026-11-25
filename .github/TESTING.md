@@ -95,7 +95,10 @@
 - `pull_request_target` runs may use the cache but never ask to save it (they
   get read-only cache tokens). The detect job keeps its permissions, pins
   `actions/cache/restore` and `actions/cache/save` by commit, and saves under a
-  run-unique key. After a change, confirm on a real run that the log's
+  run-unique key. The save runs on `always()` but only when the helper wrote the
+  `.lopu-pr-files-cache.save` marker, so a scan cancelled by `timeout-minutes`
+  after hydrating still saves its paths, while an unchanged inventory is not
+  saved again. After a change, confirm on a real run that the log's
   `Changed-file inventory:` line reports cache reuse and few REST requests.
 
 ## Protected checks and reviewed preview retirement (2026-11-13)

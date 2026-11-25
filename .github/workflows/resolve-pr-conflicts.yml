@@ -2241,7 +2241,9 @@ jobs:
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
-      - if: steps.scan.outputs.files_cache == 'save'
+      # always(): a scan cancelled by timeout-minutes still saves the exact
+      # paths it read; the helper writes this marker only for a changed cache.
+      - if: always() && hashFiles('.lopu-pr-files-cache.save') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lopu-pr-files-cache.json
