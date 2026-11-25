@@ -16863,3 +16863,11 @@ claim to protect irreversible work; inspect run logs before manual recovery.
   [the gateway runbook](docs/environment-api-gateway.md). Check a wrong project,
   disabled profile, custom database selection and cross-site write remain
   refused. Confirm zero user-configured Vercel env vars and zero pilot crons.
+- [ ] For explicit lanes, verify the base, `-dev`, and `-pr-N` aliases report
+  their own exact origins, and that preview OIDC cannot enter the production
+  authority even with a forged lane header. Disable the saved production lane
+  on production and confirm its alias fails closed; restore it only after
+  verifying the same immutable project IDs. Check a PR lane still uses the
+  shared preview API handlers and database, while production uses the current
+  production API handlers. Verify the Admin profile editor loads behind
+  same-origin Vercel protection and never sends its cookie to another origin.

@@ -36,6 +36,10 @@ test('profiles restrict primary authority and Vercel origins, and project only m
 		assert.throws(() => parseDeploymentProfile({ ...profile, ...extra }), TypeError);
 	}
 	assert.doesNotThrow(() => parseDeploymentProfile({ ...profile, id: 'legacy', mode: 'primary', testOrigin: '' }));
+	assert.deepEqual(parseDeploymentProfile({ ...profile, pilotLanes: ['production', 'preview'] }).pilotLanes, ['production', 'preview']);
+	for (const pilotLanes of [['production', 'production'], ['staging'], 'production'])
+		assert.throws(() => parseDeploymentProfile({ ...profile, pilotLanes }), TypeError);
+	assert.throws(() => parseDeploymentProfile({ ...profile, id: 'legacy', mode: 'primary', testOrigin: '', pilotLanes: ['production'] }), TypeError);
 });
 test('admin policy requires live admin, JSON, actor, expected revision; conflicts keep existing state', async () => {
 	let writes = 0;
@@ -105,8 +109,8 @@ test('deployment profile routes are represented by both capability manifests', (
 	]) {
 		const feature = 'api.' + id,
 			manifest = thingtimeCapabilityManifest('https://thingtime.test');
-		assert.equal(manifest.features[feature].version, '1.0.0');
-		assert.equal(createApiCapabilitiesManifest().features[feature], '1.0.0');
+		assert.equal(manifest.features[feature].version, '1.1.0');
+		assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
 		assert.ok(manifest.operations.some((op) => op.feature === feature && op.path === '/api/v1/' + route + '/ci/deployment-profiles'));
 	}
 });

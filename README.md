@@ -7386,3 +7386,11 @@ For a second Vercel project with no configured environment variables, use the
 [parallel deployment setup](docs/environment-api-gateway.md#parallel-hobby-frontend-with-database-backed-enrollment).
 The protected GitHub publisher builds for an enrolled test alias. Its API calls
 use the project's Vercel workload identity and the existing preview authority.
+Explicit `production`, `development`, and PR `preview` lanes are configured
+through the same per-profile admin settings, independently on each data
+authority. Production keeps its `.vercel.app` alias and relays to the current
+production API; there is no public-domain cutover. The selected lane is a
+nonsecret protected build input, not a database credential. Follow the linked
+runbook for exact origin, OIDC-environment and enrollment checks. On forks,
+create your own dedicated Vercel project and authority settings before
+enabling a lane; do not reuse Thingtime's IDs, aliases or credentials.

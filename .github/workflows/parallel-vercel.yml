@@ -1,12 +1,55 @@
-name: Thingtime parallel test deployments
+name: Thingtime parallel deployments
+
+# The publisher always runs from main. Development and PR events carry
+# source coordinates only. The protected controller reauthorizes them before
+# building and again before publishing with a profile's credentials.
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Lopu CodeQL all branches]
+    branches: [develop]
+    types: [requested]
+  repository_dispatch:
+    types: [develop-pr-preview-controller]
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Product branch to build (main, develop, or the exact PR head)
+        type: string
+        default: main
+      pr_number:
+        description: Open same-repository pull request to preview
+        type: number
+        default: 0
+      retire_pr_number:
+        description: Pull request whose ineligible preview should be retired
+        type: number
+        default: 0
+
 permissions:
+  actions: read
   contents: read
+  pull-requests: read
+
 jobs:
   publish:
-    if: vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED == 'true'
+    if: >-
+      vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED == 'true' &&
+      github.repository == 'lopugit/thingtime' && github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.event == 'push' &&
+         github.event.workflow_run.path == '.github/workflows/codeql-analysis.yml' &&
+         github.event.workflow_run.head_branch == 'develop' &&
+         github.event.workflow_run.head_repository.full_name == github.repository)) &&
+      (github.event_name != 'repository_dispatch' ||
+        (github.event.client_payload.admin_preview != '1' &&
+         github.event.client_payload.source_run_id && github.event.client_payload.pr_number &&
+         github.event.client_payload.head_ref && github.event.client_payload.head_sha))
     uses: lopugit/thingtime/.github/workflows/parallel-vercel.yml@github-actions
+    with:
+      source_ref: ${{ github.event.client_payload.head_ref || github.event.workflow_run.head_branch || inputs.source_ref || 'main' }}
+      expected_sha: ${{ github.event.client_payload.head_sha || github.event.workflow_run.head_sha || (github.event_name == 'push' && github.sha) || '' }}
+      pr_number: ${{ fromJSON((!contains(fromJSON('["closed","converted_to_draft"]'), github.event.client_payload.action) && github.event.client_payload.pr_number) || inputs.pr_number || '0') }}
+      retire_pr_number: ${{ fromJSON((contains(fromJSON('["closed","converted_to_draft"]'), github.event.client_payload.action) && github.event.client_payload.pr_number) || inputs.retire_pr_number || '0') }}
     secrets: inherit

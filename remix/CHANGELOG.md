@@ -181,6 +181,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-25: Add explicit per-profile Hobby production, development and PR
+  pilot lanes with authority-local data enrollment, exact alias and Vercel
+  environment checks, and same-origin protected Admin manifest access. The
+  public domain remains on the existing publisher. See the
+  [gateway runbook](../docs/environment-api-gateway.md). **Codex (AI)**
+
 - 2026-11-21: Added admin controls for scheduled jobs and Vercel deployment profiles. Eight jobs default to daily and the Sunday summary keeps its weekly cadence. A parallel profile can serve a test alias through the preview gateway without project environment variables. — Codex (AI)
 
 - 2026-11-16: Fix Builder saves after clearing optional fields: local history

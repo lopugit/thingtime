@@ -370,8 +370,8 @@ test('gateway relay replaces spoofed bypass headers and never reflects the secre
 
 test('parallel configuration and workload identities are bound to the enrolled test project and isolated preview gateway', async () => {
   const { generateKeyPair, SignJWT } = await import('jose');
-  const { authenticatePilot, isPilotGateway, PILOT_GATEWAY } = await import('./deploymentPilot');
-  const { selectPilotBuild } = await import('../../app/api/utils/deployment/pilotBuild');
+  const { authenticatePilot, enrolledPilotOrigin, isPilotGateway, isPilotLaneGateway, PILOT_GATEWAY } = await import('./deploymentPilot');
+  const { selectPilotBuild, pilotAliasForLane } = await import('../../app/api/utils/deployment/pilotBuild');
   const profile = { id: 'hobby-test', teamSlug: 'test-team', teamId: 'team_1', projectName: 'demo', projectId: 'prj_1',
     mode: 'parallel' as const, enabled: true, label: 'Hobby', testOrigin: 'https://demo-example.vercel.app' };
   assert.deepEqual(selectPilotBuild({}), null);
@@ -379,18 +379,41 @@ test('parallel configuration and workload identities are bound to the enrolled t
   assert.throws(() => selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: 'https://thingtime.com' }));
   assert.deepEqual(selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: profile.testOrigin }),
     { profileId: profile.id, origin: profile.testOrigin });
+  const explicit = { THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ALIAS: profile.testOrigin };
+  assert.deepEqual(selectPilotBuild({ ...explicit, THINGTIME_PILOT_LANE: 'production', THINGTIME_PILOT_ORIGIN: profile.testOrigin,
+    VERCEL_ENV: 'production' }), { profileId: profile.id, origin: profile.testOrigin, lane: 'production' });
+  assert.throws(() => selectPilotBuild({ ...explicit, THINGTIME_PILOT_LANE: 'production', THINGTIME_PILOT_ORIGIN: profile.testOrigin,
+    VERCEL_ENV: 'preview' }));
+  assert.equal(pilotAliasForLane(profile.testOrigin, 'development'), 'https://demo-example-dev.vercel.app');
+  assert.equal(pilotAliasForLane(profile.testOrigin, 'preview', 42), 'https://demo-example-pr-42.vercel.app');
+  assert.deepEqual(selectPilotBuild({ ...explicit, THINGTIME_PILOT_LANE: 'preview', THINGTIME_PILOT_PR_NUMBER: '42',
+    THINGTIME_PILOT_ORIGIN: 'https://demo-example-pr-42.vercel.app', VERCEL_ENV: 'preview' }),
+    { profileId: profile.id, origin: 'https://demo-example-pr-42.vercel.app', lane: 'preview', prNumber: 42 });
+  assert.throws(() => selectPilotBuild({ ...explicit, THINGTIME_PILOT_LANE: 'preview', THINGTIME_PILOT_PR_NUMBER: '42',
+    THINGTIME_PILOT_ORIGIN: profile.testOrigin }));
+  assert.equal(pilotAliasForLane(`https://${'a'.repeat(63)}.vercel.app`, 'preview', 42).length < 90, true);
+  assert.equal(enrolledPilotOrigin(profile, 'production'), null);
+  assert.equal(enrolledPilotOrigin({ ...profile, pilotLanes: ['production', 'preview'] }, 'preview', 42),
+    'https://demo-example-pr-42.vercel.app');
   const settings = { origin: PILOT_GATEWAY, environment: 'preview', deploymentId: 'preview', secret: 'unused' };
   assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development' }), true);
   assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'production' }), false);
   assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development', THINGTIME_FEDERATION_ID: 'production' }), false);
+  assert.equal(isPilotLaneGateway(settings, 'production', { THINGTIME_DATA_ENV: 'development' }), false);
+  assert.equal(isPilotLaneGateway({ ...settings, origin: 'https://thingtime.com', environment: 'production' }, 'production',
+    { THINGTIME_DATA_ENV: 'production' }), true);
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const sign = (claims = {}, expiry = '10m') => new SignJWT({ owner: profile.teamSlug, project: profile.projectName,
     project_id: profile.projectId, owner_id: profile.teamId, environment: 'production', ...claims }).setProtectedHeader({ alg: 'RS256' })
     .setAudience('https://vercel.com/test-team').setIssuer('https://oidc.vercel.com/test-team')
-    .setSubject('owner:test-team:project:demo:environment:production').setIssuedAt().setExpirationTime(expiry).sign(privateKey);
+    .setSubject('owner:test-team:project:demo:environment:' + ((claims as { environment?: string }).environment || 'production')).setIssuedAt().setExpirationTime(expiry).sign(privateKey);
   const token = await sign();
+  const previewToken = await sign({ environment: 'preview' });
   const key = async () => publicKey;
   assert.equal(await authenticatePilot(token, profile, key), true);
+  assert.equal(await authenticatePilot(token, profile, key, 'preview'), false);
+  assert.equal(await authenticatePilot(previewToken, profile, key, 'preview'), true);
+  assert.equal(await authenticatePilot(previewToken, profile, key, 'production'), false);
   assert.equal(await authenticatePilot(token, { ...profile, enabled: false }, key), false);
   assert.equal(await authenticatePilot(token, { ...profile, mode: 'primary' }, key), false);
   for (const claims of [{ project_id: 'prj_2' }, { owner_id: 'team_2' }, { environment: 'preview' }])
@@ -427,4 +450,29 @@ test('pilot uses only the exact preview gateway and keeps the Vercel identity se
   assert.equal(response.headers.get(PILOT_OIDC_HEADER), null);
   assert.equal(response.headers.get(TRUSTED_SOURCE_HEADER), null);
   assert.equal(calls.length, 2);
+});
+
+test('explicit production pilot discovers and forwards only to the production API', async t => {
+  const { proxyPilotRequest } = await import('./environmentGateway');
+  const { PILOT_LANE_HEADER, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, TRUSTED_SOURCE_HEADER } = await import('./deploymentPilot');
+  const origin = 'https://aligned-hobby.vercel.app';
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string | URL, init: RequestInit) => {
+    calls.push(String(url));
+    assert.equal(new URL(url).origin, 'https://thingtime.com');
+    const headers = new Headers(init.headers);
+    assert.equal(headers.get(TRUSTED_SOURCE_HEADER), null);
+    if (String(url).endsWith('/.well-known/thingtime-capabilities.json')) {
+      const manifest = thingtimeCapabilityManifest('https://thingtime.com');
+      return Response.json({ ...manifest, gateway: { origin: 'https://thingtime.com', environment: 'production', deploymentId: 'prod' } });
+    }
+    assert.equal(headers.get(PILOT_OIDC_HEADER), 'synthetic.workload');
+    assert.equal(headers.get(PILOT_PROFILE_HEADER), 'pilot');
+    assert.equal(headers.get(PILOT_LANE_HEADER), 'production');
+    return new Response('production-api');
+  });
+  const request = new Request(origin + '/api/v1/things', { headers: { 'x-vercel-oidc-token': 'synthetic.workload' } });
+  const response = await proxyPilotRequest(request, { profileId: 'pilot', origin, lane: 'production' });
+  assert.equal(await response.text(), 'production-api');
+  assert.deepEqual(calls, ['https://thingtime.com/.well-known/thingtime-capabilities.json', 'https://thingtime.com/api/v1/things']);
 });

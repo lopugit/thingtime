@@ -13,6 +13,11 @@ test('profile settings are a valid saved layout with independently editable form
   for (const name of Object.keys(PROFILE_FIELDS)) {
     assert.ok(fields.some(block => block.tag === 'input' && block.props?.name === name), name);
   }
+  for (const lane of ['production', 'development', 'preview']) {
+    const checkbox = fields.find(block => block.id === 'deployment-profile-' + lane + '-input');
+    assert.equal(checkbox?.props?.type, 'checkbox');
+    assert.deepEqual(checkbox?.props?.['data-tt-action-inputs'], { operation: 'profile.lane', lane });
+  }
   const input = fields.find(block => block.id === 'deployment-profile-team-id-input');
   assert.equal(input?.props?.['data-tt-action'], '$transient');
 });

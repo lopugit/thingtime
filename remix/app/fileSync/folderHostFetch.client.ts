@@ -17,6 +17,11 @@ export function createFolderHostFetch(input: {
 			headers = new Headers(init?.headers);
 		if (url.username || url.password || url.hash) throw changed();
 		const signed = init?.credentials === 'omit';
+		const localManifest = !signed && url.origin === origin && origin === localOrigin &&
+			url.pathname === '/.well-known/thingtime-capabilities.json' && !url.search &&
+			(init?.method === undefined || init.method === 'GET') &&
+			init?.credentials === 'same-origin' && init?.redirect === 'error' && init?.cache === 'no-store' &&
+			!['authorization', 'cookie', 'x-thingtime-expected-actor', 'x-thingtime-expected-data-plane', 'x-thingtime-expected-api-origin'].some((key) => headers.has(key));
 		if (signed) {
 			if (
 				(url.protocol !== 'https:' && url.origin !== origin) ||
@@ -28,17 +33,17 @@ export function createFolderHostFetch(input: {
 				throw changed();
 		} else if (
 			url.origin !== origin ||
-			!url.pathname.startsWith('/api/v1/') ||
+			(!url.pathname.startsWith('/api/v1/') && !localManifest) ||
 			!['same-origin', 'include'].includes(init?.credentials ?? '') ||
 			init?.redirect !== 'error' ||
 			init?.cache !== 'no-store' ||
-			headers.get('X-Thingtime-Expected-Actor') !== ownerId ||
-			headers.get('X-Thingtime-Expected-Data-Plane') !== (input.expectedDataPlane ?? 'home') ||
+			(!localManifest && headers.get('X-Thingtime-Expected-Actor') !== ownerId) ||
+			(!localManifest && headers.get('X-Thingtime-Expected-Data-Plane') !== (input.expectedDataPlane ?? 'home')) ||
 			headers.has('authorization') ||
 			headers.has('cookie')
 		)
 			throw changed();
-		if (!signed) headers.set('X-Thingtime-Expected-Api-Origin', origin!);
+		if (!signed && !localManifest) headers.set('X-Thingtime-Expected-Api-Origin', origin!);
 		const destination = signed ? url : new URL(url.pathname + url.search, localOrigin);
 		const signal = init?.signal ? AbortSignal.any([outerSignal, init.signal]) : outerSignal;
 		signal.throwIfAborted();
