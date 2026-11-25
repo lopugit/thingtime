@@ -45,6 +45,10 @@
   of any existing validator and idempotent readiness. Denied `collMod` or failed
   readback must refuse migration before content changes. An outer transaction
   must preflight protection, never issue DDL inside that transaction.
+- Inside a request-budgeted transaction, read more than 101 matching documents
+  through a cursor (for example a device with many stale connectors posting
+  `devices/node/state`). The read must succeed on a real replica set, never fail
+  with `cannot set maxTimeMS on getMore command for a non-awaitData cursor`.
 - Verify the timestamp floor cannot be authored through generic writes or
   restored through backups, copies or Timeline. It must not appear in public
   content; a same-name field inside the user's crystal remains ordinary data.

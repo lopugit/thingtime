@@ -48,6 +48,24 @@ test('transactions own the remaining deadline, with no conflicting operation tim
 	});
 });
 
+test('transactional cursor reads fetch one batch so getMore never carries a rejected maxTimeMS', async () => {
+	const { TRANSACTION_CURSOR_BATCH_SIZE } = await import('./requestBudget');
+	await withMongoRequestBudget(new AbortController().signal, 500, async () => {
+		const session = { inTransaction: () => true };
+		const find = budgetMongoArguments('find', [{ kind: 'device-connector' }, { session }]);
+		assert.equal(find[1].batchSize, TRANSACTION_CURSOR_BATCH_SIZE);
+		assert.equal(find[1].timeoutMS, undefined);
+		const aggregate = budgetMongoArguments('aggregate', [[{ $match: {} }], { session }]);
+		assert.equal(aggregate[1].batchSize, TRANSACTION_CURSOR_BATCH_SIZE);
+		const chosen = budgetMongoArguments('find', [{}, { session, batchSize: 25 }]);
+		assert.equal(chosen[1].batchSize, 25, 'an explicit batch size is preserved');
+		const outside = budgetMongoArguments('find', [{}, {}]);
+		assert.equal(outside[1].batchSize, undefined, 'non-transactional cursors keep per-op CSOT and default batches');
+		const write = budgetMongoArguments('deleteMany', [{}, { session }]);
+		assert.equal(write[1].batchSize, undefined, 'writes are not cursors');
+	});
+});
+
 test('the first cancelled request cannot cancel shared initialization for a second live waiter', async () => {
 	const { AsyncLocalStorage } = await import('node:async_hooks');
 	const { startMongoSharedWork } = await import('./requestBudget');

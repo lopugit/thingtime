@@ -56,9 +56,21 @@ export const budgetMongoArguments = (method: string, args: any[]): any[] => {
 	// A convenient transaction owns its CSOT deadline; Mongo rejects per-op
 	// timeout overrides on that explicit session. The transaction carries the
 	// remaining request budget, while supported reads still get cancellation.
-	if (result[index]?.session?.inTransaction?.()) delete result[index].timeoutMS;
+	if (result[index]?.session?.inTransaction?.()) {
+		delete result[index].timeoutMS;
+		// Without a per-op timeoutMS, the driver (6.x) stamps the transaction's
+		// remaining CSOT deadline onto getMore as maxTimeMS, which the server
+		// rejects for ordinary cursors ("cannot set maxTimeMS on getMore command
+		// for a non-awaitData cursor"). Ask for the whole result in the first
+		// batch so a transactional read only needs a getMore past the server's
+		// 16 MB batch ceiling. Callers that chose a batch size keep it.
+		if (CURSOR_METHODS.has(method) && result[index].batchSize == null) result[index].batchSize = TRANSACTION_CURSOR_BATCH_SIZE;
+	}
 	return result;
 };
+const CURSOR_METHODS = new Set(['find', 'aggregate']);
+// int32 max: the server fills the first batch up to its 16 MB reply limit.
+export const TRANSACTION_CURSOR_BATCH_SIZE = 2_147_483_647;
 
 export const mongoTransactionBudget = () => {
 	const { timeoutMS } = mongoRequestOptions();
