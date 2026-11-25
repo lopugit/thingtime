@@ -223,8 +223,17 @@ final class MobileDeviceLocation {
             generation = UUID(); work?.cancel(); work = nil
             return
         }
-        driver.start(background: driver.authorization == .authorizedAlways)
-        flush()
+        // The administrator's Automation switch decides whether background
+        // location history runs at all; off (or unknown) keeps it stopped.
+        guard let origin = scope?.origin else { driver.stop(); return }
+        let token = generation
+        Task { @MainActor [weak self] in
+            let allowed = await ThingtimeAutomationSwitches.shared.isEnabled("iphone.location", origin: origin)
+            guard let self, self.generation == token, !self.paused, self.scope?.origin == origin else { return }
+            guard allowed else { self.driver.stop(); return }
+            self.driver.start(background: self.driver.authorization == .authorizedAlways)
+            self.flush()
+        }
     }
     private func receive(_ locations: [CLLocation]) {
         guard !paused, var binding, binding.backgroundAuthorized, canUseLocation else { return }

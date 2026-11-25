@@ -4320,9 +4320,9 @@
     "semantic_hash": "f8b8430e22d9abcb6fe0b5b9a1dc2b17"
   },
   "iOS/Thingtime/Native/ThingtimeNativeNotifications.swift": {
-    "mtime": 1795601888.182526,
-    "seen": 1795602099.2704608,
-    "ast_hash": "9fbe0ac68128f1ffb9367966308451ca",
+    "mtime": 1795610526.181229,
+    "seen": 1795611411.3245609,
+    "ast_hash": "5223f0a79889cf978197c6ae9ce18836",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Native/ThingtimeWatchAttachmentUploader.swift": {
@@ -4578,10 +4578,10 @@
     "semantic_hash": "91016dbc8140b2a417f4bec3ffd600d8"
   },
   "iOS/ThingtimeWatch/Notifications/ThingtimeWatchStore.swift": {
-    "mtime": 1795496223.3226855,
-    "seen": 1795599508.69079,
-    "ast_hash": "12b0546924c5a8472c4736c55ecf3fa1",
-    "semantic_hash": "12b0546924c5a8472c4736c55ecf3fa1"
+    "mtime": 1795610585.9482827,
+    "seen": 1795611411.326435,
+    "ast_hash": "0ee3627677c527ed23eb60989f97f393",
+    "semantic_hash": ""
   },
   "iOS/ThingtimeWatch/Views/ThingtimeWatchAttachmentView.swift": {
     "mtime": 1795496223.322901,
@@ -5628,9 +5628,9 @@
     "semantic_hash": ""
   },
   "remix/app/activity/activityManager.ts": {
-    "mtime": 1795601887.9863877,
-    "seen": 1795602099.2786188,
-    "ast_hash": "b3ba846808eb598ba58caf0aafe9fcd7",
+    "mtime": 1795610364.714888,
+    "seen": 1795611411.3321788,
+    "ast_hash": "dab0a2630fa673199d8e699511d7fcfd",
     "semantic_hash": ""
   },
   "remix/app/api/cookies.ts": {
@@ -11700,9 +11700,9 @@
     "semantic_hash": "b87d97c3c862cff4f93fd8cc64eb5cec"
   },
   "remix/app/components/Admin/AdminDashboard.tsx": {
-    "mtime": 1795599391.0747688,
-    "seen": 1795599508.6918788,
-    "ast_hash": "07cf30c1e829906fd8f671499c77c0e6",
+    "mtime": 1795610481.0506778,
+    "seen": 1795611411.3707478,
+    "ast_hash": "ac50760aad1930d75c9ff807e0bd8f03",
     "semantic_hash": ""
   },
   "remix/app/components/Admin/AdminPanel.tsx": {
@@ -11904,15 +11904,15 @@
     "semantic_hash": "7938a386eee26d5ca1b0edb4b0345f27"
   },
   "remix/app/components/Admin/adminRoutesCore.test.ts": {
-    "mtime": 1795599391.0762343,
-    "seen": 1795599508.691905,
-    "ast_hash": "cd19daea36bd9e2711c17bb16d5f4996",
+    "mtime": 1795610486.320714,
+    "seen": 1795611411.371856,
+    "ast_hash": "d4be8b7881adb57a98b8fdc59224e4c2",
     "semantic_hash": ""
   },
   "remix/app/components/Admin/adminRoutesCore.ts": {
-    "mtime": 1795599391.076461,
-    "seen": 1795599508.691906,
-    "ast_hash": "ec4e851e78428da30f3b8951ff3f041a",
+    "mtime": 1795610481.050222,
+    "seen": 1795611411.371857,
+    "ast_hash": "048769facd38b5747d80de397cfeb892",
     "semantic_hash": ""
   },
   "remix/app/components/Admin/adminRowQuery.test.ts": {
@@ -16530,9 +16530,9 @@
     "semantic_hash": "5e886f72922842634e6707679be7683c"
   },
   "remix/app/components/Status/FooterStatusPanel.tsx": {
-    "mtime": 1795601888.1862237,
-    "seen": 1795602099.347818,
-    "ast_hash": "b23c1201d73583cf2d8d3ef504338b22",
+    "mtime": 1795610822.4429324,
+    "seen": 1795611411.399061,
+    "ast_hash": "1064998950d8941978277719da9f0a8c",
     "semantic_hash": ""
   },
   "remix/app/components/Status/ServiceStatus.tsx": {
@@ -17442,9 +17442,9 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1795599391.0800984,
-    "seen": 1795599508.6927161,
-    "ast_hash": "f84a63ecb55a9bfc985924bf97310027",
+    "mtime": 1795610333.8034894,
+    "seen": 1795611411.405195,
+    "ast_hash": "bb744cc47147180a51b5a25d6905b9d6",
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocsMarkdown.ts": {
@@ -18510,10 +18510,10 @@
     "semantic_hash": "b9f749d73a8d591f03b27270d2ddd7d8"
   },
   "remix/app/fileSync/remoteDeviceResources.client.ts": {
-    "mtime": 1795496223.0629363,
-    "seen": 1795599508.692876,
-    "ast_hash": "478c3437cdd0d7cfd8d4f426769e56a9",
-    "semantic_hash": "478c3437cdd0d7cfd8d4f426769e56a9"
+    "mtime": 1795610388.761292,
+    "seen": 1795611411.4116778,
+    "ast_hash": "d4d266cf6a862e9c1f6e4e22a8dee9ec",
+    "semantic_hash": ""
   },
   "remix/app/fileSync/remoteSyncClient.client.test.ts": {
     "mtime": 1795496223.063361,
@@ -18948,9 +18948,9 @@
     "semantic_hash": ""
   },
   "remix/app/hooks/backgroundRefresh.ts": {
-    "mtime": 1795601887.990422,
-    "seen": 1795602099.3630168,
-    "ast_hash": "36891913f56f02d6b4ddddaf2556b9f6",
+    "mtime": 1795610380.6328578,
+    "seen": 1795611411.414308,
+    "ast_hash": "fb295287c6604d4a163778074275735e",
     "semantic_hash": ""
   },
   "remix/app/hooks/foundPostIdentity.client.ts": {
@@ -24690,9 +24690,9 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1795496223.7115188,
-    "seen": 1795599508.693752,
-    "ast_hash": "1defe3e4c558f051cfec4037e190f300",
+    "mtime": 1795611092.877648,
+    "seen": 1795611411.448855,
+    "ast_hash": "879262f82443d0706ca0c40957bb178c",
     "semantic_hash": ""
   },
   "remix/public/embed/demo-host.js": {
@@ -25644,10 +25644,10 @@
     "semantic_hash": "f3692d91d0fd8c6aee8db1b32a960a80"
   },
   "remix/scripts/test-activity-manager-ui.mjs": {
-    "mtime": 1795496223.1914546,
-    "seen": 1795599508.6939468,
-    "ast_hash": "4ec38f994cebf8a96834763da30ab6ff",
-    "semantic_hash": "4ec38f994cebf8a96834763da30ab6ff"
+    "mtime": 1795610782.7027643,
+    "seen": 1795611411.456172,
+    "ast_hash": "1bfdbe517671d33aa831f1fe74b67179",
+    "semantic_hash": ""
   },
   "remix/scripts/test-attachment-retention.mjs": {
     "mtime": 1795496223.1915815,
@@ -25692,10 +25692,10 @@
     "semantic_hash": "638d8961af35d7b2e3a58f3d8256371c"
   },
   "remix/scripts/test-device-sync-resources-ui.mjs": {
-    "mtime": 1795496223.1944056,
-    "seen": 1795599508.693963,
-    "ast_hash": "6233169ab2aa69b0940f2cda3ee48fba",
-    "semantic_hash": "6233169ab2aa69b0940f2cda3ee48fba"
+    "mtime": 1795610803.3845518,
+    "seen": 1795611411.456576,
+    "ast_hash": "ed0f7fa1c9f5c2b8425c624eb4c71d46",
+    "semantic_hash": ""
   },
   "remix/scripts/test-device-sync-ui.mjs": {
     "mtime": 1795496223.194509,
@@ -26184,9 +26184,9 @@
     "semantic_hash": "2fe0388021235627351a08501854d3a7"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1795599391.0866466,
-    "seen": 1795599508.6940439,
-    "ast_hash": "022cf96af35e3e7bf64aafa698f65086",
+    "mtime": 1795610333.8006632,
+    "seen": 1795611411.4596999,
+    "ast_hash": "552751b9dac24b6fff3e233f311d8904",
     "semantic_hash": ""
   },
   "remix/server/routes/api/docs.ts": {
@@ -29100,9 +29100,9 @@
     "semantic_hash": "5935a79a6033f4540a084131c4badb54"
   },
   "TESTING.md": {
-    "mtime": 1795601900.8060598,
-    "seen": 1795602099.424395,
-    "ast_hash": "93c751c91fa39ca6b946555f2d4b6975",
+    "mtime": 1795611278.1339402,
+    "seen": 1795611411.473856,
+    "ast_hash": "b866ae062b4f7c12d3472a86f3eff458",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -29910,9 +29910,9 @@
     "semantic_hash": "ed04070099272ecc3b6f53561e9691ef"
   },
   "docs/feature-map/auth-accounts-and-admin.md": {
-    "mtime": 1795599391.0407882,
-    "seen": 1795599508.694583,
-    "ast_hash": "ca3c7f2470e368dbe0900dd3121a202d",
+    "mtime": 1795611285.6207592,
+    "seen": 1795611411.4775438,
+    "ast_hash": "48405be187cc0a0ef22623bb7e73f007",
     "semantic_hash": ""
   },
   "docs/feature-map/incoming-mail.md": {
@@ -30132,8 +30132,8 @@
     "semantic_hash": "5a37269d8684fcd98d1d3b31c5be907c"
   },
   "iOS/fastlane/README.md": {
-    "mtime": 1795496223.3250866,
-    "seen": 1795599508.694622,
+    "mtime": 1795602309.0182672,
+    "seen": 1795611411.479158,
     "ast_hash": "e9065834cd91a8cb309ba920944ff112",
     "semantic_hash": "e9065834cd91a8cb309ba920944ff112"
   },
@@ -30192,9 +30192,9 @@
     "semantic_hash": "206103177ef24727b10304e655440e4c"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1795601900.802747,
-    "seen": 1795602099.430557,
-    "ast_hash": "6835784d0ca345a81bf616ef0d0bd27e",
+    "mtime": 1795611278.130027,
+    "seen": 1795611411.4796622,
+    "ast_hash": "9639212ec5b18d00d998f2537f769733",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -34326,10 +34326,10 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNode/ThingtimeNodeApplication.swift": {
-    "mtime": 1795496223.3396206,
-    "seen": 1795599508.690818,
-    "ast_hash": "390947c96cffd1b16927d226f465c408",
-    "semantic_hash": "390947c96cffd1b16927d226f465c408"
+    "mtime": 1795610631.242088,
+    "seen": 1795611411.327469,
+    "ast_hash": "762309d7cd735952a0a32a31ed7d7e81",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/things/relatedWindows.test.ts": {
     "mtime": 1795496223.0857751,
@@ -35076,10 +35076,10 @@
     "semantic_hash": "10e4e2da551cc84ba08bc45b559cf46d"
   },
   "iOS/Thingtime/Devices/MobileDeviceLocation.swift": {
-    "mtime": 1795496223.273147,
-    "seen": 1795599508.6906931,
-    "ast_hash": "7795482bc20129d5555e447ae4033364",
-    "semantic_hash": "7795482bc20129d5555e447ae4033364"
+    "mtime": 1795610559.5348825,
+    "seen": 1795611411.323148,
+    "ast_hash": "a636ecdbb35542bec9b7dbc7ff1a781b",
+    "semantic_hash": ""
   },
   "iOS/Thingtime/Devices/MobileDeviceLocationBridge.swift": {
     "mtime": 1795496223.2732384,
@@ -38346,10 +38346,10 @@
     "semantic_hash": "51dc04b6c9bcae859aa90259bf67c127"
   },
   "iOS/Thingtime/Devices/MobileDeviceDiagnostics.swift": {
-    "mtime": 1795496223.27296,
-    "seen": 1795599508.6906922,
-    "ast_hash": "73250190354b40ae51af8efbd57d9b47",
-    "semantic_hash": "73250190354b40ae51af8efbd57d9b47"
+    "mtime": 1795610559.5350533,
+    "seen": 1795611411.323114,
+    "ast_hash": "71628632d260db3e88bfc47bb8d026d3",
+    "semantic_hash": ""
   },
   "iOS/Thingtime/Files/NativePhotoDiagnosticProjection.swift": {
     "mtime": 1795496223.2763472,
@@ -45054,9 +45054,9 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/automation/jobSchedules.ts": {
-    "mtime": 1795599391.0699072,
-    "seen": 1795599508.6911418,
-    "ast_hash": "c658ef5f60e79115549217664220a57d",
+    "mtime": 1795610280.4920099,
+    "seen": 1795611411.341831,
+    "ast_hash": "708aaa60f377e85e3440bd5f0ea62049",
     "semantic_hash": ""
   },
   "remix/app/api/utils/automation/scheduledDispatch.ts": {
@@ -45207,6 +45207,102 @@
     "mtime": 1795601887.990689,
     "seen": 1795602099.39813,
     "ast_hash": "1fc72b97de60bd5fbb93ffb3d034a2b2",
+    "semantic_hash": ""
+  },
+  "iOS/Shared/ThingtimeAutomationSwitches.swift": {
+    "mtime": 1795610514.6307454,
+    "seen": 1795611411.322766,
+    "ast_hash": "5db077a1ff3c52b8a8f29003cc59a158",
+    "semantic_hash": ""
+  },
+  "macos/ThingtimeNode/Sources/ThingtimeNodeCore/ThingtimeAutomationSwitches.swift": {
+    "mtime": 1795610631.2149646,
+    "seen": 1795611411.328489,
+    "ast_hash": "e9440e55a79ada14fec55adf858a43a9",
+    "semantic_hash": ""
+  },
+  "remix/app/activity/automationGating.test.ts": {
+    "mtime": 1795610729.2833178,
+    "seen": 1795611411.332181,
+    "ast_hash": "dc2b7c7389f5a437bc4a735b0e4e0713",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/automation/automationSwitchesStore.test.ts": {
+    "mtime": 1795610729.2770514,
+    "seen": 1795611411.3417962,
+    "ast_hash": "3475e2431f46d34058a6a811c4624d79",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/automation/automationSwitchesStore.ts": {
+    "mtime": 1795610266.9630358,
+    "seen": 1795611411.3417978,
+    "ast_hash": "9c8e704e92acb0f1a77d596899064971",
+    "semantic_hash": ""
+  },
+  "remix/app/automation/automationSwitches.test.ts": {
+    "mtime": 1795610702.6378434,
+    "seen": 1795611411.369364,
+    "ast_hash": "6aad6dd3def6a9486d5ada3878c19f06",
+    "semantic_hash": ""
+  },
+  "remix/app/automation/automationSwitches.ts": {
+    "mtime": 1795610420.0677774,
+    "seen": 1795611411.369365,
+    "ast_hash": "c107adc35f4543474de9e5517463e672",
+    "semantic_hash": ""
+  },
+  "remix/app/automation/automationSwitchesClient.test.ts": {
+    "mtime": 1795610702.64051,
+    "seen": 1795611411.369366,
+    "ast_hash": "20b289f84ec63b7be1b5081845ef5ebf",
+    "semantic_hash": ""
+  },
+  "remix/app/automation/automationSwitchesClient.ts": {
+    "mtime": 1795610350.3037624,
+    "seen": 1795611411.3693671,
+    "ast_hash": "72a7882ec3e58df9386db5aadd232ba2",
+    "semantic_hash": ""
+  },
+  "remix/app/automation/useAutomationSwitches.ts": {
+    "mtime": 1795610395.7869093,
+    "seen": 1795611411.3693671,
+    "ast_hash": "98522b49d96f6716c9087b494cdce7e1",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Admin/AutomationSwitchesSettings.tsx": {
+    "mtime": 1795610481.0501022,
+    "seen": 1795611411.370836,
+    "ast_hash": "8dd1e3f830383848f12e3dbab8d71569",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Admin/automationSwitchBlocks.test.ts": {
+    "mtime": 1795611092.877483,
+    "seen": 1795611411.371968,
+    "ast_hash": "73e8876989e7a109b7e197822a0070ac",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Admin/automationSwitchBlocks.ts": {
+    "mtime": 1795611114.0470233,
+    "seen": 1795611411.37197,
+    "ast_hash": "dd4f7f5325f4d20bd5d87c825afa0393",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/admin/automation-switches/_automation-switches.tsx": {
+    "mtime": 1795610309.7577384,
+    "seen": 1795611411.418398,
+    "ast_hash": "4fdfe8779cfd1ad76eed9d72157e1af6",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/automation/switches/_switches.tsx": {
+    "mtime": 1795610300.2427647,
+    "seen": 1795611411.422397,
+    "ast_hash": "9ba898ede625fc58fe2df7f6225b809d",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/automation/switches/switches.test.ts": {
+    "mtime": 1795610729.2800508,
+    "seen": 1795611411.4223979,
+    "ast_hash": "2f787131466aeab21dd076aca92bae65",
     "semantic_hash": ""
   }
 }

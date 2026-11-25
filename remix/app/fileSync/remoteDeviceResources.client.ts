@@ -5,6 +5,7 @@ import { parseRemoteSyncResources, supportsRemoteResourceControls, validateRemot
 import { validNativeSourcePath, type MobileFolder } from './mobileFolders.client';
 import { parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseDeviceSyncResourcePolicy, type DeviceSyncResourcePolicy } from './deviceResourcePolicy';
+import { automationSwitches } from '../automation/automationSwitchesClient';
 
 type Scope = { origin: string; ownerId: string; deviceId: string };
 type State = { status: RemoteSyncStatus | null; receivedAt?: number; online: boolean; checking: boolean; error: string };
@@ -14,14 +15,14 @@ const empty: State = { status: null, online: false, checking: false, error: '' }
  * connection manager. It never persists measurements or viewer-local policy. */
 export function createRemoteDeviceStatusSession(input: Scope & {
  assertCurrent(): void; createClient(signal: AbortSignal): Pick<RemoteSyncClient, 'send'>;
- visible(): boolean; onIdle?(): void; subscribeVisibility?(listener: () => void): () => void; pollMs?: number; negotiateDirections?(): Promise<boolean>; negotiateActivity?(): Promise<boolean>;
+ visible(): boolean; allowPolling?(): boolean; onIdle?(): void; subscribeVisibility?(listener: () => void): () => void; pollMs?: number; negotiateDirections?(): Promise<boolean>; negotiateActivity?(): Promise<boolean>;
 }) {
  let state = empty, consumers = 0, controller = new AbortController(), client = input.createClient(controller.signal);
  let timer: ReturnType<typeof setTimeout> | undefined, reading: Promise<void> | undefined, readAbort: AbortController | undefined, unsubscribe: (() => void) | undefined;
  const listeners = new Set<() => void>();
  const publish = (next: State) => { state = next; for (const listener of listeners) listener(); };
  const check = () => { controller.signal.throwIfAborted(); input.assertCurrent(); };
- const schedule = () => { clearTimeout(timer); if (consumers && input.visible() && !controller.signal.aborted) timer = setTimeout(() => void refresh(), input.pollMs ?? 10_000); };
+ const schedule = () => { clearTimeout(timer); if (consumers && input.visible() && (input.allowPolling?.() ?? true) && !controller.signal.aborted) timer = setTimeout(() => void refresh(), input.pollMs ?? 10_000); };
  const refresh = (): Promise<void> => {
   if (reading) return reading;
   if (!consumers || !input.visible() || controller.signal.aborted) return Promise.resolve();
@@ -97,7 +98,7 @@ function sessionFor(scope: Scope, generation: number) {
   session = createRemoteDeviceStatusSession({ ...scope, assertCurrent: check, createClient: signal => createRemoteSyncClient({ ...scope, signal, assertCurrent: check }),
    negotiateDirections: () => negotiateRemoteDirectionalProgress(), negotiateActivity: () => negotiateRemoteConnectionActivity(),
    onIdle: () => queueMicrotask(() => { if (!session!.retained() && sessions.get(key) === session) sessions.delete(key); }),
-   visible: () => document.visibilityState === 'visible', subscribeVisibility: listener => { document.addEventListener('visibilitychange', listener); return () => document.removeEventListener('visibilitychange', listener); } });
+   visible: () => document.visibilityState === 'visible', allowPolling: () => automationSwitches().enabled('desktop.fileSync'), subscribeVisibility: listener => { document.addEventListener('visibilitychange', listener); return () => document.removeEventListener('visibilitychange', listener); } });
   sessions.set(key, session);
  }
  return session;

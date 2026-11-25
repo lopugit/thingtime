@@ -1110,6 +1110,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
   endpoint({
+    id: 'automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'settings',
+    title: 'Automation switches', endpoint: '/api/v1/automation/switches', methods: ['GET'],
+    summary: 'Public on/off state of every automatic background feature: browser polling, desktop folder sync, the Mac Thingtime Node, iPhone and Watch background work, and server scheduled jobs.',
+    detail: 'Returns { ok, switches: { "<switch id>": boolean }, updatedAt }. Every registered switch is listed. Switches are off unless an administrator turned them on; clients treat a missing, unknown or unreadable switch as off and must not start repeating or scheduled work for it. A view still loads its data once when opened. The response is non-secret and CDN-cacheable for a few minutes (public, s-maxage=300), so read it at start and when the app returns to the foreground, never on a timer. A failed server read serves the last-known-good value or all-off.',
+    auth: { mode: 'none', description: 'Public, non-secret.' },
+    steps: ['GET once at start and on return to the app.', 'Run a repeating feature only while its switch is true.'],
+    requestExamples: [{ name: 'Read switches', description: 'Public read.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Everything off.', body: { ok: true, switches: { 'web.timeline': false, 'mac.node': false, 'scheduled.invites-expire': false }, updatedAt: null } }]
+  }),
+  endpoint({
+    id: 'admin-automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
+    title: 'Automation switch controls', endpoint: '/api/v1/admin/automation-switches', methods: ['GET', 'POST'],
+    summary: 'Read or change the administrator on/off switch of each automatic background feature.',
+    detail: 'GET returns { switches, updatedAt, updatedBy } read strictly from home settings (503 when unreadable). POST { changes: { "<switch id>": true | false } } changes one or more registered switches in one atomic update; unknown ids and non-boolean values are refused with 400. Requires a direct full administrator browser session on home storage, X-Thingtime-Expected-Actor, same-origin JSON. Scheduled job switches are the master on/off: a job runs only while its switch is on and its own schedule is enabled and due. Clients read changes through the public endpoint within its cache window.',
+    auth: { mode: 'session', description: 'Full administrator browser session on home storage.' },
+    steps: ['Negotiate api.admin-automation-switches 1.0.0.', 'GET the current switches.', 'POST the changed switches and read the returned state back.'],
+    requestExamples: [{ name: 'Turn timeline updates on', description: 'Administrator session.', method: 'POST', body: { changes: { 'web.timeline': true } } }],
+    responseExamples: [{ status: 200, description: 'Saved switches.', body: { ok: true, switches: { 'web.timeline': true }, updatedAt: '2026-11-25T12:00:00.000Z', updatedBy: 'admin-user-id' } }]
+  }),
+  endpoint({
     id: 'admin-job-schedules', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
     title: 'Scheduled job controls', endpoint: '/api/v1/admin/job-schedules', methods: ['GET', 'POST'],
     summary: 'Read or change a registered job’s daily UTC execution window.',

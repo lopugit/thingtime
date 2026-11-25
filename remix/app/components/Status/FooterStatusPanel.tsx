@@ -12,6 +12,7 @@ import {
 import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
 import { FrontendStatus, NitroStatus } from './ServiceStatus';
+import { useAutomationSwitch } from '~/automation/useAutomationSwitches';
 import {
   getDefaultStatusEnvironmentId,
   getStatusEnvironmentTargets,
@@ -37,6 +38,8 @@ export const FooterStatusPanel = ({
   // views never scroll this far, so mounting alone must not cost four requests.
   const panelRef = React.useRef<HTMLDivElement>(null);
   const [onScreen, setOnScreen] = React.useState(false);
+  // The administrator's Automation switch turns the footer service checks off.
+  const checksOn = useAutomationSwitch('web.statusChecks') && onScreen;
   React.useEffect(() => {
     if (onScreen) return;
     const node = panelRef.current;
@@ -243,10 +246,10 @@ export const FooterStatusPanel = ({
         )}
       </Menu>
 
-      <NitroStatus targetOrigin={targetOrigin} enabled={onScreen} />
-      <FrontendStatus targetOrigin={targetOrigin} enabled={onScreen} />
-      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} enabled={onScreen} /> : null}
-      <MongoStatus targetOrigin={targetOrigin} enabled={onScreen} />
+      <NitroStatus targetOrigin={targetOrigin} enabled={checksOn} />
+      <FrontendStatus targetOrigin={targetOrigin} enabled={checksOn} />
+      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} enabled={checksOn} /> : null}
+      <MongoStatus targetOrigin={targetOrigin} enabled={checksOn} />
     </Flex>
   );
 };
