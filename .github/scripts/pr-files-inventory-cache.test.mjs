@@ -26,6 +26,7 @@ const statusHelper = fileURLToPath(new URL('./lopu-pr-status.mjs', import.meta.u
 
 const SCAN = 'Scan open PRs and assign deterministic resolver ownership';
 const CACHE = '.lopu-pr-files-cache.json';
+const MARKER = '.lopu-pr-files-cache.save';
 const DAY = 86400;
 const SIX_HOURS = 21600;
 
@@ -73,7 +74,7 @@ let r;const files=/^repos\\/example\\/project\\/pulls\\/(\\d+)\\/files\\?per_pag
 if(endpoint==='graphql')r={status:200,body:{data:{repository:{pullRequests:{nodes:s.prs,pageInfo:{hasNextPage:false,endCursor:null}}}}}};
 else if(files){const n=files[1],seq=s.files[n];if(!seq)r={status:404,message:'Not Found'};
  else{const c=s.fileCounts[n]||0;s.fileCounts[n]=c+1;r=Array.isArray(seq)?{status:200,body:seq}:seq[c]??seq.default;}}
-else if(endpoint==='repos/example/project')r={status:200,body:{default_branch:'main'}};
+else if(endpoint==='repos/example/project')r=s.repoFails?{status:404,message:'Not Found'}:{status:200,body:{default_branch:'main'}};
 else if(/^repos\\/example\\/project\\/actions\\/concurrency_groups\\//.test(endpoint))r={status:200,body:{group_members:[]}};
 else if(/^repos\\/example\\/project\\/labels\\?per_page=100$/.test(endpoint))r={status:200,body:[]};
 else if(method!=='GET')r={status:200,body:{}};
@@ -97,7 +98,7 @@ const decode=process.argv.slice(2).some(a=>a==='--decode'||a==='-d');
 process.stdout.write(decode?Buffer.from(input.trim(),'base64').toString('utf8'):Buffer.from(input).toString('base64'));
 `;
 
-function scan({ prs, files, cache, env = {}, deadline = '600' }) {
+function scan({ prs, files, cache, env = {}, deadline = '600', repoFails = false, marker = false }) {
   const dir = mkdtempSync(join(tmpdir(), 'pr-files-cache-'));
   try {
     const bin = join(dir, 'bin'), temp = join(dir, 'runner-temp'), work = join(dir, 'workspace');
@@ -107,7 +108,8 @@ function scan({ prs, files, cache, env = {}, deadline = '600' }) {
       writeFileSync(join(bin, command), source); chmodSync(join(bin, command), 0o755);
     }
     const state = join(dir, 'state.json'), output = join(dir, 'github-output');
-    writeFileSync(state, JSON.stringify({ prs, files, fileCounts: {}, calls: [], sleeps: [] }));
+    writeFileSync(state, JSON.stringify({ prs, files, repoFails, fileCounts: {}, calls: [], sleeps: [] }));
+    if (marker) writeFileSync(join(work, MARKER), '');
     writeFileSync(output, '');
     if (typeof cache === 'function') cache(join(work, CACHE));
     else if (cache !== undefined) writeFileSync(join(work, CACHE), typeof cache === 'string' ? cache : JSON.stringify(cache));
@@ -132,7 +134,7 @@ function scan({ prs, files, cache, env = {}, deadline = '600' }) {
     return {
       ...recorded, status: result.status, log: result.stdout + result.stderr,
       githubOutput: readFileSync(output, 'utf8'), before, after,
-      cache: after === null ? null : JSON.parse(after),
+      cache: after === null ? null : JSON.parse(after), marked: regular(join(work, MARKER)),
       leftovers: spawnSync('ls', ['-A', temp], { encoding: 'utf8' }).stdout.trim()
     };
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -140,7 +142,8 @@ function scan({ prs, files, cache, env = {}, deadline = '600' }) {
 
 const fileReads = result => result.calls.filter(call => /\/pulls\/\d+\/files\?/u.test(call.endpoint))
   .map(call => Number(/pulls\/(\d+)\/files/u.exec(call.endpoint)[1]));
-const saved = result => /^files_cache=save$/mu.test(result.githubOutput);
+// The save step's only trigger is this marker file (see the YAML contract).
+const saved = result => result.marked;
 const labelled = (result, number) => result.calls
   .filter(call => call.method === 'POST' && call.endpoint === `repos/example/project/issues/${number}/labels`)
   .flatMap(call => call.body?.labels ?? []);
@@ -324,7 +327,7 @@ test('a budget refusal stops further reads instead of hammering a limited API', 
   assert.deepEqual(fileReads(result), [10], 'no request follows the refusal');
   assert.match(result.log, /::warning::GitHub's shared API budget refused the changed-file inventory; 3 PR\(s\) were not read .*#10 #11 #12/u);
   assert.deepEqual(result.sleeps, []);
-  assert.doesNotMatch(result.githubOutput, /files_cache=save/u);
+  assert.equal(saved(result), false);
 });
 
 test('pull_request_target uses the cache but never asks to save it', () => {
@@ -338,6 +341,24 @@ test('pull_request_target uses the cache but never asks to save it', () => {
   assert.equal(result.after, result.before);
 });
 
+test('a scan that dies after hydrating still marks its inventory for the always() save', () => {
+  // 25 Nov 2026, job 139078940060: the cold scan read for its full deadline,
+  // the per-candidate tail outran timeout-minutes, the job was cancelled, and
+  // a success-only save never ran -- so no scan could ever start warm.
+  const result = scan({ prs: PRS(), files: FILES(), repoFails: true });
+  assert.notEqual(result.status, 0, 'the later failure is still reported');
+  assert.deepEqual(fileReads(result), [10, 11, 12]);
+  assert.ok(saved(result), 'the marker is written as soon as the inventory is');
+  assert.deepEqual(result.cache.entries.map(item => item.number), [10, 11, 12]);
+});
+
+test('a marker that arrives with a restored archive is cleared when nothing changed', () => {
+  const result = scan({ prs: PRS(), files: FILES(), cache: warm(), marker: true });
+  assert.equal(result.status, 0, result.log);
+  assert.deepEqual(fileReads(result), []);
+  assert.equal(saved(result), false);
+});
+
 // ---------- contract ----------
 
 test('the detect job restores before and saves after the scan with pinned, run-unique cache steps', () => {
@@ -346,15 +367,19 @@ test('the detect job restores before and saves after the scan with pinned, run-u
     'the cache adds no token permission');
   assert.match(job, /- name: Check out the trusted Lopu PR-status helper\n {8}uses: actions\/checkout@[0-9a-f]{40} # v6\.1\.0\n {8}with:\n {10}ref: github-actions\n {10}fetch-depth: 1\n {10}persist-credentials: false\n {10}sparse-checkout: \.github\/scripts\n/u);
   const restore = /\n {6}- uses: actions\/cache\/restore@([0-9a-f]{40}) # v6\.1\.0\n {8}with:\n {10}path: (\S+)\n {10}key: ([^\n]+)\n {10}restore-keys: ([^\n]+)\n/u.exec(job);
-  const save = /\n {6}- if: steps\.scan\.outputs\.files_cache == 'save'\n {8}uses: actions\/cache\/save@([0-9a-f]{40}) # v6\.1\.0\n {8}with:\n {10}path: (\S+)\n {10}key: ([^\n]+)\n/u.exec(job);
+  const save = /\n {6}- if: always\(\) && hashFiles\('([^']+)'\) != ''\n {8}uses: actions\/cache\/save@([0-9a-f]{40}) # v6\.1\.0\n {8}with:\n {10}path: (\S+)\n {10}key: ([^\n]+)\n/u.exec(job);
   assert.ok(restore && save, 'both cache steps exist in their exact pinned shape');
-  assert.equal(restore[1], save[1], 'restore and save share one audited commit');
-  assert.equal(restore[2], CACHE);
-  assert.equal(save[2], CACHE);
+  const [, restoreSha, restorePath, restoreKey, restorePrefix] = restore;
+  const [, saveMarker, saveSha, savePath, saveKey] = save;
+  assert.equal(saveMarker, MARKER, 'the save runs even after a timeout, but only for a marked inventory');
+  assert.equal(restoreSha, saveSha, 'restore and save share one audited commit');
+  assert.equal(restorePath, CACHE);
+  assert.equal(savePath, CACHE);
   assert.match(helper, /^LOPU_PR_FILES_CACHE="\$\{LOPU_PR_FILES_CACHE:-\.lopu-pr-files-cache\.json\}"$/mu, 'the helper reads and writes that path');
-  assert.equal(restore[3], save[3]);
-  assert.equal(save[3], 'lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}', 'entries are immutable, so every save key is run-unique');
-  assert.ok(save[3].startsWith(restore[4]), 'the restore prefix finds the newest earlier save');
+  assert.match(helper, /^LOPU_PR_FILES_CACHE_SAVE="\$\{LOPU_PR_FILES_CACHE_SAVE:-\.lopu-pr-files-cache\.save\}"$/mu, 'and writes that marker');
+  assert.equal(restoreKey, saveKey);
+  assert.equal(saveKey, 'lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}', 'entries are immutable, so every save key is run-unique');
+  assert.ok(saveKey.startsWith(restorePrefix), 'the restore prefix finds the newest earlier save');
   const order = ['Check out the trusted Lopu PR-status helper', 'actions/cache/restore@', `name: ${SCAN}`, 'actions/cache/save@'].map(text => job.indexOf(text));
   assert.ok(order.every((at, index) => at >= 0 && (index === 0 || at > order[index - 1])), 'checkout, restore, scan, save');
 });

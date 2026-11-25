@@ -38,7 +38,13 @@
 # is today's read, under the same deadline.
 #
 # The file travels between runs through actions/cache (restore before the scan,
-# save after it), which is scoped by branch: a run restores the newest entry of
+# save after it). A changed, save-eligible inventory is written atomically and
+# then marked with LOPU_PR_FILES_CACHE_SAVE; the save step runs on `always()`
+# whenever that marker exists. A cold scan spends the whole read deadline and
+# the per-candidate tail can then outlast `timeout-minutes` (25 Nov 2026, job
+# 139078940060: cancelled at 15 min, so a success-only save never ran and no
+# scan could ever start warm). Its hydrated paths are still exact, so they are
+# saved anyway. actions/cache is scoped by branch: a run restores the newest entry of
 # its own ref scope, else the default branch's, and saves into its own ref.
 # Entries are immutable, so every save uses a run-unique key. Cache contents are
 # not signed, and GitHub lets any job that runs in a writable scope create
@@ -57,6 +63,7 @@
 # may be blocked. The rest are deferred exactly like the deadline defers them.
 
 LOPU_PR_FILES_CACHE="${LOPU_PR_FILES_CACHE:-.lopu-pr-files-cache.json}"
+LOPU_PR_FILES_CACHE_SAVE="${LOPU_PR_FILES_CACHE_SAVE:-.lopu-pr-files-cache.save}"
 LOPU_PR_FILES_TTL="${LOPU_PR_FILES_TTL:-86400}"
 LOPU_PR_FILES_TOO_LARGE_TTL="${LOPU_PR_FILES_TOO_LARGE_TTL:-21600}"
 
@@ -96,6 +103,7 @@ complete_large_pr_files() {
   next="$RUNNER_TEMP/lopu-pr-files-cache.next.json"
   echo '[]' >"$valid"
   : >"$fresh"
+  rm -f -- "$LOPU_PR_FILES_CACHE_SAVE"
   if [ -f "$LOPU_PR_FILES_CACHE" ] && [ ! -L "$LOPU_PR_FILES_CACHE" ]; then
     if ! jq -c --argjson now "$now" "$LOPU_PR_FILES_CACHE_SHAPE" \
         "$LOPU_PR_FILES_CACHE" >"$valid" 2>/dev/null; then
@@ -206,8 +214,9 @@ complete_large_pr_files() {
      && [ "${EVENT_NAME:-}" != pull_request_target ] \
      && [ "${PRIORITY_SYNC_EVENT:-false}" != true ]; then
     rm -f -- "$LOPU_PR_FILES_CACHE"
-    cp "$next" "$LOPU_PR_FILES_CACHE"
-    echo 'files_cache=save' >>"$GITHUB_OUTPUT"
+    cp "$next" "$LOPU_PR_FILES_CACHE.tmp"
+    mv -f -- "$LOPU_PR_FILES_CACHE.tmp" "$LOPU_PR_FILES_CACHE"
+    : >"$LOPU_PR_FILES_CACHE_SAVE"
   fi
   rm -f "$valid" "$carried" "$fresh" "$next"
   printf '%s\n' "$inventory"
