@@ -2638,7 +2638,15 @@ jobs:
     timeout-minutes: 5
     permissions:
       actions: write
+      contents: read
     steps:
+      - name: Check out the trusted API budget helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Dispatch one trusted github-actions worker per bounded PR batch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2652,6 +2660,8 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+          . .github/scripts/gh-budget.sh
+          trap 'gh_budget_defer "PR batch handoff"' EXIT
           # Every base push can produce several equivalent detector events
           # (push, pull_request_target, check_run and workflow_run). Their
           # immutable worker batches used to accumulate behind the one Lopu
@@ -2666,7 +2676,7 @@ jobs:
           # The new batch below re-derives live refs and mergeability, so those
           # never-started snapshots are obsolete.
           queued_worker_ids="$(
-            gh api --paginate \
+            gh_budgeted api --paginate \
               "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=queued&per_page=100" \
               --jq '
                 .workflow_runs[]
@@ -2684,12 +2694,12 @@ jobs:
           while IFS= read -r queued_run_id; do
             [ -n "$queued_run_id" ] || continue
             live_status="$(
-              gh api "repos/$REPO/actions/runs/$queued_run_id" --jq '.status' \
+              gh_budgeted api "repos/$REPO/actions/runs/$queued_run_id" --jq '.status' \
                 2>/dev/null || printf 'unknown'
             )"
             case "$live_status" in
               queued)
-                if gh api --method POST \
+                if gh_budgeted api --method POST \
                     "repos/$REPO/actions/runs/$queued_run_id/cancel" \
                     >/dev/null 2>&1
                 then
@@ -2712,7 +2722,7 @@ jobs:
               while IFS= read -r cancelled_run_id; do
                 [ -n "$cancelled_run_id" ] || continue
                 cancelled_status="$(
-                  gh api "repos/$REPO/actions/runs/$cancelled_run_id" --jq '.status' \
+                  gh_budgeted api "repos/$REPO/actions/runs/$cancelled_run_id" --jq '.status' \
                     2>/dev/null || printf 'completed'
                 )"
                 case "$cancelled_status" in
@@ -2738,7 +2748,7 @@ jobs:
           # event or scheduled sweep then uses the discoverable matrix format.
           legacy_worker_ids="$(
             for legacy_status in pending in_progress; do
-              gh api --paginate \
+              gh_budgeted api --paginate \
                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$legacy_status&per_page=100" \
                 --jq '
                   .workflow_runs[]
@@ -2775,7 +2785,7 @@ jobs:
           fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
           fleet_state=''
           if fleet_state="$(
-            gh api "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded" \
+            gh_budgeted api "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded" \
               2>"$RUNNER_TEMP/lopu-fleet-read.err"
           )"; then
             owned_numbers="$(jq -c '
@@ -2795,7 +2805,7 @@ jobs:
             priority_owned_numbers='[]'
             priority_fleet_error="$RUNNER_TEMP/lopu-priority-fleet-read.err"
             if priority_fleet_state="$(
-              gh api "repos/$REPO/actions/concurrency_groups/$priority_fleet_group_encoded" \
+              gh_budgeted api "repos/$REPO/actions/concurrency_groups/$priority_fleet_group_encoded" \
                 2>"$priority_fleet_error"
             )"; then
               priority_owned_numbers="$(jq -c '
@@ -2949,7 +2959,7 @@ jobs:
                     }
                   }
                 ' \
-                | gh api --method POST \
+                | gh_budgeted api --method POST \
                     "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                     --input -
             done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$selections")

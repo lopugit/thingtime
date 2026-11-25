@@ -223,6 +223,13 @@ jobs:
       targets: ${{ steps.scan.outputs.targets }}
       any: ${{ steps.scan.outputs.any }}
     steps:
+      - name: Check out the trusted API budget helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Scan open same-repository PRs via the API
         id: scan
         env:
@@ -245,6 +252,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . .github/scripts/gh-budget.sh
+          trap 'gh_budget_defer "stack-rebase scan" "targets=[]" any=false' EXIT
 
           if [ -n "${MANUAL_PR:-}" ] \
              && ! [[ "$MANUAL_PR" =~ ^[1-9][0-9]*$ ]]; then
@@ -259,20 +268,20 @@ jobs:
           live_ref_sha() {
             local encoded
             encoded="$(encode_ref "$1")"
-            gh api "repos/$REPO/git/ref/heads/$encoded" --jq '.object.sha'
+            gh_budgeted api "repos/$REPO/git/ref/heads/$encoded" --jq '.object.sha'
           }
 
           branch_protected() {
             local encoded
             encoded="$(encode_ref "$1")"
-            gh api "repos/$REPO/branches/$encoded" --jq '.protected'
+            gh_budgeted api "repos/$REPO/branches/$encoded" --jq '.protected'
           }
 
           all="$(
-            gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
+            gh_budgeted api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
               | jq -c 'add // []'
           )"
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          default_ref="$(gh_budgeted api "repos/$REPO" --jq '.default_branch')"
 
           # A stack member either targets another open PR's head branch or is
           # itself the base of another open PR. Compare only same-repo PRs;
@@ -398,7 +407,7 @@ jobs:
             next_pending='[]'
             while IFS= read -r number; do
               [ -n "$number" ] || continue
-              detail="$(gh api "repos/$REPO/pulls/$number")"
+              detail="$(gh_budgeted api "repos/$REPO/pulls/$number")"
               rebaseable="$(jq -r '.rebaseable' <<<"$detail")"
               mergeable="$(jq -r '.mergeable' <<<"$detail")"
               if [ "$rebaseable" != null ] && [ "$mergeable" != null ]; then
@@ -456,7 +465,7 @@ jobs:
               for attempt in 1 2 3; do
                 : >"$error_file"
                 delete_succeeded=false
-                if GH_TOKEN="$token" gh api --method DELETE "$endpoint" \
+                if GH_TOKEN="$token" gh_budgeted api --method DELETE "$endpoint" \
                   --silent 2>"$error_file"; then
                   delete_succeeded=true
                 fi
@@ -464,7 +473,7 @@ jobs:
                 # avoids deleting a fresh same-name hold that another worker
                 # could apply while GitHub's issue response catches up.
                 for verify_attempt in 1 2 3; do
-                  issue_json="$(GH_TOKEN="$token" gh api \
+                  issue_json="$(GH_TOKEN="$token" gh_budgeted api \
                     "repos/$REPO/issues/$number" 2>>"$error_file" || true)"
                   absent="$(jq -r --arg label "$label" '
                       if type == "object" and (.labels | type) == "array"
@@ -535,7 +544,7 @@ jobs:
             local token decoded payload topology
             topology="$1"
             token="$(
-              gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp 2>/dev/null \
+              gh_budgeted api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp 2>/dev/null \
                 | jq -r '
                     add // []
                     | [.[]
@@ -589,7 +598,7 @@ jobs:
                 echo "Manual run will recover the existing ai-rebase-in-progress lock on #$number."
               else
                 labelled_at="$(
-                  gh api --paginate "repos/$REPO/issues/$number/events?per_page=100" --slurp \
+                  gh_budgeted api --paginate "repos/$REPO/issues/$number/events?per_page=100" --slurp \
                     | jq -r 'add // []
                         | map(select(.event == "labeled"
                                      and .label.name == "ai-rebase-in-progress"))
@@ -832,6 +841,13 @@ jobs:
       # root handoff on the GITHUB_TOKEN and grant only that documented scope.
       contents: write
     steps:
+      - name: Check out the trusted API budget helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Dispatch one exact ref snapshot per root PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -847,6 +863,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . .github/scripts/gh-budget.sh
+          trap 'gh_budget_defer "rebase handoff"' EXIT
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
             target="$(base64 --decode <<<"$encoded")"
@@ -892,7 +910,7 @@ jobs:
                     }
                   }
                 }
-              ' | gh api --method POST \
+              ' | gh_budgeted api --method POST \
                 "repos/$REPO/dispatches" \
                 --input -
           done < <(jq -r '.[] | @base64' <<<"$TARGETS")

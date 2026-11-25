@@ -63,6 +63,20 @@
   request's authoritative quota headers. Check normal before/always-after snapshots
   separately during the next authorized analysis; do not dispatch scans just for QA.
 
+## Resolver and stack-rebase API budget deferral (2026-11-25)
+
+- Run `node --test .github/scripts/gh-budget-deferral.test.mjs`. It executes the
+  real resolver batch handoff, stack-rebase scan and stack handoff shell against
+  a synthetic `gh`. An exhausted installation budget (HTTP 403/429 plus `API
+  rate limit exceeded`) must end green with one notice, make no further request
+  and never replay a refused dispatch. The scan must publish only `targets=[]`/`any=false`.
+- A bare 403, a non-budget dispatch refusal, and a genuine failure after a
+  tolerated budget refusal must stay red. Every `gh` call in those steps goes
+  through the shared `.github/scripts/gh-budget.sh`, checked out from
+  `github-actions`; a raw call fails the contract test.
+- `resolve-pr-conflicts.yml` must stay at or below 510,000 bytes, so put new
+  shell in a checked-out helper rather than inline in that workflow.
+
 ## Protected checks and reviewed preview retirement (2026-11-13)
 
 - Run the protected-deployment-fetch, preview-retirement-request, orphan-preview-
