@@ -187,7 +187,7 @@ export const useThingSource = ({
 	const [tick, setTick] = React.useState(0);
 	React.useEffect(() => {
 		if (!intervalMs || !interactive || !canRun) return;
-		const handle = activityInterval('timer:components/Builder/liveComponent:1', 'Live component refresh', () => setTick((current) => current + 1), intervalMs);
+		const handle = activityInterval('timer:components/Builder/liveComponent:1', 'Live component refresh', () => setTick((current) => current + 1), intervalMs, { local: true });
 		return () => clearActivityInterval(handle);
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);

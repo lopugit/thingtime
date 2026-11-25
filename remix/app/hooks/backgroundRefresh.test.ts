@@ -3,17 +3,21 @@ import test from 'node:test';
 import { createBackgroundRefresh, type RefreshEnvironment } from './backgroundRefresh.ts';
 
 const fixture = () => {
-  let now = 0, online = true;
+  let now = 0, online = true, idle = false;
+  const presence = new Set<() => void>();
   const window = new EventTarget();
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   let next = 0;
   const timers = new Map<number, { at: number; fn: () => void }>();
   const refresh = createBackgroundRefresh({ window, document, online: () => online, now: () => now,
     setTimer: (fn, ms) => { const id = ++next; timers.set(id, { at: now + ms, fn }); return id; },
-    clearTimer: id => timers.delete(id as unknown as number)
+    clearTimer: id => timers.delete(id as unknown as number),
+    idle: () => idle,
+    onPresence: (listener: () => void) => { presence.add(listener); return () => { presence.delete(listener); }; }
   } as unknown as RefreshEnvironment);
   const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
   return { refresh, window, document, timers, flush, offline: () => { online = false; }, online: () => { online = true; },
+    setIdle: (value: boolean) => { idle = value; for (const listener of [...presence]) listener(); }, listeners: () => presence.size,
     advance: async (ms: number) => { now += ms; for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.fn(); } await flush(); }
   };
 };
@@ -36,14 +40,30 @@ test('return, reconnect and page restoration refresh immediately, coalescing foc
   f.offline(); await f.advance(60_000); assert.equal(calls, 3);
   f.online(); f.window.dispatchEvent(new Event('online')); await f.flush(); assert.equal(calls, 4);
 });
-test('hidden tabs poll slowly and immediately catch up on return', async () => {
+test('hidden tabs stop polling entirely and catch up immediately on return', async () => {
   const f = fixture(); let calls = 0;
   f.document.visibilityState = 'hidden';
   f.refresh.subscribe('chat', () => { calls++; }, 5000); await f.flush();
-  await f.advance(5000); assert.equal(calls, 1);
-  await f.advance(55_000); assert.equal(calls, 2);
-  await f.advance(2000); f.document.visibilityState = 'visible'; f.document.dispatchEvent(new Event('visibilitychange'));
-  await f.flush(); assert.equal(calls, 3);
+  assert.equal(calls, 1, 'the first load still happens');
+  await f.advance(10 * 60_000); assert.equal(calls, 1, 'nothing polls while hidden');
+  assert.equal(f.timers.size, 0, 'no timer is left armed');
+  f.document.visibilityState = 'visible'; f.document.dispatchEvent(new Event('visibilitychange'));
+  await f.flush(); assert.equal(calls, 2, 'returning refreshes at once');
+  await f.advance(5000); assert.equal(calls, 3, 'visible polling resumes');
+  f.document.visibilityState = 'hidden'; f.document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(f.timers.size, 0, 'hiding cancels the pending poll');
+  await f.advance(60_000); assert.equal(calls, 3);
+});
+test('idle users get no polling until they interact again', async () => {
+  const f = fixture(); let calls = 0;
+  const off = f.refresh.subscribe('chat', () => { calls++; }, 5000); await f.flush();
+  await f.advance(5000); assert.equal(calls, 2);
+  f.setIdle(true);
+  assert.equal(f.timers.size, 0, 'going idle cancels the pending poll');
+  await f.advance(60 * 60_000); assert.equal(calls, 2, 'an idle hour costs no requests');
+  f.setIdle(false); await f.flush(); assert.equal(calls, 3, 'the next interaction refreshes at once');
+  await f.advance(5000); assert.equal(calls, 4, 'active polling resumes');
+  off(); assert.equal(f.listeners(), 0, 'the last unsubscribe releases the presence listener');
 });
 test('offline connectivity hints allow first load and foreground probes without background polling', async () => {
   const f = fixture(); let calls = 0;

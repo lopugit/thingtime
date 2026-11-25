@@ -155,7 +155,7 @@ function Countdown({ duration, enabled }: { duration: number; enabled: boolean }
 			if (!next) setDeadline(null);
 		};
 		tick();
-		const timer = activityInterval('timer:components/Builder/NativeComponentControls:1', 'Native Component Controls', tick, 200);
+		const timer = activityInterval('timer:components/Builder/NativeComponentControls:1', 'Native Component Controls', tick, 200, { local: true });
 		return () => clearActivityInterval(timer);
 	}, [deadline, enabled]);
 	const pause = () => {
