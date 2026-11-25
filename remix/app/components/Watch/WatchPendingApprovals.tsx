@@ -3,7 +3,7 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { supportsWatchApproval, WATCH_QUICK_APPROVAL_REQUIREMENTS } from './watchApprovalCapabilities';
-import { visibleWatchRequests } from './watchPendingCore';
+import { shouldPollWatchApprovals, visibleWatchRequests, WATCH_APPROVAL_TICK_MS } from './watchPendingCore';
 
 type Viewer = { id: string; username: string; temporary?: boolean };
 type PendingWatch = { pairingId: string; userCode: string; device: { name: string }; expiresAt: string };
@@ -23,13 +23,17 @@ export const WatchPendingApprovals = ({ user: explicitUser, embedded = false }: 
 		const controller = new AbortController();
 		let supported = false;
 		let polling = false;
-		const poll = async () => {
+		const cadence = { lastPolledAt: 0, hasPending: false };
+		const poll = async (trigger: 'tick' | 'signal' = 'signal') => {
 			if (!supported || polling || document.visibilityState !== 'visible') return;
+			if (!shouldPollWatchApprovals(trigger, cadence)) return;
 			polling = true;
+			cadence.lastPolledAt = Date.now();
 			try {
 				const response = await fetch('/api/v1/watch/pairing?op=pending', { credentials: 'include', signal: controller.signal });
 				const body = await response.json();
 				if (!controller.signal.aborted && response.ok && body.account?.id === user.id) {
+					cadence.hasPending = Array.isArray(body.requests) && body.requests.length > 0;
 					setSnapshot({ accountId: user.id, requests: Array.isArray(body.requests) ? body.requests : [] });
 				} else if (!controller.signal.aborted && response.status === 401) {
 					setSnapshot(null);
@@ -49,16 +53,18 @@ export const WatchPendingApprovals = ({ user: explicitUser, embedded = false }: 
 				/* Origins without this feature do not acquire a polling loop. */
 			}
 		})();
-		const timer = activityInterval('timer:components/Watch/WatchPendingApprovals:1', 'Watch Pending Approvals', poll, 15_000);
-		activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('visibilitychange', poll);
-		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('focus', poll);
-		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('thingtime:watch-approval-offered', poll);
+		const tick = () => poll('tick');
+		const signal = () => poll('signal');
+		const timer = activityInterval('timer:components/Watch/WatchPendingApprovals:1', 'Watch Pending Approvals', tick, WATCH_APPROVAL_TICK_MS);
+		activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('visibilitychange', signal);
+		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('focus', signal);
+		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('thingtime:watch-approval-offered', signal);
 		return () => {
 			controller.abort();
 			clearActivityInterval(timer);
-			activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('visibilitychange', poll);
-			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('focus', poll);
-			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('thingtime:watch-approval-offered', poll);
+			activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('visibilitychange', signal);
+			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('focus', signal);
+			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('thingtime:watch-approval-offered', signal);
 		};
 	}, [user?.id, user?.temporary]);
 
