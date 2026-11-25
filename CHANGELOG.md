@@ -1,3 +1,8 @@
+## 2026-11-25 — All-branch rebuild leaves Lopu's agent fleet
+
+- Split the all-branch workflow into a deterministic `build` job (rebuild and first union check, own `lopu-all-branch` lane) and a `doctor` job that alone joins `lopu-agent-fleet` and only runs for a repairable failure with a model credential. Reviews and resolutions no longer wait ~20–40 minutes behind every rebuild.
+- Hand the exact failing tree across as a pack of locally created objects plus the recorded input tips. The doctor stands down without model spend when develop, main, a merged PR head or `all` moved while it waited, verifies the restored working tree, and pushes with a lease so it never overwrites a newer union.
+
 ## 2026-11-25 — Parallel environment publishing
 
 - Publish opt-in main, develop and eligible PR builds to separate aliases. Recheck the saved lane, trusted PR author and actor, source workflow run, GitHub SHA and Vercel destination before promotion. PR builds run separately from publishing credentials, and nonproduction acceptance never sends a project bypass to PR code.

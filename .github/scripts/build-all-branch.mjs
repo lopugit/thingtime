@@ -46,11 +46,26 @@
 //   Rebuild dedup compares the *manifest commit* trees, so unchanged inputs
 //   skip the build check and AI entirely.
 //
+// - Fleet split: only the model-backed doctor may hold Lopu's serialized
+//   agent-fleet lane, so the workflow runs `build` + the first `check` in a
+//   deterministic job and hands a repairable failure to a separate doctor job.
+//   `handoff` packs every object this checkout created locally (the union
+//   commits plus the dirty working tree; fetched promisor objects stay on
+//   origin) beside the exact input tips, state, and build log. `doctor-admit`
+//   stands down without model spend when any recorded tip moved while it
+//   waited for the fleet; otherwise it fetches the same inputs, imports the
+//   pack, restores and verifies the exact working tree, and arms a
+//   --force-with-lease push against the `all` tip the rebuild replayed from.
+//
 // Modes (argv[2]): `build` (default) rebuild + replay + dedup decision;
 // `check` run the union build (install → build:client → build:server) with
-// mechanical lockfile repair; `doctor-commit --round N` guard + commit the
-// model's working-tree edits; `doctor-record` note an exhausted doctor;
-// `push` final force-push with the .github re-pin fallback and summary.
+// mechanical lockfile repair; `handoff --out DIR` export a failing union for
+// the doctor job; `doctor-admit --from DIR` restore it there (or stand down
+// when it is stale); `doctor-install` give round 1 the same node_modules the
+// build job's check had; `doctor-commit --round N` guard + commit the model's
+// working-tree edits; `doctor-record` note an exhausted doctor; `push` final
+// force-push (leased after `doctor-admit`) with the .github re-pin fallback
+// and summary.
 //
 // Requirements: a pushable `origin` checkout of the repo, plus `gh` auth
 // (GH_TOKEN in Actions) for PR listing. Tunables: ALL_BRANCH_NAME (all),
@@ -64,7 +79,18 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
 
 const ALL_BRANCH = process.env.ALL_BRANCH_NAME || "all";
 const BASE_BRANCHES = (process.env.ALL_BASE_BRANCHES || "develop main")
@@ -81,6 +107,13 @@ const BUILD_LOG = `${STATE_DIR}/build.log`;
 const DOCTOR_SUBJECT_PREFIX = "all: build doctor";
 const MANIFEST_SUBJECT_PREFIX = "all: manifest (";
 const MAX_REPLAYED_DOCTOR_COMMITS = 30;
+// Files the build job hands to the doctor job (one artifact directory).
+const HANDOFF_VERSION = 1;
+const HANDOFF_FILE = "handoff.json";
+const HANDOFF_PACK = "union.pack";
+const HANDOFF_STATE = "state.json";
+const HANDOFF_LOG = "build.log";
+const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 // The fast path keeps the checkout blobless. If Git asks the promisor remote
 // for an object GitHub no longer serves lazily, materialize the exact live
@@ -211,9 +244,91 @@ export function shouldRevertDoctorStatusPath(path) {
   return isForbiddenDoctorPath(p);
 }
 
+// `git ls-remote` output → Map(ref → sha). Pure: exercised by --self-test.
+export function parseLsRemote(text) {
+  const refs = new Map();
+  for (const line of String(text ?? "").split("\n")) {
+    const match = /^([0-9a-f]{40})\t(\S+)$/.exec(line.replace(/\r$/, ""));
+    if (match) refs.set(match[2], match[1]);
+  }
+  return refs;
+}
+
+// The handoff crosses a job boundary as an artifact, so re-check its shape
+// before any value reaches a git argument. Pure: exercised by --self-test.
+export function validateHandoff(handoff, { allBranch, baseBranches }) {
+  assert.equal(handoff?.version, HANDOFF_VERSION, "unsupported build-doctor handoff version");
+  assert.equal(handoff.allBranch, allBranch, "handoff names a different union branch");
+  for (const key of ["tip", "tree", "worktree"]) {
+    assert.match(String(handoff[key] ?? ""), SHA_PATTERN, `handoff ${key} must be a full object id`);
+  }
+  assert.ok(
+    handoff.remoteTip === "" || SHA_PATTERN.test(String(handoff.remoteTip ?? "")),
+    "handoff remoteTip must be empty or a full commit id"
+  );
+  assert.ok(Array.isArray(handoff.bases) && Array.isArray(handoff.pulls), "handoff must record its input tips");
+  assert.deepEqual(
+    handoff.bases.map((base) => base?.branch),
+    baseBranches,
+    "handoff bases must be this builder's base branches, in order"
+  );
+  for (const { sha } of handoff.bases) assert.match(String(sha ?? ""), SHA_PATTERN, "base tips must be full commit ids");
+  const seen = new Set();
+  for (const pull of handoff.pulls) {
+    assert.ok(Number.isSafeInteger(pull?.number) && pull.number > 0, "PR numbers must be positive integers");
+    assert.ok(!seen.has(pull.number), `PR #${pull.number} is recorded twice`);
+    seen.add(pull.number);
+    assert.match(String(pull.sha ?? ""), SHA_PATTERN, `PR #${pull.number} head must be a full commit id`);
+  }
+  return handoff;
+}
+
+// Decide whether a queued doctor may still repair its handoff. The doctor can
+// wait in the fleet for a long time; if any input it was built from moved, the
+// pending rebuild (every base push and PR event, plus the hourly schedule,
+// queues one) owns the branch and this one stands down before spending a
+// model round. Pure: exercised by --self-test.
+export function decideDoctorAdmission(handoff, liveRefs, { allBranch }) {
+  const live = (ref) => liveRefs.get(ref) ?? "";
+  const short = (sha) => (sha ? sha.slice(0, 7) : "(missing)");
+  const moved = [];
+  const liveAll = live(`refs/heads/${allBranch}`);
+  if (liveAll !== handoff.remoteTip) {
+    moved.push(`origin/${allBranch} moved from ${short(handoff.remoteTip)} to ${short(liveAll)}`);
+  }
+  for (const { branch, sha } of handoff.bases) {
+    const now = live(`refs/heads/${branch}`);
+    if (now !== sha) moved.push(`${branch} moved from ${short(sha)} to ${short(now)}`);
+  }
+  for (const { number, sha } of handoff.pulls) {
+    const now = live(`refs/pull/${number}/head`);
+    if (now !== sha) moved.push(`PR #${number} moved from ${short(sha)} to ${short(now)}`);
+  }
+  if (moved.length > 0) {
+    const shown = moved.slice(0, 5).join("; ") + (moved.length > 5 ? `; and ${moved.length - 5} more` : "");
+    return { admit: false, reason: `the union inputs changed while the doctor waited (${shown})` };
+  }
+  return { admit: true, reason: "", lease: handoff.remoteTip };
+}
+
+const workflowJobBlock = (text, key) => {
+  const start = text.indexOf(`\n  ${key}:\n`);
+  assert.notEqual(start, -1, `all-branch workflow must define the ${key} job`);
+  const rest = text.slice(start + 1);
+  const next = rest.slice(1).search(/\n  [A-Za-z0-9_-]+:\n/);
+  return next === -1 ? rest : rest.slice(0, next + 2);
+};
+const workflowSteps = (jobBlock) =>
+  jobBlock
+    .split(/\n(?=      - )/)
+    .slice(1)
+    .map((body) => ({ name: /^      - name: (.+)$/m.exec(body)?.[1] ?? "", body }));
+
 // Keep the doctor internal to the one public Lopu manager. Push normalization
 // lives in resolve-pr-conflicts.yml because provider actions reject push-event
 // provenance even when the implementation is reached through workflow_call.
+// Only the doctor job may join Lopu's serialized agent fleet; the deterministic
+// build job must never run a model.
 export function assertAllBranchWorkflowContract(workflowText) {
   const text = String(workflowText ?? "").replaceAll("\r\n", "\n");
   const triggerBlock = text.split("\npermissions:", 1)[0];
@@ -229,23 +344,120 @@ export function assertAllBranchWorkflowContract(workflowText) {
     "all-branch workflow must not expose a second public trigger"
   );
   assert.doesNotMatch(text, /\n  handoff:\n/, "push normalization belongs to the public Lopu manager");
-  const rebuildBlock = text.slice(text.indexOf("\n  rebuild:"));
-  assert.match(rebuildBlock, /if: github\.repository == 'lopugit\/thingtime'/);
-  assert.match(
-    rebuildBlock,
-    /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/,
-    "the union doctor must share Lopu's durable single-agent fleet"
-  );
-  assert.match(
-    rebuildBlock,
-    /name: Check out develop working tree[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/,
-    "the union checkout keeps exact ancestry without eagerly downloading historical blobs"
-  );
+  const jobKeys = [...text.slice(text.indexOf("\njobs:\n")).matchAll(/\n  ([A-Za-z0-9_-]+):\n/g)].map((m) => m[1]);
+  assert.deepEqual(jobKeys, ["build", "doctor"], "the union runs as one deterministic job and one doctor job");
+  const build = workflowJobBlock(text, "build");
+  const doctor = workflowJobBlock(text, "doctor");
+  const fleetQueue = /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/;
+  const modelUse = /uses: \.\/control-plane\/\.github\/actions\/lopu-agent\b|lopu-model-waterfall\.mjs|claude-args:|You are Lopu,/;
+
+  for (const [label, block] of [["build", build], ["doctor", doctor]]) {
+    assert.match(block, /if: github\.repository == 'lopugit\/thingtime'/, `${label} job stays on the canonical repository`);
+    assert.match(block, /timeout-minutes: 60\n/, `${label} job keeps the sweeper's 60-minute bound`);
+    assert.match(
+      block,
+      /name: Check out develop working tree[\s\S]*?fetch-depth: 0[\s\S]*?filter: blob:none[\s\S]*?persist-credentials: false/,
+      `${label}: the union checkout keeps exact ancestry without eagerly downloading historical blobs`
+    );
+    const steps = workflowSteps(block);
+    assert.equal(steps.at(-1)?.name, "Push the all branch", `${label}: the credential-helper push is the final step`);
+    for (const step of steps) {
+      if (/uses: actions\/checkout@/.test(step.body)) {
+        assert.match(step.body, /persist-credentials: false/, `${label}: ${step.name} must not persist a token`);
+      }
+    }
+  }
+
+  // Fleet membership: exactly the doctor, never the deterministic rebuild.
   assert.equal(
-    [...rebuildBlock.matchAll(/You are Lopu, Thingtime's principal PR and repository manager\./g)].length,
+    [...text.matchAll(/^\s*group: lopu-agent-fleet-/gm)].length,
+    1,
+    "only one job may join the Lopu agent fleet"
+  );
+  assert.match(doctor, fleetQueue, "the union doctor must share Lopu's durable single-agent fleet");
+  assert.doesNotMatch(build, /group: lopu-agent-fleet-/, "the deterministic rebuild must not hold Lopu's agent fleet");
+  assert.match(
+    build,
+    /concurrency:\n\s*group: lopu-all-branch-\$\{\{ github\.repository \}\}\n\s*cancel-in-progress: false/,
+    "the deterministic rebuild runs in its own non-cancelling all-branch lane"
+  );
+  assert.doesNotMatch(build, modelUse, "no model may run in the deterministic rebuild job");
+  for (const step of ["Rebuild the all branch", "Union build check", "Hand the failing union to the build doctor"]) {
+    assert.ok(workflowSteps(build).some(({ name }) => name === step), `build job must run "${step}"`);
+  }
+  assert.match(build, /outputs:\n\s*handoff: \$\{\{ steps\.handoff\.outputs\.handoff \}\}/);
+  assert.match(
+    build,
+    /id: handoff\n\s*if: >-\n\s*steps\.build\.outputs\.proceed == 'true'\n\s*&& steps\.check1\.outputs\.build_ok != 'true'\n\s*&& steps\.check1\.outputs\.ai_eligible == 'true'\n\s*&& steps\.backend\.outputs\.has_credential == 'true'\n\s*run: node control-plane\/\.github\/scripts\/build-all-branch\.mjs handoff --out "\$RUNNER_TEMP\/lopu-all-handoff"/,
+    "only a repairable failure with a model credential is handed to the doctor"
+  );
+  for (const step of ["Record the doctor outcome", "Push the all branch"]) {
+    const body = workflowSteps(build).find(({ name }) => name === step)?.body ?? "";
+    assert.match(
+      body,
+      /if: steps\.build\.outputs\.proceed == 'true' && steps\.handoff\.outputs\.handoff != 'true'/,
+      `build job "${step}" yields to the doctor whenever it handed off`
+    );
+  }
+  const artifact = /name: (lopu-all-branch-doctor-handoff)\n/;
+  assert.match(build, /uses: actions\/upload-artifact@[0-9a-f]{40}[\s\S]*?name: lopu-all-branch-doctor-handoff\n/);
+  assert.match(doctor, /uses: actions\/download-artifact@[0-9a-f]{40}[\s\S]*?name: lopu-all-branch-doctor-handoff\n/);
+  assert.equal(artifact.exec(build)?.[1], artifact.exec(doctor)?.[1]);
+
+  assert.match(doctor, /\n    needs: build\n/, "the doctor runs after the deterministic rebuild");
+  assert.match(
+    doctor,
+    /\n    if: github\.repository == 'lopugit\/thingtime' && needs\.build\.outputs\.handoff == 'true'\n/,
+    "the doctor job (and its fleet wait) exists only for a handed-off failure"
+  );
+  const doctorSteps = workflowSteps(doctor);
+  const stepIndex = (name) => doctorSteps.findIndex((step) => step.name === name);
+  assert.ok(
+    stepIndex("Admit the handoff and restore the failing union") !== -1 &&
+      stepIndex("Admit the handoff and restore the failing union") < stepIndex("Load the build-doctor model waterfall"),
+    "the doctor admits its handoff before any model is selected"
+  );
+  assert.ok(
+    stepIndex("Admit the handoff and restore the failing union") < stepIndex("Install the union's dependencies for round 1") &&
+      stepIndex("Install the union's dependencies for round 1") < stepIndex("Lopu build doctor round 1"),
+    "round 1 sees the same installed dependencies the build job's check had"
+  );
+  assert.match(
+    doctorSteps[stepIndex("Install the union's dependencies for round 1")]?.body ?? "",
+    /if: steps\.admit\.outputs\.proceed == 'true'\n\s*run: node control-plane\/\.github\/scripts\/build-all-branch\.mjs doctor-install\n/
+  );
+  assert.match(
+    doctorSteps[stepIndex("Load the build-doctor model waterfall")]?.body ?? "",
+    /if: steps\.admit\.outputs\.proceed == 'true'/,
+    "a stale handoff never loads a model"
+  );
+  const rounds = doctorSteps.filter(({ name }) => /^Lopu build doctor round \d$/.test(name));
+  assert.equal(rounds.length, 3, "the doctor keeps three bounded rounds");
+  for (const round of rounds) {
+    assert.match(round.body, /uses: \.\/control-plane\/\.github\/actions\/lopu-agent\n/, `${round.name} uses the one Lopu action`);
+    assert.match(round.body, /--allowedTools "Read,Grep,Glob,Edit,Write"/, `${round.name} may only edit files`);
+    assert.match(round.body, /--disallowedTools "WebFetch,WebSearch,Bash,/, `${round.name} has no shell`);
+  }
+  assert.equal(
+    [...doctor.matchAll(/You are Lopu, Thingtime's principal PR and repository manager\./g)].length,
     3,
     "every union repair round must identify itself as Lopu"
   );
+
+  // GH_TOKEN reaches only the fetch/push steps and the credential scan.
+  const tokenSteps = new Set([
+    "Rebuild the all branch",
+    "Admit the handoff and restore the failing union",
+    "Commit doctor round 1",
+    "Commit doctor round 2",
+    "Commit doctor round 3",
+    "Push the all branch",
+  ]);
+  for (const step of [...workflowSteps(build), ...doctorSteps]) {
+    if (/\bGH_TOKEN:/.test(step.body)) {
+      assert.ok(tokenSteps.has(step.name), `"${step.name}" must not receive GH_TOKEN`);
+    }
+  }
 }
 
 const readState = () => {
@@ -692,6 +904,134 @@ function selfTest() {
   {
     const workflow = readFileSync(new URL("../workflows/all-branch.yml", import.meta.url), "utf8");
     assertAllBranchWorkflowContract(workflow);
+
+    // Fleet membership is enforced, not just documented: each of these
+    // regressions must fail the contract.
+    const rejects = (label, mutate) => {
+      const mutated = mutate(workflow);
+      assert.notEqual(mutated, workflow, `${label}: the mutation must apply`);
+      assert.throws(() => assertAllBranchWorkflowContract(mutated), assert.AssertionError, label);
+    };
+    rejects("the rebuild re-joining the agent fleet", (text) =>
+      text.replace(
+        "group: lopu-all-branch-${{ github.repository }}\n      cancel-in-progress: false",
+        "group: lopu-agent-fleet-${{ github.repository }}\n      queue: max\n      cancel-in-progress: false"
+      )
+    );
+    rejects("the doctor leaving the agent fleet", (text) =>
+      text.replace("group: lopu-agent-fleet-${{ github.repository }}", "group: lopu-doctor-${{ github.repository }}")
+    );
+    rejects("a model round inside the build job", (text) =>
+      text.replace(
+        "      - name: Union build check\n",
+        "      - name: Early doctor\n        uses: ./control-plane/.github/actions/lopu-agent\n\n      - name: Union build check\n"
+      )
+    );
+    rejects("a doctor that runs without a handoff", (text) =>
+      text.replace(" && needs.build.outputs.handoff == 'true'\n", "\n")
+    );
+    rejects("a build job that pushes over a handed-off union", (text) =>
+      text.replace(
+        "      - name: Push the all branch\n        if: steps.build.outputs.proceed == 'true' && steps.handoff.outputs.handoff != 'true'\n",
+        "      - name: Push the all branch\n        if: steps.build.outputs.proceed == 'true'\n"
+      )
+    );
+    rejects("a doctor that selects a model before admission", (text) =>
+      text.replace(
+        "        id: models\n        if: steps.admit.outputs.proceed == 'true'\n",
+        "        id: models\n        if: always()\n"
+      )
+    );
+    rejects("a doctor checkout that persists its token", (text) => {
+      const at = text.indexOf("  doctor:\n");
+      return text.slice(0, at) + text.slice(at).replace("persist-credentials: false", "persist-credentials: true");
+    });
+    rejects("GH_TOKEN reaching the model waterfall loader", (text) =>
+      text.replace(
+        "        id: models\n        if: steps.admit.outputs.proceed == 'true'\n",
+        "        id: models\n        if: steps.admit.outputs.proceed == 'true'\n        env:\n          GH_TOKEN: ${{ github.token }}\n"
+      )
+    );
+    rejects("a third job", (text) => `${text}\n  extra:\n    runs-on: ubuntu-latest\n    steps: []\n`);
+  }
+
+  // Handoff validation and doctor admission.
+  {
+    const sha = (char) => char.repeat(40);
+    const handoff = {
+      version: 1,
+      allBranch: "all",
+      tip: sha("1"),
+      tree: sha("2"),
+      worktree: sha("3"),
+      remoteTip: sha("4"),
+      bases: [
+        { branch: "develop", sha: sha("d") },
+        { branch: "main", sha: sha("e") },
+      ],
+      pulls: [
+        { number: 12, sha: sha("a") },
+        { number: 112, sha: sha("b") },
+      ],
+    };
+    const shape = { allBranch: "all", baseBranches: ["develop", "main"] };
+    assert.equal(validateHandoff(handoff, shape), handoff);
+    for (const broken of [
+      { ...handoff, version: 2 },
+      { ...handoff, allBranch: "everything" },
+      { ...handoff, tip: "HEAD" },
+      { ...handoff, worktree: `${sha("3")} --upload-pack=evil` },
+      { ...handoff, remoteTip: "refs/heads/all" },
+      { ...handoff, bases: [...handoff.bases].reverse() },
+      { ...handoff, pulls: [{ number: "12; rm -rf /", sha: sha("a") }] },
+      { ...handoff, pulls: [{ number: 12, sha: sha("a") }, { number: 12, sha: sha("a") }] },
+      { ...handoff, pulls: undefined },
+    ]) {
+      assert.throws(() => validateHandoff(broken, shape), assert.AssertionError);
+    }
+    assert.doesNotThrow(() => validateHandoff({ ...handoff, remoteTip: "", pulls: [] }, shape));
+
+    const listing = [
+      `${sha("4")}\trefs/heads/all`,
+      `${sha("d")}\trefs/heads/develop`,
+      `${sha("e")}\trefs/heads/main`,
+      `${sha("a")}\trefs/pull/12/head`,
+      `${sha("b")}\trefs/pull/112/head`,
+      "warning: not a ref line",
+      "",
+    ].join("\n");
+    const live = parseLsRemote(listing);
+    assert.equal(live.size, 5);
+    assert.equal(live.get("refs/pull/12/head"), sha("a"));
+    assert.deepEqual(decideDoctorAdmission(handoff, live, { allBranch: "all" }), {
+      admit: true,
+      reason: "",
+      lease: sha("4"),
+    });
+    const moved = (ref, value) => {
+      const next = new Map(live);
+      if (value === undefined) next.delete(ref);
+      else next.set(ref, value);
+      return decideDoctorAdmission(handoff, next, { allBranch: "all" });
+    };
+    assert.match(moved("refs/heads/develop", sha("f")).reason, /develop moved from ddddddd to fffffff/);
+    assert.match(moved("refs/heads/main", sha("f")).reason, /main moved/);
+    assert.match(moved("refs/pull/112/head", sha("f")).reason, /PR #112 moved/);
+    assert.match(moved("refs/heads/all", sha("f")).reason, /origin\/all moved from 4444444 to fffffff/);
+    assert.match(moved("refs/heads/all", undefined).reason, /origin\/all moved from 4444444 to \(missing\)/);
+    assert.match(moved("refs/pull/12/head", undefined).reason, /PR #12 moved from aaaaaaa to \(missing\)/);
+    for (const ref of ["refs/heads/develop", "refs/heads/all", "refs/pull/12/head"]) {
+      assert.equal(moved(ref, sha("f")).admit, false, `${ref} moving must supersede the doctor`);
+    }
+    // No pushed union yet: admit only while origin/all is still absent.
+    const fresh = { ...handoff, remoteTip: "" };
+    const withoutAll = new Map(live);
+    withoutAll.delete("refs/heads/all");
+    assert.deepEqual(decideDoctorAdmission(fresh, withoutAll, { allBranch: "all" }).lease, "");
+    assert.equal(decideDoctorAdmission(fresh, live, { allBranch: "all" }).admit, false);
+    // Long move lists stay one bounded summary line.
+    const many = { ...handoff, pulls: Array.from({ length: 9 }, (_, i) => ({ number: i + 1, sha: sha("c") })) };
+    assert.match(decideDoctorAdmission(many, live, { allBranch: "all" }).reason, /and 4 more\)$/);
   }
 }
 
@@ -778,6 +1118,17 @@ function buildMode() {
     branch,
     sha: git("rev-parse", `refs/remotes/origin/${branch}`),
   }));
+  // Exact inputs as first fetched. A later complete-history refetch can only
+  // move a ref forward, which makes a doctor handoff conservatively stale.
+  const inputs = {
+    bases: baseTips,
+    pulls: ordered.map((pr) => ({
+      number: pr.number,
+      sha: git("rev-parse", `refs/all-build/pr-${pr.number}^{commit}`),
+    })),
+  };
+  const remoteAll = tryGit("rev-parse", "-q", "--verify", `${REMOTE_ALL_REF}^{commit}`);
+  const remoteTip = remoteAll.status === 0 ? remoteAll.stdout.trim() : "";
 
   const notes = [];
   for (const branch of BASE_BRANCHES.slice(1)) {
@@ -861,7 +1212,7 @@ function buildMode() {
     }
   }
 
-  writeState({ notes, manifest, proceed: true, buildOk: null, stage: "", replayed, doctored: 0, merges: merges.length, skips: skipped.length });
+  writeState({ notes, manifest, proceed: true, buildOk: null, stage: "", replayed, doctored: 0, merges: merges.length, skips: skipped.length, inputs, remoteTip });
   stepOutput("proceed", "true");
   console.log(
     `build-all-branch: rebuild ready (${merges.length} merged, ${skipped.length} skipped, ${replayed} fixup${replayed === 1 ? "" : "s"} replayed)`
@@ -966,6 +1317,205 @@ function checkMode() {
   if (!ok) console.error(`build-all-branch check: union build failing at ${stage} (log: ${BUILD_LOG})`);
 }
 
+// The tree doctor-commit would stage right now: HEAD plus every working-tree
+// change outside the state and controller directories. Uses a throwaway copy
+// of the index so the real index (== HEAD) is untouched.
+function worktreeTree() {
+  const index = resolve(git("rev-parse", "--git-path", "index"));
+  const scratch = `${index}.all-handoff`;
+  copyFileSync(index, scratch);
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: scratch };
+    run("git", ["add", "-A", "--", ".", `:(exclude)${STATE_DIR}`, ":(exclude)control-plane"], { env });
+    return run("git", ["write-tree"], { env }).trim();
+  } finally {
+    rmSync(scratch, { force: true });
+  }
+}
+
+// Build job: export a failing union for the doctor job. The pack holds only
+// objects this checkout created (merge/pin/manifest/replay commits, their new
+// trees and merged blobs, and the dirty working tree); everything fetched from
+// origin stays a promisor object the doctor job fetches itself.
+function handoffMode(outDir) {
+  requireAllBranchCheckout("handoff");
+  const state = readState();
+  if (state.proceed !== true || state.buildOk !== false || !state.inputs) {
+    console.error("build-all-branch handoff: only a checked, failing rebuild can be handed to the doctor.");
+    process.exit(2);
+  }
+  const tip = git("rev-parse", "HEAD");
+  const handoff = validateHandoff(
+    {
+      version: HANDOFF_VERSION,
+      allBranch: ALL_BRANCH,
+      tip,
+      tree: git("rev-parse", "HEAD^{tree}"),
+      worktree: worktreeTree(),
+      remoteTip: state.remoteTip || "",
+      bases: state.inputs.bases,
+      pulls: state.inputs.pulls,
+    },
+    { allBranch: ALL_BRANCH, baseBranches: BASE_BRANCHES }
+  );
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+
+  // Current Git marks a blobless clone with remote.<name>.promisor; older Git
+  // used extensions.partialClone. Either way, promisor objects stay out.
+  const promisorConfig =
+    tryGit("config", "--get-regexp", "^(extensions\\.partialclone|remote\\..+\\.promisor)$").stdout || "";
+  const partial = promisorConfig
+    .split("\n")
+    .some((line) => /^extensions\.partialclone \S/i.test(line) || /^remote\..+\.promisor true$/i.test(line));
+  const revs = [
+    handoff.tip,
+    handoff.worktree,
+    ...handoff.bases.map(({ sha }) => `^${sha}`),
+    ...handoff.pulls.map(({ sha }) => `^${sha}`),
+    ...(handoff.remoteTip ? [`^${handoff.remoteTip}`] : []),
+  ];
+  const packPath = join(outDir, HANDOFF_PACK);
+  const fd = openSync(packPath, "w");
+  let pack;
+  try {
+    pack = spawnSync(
+      "git",
+      // --no-sparse keeps exact rev-list reachability: the sparse walk leaves
+      // unchanged sibling blobs of a touched directory interesting, and in a
+      // blobless clone those may not even be present locally.
+      ["pack-objects", "--revs", "--stdout", "--no-sparse", ...(partial ? ["--exclude-promisor-objects"] : [])],
+      { input: `${revs.join("\n")}\n`, stdio: ["pipe", fd, "pipe"], encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+  } finally {
+    closeSync(fd);
+  }
+  if (pack.status !== 0) {
+    throw new Error(`could not pack the union for the doctor: ${singleLine(pack.stderr, 300)}`);
+  }
+  copyFileSync(STATE_FILE, join(outDir, HANDOFF_STATE));
+  if (existsSync(BUILD_LOG)) copyFileSync(BUILD_LOG, join(outDir, HANDOFF_LOG));
+  writeFileSync(join(outDir, HANDOFF_FILE), `${JSON.stringify(handoff, null, 2)}\n`);
+  const bytes = readFileSync(packPath).length;
+  stepOutput("handoff", "true");
+  writeSummary(
+    [
+      "## Build all branch",
+      "",
+      `❌ Union build failing at ${state.stage || "build"} — handed ${tip.slice(0, 7)} (${bytes} byte pack, ${handoff.pulls.length} PR tips) to the build doctor, which waits for Lopu's agent fleet. This job did not hold the fleet and did not push.`,
+    ].join("\n")
+  );
+}
+
+// Doctor job: admit (or stand down from) a handoff, then restore the exact
+// failing union and working tree the build job checked.
+function doctorAdmitMode(fromDir) {
+  const handoff = validateHandoff(JSON.parse(readFileSync(join(fromDir, HANDOFF_FILE), "utf8")), {
+    allBranch: ALL_BRANCH,
+    baseBranches: BASE_BRANCHES,
+  });
+  const patterns = [
+    `refs/heads/${ALL_BRANCH}`,
+    ...handoff.bases.map(({ branch }) => `refs/heads/${branch}`),
+    ...handoff.pulls.map(({ number }) => `refs/pull/${number}/head`),
+  ];
+  let listing = null;
+  for (let attempt = 1; attempt <= 2 && listing === null; attempt += 1) {
+    const result = spawnSync("git", [...gitAuthConfig(), "ls-remote", "origin", ...patterns], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (result.status === 0) listing = result.stdout;
+    else console.error(`build-all-branch doctor-admit: ls-remote attempt ${attempt} failed: ${singleLine(result.stderr, 200)}`);
+  }
+  if (listing === null) throw new Error("could not read the live union inputs from origin");
+  const standDown = (reason) => {
+    writeSummary(
+      [
+        "## Build all branch",
+        "",
+        `🩺 The build doctor stood down without running a model or pushing: ${reason}. The pending rebuild will rebuild and, if needed, doctor the newer inputs.`,
+      ].join("\n")
+    );
+    stepOutput("proceed", "false");
+  };
+  const decision = decideDoctorAdmission(handoff, parseLsRemote(listing), { allBranch: ALL_BRANCH });
+  if (!decision.admit) return standDown(decision.reason);
+
+  const refspecs = [
+    ...handoff.bases.map(({ branch }) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
+    ...handoff.pulls.map(({ number }) => `+refs/pull/${number}/head:refs/all-build/pr-${number}`),
+    ...(handoff.remoteTip ? [`+refs/heads/${ALL_BRANCH}:${REMOTE_ALL_REF}`] : []),
+  ];
+  run("git", [...gitAuthConfig(), "fetch", "--no-tags", "--force", "origin", ...refspecs], {
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  if (!handoff.remoteTip) tryGit("update-ref", "-d", REMOTE_ALL_REF);
+  const fetched = new Map([
+    ...handoff.bases.map(({ branch }) => [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]),
+    ...handoff.pulls.map(({ number }) => [`refs/pull/${number}/head`, `refs/all-build/pr-${number}`]),
+    ...(handoff.remoteTip ? [[`refs/heads/${ALL_BRANCH}`, REMOTE_ALL_REF]] : []),
+  ]);
+  const local = new Map(
+    [...fetched].map(([remoteRef, localRef]) => [remoteRef, tryGit("rev-parse", "-q", "--verify", `${localRef}^{commit}`).stdout?.trim() || ""])
+  );
+  if (!handoff.remoteTip) local.set(`refs/heads/${ALL_BRANCH}`, "");
+  const refetched = decideDoctorAdmission(handoff, local, { allBranch: ALL_BRANCH });
+  if (!refetched.admit) return standDown(refetched.reason);
+
+  const fd = openSync(join(fromDir, HANDOFF_PACK), "r");
+  let imported;
+  try {
+    imported = spawnSync("git", ["index-pack", "--stdin"], { stdio: [fd, "pipe", "pipe"], encoding: "utf8" });
+  } finally {
+    closeSync(fd);
+  }
+  if (imported.status !== 0) throw new Error(`could not import the union pack: ${singleLine(imported.stderr, 300)}`);
+  assert.equal(git("rev-parse", `${handoff.tip}^{tree}`), handoff.tree, "the imported union tip has a different tree");
+  assert.equal(git("cat-file", "-t", handoff.worktree), "tree", "the imported working tree is missing");
+
+  git("checkout", "--force", "-B", ALL_BRANCH, handoff.tip);
+  run("git", [
+    "restore",
+    `--source=${handoff.worktree}`,
+    "--worktree",
+    "--",
+    ".",
+    `:(exclude)${STATE_DIR}`,
+    ":(exclude)control-plane",
+  ]);
+  const restored = worktreeTree();
+  assert.equal(restored, handoff.worktree, "the restored working tree differs from the tree the build job checked");
+
+  mkdirSync(STATE_DIR, { recursive: true });
+  copyFileSync(join(fromDir, HANDOFF_STATE), STATE_FILE);
+  if (existsSync(join(fromDir, HANDOFF_LOG))) copyFileSync(join(fromDir, HANDOFF_LOG), BUILD_LOG);
+  const state = readState();
+  writeState({ ...state, lease: decision.lease });
+  console.log(
+    `build-all-branch doctor-admit: restored ${handoff.tip.slice(0, 7)} with its exact working tree; pushes are leased on ${decision.lease ? decision.lease.slice(0, 7) : `a missing origin/${ALL_BRANCH}`}`
+  );
+  stepOutput("proceed", "true");
+}
+
+// Doctor job: reinstall the union's dependencies before round 1, so the model
+// reads the same node_modules it had when the build job ran this check in the
+// same job. Never writes BUILD_LOG (the model must read the build job's
+// failure) and never fails the job: the next re-check installs again anyway.
+function doctorInstallMode() {
+  requireAllBranchCheckout("doctor-install");
+  const result = spawnSync("corepack", ["pnpm", "--dir", "remix", "install", "--no-frozen-lockfile"], {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  console.log(output.split("\n").slice(-20).join("\n"));
+  if (result.status !== 0) {
+    console.log("::notice::The doctor's dependency install failed; round 1 runs without node_modules and the re-check installs again.");
+  }
+}
+
 // Guard and commit whatever the doctor model left in the working tree.
 function doctorCommitMode(round) {
   requireAllBranchCheckout("doctor-commit");
@@ -1049,6 +1599,8 @@ function doctorRecordMode() {
 }
 
 // Final force-push (with the .github re-pin fallback) and the run summary.
+// After doctor-admit the push is leased on the `all` tip the rebuild replayed
+// from, so a doctor can never overwrite a newer union that landed meanwhile.
 function pushMode() {
   requireAllBranchCheckout("push");
   const state = readState();
@@ -1073,7 +1625,13 @@ function pushMode() {
   } else if (!PUSH) {
     pushLine = `Build only (ALL_PUSH=0): origin/${ALL_BRANCH} was not updated.`;
   } else {
-    const pushArgs = ["push", "--force", "origin", `${ALL_BRANCH}:refs/heads/${ALL_BRANCH}`];
+    const lease = typeof state.lease === "string" ? state.lease : null;
+    const pushArgs = [
+      "push",
+      lease === null ? "--force" : `--force-with-lease=refs/heads/${ALL_BRANCH}:${lease}`,
+      "origin",
+      `${ALL_BRANCH}:refs/heads/${ALL_BRANCH}`,
+    ];
     let push = pushGit(pushArgs);
     if (push.status !== 0 && /workflow/i.test(push.stderr || "")) {
       // GITHUB_TOKEN may not change .github/workflows/** content. Re-pin
@@ -1096,7 +1654,9 @@ function pushMode() {
         }
       }
     }
-    if (push.status !== 0) {
+    if (push.status !== 0 && lease !== null && /stale info/i.test(push.stderr || "")) {
+      pushLine = `Superseded — origin/${ALL_BRANCH} moved while the doctor was repairing, so this older union was not pushed over it.`;
+    } else if (push.status !== 0) {
       console.error(`build-all-branch: push failed: ${push.stderr || ""}`);
       process.exitCode = 1;
       pushLine = `❌ Push to origin/${ALL_BRANCH} failed: ${singleLine(push.stderr, 300)}`;
@@ -1121,10 +1681,27 @@ if (process.argv.includes("--self-test")) {
   console.log("build-all-branch: self-test OK");
 } else {
   const mode = process.argv[2] || "build";
+  const flagValue = (name) => {
+    const flag = process.argv.indexOf(name);
+    return flag !== -1 && process.argv[flag + 1] ? process.argv[flag + 1] : "";
+  };
+  const requiredDir = (name) => {
+    const value = flagValue(name);
+    if (!value) {
+      console.error(`build-all-branch ${mode}: ${name} <directory> is required`);
+      process.exit(2);
+    }
+    // Resolve before prepare() moves to the repository root.
+    return resolve(value);
+  };
   try {
+    const handoffDir = mode === "handoff" ? requiredDir("--out") : mode === "doctor-admit" ? requiredDir("--from") : "";
     prepare();
     if (mode === "build") buildMode();
     else if (mode === "check") checkMode();
+    else if (mode === "handoff") handoffMode(handoffDir);
+    else if (mode === "doctor-admit") doctorAdmitMode(handoffDir);
+    else if (mode === "doctor-install") doctorInstallMode();
     else if (mode === "doctor-commit") {
       const flag = process.argv.indexOf("--round");
       doctorCommitMode(flag !== -1 && process.argv[flag + 1] ? process.argv[flag + 1] : "1");

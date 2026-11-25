@@ -32,10 +32,37 @@
 # calls this internal implementation. PR lifecycle, schedule, and manual
 # manager events are already supported and call it directly.
 #
+# Two jobs, one lane each. Only model-backed work may hold Lopu's serialized
+# `lopu-agent-fleet-<repo>` lane, which every PR review, conflict resolution,
+# promotion and stack rebase also waits on. The deterministic rebuild (~20 min
+# for ~130 PRs) and the first union build check need no model, so the `build`
+# job runs them in its own `lopu-all-branch-<repo>` lane. When the union is
+# green, failed only at install, or has no model credential, `build` records
+# and pushes `all` itself and the fleet is never entered. Only a failing union
+# that a model may repair is handed to the `doctor` job, which waits for the
+# fleet and then runs the edit-only rounds, re-checks, record and push.
+#
+# The doctor rounds still operate on the exact tree that failed. `build` packs
+# every object it created locally (the union commits plus the dirty working
+# tree, such as a re-resolved lockfile) and uploads that pack with the
+# recorded input tips, the doctor state and the build log. Objects fetched from
+# origin are not repacked; the doctor job fetches the same exact input refs.
+# Before any model runs, `doctor-admit` compares the recorded tips with a live
+# `git ls-remote`: if develop, main, a merged PR head or `all` itself moved
+# while the doctor waited for the fleet, a newer rebuild owns the branch and
+# the stale doctor exits without model spend or a push. Otherwise it restores
+# the union, proves the working tree matches the recorded tree, and pushes
+# with --force-with-lease against the `all` tip the rebuild replayed from.
+# The caller already serializes whole all-branch runs
+# (`lopu-maintenance-build-all`), so a later rebuild never starts while an
+# earlier doctor is still queued.
+#
 # Security model (matches the resolver): the model has NO shell and NO git —
-# it only edits files; both checkouts use persist-credentials: false, so no
+# it only edits files; every checkout uses persist-credentials: false, so no
 # token exists in .git/config for it to read; pushes authenticate through an
-# ephemeral credential helper reading GH_TOKEN only in the final push step.
+# ephemeral credential helper reading GH_TOKEN only in each job's final push
+# step (the rebuild and doctor-admit steps use the same helper only to fetch,
+# before any model runs).
 # Fork PR content never enters the union, and the doctor never touches source
 # PRs — it commits to the regenerated `all` branch only.
 #
@@ -56,19 +83,19 @@ permissions:
   pull-requests: read
 
 jobs:
-  rebuild:
-    name: Lopu builds and repairs the all branch
+  build:
+    name: Lopu builds the all branch
     if: github.repository == 'lopugit/thingtime'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # The deterministic union build and its optional model-backed doctor stay
-    # in one job because they share an exact working tree. Put that whole job
-    # in Lopu's durable repository fleet so no doctor overlaps a PR review,
-    # promotion, conflict resolution, rebase, or stack cascade.
+    # Deterministic work only: no step here runs a model. Keep it out of the
+    # agent fleet so reviews and resolutions never wait behind a rebuild. A
+    # rebuild always reads live tips, so one newest pending rebuild is enough.
     concurrency:
-      group: lopu-agent-fleet-${{ github.repository }}
-      queue: max
+      group: lopu-all-branch-${{ github.repository }}
       cancel-in-progress: false
+    outputs:
+      handoff: ${{ steps.handoff.outputs.handoff }}
     steps:
       - name: Check out develop working tree
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -128,16 +155,112 @@ jobs:
           if [ "$HAS_CLAUDE_CREDENTIAL" = true ] || [ "$HAS_OPENAI_CREDENTIAL" = true ]; then has_credential=true; fi
           echo "has_credential=$has_credential" >>"$GITHUB_OUTPUT"
 
-      # The doctor reuses the resolver's admin-configured model waterfall (one
-      # dial governs both automations), validated against the same closed
-      # allowlist so a compromised response can never inject CLI flags.
-      - name: Load the build-doctor model waterfall
-        id: models
+      # A repairable failure leaves this job without pushing: the doctor job
+      # owns the record and push for that union.
+      - name: Hand the failing union to the build doctor
+        id: handoff
         if: >-
           steps.build.outputs.proceed == 'true'
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
           && steps.backend.outputs.has_credential == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs handoff --out "$RUNNER_TEMP/lopu-all-handoff"
+
+      - name: Upload the build-doctor handoff
+        if: steps.handoff.outputs.handoff == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lopu-all-branch-doctor-handoff
+          path: ${{ runner.temp }}/lopu-all-handoff/
+          if-no-files-found: error
+          retention-days: 1
+          # A full re-run rebuilds and replaces it; a doctor-only re-run reads
+          # the same run's handoff.
+          overwrite: true
+
+      - name: Record the doctor outcome
+        if: steps.build.outputs.proceed == 'true' && steps.handoff.outputs.handoff != 'true'
+        env:
+          ALL_DOCTOR_SKIP_REASON: >-
+            ${{ steps.check1.outputs.build_ok != 'true'
+                && steps.check1.outputs.ai_eligible == 'true'
+                && steps.backend.outputs.has_credential != 'true'
+                && 'the selected Lopu backend has no matching Actions credential — union pushed unhealed'
+                || '' }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-record
+
+      - name: Push the all branch
+        if: steps.build.outputs.proceed == 'true' && steps.handoff.outputs.handoff != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs push
+
+  doctor:
+    name: Lopu repairs the all-branch build
+    needs: build
+    if: github.repository == 'lopugit/thingtime' && needs.build.outputs.handoff == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Only this job runs a model, so only this job joins Lopu's durable
+    # repository fleet: no doctor round overlaps a PR review, promotion,
+    # conflict resolution, rebase, or stack cascade.
+    concurrency:
+      group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - name: Check out develop working tree
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: develop
+          fetch-depth: 0
+          # Same promisor clone as the build job: the handoff pack carries only
+          # locally created objects and Git fetches the rest lazily.
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Check out protected build controller
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          path: control-plane
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download the build-doctor handoff
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: lopu-all-branch-doctor-handoff
+          path: ${{ runner.temp }}/lopu-all-handoff
+
+      - name: Admit the handoff and restore the failing union
+        id: admit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-admit --from "$RUNNER_TEMP/lopu-all-handoff"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.admit.outputs.proceed == 'true'
+        with:
+          package_json_file: remix/package.json
+
+      - uses: actions/setup-node@v4
+        if: steps.admit.outputs.proceed == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+
+      - name: Install the union's dependencies for round 1
+        if: steps.admit.outputs.proceed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-install
+
+      # The doctor reuses the resolver's admin-configured model waterfall (one
+      # dial governs both automations), validated against the same closed
+      # allowlist so a compromised response can never inject CLI flags.
+      - name: Load the build-doctor model waterfall
+        id: models
+        if: steps.admit.outputs.proceed == 'true'
         shell: bash
         run: node "control-plane/.github/scripts/lopu-model-waterfall.mjs" metadata
 
@@ -363,18 +486,11 @@ jobs:
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
       - name: Record the doctor outcome
-        if: steps.build.outputs.proceed == 'true'
-        env:
-          ALL_DOCTOR_SKIP_REASON: >-
-            ${{ steps.check1.outputs.build_ok != 'true'
-                && steps.check1.outputs.ai_eligible == 'true'
-                && steps.backend.outputs.has_credential != 'true'
-                && 'the selected Lopu backend has no matching Actions credential — union pushed unhealed'
-                || '' }}
+        if: steps.admit.outputs.proceed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-record
 
       - name: Push the all branch
-        if: steps.build.outputs.proceed == 'true'
+        if: steps.admit.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs push

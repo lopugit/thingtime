@@ -25,6 +25,9 @@
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
+// all-branch.yml runs a deterministic `build` job in its own lane and only its
+// `doctor` job in the fleet. Both are swept: the caller serializes whole
+// all-branch runs, so a hung build job still holds back every later rebuild.
 export const FLEET_WORKFLOWS = new Set(["resolve-pr-conflicts.yml", "all-branch.yml", "rebase-pr-stacks.yml"]);
 export const JOB_LIMIT_MS = 60 * 60_000;
 export const FORCE_GRACE_MS = 10 * 60_000;
