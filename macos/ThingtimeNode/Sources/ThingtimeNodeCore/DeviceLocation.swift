@@ -42,6 +42,12 @@ public struct DeviceLocationObservation: Codable, Equatable, Sendable {
     var sampleProvider: (@MainActor () async -> CLLocation?)?
     var authorizationProvider: (@MainActor () -> String)?
     private var timeout: Task<Void, Never>?
+    /// The heartbeat calls `publish` every control-plane cycle. A Mac rarely
+    /// moves, so after a delivered observation the next one waits this long;
+    /// each skipped publish saves two policy reads and an upload request.
+    var minimumPublishInterval: TimeInterval = 5 * 60
+    var clock: @MainActor () -> Date = { Date() }
+    private var lastDelivered: [String: Date] = [:]
 
     public init(fileURL: URL) throws {
         self.fileURL = fileURL
@@ -68,6 +74,7 @@ public struct DeviceLocationObservation: Codable, Equatable, Sendable {
     }
     public func setEnabled(_ enabled: Bool, deviceID: String) throws {
         generation += 1
+        lastDelivered.removeValue(forKey: deviceID)
         publications[deviceID]?.cancel()
         finish(nil)
         if enabled { state.enabled.insert(deviceID) } else { state.enabled.remove(deviceID); state.pending.removeValue(forKey: deviceID) }
@@ -118,6 +125,8 @@ public struct DeviceLocationObservation: Codable, Equatable, Sendable {
     }
     public func publish(client: any DeviceObservationClient, deviceID: String) async {
         guard publications[deviceID] == nil else { return }
+        if state.pending[deviceID] == nil, let delivered = lastDelivered[deviceID],
+           clock().timeIntervalSince(delivered) < minimumPublishInterval { return }
         let publication = Task { await self.publishObservation(client: client, deviceID: deviceID) }
         publications[deviceID] = publication
         await publication.value
@@ -153,6 +162,7 @@ public struct DeviceLocationObservation: Codable, Equatable, Sendable {
             try await client.sendObservation(observation, deviceID: deviceID)
             guard token == generation else { return }
             state.pending.removeValue(forKey: deviceID); try persist()
+            lastDelivered[deviceID] = clock()
         } catch ThingtimeAPIClientError.rejected(status: 401) { try? revoke(deviceID: deviceID) }
         catch ThingtimeAPIClientError.rejected(status: 403) { try? revoke(deviceID: deviceID) }
         catch { /* Keep immutable pending data for exact retry; never log coordinates. */ }
