@@ -1,0 +1,21 @@
+name: Lopu stuck run sweeper
+# Schedules the github-actions implementation that frees Lopu's serialized
+# agent-fleet lane from stuck, failing or ghost runs. Scheduled triggers
+# only run from the default branch, so this thin listener lives on main.
+on:
+  schedule:
+    - cron: '4-59/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Log decisions without cancelling anything
+        type: boolean
+        default: false
+permissions:
+  actions: write
+  contents: read
+jobs:
+  sweep:
+    uses: lopugit/thingtime/.github/workflows/lopu-stuck-run-sweeper.yml@github-actions
+    with:
+      dry_run: ${{ inputs.dry_run == true }}
