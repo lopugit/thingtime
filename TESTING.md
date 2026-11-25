@@ -45,6 +45,10 @@
   of any existing validator and idempotent readiness. Denied `collMod` or failed
   readback must refuse migration before content changes. An outer transaction
   must preflight protection, never issue DDL inside that transaction.
+- Inside a request-budgeted transaction, read more than 101 matching documents
+  through a cursor (for example a device with many stale connectors posting
+  `devices/node/state`). The read must succeed on a real replica set, never fail
+  with `cannot set maxTimeMS on getMore command for a non-awaitData cursor`.
 - Verify the timestamp floor cannot be authored through generic writes or
   restored through backups, copies or Timeline. It must not appear in public
   content; a same-name field inside the user's crystal remains ordinary data.
@@ -7324,6 +7328,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Idle Mac node cost: leave the installed app paired and unused for 5
+      minutes. Vercel Observability for `devices/node/commands` shows short
+      claims (no 20 s long-poll) about every 30 s, and the device still reads
+      as online. Send a device command: it is claimed within about 30 s, and
+      the node returns to long-polling while commands flow.
+      `devices/node/observations` uploads at most once every 5 minutes.
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
       The live transcript fills the message field without Chromium's `network`

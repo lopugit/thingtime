@@ -87,4 +87,25 @@ final class DeviceLocationTests: XCTestCase {
         XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.access(for: "media.play"), .forbidden)
         XCTAssertFalse(DeviceAlertService.validSoundID("../../a"))
     }
+
+    @MainActor func testDeliveredObservationWaitsForTheMinimumIntervalBeforeTheNextPublish() async throws {
+        let (service, path) = try service(); defer { try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+        service.clock = { now }
+        let client = ObservationFixture([.init(enabled: true, retentionMs: nil, collectionId: UUID().uuidString)])
+        try service.setEnabled(true, deviceID: "device")
+        await service.publish(client: client, deviceID: "device")
+        now = now.addingTimeInterval(60)
+        await service.publish(client: client, deviceID: "device")
+        var writes = await client.observations()
+        XCTAssertEqual(writes.count, 1, "a heartbeat inside the interval sends nothing")
+        now = now.addingTimeInterval(5 * 60)
+        await service.publish(client: client, deviceID: "device")
+        writes = await client.observations()
+        XCTAssertEqual(writes.count, 2)
+        try service.setEnabled(true, deviceID: "device")
+        await service.publish(client: client, deviceID: "device")
+        writes = await client.observations()
+        XCTAssertEqual(writes.count, 3, "re-enabling location publishes immediately")
+    }
 }
