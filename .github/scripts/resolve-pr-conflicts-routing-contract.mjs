@@ -20,6 +20,8 @@ const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml",
 const LOPU_ACTION_URL = new URL("../actions/lopu-agent/action.yml", import.meta.url);
 const LOPU_STATUS_URL = new URL("./lopu-pr-status.mjs", import.meta.url);
 const LOPU_STATUS_TEST_URL = new URL("./lopu-pr-status.test.mjs", import.meta.url);
+// The detector sources its changed-file hydration (and cache) from here.
+const PR_FILES_HELPER_URL = new URL("./pr-files-inventory.sh", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
@@ -356,6 +358,7 @@ function assertWorkflowSource() {
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
   const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
+  const prFilesHelperSource = readFileSync(PR_FILES_HELPER_URL, "utf8");
   // Every shell surface of this control plane, enumerated rather than listed.
   // The hazard is a helper that becomes captured, or a captured helper added to
   // a file nobody remembered to add here -- so a hand-kept list is the one shape
@@ -771,12 +774,13 @@ function assertWorkflowSource() {
     "every gh_read_retry copy honours the caller-scoped slow-diff retry opt-out",
   );
   assert.equal(
-    source.match(/^\s*local LOPU_SLOW_DIFF_RETRY=false$/gmu)?.length,
+    (source.match(/^\s*local LOPU_SLOW_DIFF_RETRY=false$/gmu) ?? []).length
+      + (prFilesHelperSource.match(/^\s*local LOPU_SLOW_DIFF_RETRY=false$/gmu) ?? []).length,
     1,
     "exactly one caller declines the slow-diff retry, and it does so by dynamic scope",
   );
   assert.match(
-    source,
+    prFilesHelperSource,
     /complete_large_pr_files\(\) \{[\s\S]*local LOPU_SLOW_DIFF_RETRY=false[\s\S]*if \[ "\$SECONDS" -ge "\$deadline" \]; then[\s\S]*deferred="\$\(\( deferred \+ 1 \)\)"/u,
     "the advisory changed-file inventory is the caller that declines it, under a step-clock deadline",
   );
@@ -789,7 +793,7 @@ function assertWorkflowSource() {
     "the detector publishes a changed-file hydration budget below its job timeout",
   );
   assert.match(
-    source,
+    prFilesHelperSource,
     /The changed-file inventory reached its \$\{deadline\}s budget with \$deferred PR\(s\) un-hydrated;[\s\S]*inventory incomplete\): \$deferred_numbers" >&2/u,
     "a deferred changed-file inventory names every PR it dropped, on stderr",
   );
@@ -1117,7 +1121,7 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
-    /Check out the trusted Lopu PR-status helper[\s\S]*ref: github-actions[\s\S]*sparse-checkout: \.github\/scripts\/lopu-pr-status\.mjs/u,
+    /Check out the trusted Lopu PR-status helper[\s\S]*ref: github-actions[\s\S]*sparse-checkout: \.github\/scripts\n/u,
     "detector classification executes only the fixed controller helper",
   );
   assert.match(
@@ -1127,6 +1131,11 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
+    /\n {10}\. \.github\/scripts\/pr-files-inventory\.sh\n[\s\S]*all_open="\$\(complete_large_pr_files "\$all_open"\)"/u,
+    "the detector sources its changed-file hydration from the trusted controller checkout",
+  );
+  assert.match(
+    prFilesHelperSource,
     /complete_large_pr_files[\s\S]*pulls\/\$number\/files\?per_page=100[\s\S]*--slurpfile response "\$pages"/u,
     "large PRs receive an exact file-backed paginated changed-file inventory",
   );

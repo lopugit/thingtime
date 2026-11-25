@@ -56,6 +56,9 @@ jobs:
       - name: Validate the stuck Lopu run sweeper
         run: node --test .github/scripts/lopu-stuck-run-sweeper.test.mjs
 
+      - name: Validate the conflict detector's changed-file cache
+        run: node --test .github/scripts/pr-files-inventory-cache.test.mjs
+
       - name: Validate JavaScript syntax
         run: |
           set -euo pipefail

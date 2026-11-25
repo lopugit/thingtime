@@ -77,6 +77,27 @@
 - `resolve-pr-conflicts.yml` must stay at or below 510,000 bytes, so put new
   shell in a checked-out helper rather than inline in that workflow.
 
+## Conflict-detector changed-file cache (2026-11-25)
+
+- Run `node --test .github/scripts/pr-files-inventory-cache.test.mjs`. It
+  executes the real detect scan step and `.github/scripts/pr-files-inventory.sh`
+  against a synthetic `gh`. A PR at an unchanged number, `headRefOid` and
+  `baseRefName` inside the one-day TTL must make no `pulls/N/files` request and
+  still feed the overlap labels. A moved head, a retarget or an expired entry
+  must re-read only that PR.
+- A missing, corrupt, off-shape, future-dated, duplicated, symlinked or
+  directory cache must warn once and read every PR, exactly as before the cache.
+- An HTTP 422 "diff is taking too long to generate" is one attempt, keeps the PR
+  explicitly incomplete, and is not retried at the same head for six hours. Any
+  other 422 is not cached. A budget refusal stops further reads and names the
+  skipped PRs. `FILES_INVENTORY_DEADLINE_SECONDS` still bounds reads; cache hits
+  need no budget.
+- `pull_request_target` runs may use the cache but never ask to save it (they
+  get read-only cache tokens). The detect job keeps its permissions, pins
+  `actions/cache/restore` and `actions/cache/save` by commit, and saves under a
+  run-unique key. After a change, confirm on a real run that the log's
+  `Changed-file inventory:` line reports cache reuse and few REST requests.
+
 ## Protected checks and reviewed preview retirement (2026-11-13)
 
 - Run the protected-deployment-fetch, preview-retirement-request, orphan-preview-
