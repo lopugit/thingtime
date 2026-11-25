@@ -12,7 +12,8 @@ export const ADMIN_TABS = [
   { slug: 'ai-providers', label: 'AI Providers' },
   { slug: 'lopu', label: 'Lopu' },
   { slug: 'platform', label: 'Platform' },
-  { slug: 'access', label: 'Access & limits' }
+  { slug: 'access', label: 'Access & limits' },
+  { slug: 'automation', label: 'Automation' }
 ] as const;
 
 export type AdminTabSlug = (typeof ADMIN_TABS)[number]['slug'];

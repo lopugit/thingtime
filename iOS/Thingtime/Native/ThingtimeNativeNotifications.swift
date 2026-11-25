@@ -54,7 +54,13 @@ final class ThingtimeNativeNotifications: NSObject {
             foregroundObserver = NotificationCenter.default.addObserver(
                 forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in _ = await self?.refresh() }
+                Task { @MainActor in
+                    // The administrator's Automation switch can turn the
+                    // return-to-app refresh off; launch and push refreshes stay.
+                    guard let self, let origin = self.trustedOrigin.flatMap(URL.init(string:)),
+                          await ThingtimeAutomationSwitches.shared.isEnabled("iphone.notifications", origin: origin) else { return }
+                    _ = await self.refresh()
+                }
             }
         }
         Task { await refresh() }

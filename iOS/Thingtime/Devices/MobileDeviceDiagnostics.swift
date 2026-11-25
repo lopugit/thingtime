@@ -242,8 +242,15 @@ final class MobileDeviceDiagnostics {
     private func scheduleRetry() {
         guard automaticRetries, retry == nil, saved.binding != nil, let at = saved.retryAt else { return }
         let delay = max(1, min(900, at.timeIntervalSince(now()))), token = generation
+        let origin = saved.binding?.scope.origin
         retry = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            // Timed retries run only while the administrator's Automation
+            // switch is on; the next foreground flush still delivers.
+            guard let origin, await ThingtimeAutomationSwitches.shared.isEnabled("iphone.diagnostics", origin: origin) else {
+                if let self, self.generation == token { self.retry = nil }
+                return
+            }
             guard let self, self.generation == token else { return }
             self.retry = nil; self.flush()
         }

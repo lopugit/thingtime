@@ -1,3 +1,29 @@
+## Automation switches (Admin → Automation, 2026-11-25)
+
+- [ ] With every switch off (the default), open a signed-in page, keep using it
+  for 30 s and confirm the Network panel shows no repeating `/api/` requests;
+  each view still loads its data once when opened. Return to the tab and
+  confirm it does not refresh on its own.
+- [ ] Turn one web switch on (for example Notification badge) and confirm only
+  its requests resume, at once and then on their interval; turn it off and
+  confirm they stop without a reload.
+- [ ] Toggle a switch, reload Admin → Automation and confirm it read back from
+  the server. "Turn everything off" sets all 25 off. Sections start collapsed;
+  clicking a checkbox must not expand its section. Check 375 px width to the
+  bottom of the page.
+- [ ] `GET /api/v1/automation/switches` returns every switch, no `updatedBy`, and
+  `Cache-Control: public, max-age=60, s-maxage=300`. Unknown switch ids or
+  non-boolean values are refused by the admin POST.
+- [ ] A scheduled job whose switch is off returns 204 from a signed scheduler
+  request and does not claim its day.
+- [ ] Mac Thingtime Node: with `mac.node` off the log says remote commands and
+  status reports are off and no `devices/node/commands` requests are made;
+  turning it on applies after the Mac wakes or the node restarts.
+- [ ] iPhone: with `iphone.notifications` off, returning to the app does not call
+  the notifications refresh; with `iphone.location` off, background location
+  history stays stopped. Watch: with `watch.pairing` off, a pending code is
+  checked once and the message points to Check approval.
+
 ## Builder cleared-field save regression
 
 - [ ] Edit nested Builder text (which clears its optional rich HTML), clear optional styling, then immediately Save. Verify the Timeline draft and server page retain the text, media references and remaining styling after reload. Repeat edits and Save; undefined optional object properties must not block history capture. Save empty text and HTML blocks, null/cleared optional fields, and text longer than 2,000 characters; exact-ID readback and reload must retain every block and the complete text. Invalid values, getters and undefined array entries must still be rejected without claiming a saved draft.

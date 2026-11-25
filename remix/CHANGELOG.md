@@ -181,6 +181,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-25: **Automation switches — every automatic, repeating or scheduled
+  feature now has an administrator on/off switch, and all of them start off.**
+  Admin → Automation lists 25 switches (browser polling by feature, desktop
+  folder sync, the Mac Thingtime Node, iPhone notification refresh, location
+  history and diagnostics retries, Watch pairing checks, and each of the nine
+  server scheduled jobs), each in its own collapsed section with the checkbox in
+  its heading, plus "Turn everything off". State lives in the
+  `automation-switches` settings singleton; `GET /api/v1/automation/switches`
+  (public, CDN-cached five minutes) and `GET|POST /api/v1/admin/automation-switches`
+  (`api.automation-switches` / `api.admin-automation-switches` 1.0.0). Browsers
+  gate the shared activity manager and background-refresh hub on it (a view
+  still loads once; nothing repeats or refreshes on return while off), scheduled
+  jobs check their switch before the daily claim, and the native apps read the
+  same endpoint at start, on return to the app and on Mac wake. Unknown,
+  missing or unreadable switches count as off. Local-only timers (clocks,
+  codes, local battery and node status) are not switched. **Claude (AI)**
 - 2026-11-25: Stop two more automatic checks. The iOS app no longer polls
   notifications every 30 seconds; it refreshes when the web view loads, when a
   push arrives and when the user returns to the app. The footer's service

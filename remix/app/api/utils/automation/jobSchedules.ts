@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import { getSettingsCollection } from '../mongodb/collections';
 import { SCHEDULED_HTTP_JOBS, defaultPolicy, type Job, type JobPolicy } from './scheduledJobs';
+import { automationSwitchEnabled } from './automationSwitchesStore';
+import { scheduledJobSwitchId } from '../../../automation/automationSwitches';
 
 const keyFor = (job: Job) => 'scheduled-job:' + job.id;
 const idFor = (job: Job) => new ObjectId(createHash('sha256').update(keyFor(job)).digest().subarray(0, 12));
@@ -33,6 +35,9 @@ export function due(job: Job, settings: JobPolicy, now: Date) {
 // An ambiguous or failed execution keeps its daily claim: jobs may have already
 // sent mail or dispatched a workflow. Manual recovery uses the job's own tools.
 export async function claimScheduledDay(job: Job, now: Date) {
+  // The administrator's Automation switch is the master on/off for every
+  // scheduled job; the job's own schedule (enabled + hour) applies only when on.
+  if (!(await automationSwitchEnabled(scheduledJobSwitchId(job.id)))) return false;
   const db = await getSettingsCollection();
   const key = keyFor(job);
   const row = await db.findOne({ key });

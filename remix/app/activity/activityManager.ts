@@ -1,4 +1,5 @@
 import { userPresence } from './userPresence';
+import { automationSwitches } from '../automation/automationSwitchesClient';
 
 /** Explicit, device-local ownership of background work. No global timer or
  * EventTarget monkey-patching: disabling an entry invokes its real cleanup. */
@@ -26,6 +27,8 @@ export function createActivityManager(
 		storage?: () => Store | undefined;
 		hidden?: () => boolean;
 		idle?: () => boolean;
+		/** True when an administrator's Automation switch turns this work off. */
+		blocked?: (spec: ActivitySpec) => boolean;
 		now?: () => number;
 		notify?: (callback: () => void) => void;
 	} = {}
@@ -66,6 +69,8 @@ export function createActivityManager(
 		row.enabled = row.essential || !disabled.has(id);
 		row.state = !row.enabled
 			? 'Disabled until you enable it'
+			: owned.length && switchedOff(row)
+			? 'Turned off by an administrator'
 			: !owned.length
 			? 'Idle — no mounted owner'
 			: !row.running
@@ -88,11 +93,15 @@ export function createActivityManager(
 	};
 	// Network polling waits while nobody is using the window; it resumes (with an
 	// immediate catch-up, see activityInterval) on the next interaction.
+	// Administrator Automation switches stop repeating network work only;
+	// device-local timers and lifecycle guards are never switched off.
+	const switchedOff = (spec: ActivitySpec) => spec.kind === 'polling' && !spec.local && !spec.essential && !!options.blocked?.(spec);
 	const idlePaused = (spec: ActivitySpec) => spec.kind === 'polling' && !spec.background && !spec.local && !!options.idle?.();
 	const reconcile = (instance: Instance) => {
 		const paused = idlePaused(instance.spec);
-		const shouldRun = (instance.spec.essential || !disabled.has(instance.spec.id)) && (instance.spec.background || !options.hidden?.()) && !paused;
-		if (!shouldRun) stop(instance, disabled.has(instance.spec.id) ? 'disabled' : paused && !options.hidden?.() ? 'idle' : 'hidden');
+		const off = switchedOff(instance.spec);
+		const shouldRun = (instance.spec.essential || !disabled.has(instance.spec.id)) && (instance.spec.background || !options.hidden?.()) && !paused && !off;
+		if (!shouldRun) stop(instance, disabled.has(instance.spec.id) ? 'disabled' : off ? 'switched-off' : paused && !options.hidden?.() ? 'idle' : 'hidden');
 		else if (!instance.controller) {
 			instance.controller = new AbortController();
 			try {
@@ -213,6 +222,7 @@ export const activityManager = createActivityManager({
 	storage: () => (typeof window === 'undefined' ? undefined : window.localStorage),
 	hidden: () => typeof document !== 'undefined' && document.hidden,
 	idle: () => userPresence()?.isIdle() ?? false,
+	blocked: (spec) => !automationSwitches().allows(spec.id),
 	// Coalesce UI notifications; this timer exists only while there are subscribers.
 	notify: (callback) => setTimeout(callback, 250)
 });
@@ -245,6 +255,17 @@ function lifecycle() {
 			detail: 'Stops network polling after two minutes without interaction and refreshes on your next interaction.'
 		},
 		() => userPresence()?.subscribe(() => activityManager.visibilityChanged())
+	);
+	activityManager.register(
+		{
+			id: 'activity.automation-switches',
+			title: 'Administrator automation switches',
+			kind: 'listener',
+			essential: true,
+			background: true,
+			detail: 'Stops or resumes repeating network work when an administrator changes its Automation switch.'
+		},
+		() => automationSwitches().subscribe(() => activityManager.visibilityChanged())
 	);
 	activityManager.register(
 		{

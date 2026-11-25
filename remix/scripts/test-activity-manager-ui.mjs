@@ -17,7 +17,11 @@ if (!process.env.TT_ACTIVITY_UI_WORKER) {
 		let source = await readFile(join(root, 'scripts/mobile-sync-editor.browser.tsx'), 'utf8');
 
 		source = `import {ActivityManagerPage} from '../app/components/Activity/ActivityManagerPage';
-import {activityInterval,clearActivityInterval,activityEvents} from '../app/activity/activityManager';\n${source}`;
+import {activityInterval,clearActivityInterval,activityEvents} from '../app/activity/activityManager';
+import {automationSwitches} from '../app/automation/automationSwitchesClient';
+import {AUTOMATION_SWITCHES} from '../app/automation/automationSwitches';
+// The fixture exercises the user's own activity controls, so every administrator Automation switch is on.
+automationSwitches().apply(Object.fromEntries(AUTOMATION_SWITCHES.map(entry => [entry.id, true])));\n${source}`;
 		source = source
 			.replace('<Fixture />', '<ActivityFixture />')
 			.replace(
