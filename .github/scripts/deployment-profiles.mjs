@@ -16,10 +16,11 @@ export async function requireOperation(feature, path, method, fetcher = fetch) {
       !data.operations?.some(op => op.feature === feature && op.path === path && op.methods?.includes(method))) {
     throw new Error('Required Thingtime operation unavailable: ' + feature);
   }
+  return data.features[feature].version;
 }
 
 export async function profiles(env = process.env, fetcher = fetch) {
-  await requireOperation('api.integration-ci-deployment-profiles', route, 'POST', fetcher);
+  const version = await requireOperation('api.integration-ci-deployment-profiles', route, 'POST', fetcher);
   const secret = env.THINGTIME_CI_ROUTER_SECRET;
   const repository = env.GITHUB_REPOSITORY;
   if (!secret || repository !== 'lopugit/thingtime') throw new Error('Missing controller identity');
@@ -33,9 +34,12 @@ export async function profiles(env = process.env, fetcher = fetch) {
   if (!data.ok || data.repository !== repository || !Array.isArray(data.profiles)) throw new Error('Invalid deployment profile response');
   const seen = new Set();
   for (const p of data.profiles) {
+    const lanes = p.pilotLanes ?? [];
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(p.id) || ('vercel-deployment-' + p.id).length > 255 || seen.has(p.id) ||
         typeof p.enabled !== 'boolean' || p.mode !== (p.id === 'legacy' ? 'primary' : 'parallel') ||
         !/^team_[A-Za-z0-9]+$/.test(p.teamId) || !/^prj_[A-Za-z0-9]+$/.test(p.projectId) ||
+        !Array.isArray(lanes) || lanes.some(lane => !['production', 'development', 'preview'].includes(lane)) ||
+        new Set(lanes).size !== lanes.length || (lanes.length && (p.mode !== 'parallel' || Number(version.split('.')[1]) < 1)) ||
         (p.mode === 'parallel' && !/^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(p.testOrigin))) {
       throw new Error('Invalid target identity');
     }
@@ -59,6 +63,6 @@ export async function legacyEnabled(env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const rows = (await profiles()).filter(p => p.mode === 'parallel' && p.enabled);
+  const rows = (await profiles()).filter(p => p.mode === 'parallel' && p.enabled && !p.pilotLanes?.includes('production'));
   await appendFile(process.env.GITHUB_OUTPUT, 'targets=' + JSON.stringify(rows.map(({ id, testOrigin }) => ({ id, testOrigin }))) + '\n');
 }

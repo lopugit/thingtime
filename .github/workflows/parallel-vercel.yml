@@ -1,10 +1,23 @@
 name: Publish parallel Vercel profiles
 on:
   workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: main
+      pr_number:
+        type: number
+        default: 0
+      retire_pr_number:
+        type: number
+        default: 0
+      expected_sha:
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
-  group: thingtime-parallel-vercel-main
+  group: thingtime-parallel-vercel-${{ inputs.pr_number || inputs.retire_pr_number || inputs.source_ref }}
   cancel-in-progress: false
 jobs:
   discover:
@@ -12,18 +25,33 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.list.outputs.targets }}
+      pilot_targets: ${{ steps.pilot.outputs.targets }}
+      pilot_source_sha: ${{ steps.pilot.outputs.source_sha }}
+      pilot_source_ref: ${{ steps.pilot.outputs.source_ref }}
+      pilot_should_build: ${{ steps.pilot.outputs.should_build }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: github-actions
           persist-credentials: false
       - id: list
+        if: inputs.source_ref == 'main' && inputs.retire_pr_number == 0
         run: node .github/scripts/deployment-profiles.mjs
         env:
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+      - id: pilot
+        run: node .github/scripts/pilot-deployment-plan.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RETIRE_PR_NUMBER: ${{ inputs.retire_pr_number }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
   build:
     needs: discover
-    if: needs.discover.outputs.targets != '[]'
+    if: inputs.source_ref == 'main' && inputs.retire_pr_number == 0 && needs.discover.outputs.targets != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -91,4 +119,98 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
           PROFILE_ID: ${{ matrix.profile.id }}
           TEST_ORIGIN: ${{ matrix.profile.testOrigin }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+
+  pilot-build:
+    needs: discover
+    if: needs.discover.outputs.pilot_should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(needs.discover.outputs.pilot_targets) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.discover.outputs.pilot_source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Build pilot without deployment credentials
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: ${{ matrix.profile.lane == 'production' && 'production' || 'preview' }}
+          VERCEL_TARGET_ENV: ${{ matrix.profile.lane == 'production' && 'production' || 'preview' }}
+          VERCEL_GIT_COMMIT_REF: ${{ needs.discover.outputs.pilot_source_ref }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.discover.outputs.pilot_source_sha }}
+          THINGTIME_PILOT_PROFILE_ID: ${{ matrix.profile.id }}
+          THINGTIME_PILOT_LANE: ${{ matrix.profile.lane }}
+          THINGTIME_PILOT_ALIAS: ${{ matrix.profile.baseOrigin }}
+          THINGTIME_PILOT_ORIGIN: https://${{ matrix.profile.alias }}
+          PILOT_PR_NUMBER: ${{ matrix.profile.prNumber }}
+        run: |
+          if [ "$THINGTIME_PILOT_LANE" = preview ]; then
+            export THINGTIME_PILOT_PR_NUMBER="$PILOT_PR_NUMBER"
+          fi
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+          corepack pnpm --dir remix install --frozen-lockfile
+          node scripts/vercel-build.mjs
+          tar -czf "$RUNNER_TEMP/prebuilt.tgz" .vercel/output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-${{ matrix.profile.id }}-${{ matrix.profile.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prebuilt.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  pilot-publish:
+    needs: [discover, pilot-build]
+    if: always() && needs.discover.result == 'success' && needs.discover.outputs.pilot_targets != '[]' && (needs.pilot-build.result == 'success' || (inputs.retire_pr_number != 0 && needs.pilot-build.result == 'skipped'))
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(needs.discover.outputs.pilot_targets) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: vercel-deployment-${{ matrix.profile.id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: inputs.retire_pr_number == 0
+        with:
+          name: pilot-${{ matrix.profile.id }}-${{ matrix.profile.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/artifact
+      - name: Validate prebuilt output without executing product code
+        if: inputs.retire_pr_number == 0
+        run: python3 .github/scripts/extract-vercel-prebuilt.py "$RUNNER_TEMP/artifact/prebuilt.tgz" "$RUNNER_TEMP/prebuilt"
+      - name: Install pinned publisher without credentials
+        if: inputs.retire_pr_number == 0
+        run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+      - name: Publish or retire pilot alias
+        run: node .github/scripts/publish-pilot.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
+          VERCEL_DEPLOY_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          SOURCE_REF: ${{ needs.discover.outputs.pilot_source_ref }}
+          SOURCE_SHA: ${{ needs.discover.outputs.pilot_source_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RETIRE_PR_NUMBER: ${{ inputs.retire_pr_number }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PROFILE_ID: ${{ matrix.profile.id }}
+          PILOT_LANE: ${{ matrix.profile.lane }}
+          PILOT_ALIAS: ${{ matrix.profile.alias }}
+          PILOT_BASE_ORIGIN: ${{ matrix.profile.baseOrigin }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
