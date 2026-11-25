@@ -542,7 +542,9 @@ function assertObservableLabelCleanup(rebase) {
   );
   assert.match(
     scan,
-    /GH_TOKEN="\$token" gh api --method DELETE/u,
+    // gh_budgeted (gh-budget.sh) wraps the same call; the token still
+    // travels only through the environment prefix, never an argument.
+    /GH_TOKEN="\$token" gh_budgeted api --method DELETE/u,
     "rebase detector label cleanup: switches credentials without exposing them",
   );
   assert.match(
