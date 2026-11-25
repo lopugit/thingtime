@@ -16,6 +16,8 @@ on:
         default: ''
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 concurrency:
   group: thingtime-parallel-vercel-${{ inputs.pr_number || inputs.retire_pr_number || inputs.source_ref }}
   cancel-in-progress: false
@@ -23,12 +25,14 @@ jobs:
   discover:
     if: github.repository == 'lopugit/thingtime' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: vercel-develop-pr-control
     outputs:
       targets: ${{ steps.list.outputs.targets }}
       pilot_targets: ${{ steps.pilot.outputs.targets }}
       pilot_source_sha: ${{ steps.pilot.outputs.source_sha }}
       pilot_source_ref: ${{ steps.pilot.outputs.source_ref }}
       pilot_should_build: ${{ steps.pilot.outputs.should_build }}
+      pilot_trusted_actors: ${{ steps.pilot.outputs.trusted_actors }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -42,8 +46,9 @@ jobs:
       - id: pilot
         run: node .github/scripts/pilot-deployment-plan.mjs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
           THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           SOURCE_REF: ${{ inputs.source_ref }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -130,6 +135,8 @@ jobs:
         profile: ${{ fromJSON(needs.discover.outputs.pilot_targets) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -196,8 +203,9 @@ jobs:
       - name: Publish or retire pilot alias
         run: node .github/scripts/publish-pilot.mjs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ needs.discover.outputs.pilot_trusted_actors }}
           THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_DEPLOY_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}

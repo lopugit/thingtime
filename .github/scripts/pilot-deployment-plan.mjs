@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { profiles } from './deployment-profiles.mjs';
 import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
@@ -9,10 +9,13 @@ const sourcePath = 'remix/app/api/utils/deployment/pilotBuild.ts';
 const shaPattern = /^[a-f0-9]{40}$/;
 const branchPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$/;
 const protectedBranches = new Set(['main', 'develop', 'github-actions']);
+const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const trustedPermissions = new Set(['admin', 'write']);
+const dispatchActions = new Set(['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft', 'edited', 'closed']);
 
 export function pilotAlias(baseOrigin, lane, prNumber = 0) {
   const url = new URL(baseOrigin);
-  if (url.protocol !== 'https:' || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash ||
+  if (url.protocol !== 'https:' || url.href !== `https://${url.hostname}/` ||
       !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(url.hostname)) throw new Error('Invalid pilot base origin');
   if (!['production', 'development', 'preview'].includes(lane)) throw new Error('Invalid pilot lane');
   if (lane === 'production') return url.hostname;
@@ -49,9 +52,17 @@ export function sameRepositoryPr(pr, repo, number, ref, state) {
     (ref === null || pr.head.ref === ref) && shaPattern.test(pr.head.sha || '');
 }
 
+export function pilotPrShapeIssue(pr, repo, number, ref) {
+  if (!sameRepositoryPr(pr, repo, number, ref, 'open')) return 'same-repository PR identity';
+  if (!trustedAssociations.has(pr.author_association) || !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(pr.user?.login || '')) return 'PR author association';
+  if (pr.draft === true || pr.base.ref === 'github-actions' || !branchPattern.test(pr.base.ref || '')) return 'ineligible PR state or base';
+  return null;
+}
+
 export function retireablePilotPr(pr, repo, number) {
   if (pr?.number !== number || pr.base?.repo?.full_name !== repo.full_name || pr.base.repo.id !== repo.id ||
-      (pr.head?.repo && (pr.head.repo.full_name !== repo.full_name || pr.head.repo.id !== repo.id))) return false;
+      (pr.head?.repo && (pr.head.repo.full_name !== repo.full_name || pr.head.repo.id !== repo.id)) ||
+      !shaPattern.test(pr.head?.sha || '') || !branchPattern.test(pr.head?.ref || '')) return false;
   return pr.state === 'closed' || (pr.state === 'open' && (pr.draft === true || pr.base.ref === 'github-actions'));
 }
 
@@ -64,7 +75,60 @@ const github = async (path, token, fetcher = fetch) => {
   return response.json();
 };
 
-export async function pilotPlan(env = process.env, { fetcher = fetch, profileReader = profiles, retentionReader = readPreviewRetentionPolicy } = {}) {
+const trustedLogin = value => {
+  const login = String(value || '').trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(login)) throw new Error('Invalid pilot principal');
+  return login;
+};
+
+export async function assertPilotPrincipal(login, env, fetcher = fetch) {
+  const normalized = trustedLogin(login);
+  const trusted = new Set(String(env.DEVELOP_PREVIEW_TRUSTED_ACTORS || '').split(/[\s,]+/).filter(Boolean).map(trustedLogin));
+  if (!trusted.size || !trusted.has(normalized)) throw new Error('Pilot principal is not in the saved trusted actor allowlist');
+  const permission = await github(`/collaborators/${normalized}/permission`, env.GH_TOKEN, fetcher);
+  if (!trustedPermissions.has(permission.permission)) throw new Error('Pilot principal lacks current write or admin permission');
+}
+
+export function pilotDispatchIssue(event, run, repo, pr, expectedSha) {
+  const payload = event?.client_payload;
+  const actor = String(payload?.actor || '').toLowerCase();
+  if (event?.action !== 'develop-pr-preview-controller' || !payload || !dispatchActions.has(payload.action) ||
+      !Number.isSafeInteger(Number(payload.pr_number)) || Number(payload.pr_number) !== pr.number ||
+      !Number.isSafeInteger(Number(payload.source_run_id)) || Number(payload.source_run_id) < 1 ||
+      payload.head_sha !== expectedSha || payload.head_sha !== pr.head.sha || payload.head_ref !== pr.head.ref ||
+      !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(actor)) return 'dispatch payload';
+  if (Number(run?.id) !== Number(payload.source_run_id) || run.event !== 'pull_request_target' ||
+      String(run.path || '').split('@')[0] !== '.github/workflows/develop-pr-preview.yml' ||
+      Number(run.repository?.id) !== repo.id ||
+      String(run.triggering_actor?.login || run.actor?.login || '').toLowerCase() !== actor ||
+      !['queued', 'in_progress', 'completed'].includes(run.status)) return 'source workflow run';
+  const association = Array.isArray(run.pull_requests) ? run.pull_requests.find(item => item.number === pr.number) : null;
+  if (!association && (Number(run.head_repository?.id) !== repo.id || run.head_sha !== expectedSha || run.head_branch !== pr.head.ref)) return 'source workflow head';
+  if (association && (association.head?.sha !== expectedSha || association.head?.ref !== pr.head.ref ||
+      Number(association.head?.repo?.id) !== repo.id || Number(association.base?.repo?.id) !== repo.id)) return 'source PR association';
+  if (payload.action === 'closed' && pr.state !== 'closed') return 'closed PR state';
+  return null;
+}
+
+export async function assertPilotPrAdmission(pr, repo, env, fetcher) {
+  if (!['workflow_dispatch', 'repository_dispatch'].includes(env.GITHUB_EVENT_NAME)) throw new Error('Pilot PR requires trusted dispatch or manual controller event');
+  const event = JSON.parse(await readFile(env.GITHUB_EVENT_PATH, 'utf8'));
+  let actor = env.GITHUB_TRIGGERING_ACTOR || env.GITHUB_ACTOR;
+  if (env.GITHUB_EVENT_NAME === 'repository_dispatch') {
+    const payload = event.client_payload;
+    const runId = Number(payload?.source_run_id);
+    if (!Number.isSafeInteger(runId) || runId < 1) throw new Error('Pilot dispatch lacks source workflow run');
+    const run = await github(`/actions/runs/${runId}`, env.GH_TOKEN, fetcher);
+    const issue = pilotDispatchIssue(event, run, repo, pr, env.EXPECTED_SHA);
+    if (issue) throw new Error(`Pilot dispatch has invalid ${issue}`);
+    actor = payload.actor;
+  } else if (Number(event.inputs?.pr_number || event.inputs?.retire_pr_number || 0) !== pr.number) {
+    throw new Error('Pilot manual PR input changed');
+  }
+  await Promise.all([assertPilotPrincipal(pr.user?.login, env, fetcher), assertPilotPrincipal(actor, env, fetcher)]);
+}
+
+export async function pilotPlan(env = process.env, { fetcher = fetch, profileReader = profiles, retentionReader = readPreviewRetentionPolicy, prAdmission = assertPilotPrAdmission } = {}) {
   if (env.GITHUB_REPOSITORY !== repository || env.GITHUB_REF !== 'refs/heads/main' || !env.GH_TOKEN) throw new Error('Pilot planner requires trusted main controller');
   const ref = env.SOURCE_REF || 'main';
   const prNumber = Number(env.PR_NUMBER || 0), retirePrNumber = Number(env.RETIRE_PR_NUMBER || 0);
@@ -83,22 +147,22 @@ export async function pilotPlan(env = process.env, { fetcher = fetch, profileRea
       const policy = await retentionReader({ repository, repositoryId: repo.id }, { env, fetcher });
       retireable = !pullRequestIsLive(pr, policy);
     }
-    if (lane === 'retire' ? !retireable :
-        !sameRepositoryPr(pr, repo, number, ref, 'open') || pr.draft === true || pr.base.ref === 'github-actions') {
+    if (lane === 'retire' ? !retireable : pilotPrShapeIssue(pr, repo, number, ref)) {
       throw new Error('Pilot PR is not an exact eligible same-repository source');
     }
+    if (lane === 'preview') await prAdmission(pr, repo, env, fetcher);
     branch = pr.head.ref;
+    sha = pr.head.sha;
     if (lane === 'preview') {
       const policy = await retentionReader({ repository, repositoryId: repo.id }, { env, fetcher });
       if (!pullRequestIsLive(pr, policy)) throw new Error('Pilot PR is stale under saved retention policy');
-      sha = pr.head.sha;
     }
   } else {
     const head = await github(`/git/ref/heads/${encodeURIComponent(ref)}`, env.GH_TOKEN, fetcher);
     sha = head.object?.sha;
     if (!shaPattern.test(sha || '')) throw new Error('Invalid branch head');
   }
-  if (env.EXPECTED_SHA && (!shaPattern.test(env.EXPECTED_SHA) || (lane !== 'retire' && sha !== env.EXPECTED_SHA))) {
+  if (env.EXPECTED_SHA && (!shaPattern.test(env.EXPECTED_SHA) || sha !== env.EXPECTED_SHA)) {
     throw new Error('Pilot source advanced since trusted event');
   }
   if (lane !== 'retire') {
@@ -112,7 +176,8 @@ export async function pilotPlan(env = process.env, { fetcher = fetch, profileRea
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const plan = await pilotPlan();
-  for (const [key, value] of Object.entries({ targets: JSON.stringify(plan.targets), source_sha: plan.sourceSha, source_ref: plan.sourceRef, should_build: String(plan.shouldBuild) })) {
+  const trustedActors = String(process.env.DEVELOP_PREVIEW_TRUSTED_ACTORS || '').split(/[\s,]+/).filter(Boolean).map(trustedLogin).join(',');
+  for (const [key, value] of Object.entries({ targets: JSON.stringify(plan.targets), source_sha: plan.sourceSha, source_ref: plan.sourceRef, should_build: String(plan.shouldBuild), trusted_actors: trustedActors })) {
     await appendFile(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
   }
 }
