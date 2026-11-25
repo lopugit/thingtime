@@ -181,6 +181,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-26: **The capabilities manifest is now kept at Vercel's edge, so
+  the environment gateway's ownership check no longer costs a function call.**
+  Before most API calls the server confirms it still owns the database by
+  fetching `/.well-known/thingtime-capabilities.json` from its own alias, and
+  trusts the answer for five seconds. Under light traffic that was nearly one
+  extra invocation per API call (about 630 an hour on 26 November). The
+  manifest now carries `Vercel-CDN-Cache-Control: max-age=3600`; Vercel keys
+  that cache per deployment, so an alias move still returns the new owner at
+  once, and browsers and Cloudflare still see `private, no-store`. Only an
+  exact-host HTTPS GET is stored (forged forwarded host/scheme refused), and a
+  storable conditional GET returns the full body so the edge can keep it.
+  Client capability checks get the same saving. `api.environment-gateway`
+  1.3.1. See `docs/environment-api-gateway.md`.
 - 2026-11-25: **Automation switches — every automatic, repeating or scheduled
   feature now has an administrator on/off switch, and all of them start off.**
   Admin → Automation lists 25 switches (browser polling by feature, desktop
