@@ -1060,8 +1060,15 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/lopu-pr-status.mjs
-          sparse-checkout-cone-mode: false
+          sparse-checkout: .github/scripts
+
+      # Changed paths per exact PR head and base from earlier scans. Data only;
+      # .github/scripts/pr-files-inventory.sh validates it and documents scope.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lopu-pr-files-cache.json
+          key: lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: lopu-pr-files-v1-
 
       - name: Scan open PRs and assign deterministic resolver ownership
         id: scan
@@ -1771,6 +1778,7 @@ jobs:
             inventory="$(jq -c '[{
               number,
               headRefName:.head.ref,
+              headRefOid:.head.sha,
               baseRefName:.base.ref,
               isCrossRepository:(.head.repo.full_name != .base.repo.full_name),
               isDraft:(.draft == true),
@@ -1822,6 +1830,7 @@ jobs:
                     nodes {
                       number
                       headRefName
+                      headRefOid
                       baseRefName
                       isCrossRepository
                       isDraft
@@ -1849,7 +1858,7 @@ jobs:
               return 1
             fi
             inventory="$(jq -c '[.[].data.repository.pullRequests.nodes[]
-              | {number, headRefName, baseRefName, isCrossRepository,
+              | {number, headRefName, headRefOid, baseRefName, isCrossRepository,
                  isDraft, mergeable, mergeStateStatus,
                  labels:(.labels.nodes // []),
                  files:[], filesTotal:0, filesIncomplete:true}]' "$response")"
@@ -1857,58 +1866,8 @@ jobs:
             printf '%s\n' "$inventory"
           }
 
-          # Keep expensive diff generation out of the shared GraphQL query:
-          # one large PR can time out every otherwise healthy PR in the page.
-          # Hydrate changed paths independently after mergeability settles.
-          # Failure preserves explicit incomplete state and does not abort the
-          # repository scan. Diagnostics must stay on stderr, never JSON stdout.
-          #
-          # Per-PR isolation stopped one ungeneratable diff from poisoning the
-          # shared inventory but left the AGGREGATE cost unbounded, taking the
-          # same scan down a second way: this loop is O(open PRs) and the
-          # slow-diff retry made each refusal cost ~26s instead of ~2s. Two
-          # bounds keep it out of the detector's timeout. LOPU_SLOW_DIFF_RETRY
-          # is `local`, so bash's dynamic scope declines that retry for this
-          # function only while load-bearing readers keep all four attempts;
-          # FILES_INVENTORY_DEADLINE_SECONDS then caps the loop on the step's
-          # clock. PRs past it keep the explicit incomplete state a single read
-          # failure already produces and the next sweep retries them, and the
-          # deferral names them: an un-hydrated PR is indistinguishable from a
-          # PR that changed no files.
-          complete_large_pr_files() {
-            local inventory="$1" encoded pr number pages deferred=0 deferred_numbers=''
-            local deadline="${FILES_INVENTORY_DEADLINE_SECONDS:-600}"
-            local LOPU_SLOW_DIFF_RETRY=false
-            while IFS= read -r encoded; do
-              [ -n "$encoded" ] || continue
-              pr="$(base64 --decode <<<"$encoded")"
-              number="$(jq -r '.number' <<<"$pr")"
-              if [ "$SECONDS" -ge "$deadline" ]; then
-                deferred="$(( deferred + 1 ))"
-                deferred_numbers="${deferred_numbers:+$deferred_numbers }#$number"
-                continue
-              fi
-              pages="$RUNNER_TEMP/lopu-pr-files-$number.json"
-              if ! gh_read_retry --paginate \
-                  "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
-                rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels use only its available changed paths (inventory incomplete)." >&2
-                continue
-              fi
-              inventory="$(jq -c \
-                --argjson number "$number" \
-                --slurpfile response "$pages" \
-                '($response[0] | add // [] | map(.filename) | unique) as $files
-                 | map(if .number == $number
-                       then . + {files:$files, filesTotal:($files | length), filesIncomplete:false}
-                       else . end)' <<<"$inventory")"
-              rm -f "$pages"
-            done < <(jq -r '.[] | select(.filesIncomplete == true or .filesTotal > (.files | length)) | @base64' <<<"$inventory")
-            if [ "$deferred" -gt 0 ]; then
-              echo "::warning::The changed-file inventory reached its ${deadline}s budget with $deferred PR(s) un-hydrated; their overlap labels use no changed paths and the next scan retries them (inventory incomplete): $deferred_numbers" >&2
-            fi
-            printf '%s\n' "$inventory"
-          }
+          # Changed-path hydration and its cross-run cache: see the helper.
+          . .github/scripts/pr-files-inventory.sh
 
           query() {
             if [ -n "$PR_BATCH_B64" ]; then
@@ -2281,6 +2240,12 @@ jobs:
           fi
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scan.outputs.files_cache == 'save'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lopu-pr-files-cache.json
+          key: lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Creation-time promotion conflicts do not have a PR yet, so the ordinary
   # detector cannot own them. The promoter first creates an immutable empty
