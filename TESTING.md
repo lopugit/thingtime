@@ -7324,6 +7324,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Idle Mac node cost: leave the installed app paired and unused for 5
+      minutes. Vercel Observability for `devices/node/commands` shows short
+      claims (no 20 s long-poll) about every 30 s, and the device still reads
+      as online. Send a device command: it is claimed within about 30 s, and
+      the node returns to long-polling while commands flow.
+      `devices/node/observations` uploads at most once every 5 minutes.
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
       The live transcript fills the message field without Chromium's `network`
