@@ -52,12 +52,13 @@ const getProgressLeft = (progress: number) => {
   return `${Math.max(0, Math.min(100, progress))}%`;
 };
 
-export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetOrigin?: string }) => {
+export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetOrigin?: string; enabled?: boolean }) => {
   const [status, setStatus] = React.useState<VercelDeploymentStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshTick, setRefreshTick] = React.useState(0);
 
   React.useEffect(() => {
+    if (props.enabled === false) return;
     let isMounted = true;
     let timeoutId: number | undefined;
     let xhr: XMLHttpRequest | undefined;
@@ -116,7 +117,7 @@ export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetO
         window.clearTimeout(timeoutId);
       }
     };
-  }, [props.targetOrigin, refreshTick]);
+  }, [props.targetOrigin, refreshTick, props.enabled]);
 
   const refreshStatus = React.useCallback(() => {
     setStatus(null);

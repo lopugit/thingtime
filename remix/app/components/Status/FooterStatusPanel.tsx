@@ -33,6 +33,26 @@ export const FooterStatusPanel = ({
   showDeploymentStatus: boolean;
 }) => {
   const [currentOrigin, setCurrentOrigin] = React.useState('');
+  // The health probes run only once the footer is actually on screen. Most page
+  // views never scroll this far, so mounting alone must not cost four requests.
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const [onScreen, setOnScreen] = React.useState(false);
+  React.useEffect(() => {
+    if (onScreen) return;
+    const node = panelRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setOnScreen(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setOnScreen(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onScreen]);
   const [selectedEnvironmentId, setSelectedEnvironmentId] =
     React.useState<StatusEnvironmentId>('current');
   const [loadedStoredSelection, setLoadedStoredSelection] = React.useState(false);
@@ -119,7 +139,7 @@ export const FooterStatusPanel = ({
   const targetOrigin = selectedEnvironment?.origin;
 
   return (
-    <Flex flexDirection="column" rowGap={2} alignItems="flex-start">
+    <Flex ref={panelRef} flexDirection="column" rowGap={2} alignItems="flex-start">
       <Menu placement="bottom-start" isLazy>
         {({ isOpen }) => (
           <>
@@ -223,10 +243,10 @@ export const FooterStatusPanel = ({
         )}
       </Menu>
 
-      <NitroStatus targetOrigin={targetOrigin} />
-      <FrontendStatus targetOrigin={targetOrigin} />
-      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} /> : null}
-      <MongoStatus targetOrigin={targetOrigin} />
+      <NitroStatus targetOrigin={targetOrigin} enabled={onScreen} />
+      <FrontendStatus targetOrigin={targetOrigin} enabled={onScreen} />
+      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} enabled={onScreen} /> : null}
+      <MongoStatus targetOrigin={targetOrigin} enabled={onScreen} />
     </Flex>
   );
 };
