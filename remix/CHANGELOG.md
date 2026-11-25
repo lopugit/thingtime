@@ -181,6 +181,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-25: Stop two more automatic checks. The iOS app no longer polls
+  notifications every 30 seconds; it refreshes when the web view loads, when a
+  push arrives and when the user returns to the app. The footer's service
+  status rows (Nitro, frontend, MongoDB, Vercel) probe their health endpoints
+  only once the footer scrolls into view, instead of on every page load.
+  **Claude (AI)**
+
 - 2026-11-25: Cut automatic server traffic. Browsers now get the page shell
   straight from the CDN, and only link unfurlers and crawlers reach the social
   metadata function, which served about 45K page loads a day. Network polling
