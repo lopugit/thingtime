@@ -6163,6 +6163,15 @@ halves.
 - [ ] Verify the installed Vercel pool adapter registers `waitUntil` through
   the configured idle timeout; distinguish this local adapter test from actual
   Fluid suspension and Atlas monitoring-socket observations.
+- [ ] Manifest edge cache (2026-11-26): on the live alias, a plain GET of
+  `/.well-known/thingtime-capabilities.json` returns `Cache-Control: private,
+  no-store` with no `Vercel-CDN-Cache-Control` or `CDN-Cache-Control` visible,
+  and a repeat shows `x-vercel-cache: HIT`. A conditional repeat with the
+  ETag must not invoke the function. After the next production deploy the
+  manifest names the new deployment at once (per-deployment cache key), and
+  the Observability `/__server` count stays far below the `/api/[...]` count.
+  `X-Forwarded-Host`/`X-Forwarded-Proto` overrides never change the returned
+  origin. Unit coverage: `server/handlers/thingtime-capabilities.test.ts`.
 
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
