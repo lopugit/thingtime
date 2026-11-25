@@ -14,10 +14,8 @@ on:
       expected_sha:
         type: string
         default: ''
-permissions:
-  contents: read
-  actions: read
-  pull-requests: read
+# Inherit the calling listener’s read scopes. The installed v1 main listener
+# grants contents:read only, while lane-aware listeners also grant PR/run reads.
 concurrency:
   group: thingtime-parallel-vercel-${{ inputs.pr_number || inputs.retire_pr_number || inputs.source_ref }}
   cancel-in-progress: false
