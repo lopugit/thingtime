@@ -8,7 +8,7 @@
   its requests resume, at once and then on their interval; turn it off and
   confirm they stop without a reload.
 - [ ] Toggle a switch, reload Admin → Automation and confirm it read back from
-  the server. "Turn everything off" sets all 25 off. Sections start collapsed;
+  the server. "Turn everything off" sets all 26 off. Sections start collapsed;
   clicking a checkbox must not expand its section. Check 375 px width to the
   bottom of the page.
 - [ ] `GET /api/v1/automation/switches` returns every switch, no `updatedBy`, and
@@ -23,6 +23,13 @@
   the notifications refresh; with `iphone.location` off, background location
   history stays stopped. Watch: with `watch.pairing` off, a pending code is
   checked once and the message points to Check approval.
+- [ ] CI webhooks: with `ci.webhookDetail` off (the default), a signed
+  `workflow_job`, `deployment_status` or PR `labeled` delivery to
+  `/api/v1/integrations/github/webhook` returns 200 `accepted:false` and adds no
+  `ci-event` row; a PR `synchronize`, `push` or Feature Stack `workflow_run` is
+  still recorded (202). In Vercel Observability the webhook's P75 duration
+  drops to tens of milliseconds. Reconcile on Admin → CI Control still fills the
+  dashboard from GitHub.
 
 ## Builder cleared-field save regression
 
