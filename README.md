@@ -996,6 +996,13 @@ events, using:
 https://<your-thingtime-origin>/api/v1/integrations/github/webhook
 ```
 
+Workflow job, workflow run, deployment and PR label deliveries are the bulk of
+the traffic (tens of thousands a day while PRs are active). The route skips
+them before any write unless Admin → Automation → **Live CI job, run and
+deployment updates** is on, which it is not by default. Use Reconcile on the CI
+dashboard to read the current state from GitHub instead. To stop the requests
+entirely, leave those four events unsubscribed in the GitHub App.
+
 Create a project-scoped Vercel webhook for deployment created/ready/error/
 canceled/deleted events at:
 

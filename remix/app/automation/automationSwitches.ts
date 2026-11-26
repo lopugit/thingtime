@@ -15,7 +15,7 @@ import { SCHEDULED_HTTP_JOBS } from '../api/utils/automation/scheduledJobs';
  * Device-local timers that never touch the network (on-screen clocks, codes,
  * local battery and node status) are not covered: they cost no server work.
  */
-export type AutomationSurface = 'web' | 'desktop' | 'mac' | 'iphone' | 'watch' | 'server';
+export type AutomationSurface = 'web' | 'desktop' | 'mac' | 'iphone' | 'watch' | 'server' | 'ci';
 
 export type AutomationSwitch = {
 	id: string;
@@ -32,7 +32,8 @@ export const AUTOMATION_SURFACES: readonly { id: AutomationSurface; title: strin
 	{ id: 'mac', title: 'Mac Thingtime Node' },
 	{ id: 'iphone', title: 'iPhone app' },
 	{ id: 'watch', title: 'Apple Watch app' },
-	{ id: 'server', title: 'Server scheduled jobs' }
+	{ id: 'server', title: 'Server scheduled jobs' },
+	{ id: 'ci', title: 'CI webhooks' }
 ];
 
 const CLIENT_SWITCHES: readonly AutomationSwitch[] = [
@@ -67,8 +68,15 @@ const CLIENT_SWITCHES: readonly AutomationSwitch[] = [
 	{ id: 'iphone.diagnostics', surface: 'iphone', title: 'Diagnostics retries', summary: 'Retries diagnostic uploads on a timer.',
 		covers: ['Automatic diagnostics retries'] },
 	{ id: 'watch.pairing', surface: 'watch', title: 'Pairing checks', summary: 'Re-checks a pairing code until it is approved.',
-		covers: ['Automatic pairing approval checks'] }
+		covers: ['Automatic pairing approval checks'] },
+	// GitHub sends these as webhooks, not on a timer, but they are the busiest
+	// automatic server work: tens of thousands a day while PRs are active.
+	{ id: 'ci.webhookDetail', surface: 'ci', title: 'Live CI job, run and deployment updates', summary: 'Records each GitHub job, workflow run, deployment and PR label change as it happens. When off, they are skipped; Reconcile on the CI dashboard reads the latest state from GitHub.',
+		covers: ['Job updates', 'Workflow run updates', 'Deployment updates', 'PR label changes'] }
 ];
+
+/** Switch that lets the GitHub webhook record high-volume CI detail. */
+export const CI_WEBHOOK_DETAIL_SWITCH = 'ci.webhookDetail';
 
 export const scheduledJobSwitchId = (jobId: string) => `scheduled.${jobId}`;
 

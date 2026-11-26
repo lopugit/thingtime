@@ -181,6 +181,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-26: **GitHub CI detail webhooks are skipped before any database
+  work.** Job updates, workflow runs, deployments and PR label changes were about
+  99% of ~42,000 GitHub deliveries a day, each holding a 2 GB function for
+  0.7–2 s. They now return 200 `accepted:false` unless the new Admin →
+  Automation switch **Live CI job, run and deployment updates**
+  (`ci.webhookDetail`, off by default) is on; PR state changes, pushes, branch
+  create/delete and Feature Stack runs are still recorded, and Reconcile on
+  the CI dashboard reads current state from GitHub. `api.github-ci-webhook`
+  1.1.0. Vercel Fluid functions cannot be smaller than 2 GB (a test deployment
+  asking for 1024 and 512 MB still got the same ~2.2 GB instance), so cutting
+  the seconds requests stay in flight is the memory lever. Plan:
+  [`PLAN/vercel-memory-and-ci-webhooks.md`](../PLAN/vercel-memory-and-ci-webhooks.md).
+
 - 2026-11-26: **The capabilities manifest is now kept at Vercel's edge, so
   the environment gateway's ownership check no longer costs a function call.**
   Before most API calls the server confirms it still owns the database by
