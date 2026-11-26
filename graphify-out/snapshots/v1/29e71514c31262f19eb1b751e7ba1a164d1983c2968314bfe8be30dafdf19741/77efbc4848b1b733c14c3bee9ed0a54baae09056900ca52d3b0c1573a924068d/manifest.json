@@ -26664,9 +26664,9 @@
     "semantic_hash": "5e48b476511983dd2d258cfcddbe3781"
   },
   "NOTES/README.md": {
-    "mtime": 1795599391.0334692,
-    "seen": 1795599508.694112,
-    "ast_hash": "a41e6609e2809551541d5bc5b02f76a0",
+    "mtime": 1795666623.4174404,
+    "seen": 1795666739.173049,
+    "ast_hash": "d13f6c9fc204f2e754ae24838f5669ba",
     "semantic_hash": ""
   },
   "NOTES/accessibility-and-language-readiness-baseline.md": {
@@ -45303,6 +45303,12 @@
     "mtime": 1795610729.2800508,
     "seen": 1795611411.4223979,
     "ast_hash": "2f787131466aeab21dd076aca92bae65",
+    "semantic_hash": ""
+  },
+  "NOTES/hosting-options-2026-11-26.md": {
+    "mtime": 1795666621.5890129,
+    "seen": 1795666739.173447,
+    "ast_hash": "f3462a4d92ae0f128f7b2264cdf09817",
     "semantic_hash": ""
   }
 }
