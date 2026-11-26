@@ -1774,12 +1774,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'github-ci-webhook',
+    // 1.1.0: high-volume CI detail (workflow_job, workflow_run other than
+    // Feature Stack runs, deployment, deployment_status, and PR actions other
+    // than opened/reopened/synchronize/closed/ready_for_review/converted_to_draft/edited)
+    // is answered 200 accepted:false without any write while the
+    // ci.webhookDetail automation switch is off (the default).
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'integrations',
     title: 'GitHub CI webhook',
     endpoint: '/api/v1/integrations/github/webhook',
     summary: 'Receive signed GitHub App events for the CI control plane.',
     detail:
-      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
+      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things. High-volume CI detail (job updates, workflow runs other than Feature Stack runs, deployments and PR label/assignee/review-request changes) is recorded only while the ci.webhookDetail automation switch is on; otherwise the verified delivery is answered 200 with accepted:false and nothing is written. Admin CI Reconcile reads current state from GitHub on demand.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
     methods: ['POST'],
 		steps: [
@@ -1797,6 +1803,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		],
     responseExamples: [
       { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
+      { status: 200, description: 'Verified CI detail skipped while ci.webhookDetail is off.', body: { ok: true, accepted: false, touched: [], ignoredReason: 'CI detail updates are off' } },
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
     ]
   }),
