@@ -1,4 +1,5 @@
 import { readNativeSyncActivity } from './syncActivity.client';
+import { remoteSyncPollDelay } from './remoteSyncPollCadence';
 import { withDeviceSyncHistoryRecordingIssue } from './deviceSyncHistory.client';
 import { parseSyncDirections } from './directionalProgress';
 import { readStampedCache } from '../hooks/localCache';
@@ -328,6 +329,7 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 	const origin = window.location.origin, sessions = new Map<string, DeviceSession>();
 	let timer: ReturnType<typeof setTimeout> | undefined, stopped = false, releaseWindow: (() => Promise<void>) | undefined;
 	let historyRead: Promise<void> | undefined;
+	let emptyPolls = 0, sawCommand = false;
 	let enrollment: { deviceId: string; origin: string; connectionId: string; controller: AbortController } | undefined;
 	const check = () => {
 		signal.throwIfAborted();
@@ -335,6 +337,7 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 			throw Error('The remote sync account changed.');
 	};
 	const run = async () => {
+		sawCommand = false;
 		try {
 			check();
 			const local = await adapter.bridge.nodeGetStatus!(); check();
@@ -379,6 +382,7 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 					}
 					const pending = response.command;
 					if (!pending) continue;
+					sawCommand = true;
 					if (typeof pending.id !== 'string' || typeof pending.leaseId !== 'string' || !Number.isFinite(Date.parse(pending.expiresAt)) || Date.parse(pending.expiresAt) <= Date.now()) continue;
 					let command: RemoteSyncCommand | undefined;
 					try { command = validateRemoteSyncCommand(pending.command); } catch { /* Reply on the same claimed lease below. */ }
@@ -431,7 +435,11 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 				}
 			}
 		} catch { /* Identity teardown or temporary native availability. */ }
-		finally { if (!stopped && !signal.aborted) timer = setTimeout(run, 2000); }
+		finally {
+			// Running setup or history work keeps the mailbox responsive for its Pause.
+			emptyPolls = sawCommand || enrollment || historyRead ? 0 : emptyPolls + 1;
+			if (!stopped && !signal.aborted) timer = setTimeout(run, remoteSyncPollDelay(emptyPolls));
+		}
 	};
 	const stop = () => { if (stopped) return; stopped = true; controller.abort(); clearTimeout(timer); sessions.clear(); void releaseWindow?.().catch(() => {}); releaseWindow = undefined; };
 	signal.addEventListener('abort', stop, { once: true });
