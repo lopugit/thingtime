@@ -81,10 +81,18 @@ than 1,000 deliveries a day.
 - Close the stale pre-#1557 browser tab that keeps `chats/updates` open (7 s
   each).
 - Replace remaining long-polls with short reads plus client-triggered refresh.
-- Speed up the slow endpoints themselves: `health/nitro` storage readiness
-  (~2.8 s, run by the storage monitor workflow 183 times a day), `auth/me`
-  (P75 1.6 s for signed-in users) and `things` (1.1 s). Every second saved is
-  2 GB-seconds.
+- Done 2026-11-27: `health/nitro` storage readiness scanned the whole `things`
+  collection (~2.8 s) with a 30 s cache, while the storage monitor calls it
+  about 180 times a day. A `ready` result is now kept for 15 minutes; other
+  states are still re-checked after 30 s. `auth/me` opened a MongoDB
+  transaction on every call to make sure the hidden Debug folder exists. It
+  now reads first and opens a transaction only to create the folder.
+- `things` (folder list, 50 items, 120 KB): 6.3 s on its first call after a
+  quiet spell and 320–560 ms after, measured in the owner's signed-in browser
+  on 27 Nov. That points at database cache misses: the collection holds 577 MB
+  of data and 748 MB of indexes. Next: confirm the Atlas tier and its cache
+  size, compact or drop oversized indexes, and check the list query with
+  `explain('executionStats')`. Every second saved is 2 GB-seconds.
 - Target: under 30 GB-hr a day (about $0.45).
 
 ### M4 — leave per-second memory billing if M1–M3 fall short
