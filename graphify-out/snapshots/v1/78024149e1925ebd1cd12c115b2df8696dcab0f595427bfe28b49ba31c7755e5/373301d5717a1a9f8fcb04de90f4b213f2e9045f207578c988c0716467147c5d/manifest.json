@@ -18558,10 +18558,10 @@
     "semantic_hash": "9d69a5a358c518fd2a67436e9c8ccc97"
   },
   "remix/app/fileSync/remoteSyncWorker.client.ts": {
-    "mtime": 1795769039.0088663,
-    "seen": 1795774701.588481,
-    "ast_hash": "2d6a58965a79a0427e42e028b003f792",
-    "semantic_hash": "2d6a58965a79a0427e42e028b003f792"
+    "mtime": 1795780249.9985125,
+    "seen": 1795780358.031362,
+    "ast_hash": "0f14c1bb6887b4d7bae02cff6ec798ef",
+    "semantic_hash": ""
   },
   "remix/app/fileSync/remoteSyncWorker.test.mts": {
     "mtime": 1795769039.0097256,
@@ -45327,6 +45327,18 @@
     "mtime": 1795769725.586772,
     "seen": 1795774701.585866,
     "ast_hash": "9fdfcbaaab5c20e58e77c30c1a6c9f4b",
+    "semantic_hash": ""
+  },
+  "remix/app/fileSync/remoteSyncPollCadence.test.ts": {
+    "mtime": 1795780249.998248,
+    "seen": 1795780358.031299,
+    "ast_hash": "90b4fee331e0b81c9917442429612251",
+    "semantic_hash": ""
+  },
+  "remix/app/fileSync/remoteSyncPollCadence.ts": {
+    "mtime": 1795780249.9983501,
+    "seen": 1795780358.031302,
+    "ast_hash": "d11792406ecf0cc4978433f8fcfd9779",
     "semantic_hash": ""
   }
 }
