@@ -191,6 +191,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     return mostRecentLauncher()
   }
 
+  /// The launcher a bridge request without its own window refers to.
   private func mostRecentLauncher() -> LauncherPanelController? {
     let candidates: [LauncherPanelController]
     if focusRecentOnCurrentDisplay, let screenNumber = activeScreenNumber() {
@@ -204,22 +205,47 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  /// The launcher a hotkey, reopen or Open request should present on the
+  /// active display, or nil when a new launcher should be created there.
+  private func launcher(for request: LauncherWindowSelection.Request) -> LauncherPanelController? {
+    let candidates = launchers.values.map { launcher in
+      LauncherWindowSelection.Candidate(
+        id: launcher.id,
+        recency: launcherRecency[launcher.id] ?? 0,
+        screenNumber: launcher.screenNumber,
+        isVisible: launcher.isVisible,
+        isPinned: launcher.isPinned
+      )
+    }
+    guard let id = LauncherWindowSelection.choose(
+      request,
+      among: candidates,
+      activeScreenNumber: activeScreenNumber(),
+      preferCurrentDisplay: focusRecentOnCurrentDisplay
+    ) else { return nil }
+    return launchers[id]
+  }
+
   private func markRecent(_ id: UUID) {
     recencyCounter &+= 1
     launcherRecency[id] = recencyCounter
   }
 
   private func showLauncher(id: UUID?) {
-    if let launcher = launcher(id: id) {
+    guard let id else {
+      showMostRecentLauncher()
+      return
+    }
+    if let launcher = launchers[id] {
       markRecent(launcher.id)
-      launcher.show(on: id == nil ? activeScreen() : nil)
+      launcher.show()
       return
     }
     _ = try? createLauncher(show: true, screen: activeScreen())
   }
 
   private func showMostRecentLauncher() {
-    guard let launcher = mostRecentLauncher() else {
+    guard let launcher = launcher(for: .open) else {
       _ = try? createLauncher(show: true, screen: activeScreen())
       return
     }
@@ -229,7 +255,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func toggleMostRecentLauncher() {
-    guard let launcher = mostRecentLauncher() else {
+    guard let launcher = launcher(for: .open) else {
       _ = try? createLauncher(show: true, screen: activeScreen())
       return
     }
@@ -239,7 +265,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func runCommandHotKey(itemID: String) {
-    guard let launcher = mostRecentLauncher() else {
+    guard let launcher = launcher(for: .command) else {
       guard let created = try? createLauncher(show: false) else { return }
       created.runCommandHotKey(itemID: itemID)
       return
@@ -363,9 +389,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
   }
 
-  private func activeScreenNumber() -> NSNumber? {
-    activeScreen()?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-  }
+  private func activeScreenNumber() -> Int? { activeScreen()?.commanderScreenNumber }
 
   private func tearDownRuntime(stopDaemon: Bool) {
     for launcher in launchers.values { launcher.shutdown() }

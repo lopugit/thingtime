@@ -7376,6 +7376,11 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       as online. Send a device command: it is claimed within about 30 s, and
       the node returns to long-polling while commands flow.
       `devices/node/observations` uploads at most once every 5 minutes.
+- [ ] Run the lease-heartbeat failure regression on the release runner. Dispatch
+      waits for cancellation from the failed renewal, and exactly one failed
+      renewal produces exactly one `uncertain` / `command_outcome_uncertain`
+      report even when dispatch returns success. A missed cancellation fails
+      within the watchdog timeout instead of relying on a 35 ms scheduling race.
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
       The live transcript fills the message field without Chromium's `network`
@@ -7997,6 +8002,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       menu do not navigate or expand. The Move dialog remains a folder picker
       without browse controls. Column folder clicks retain the parent column
       and show children in the next column.
+- [ ] With nested folders and a long name in the browsing sidebar and Move
+      picker, check that the caret sits beside the icon/name and rows are compact
+      without clipping. On desktop, hover and keyboard-focus the name to read
+      its full label; on mobile, press and hold the name. A hold must not open
+      the folder, while a tap, caret click, selection, menu and drag/drop keep
+      their usual behavior. Check the bottom of the tree at narrow and wide sizes.
 
 - Real-app isolated acceptance: after `npm run worktree-setup`, build the
   local server with `NITRO_PRESET=node-server pnpm --dir remix run build:server`,
@@ -14144,6 +14155,7 @@ separate from deterministic discovery/lease tests.
 - Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
+- Commander account restart recovery: retain all saved account metadata across rebuilds and restarts; restore the exact issuing origin/client (including legacy IDs), switch between environments and back, and retry a temporarily locked Keychain on focus without removing the account. Cloud sync must use the saved issuer and refuse redirects; a changed next-login profile must never receive another account's token. Confirm the production desktop callback registration separately before claiming live sign-in acceptance.
 
 
 ## Editable private settings documents
