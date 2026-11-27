@@ -56,10 +56,16 @@ export function createDeviceDiagnosticsService(overrides: Partial<Dependencies> 
             return deps.transaction(work);
         }
     };
-    const ensure = (ownerId: string, origin: string) => transact(async session => {
-        const row = await folder(ownerId, origin, session, true);
-        return { ok: true as const, folder: publicFolder(row), settings: { enabled: row.crystal.diagnosticsEnabled !== false } };
-    });
+    const ensured = (row: any) => ({ ok: true as const, folder: publicFolder(row), settings: { enabled: row.crystal.diagnosticsEnabled !== false } });
+    // auth/me calls this on every request. The folder almost always exists, so
+    // check with one plain read (same identity checks) and open a transaction
+    // only to create it.
+    const ensure = async (ownerId: string, origin: string) => {
+        plane();
+        const existing = await folder(ownerId, origin);
+        if (existing) return ensured(existing);
+        return transact(async session => ensured(await folder(ownerId, origin, session, true)));
+    };
     const actorFence = async (actor: DeviceActor, session: any) => {
         const now = deps.now();
         const result = await (await deps.sessions()).updateOne({ jti: actor.sessionId, userId: actor.userId, purpose: 'device',
