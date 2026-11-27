@@ -356,6 +356,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   complete demo review-page metadata so its confirmation controls render.
   **Codex (AI)**
 
+- 2026-11-13: Tighten the Things folder tree, place selection beside the trailing
+  actions, and reveal full names on hover, keyboard focus and touch hold. Extend
+  the isolated browser acceptance runner with tree interaction checks and a
+  normal-networking option for disposable local test accounts. **Codex (AI)**
 
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
