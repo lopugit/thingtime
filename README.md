@@ -10,6 +10,11 @@ CI and nothing else:
 vercel.json          the Vercel Git-deployment kill-switch
 ```
 
+The [protected unsigned native compile lane](.github/NATIVE_COMPILE.md) accepts
+an explicit owner PR/head SHA after independent controller/listener admission.
+Candidate files remain opaque data until kernel network denial and a fresh
+unprivileged build identity are active; it has no signing or release path.
+
 Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
 `AGENTS.md` and `CLAUDE.md` as symlinks to it), because agents work on this
 branch too.
@@ -50,6 +55,62 @@ every branch inheriting this thin tree and keeps `ignoreCommand: "exit 0"` as a
 second fail-safe. It has no install, build, or output command because there is
 no product here to deploy.
 
+## Environment gateways for future product builds
+
+The protected publishers select the backend bootstrap; product builds contain no
+Vercel token, Mongo credential or gateway signing secret. `environment-gateway-policy.mjs`
+maps production to `https://thingtime.com`, custom develop to
+`https://dev.thingtime.com`, and standard preview to
+`https://master.previews.thingtime.com`. The preview master is a separate
+preview-target build of the trusted current `main` source, never whichever PR
+published last. Its Vercel preview scope uses the existing development Mongo and
+auth/signing configuration; production retains production scope. Develop keeps
+its existing custom environment and source branch. Ordinary protected PR previews
+retain the custom `develop` credential and build target while using the controlled
+standard Preview gateway; their existing
+`pr-N.previews.dev.thingtime.com` URLs remain compatibility names rather than
+indicating the runtime environment. Older custom-develop deployments are not
+reused or mass-deleted during this migration.
+
+Bootstrap setup requires one encrypted `THINGTIME_GATEWAY_SECRET` (at least 32
+characters) in each selected Vercel scope: production, preview, and custom develop.
+Keep it in the authorized Vercel secret store or the canonical server vault;
+never put values in workflow inputs, GitHub artifacts, command arguments or docs.
+The secret is irreducible bootstrap authority for authenticating the relay before
+Mongo/vault access. Environment and canonical origin are protected publisher
+constants, passed by environment-variable key name through the child environment.
+Missing encrypted secret metadata refuses publication before upload. The protected
+workflow accepts `build_only: true` to create exact-source artifacts without
+uploading or changing aliases; production builds also emit the separate preview
+master artifact. This supports deployment-scoped owner bootstrap before scoped
+project settings are activated. The project
+remains Git-disconnected and prebuilt-only; no native branch-variable feature is
+assumed.
+
+New product bundles default to proxy mode and can explicitly opt into their own
+backend through their documented bundled policy or
+`THINGTIME_MONGODB_CONNECTION_MODE=dedicated`. Ordinary branch publications do
+not override that choice. The three canonical gateway owners are explicitly
+forced to proxy mode, preventing an inherited dedicated override from converting
+a shared gateway into a branch backend. An unknown environment mapping fails
+closed. Existing immutable deployments are allowed to age out naturally; this
+policy does not revoke their credentials or claim their background pools stopped.
+
+The stable publisher records gateway provenance and rejects old READY deployment
+reuse. Production uses `--skip-domain`; the pinned CLI does not support that flag
+for custom targets. All applicable alias bindings are therefore snapshotted
+before every upload, then verified after publication. Exact canonical manifest
+identity and ordinary API/static reads allow up to 90 seconds for edge propagation,
+with bounded backoff and an abort deadline. Safe mismatch diagnostics include only
+public owner identity, HTTP status and allowlisted cache indicators; secrets,
+cookies and raw response bodies are excluded. Failure restores bindings
+still owned by that attempt, without overwriting a concurrent operator. The PR
+preview controller never promotes `dev.thingtime.com`; only the stable publisher
+owns that canonical alias. Source must support the gateway capability before an
+owner can pass the exact manifest and API checks. Keep the old production/develop
+bindings until bootstrap has passed review and each environment can be activated
+and verified independently.
+
 ## Why it is bare
 
 `main` and `develop` carry only **thin listeners** — one `uses:` of a workflow
@@ -86,6 +147,29 @@ refuses them outright because it cannot push to a fork's branches.
 syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
+
+CodeQL quota snapshots run immediately before the Analyze action and under
+`always()` afterward using that analysis job's built-in token. They emit only
+observed UTC and numeric `limit`, `remaining`, and `reset` values for `core` and
+`code_scanning_upload`; missing values stay `null` (unknown). The two resources
+are distinct, and an actual request's rate-limit headers remain authoritative
+if they disagree with the snapshot. `GET /rate_limit` is primary-quota-exempt,
+not secondary-limit-exempt; each snapshot makes one bounded read.
+
+The same analysis job also waits for at least 100 reported core units before
+the pinned official Analyze step, including its SARIF fingerprinting. The
+20-minute admission deadline fails the required job when core stays unavailable
+or exhausted; it does not count an optional upload-family bucket as core
+capacity. A separate 65-minute quota and processing window begins after Analyze.
+Admission does not reserve the shared token's capacity against concurrent jobs.
+
+For current repository-token measurement without a scan, explicitly dispatch
+`codeql-analysis.yml` on `github-actions` with `quota_only=true` and leave PR,
+head and backfill inputs unset. This mode is refused on other refs/repositories
+or with analysis selection. It uses minimum token permissions and distinct
+check names, so it cannot supply a required product Analyze result. It measures
+the new diagnostic job's token, not a historical failed job's token or upload
+response. No token is exported, and no probe loop or automatic retry is created.
 
 CI concurrency is scoped to the PR number or pushed/dispatched ref. A newer
 run may supersede the same subject, but unrelated PRs never share a cancellation
@@ -156,6 +240,134 @@ marker before accepting any HTTP status, so neither response can count as a
 valid preview. Projects without directory listings can stage with
 `PREVIEW_FALLBACK_ROOT_STATUS=404` for a true root 404. This tool never changes
 the project-wide directory-listing setting.
+
+### Orphan deployment cleanup (2026-10-30)
+
+The existing protected preview controller now scans the complete project deployment
+inventory before each six-hour recovery sweep and on PR close. It removes actual
+Vercel deployments (including their immutable URLs), rather than only removing
+PR aliases. Legacy source-build previews and ordinary prebuilt branch previews
+are included when exact source/project/repository ownership is established and
+no open same-repository PR uses the branch. Open drafts still protect their
+branch from this orphan sweep; the existing current-policy draft cleanup remains
+separate. Closed PR events also inspect branch previews without PR metadata.
+
+Production targets, untagged main/develop/staging/controller/fallback branches,
+gateway owners, production/custom stable target pointers, all bound project domains, arbitrary
+custom aliases, foreign identities and unknown metadata are preserved. Explicit PR-tagged snapshots of closed promotions may be cleaned
+even when their source branch is `develop`; current owners and bindings remain
+protected. The controller paginates before deletion and rechecks deployment, alias and PR state
+before canceling or deleting; the generic `targets.preview` last-deployment
+pointer does not protect an orphan; a reopened/new PR or changed alias stops the action.
+A still-canceling upload is left for the next sweep. Provider errors preserve
+unknown resources and fail the run. Separate API checks are not an atomic
+provider transaction: a subsequent sweep reconciles a concurrent late upload.
+
+Ordinary prebuilt feature previews now require an open same-repository PR before
+build planning, upload, immutable acceptance and alias publication. A PR closed
+during upload causes guarded removal of that exact deployment. Stable gateway
+publication is exempt. All three preview publishers additionally read the exact
+immutable source SHA and require Mongo's connect fence, gateway middleware,
+authority and explicit connection policy. Old source fails admission even if
+publisher metadata claims gateway support. This is a compatibility gate, not
+proof against hostile source or a measurement of live Mongo connections. The
+existing explicit `dedicated` branch opt-in remains supported; missing/old
+source never falls back to it. The PR publisher retains its exact-head fences.
+
+The saved admin policy is the only retention configuration. Protected jobs
+negotiate `api.integration-ci-preview-retention` 1.0.0 and its POST operation at
+`THINGTIME_PREVIEW_POLICY_ORIGIN` (default `https://thingtime.com`), then read
+`/api/v1/integrations/ci/preview-retention`. Requests use the existing
+`THINGTIME_CI_ROUTER_SECRET` and the CI HMAC header, with repository,
+`ref: "github-actions"` and a fresh ISO timestamp. That secret is supplied only
+to protected controller steps; untrusted builds receive none. No separate
+controller retention defaults or public settings fallback exist.
+
+The product admin settings own `enabled`, `noOpenPrGraceHours`,
+`pruneSupersededOpenPr`, `supersededGraceHours` and optional
+`inactivePullRequestDays`. No-open grace uses the later deployment creation or
+known PR close time; untagged branch snapshots use creation age. Superseded
+pruning waits for the replacement's grace and keeps the newest READY live-head
+preview plus active builds. Opt-in inactivity expiry uses fresh GitHub
+`updated_at` (including GitHub's normal automation activity), deletes previews
+without closing the PR, and prevents recovery/publication until new activity.
+Expired-open cleanup avoids comments/labels that would reset that clock.
+
+Disabled cleanup, grace-retained objects and protected owners are not marked
+removed or inactive. Missing/invalid/unreachable policy preserves resources and
+fails the run; there is no destructive fallback. Each cancel/delete fence reads
+fresh policy, so disabling it stops the next mutation. Stable
+production/develop/staging publication does not depend on policy API availability.
+Explicit admin removal of a selected environment remains a separately requested
+operation; retention policy does not grant permission to delete stable services.
+
+PR-scoped retention still paginates the complete project summary inventory for
+keeper discovery, but skips detail reads when every summary for an ID carries a
+valid explicit different PR number. Matching, missing or malformed metadata takes
+the existing fresh-detail path; summaries never authorize deletion. An inconsistent
+summary may defer cleanup to global reconciliation, which remains unchanged.
+All policy, identity, live-PR, current-head, alias and cancel/delete fences stay
+fresh and serial. If provider summaries omit PR metadata, this optimization saves
+no detail requests. Verify with `node --test
+.github/scripts/orphan-preview-cleanup.test.mjs`: cover read counts, duplicate and
+unknown metadata, summary/detail disagreement, pagination and mutation races.
+
+Rollout order: deploy the product settings endpoint/capability first and verify
+its signed read in CI, then merge this controller into `github-actions`. The
+existing default-branch listener already supplies close events and the six-hour
+schedule, so no new main listener or cron is needed. Existing old runs may still
+hold their earlier source snapshot. No live acceptance is established by local
+fixtures.
+
+For immediate acceptance, an allowlisted maintainer with current repository
+write/admin permission can use the existing listener's zero-PR reconciliation
+mode. It authorizes the triggering actor, builds no PR code, fetches saved policy
+and runs only retention reconciliation:
+
+```sh
+gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0
+```
+
+Inspect the resulting workflow's sanitized counts and exact provider readback;
+repeat for idempotence and verify unchanged production/develop/staging/master
+aliases. This dispatch uses GitHub's existing protected secret; do not retrieve
+CI secrets locally or bypass capability/actor checks to run acceptance.
+
+### Protected deployment checks and reviewed retirement
+
+Protected publishers and storage-health checks can authenticate to a Vercel
+project that has Deployment Protection enabled. The shared
+`protected-deployment-fetch.mjs` helper reads the selected project's automation
+credential through the existing Vercel API token, verifies each destination's
+project identity, and sends the scoped bypass header only to that HTTPS origin.
+Credential and destination lookups expire after 30 seconds. Redirects refuse;
+caller-supplied bypass and bypass-cookie headers and Host overrides are removed. No token,
+bypass value, account cookie, or raw provider error belongs in inputs, artifacts
+or logs. This controller support does not turn on project protection.
+
+Reviewed retirement is an additional exact-selection mode. After this protected
+workflow is merged, add the optional `retirement_deployment_ids` string and
+`retirement_dry_run` boolean forwarding inputs to the thin main listener; older
+callers remain compatible. Only an authorized manual dispatch with `pr_number=0`
+can select this mode. Supply a JSON array of 1–100 distinct deployment IDs as a
+bounded maintenance batch, and run it first with `retirement_dry_run=true`.
+The controller reads the current saved policy using its existing protected CI
+secret. It never substitutes local retention settings.
+
+Inspect the private `preview-retirement-<run>-<attempt>` artifact before executing
+the reviewed exact selection with `retirement_dry_run=false`. The seven-day
+artifact contains only repository/project IDs, requested/proposed/retained/deleted
+IDs, observed time, canonical policy, fixed decision reasons, and redacted
+provider endpoint/status diagnostics. A failed policy or verification read is
+reported as unavailable and cannot authorize deletion. Recheck recent legitimate
+use independently before executing the reviewed batch.
+
+This mode additionally preserves every aliased deployment, every current project
+target, active builds, stable branches, gateway owners, open or unverified PRs,
+and deployments still within policy grace since PR closure. It performs fresh
+policy, source, PR and alias checks at the deletion boundary. Ordinary automatic
+retention keeps its existing behavior; no new schedule or automatic cleanup is
+created. Confirm exact provider absence afterward and preserve ambiguous cases.
 
 ### Discoverable preview status and recovery
 
@@ -430,7 +642,7 @@ size, Vite shell, and Build Output routes before a pinned Vercel CLI uploads it
 with `--prebuilt`; feature-branch build scripts never receive the Vercel token
 or the develop S3 probe URL. Keep build-time public values derivable from the
 GitHub event. Secrets used by server functions remain runtime values in the
-selected Vercel Custom Environment and must not be copied into the build job.
+selected Vercel runtime environment and must not be copied into the build job.
 
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"
@@ -451,29 +663,32 @@ THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<bucket>.s3.<region>.amazonaws.com/
 
 ### Stable develop domain
 
-For a hosted `develop` URL, create a Vercel Custom Environment with an exact
-`develop` branch matcher, but leave its domain list empty. Bind the stable
-domain itself to the `develop` Git branch. This gives Vercel a deterministic
-fallback for the hostname, while the controller separately promotes only an
-exact, verified native `develop` deployment.
+For a hosted `develop` URL, keep the Vercel Custom Environment's exact
+`develop` branch matcher and leave its domain list empty. Bind the stable domain
+to the `develop` branch; only the protected stable publisher may promote the
+verified prebuilt gateway owner. The ordinary PR controller never promotes it.
 
-If trusted PR automation creates prebuilt deployments in that same Custom
-Environment, it must use `--skip-domain` and assign only a separate PR alias
-after validating the exact repository, branch, commit metadata, and READY
-state. Bind the development PR wildcard to the `develop` Git branch.
-Vercel does not permit binding a project domain to the production branch as a
-Preview domain, so the production preview wildcard must remain detached (the
-documented Vercel production fallback) and may not attach to a Custom
-Environment. Exact controller-owned aliases override the wildcard fallback.
-The controller checks both Vercel bindings, DNS, and a live `/api/root-data`
-fallback probe before it can publish, so a detached production wildcard is only
-accepted when it actually resolves to `main`.
+Ordinary PRs continue to build and deploy in the custom `develop` Vercel target,
+with its existing credential scope. The protected publisher injects the one
+unbranched standard Preview signing secret only into the upload child process,
+and sets the logical gateway to `master.previews.thingtime.com`. Their existing development
+PR hostnames remain compatibility URLs. The pinned CLI supports `--skip-domain`
+only for production, so do not add that flag to preview/custom uploads. The
+publisher must preserve unrelated canonical and branch aliases when uploading
+and assign only the exact verified PR alias. Legacy custom-develop deployments
+are excluded from the new provenance policy and cleanup selection.
+
+Keep the development PR wildcard's existing branch binding. The production
+preview wildcard stays detached rather than attaching to a Custom Environment;
+exact controller-owned aliases override these fallback names. The controller
+checks its project bindings and verifies the current trusted-main preview
+master manifest and real API before publishing a new PR follower.
 
 Every open, ready, same-repository PR from an allowlisted author is eligible,
 regardless of whether its base is `develop`, `main`, or another feature branch.
 The controller revalidates the exact live ref and SHA before publishing, while
-the deployment itself always remains in the isolated Vercel `develop` Custom
-Environment. A closed former parent PR therefore cannot strand a child PR, and
+the deployment itself keeps the custom Vercel `develop` environment and its
+existing credentials. A closed former parent PR therefore cannot strand a child PR, and
 forks, drafts, stale dispatches, or users without current write access still
 receive no credentialed preview. As soon as authorization succeeds, the
 controller posts the expected persistent URL and a clearly labelled UTC ready
@@ -574,3 +789,184 @@ Manual acceptance: verify a push and a scheduled non-comment run execute
 conflict detection, a repaired PR reports live mergeability, and its current-SHA
 preview is visible without expanding comments. A moving target must leave a
 requeue notice rather than overwrite it with a resolved claim.
+# Prebuilt-only Vercel deployments
+
+`.github/workflows/deploy-vercel-prebuilt.yml` builds product commits on
+standard GitHub-hosted Ubuntu runners and uploads only validated Build Output
+API artifacts. Its build job receives no deployment credentials. Prepare and
+publish use the protected `vercel-prebuilt-control` environment, with secret
+`VERCEL_DEPLOY_TOKEN` and variables `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`,
+`VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`. Configure those for your own Vercel project
+when forking; never copy another account's values or credentials. Its deployment
+branch policy must admit the exact canonical `github-actions` branch for direct
+build-only dispatches, alongside the existing default-branch listeners. Preserve
+all other environment protections.
+
+The product default branch carries a thin push/manual/workflow-run listener.
+Current default-branch source maps to production, Vercel custom branch matchers
+select custom environments, and other product branches select Preview.
+Requested push runs of Web CI and Lopu CodeQL also wake the default-branch
+listener for older product branches. Same-SHA READY deployments skip rebuilds;
+stale events skip; production source must equal the current default branch.
+Existing PR-specific preview controllers remain GitHub-built and continue
+their private development-storage checks and exact-SHA alias management, with
+ordinary PR followers using the controlled Preview gateway through custom `develop`.
+
+Vercel's native Git integration and source deploy hooks are disconnected at
+cutover. An absent native Git link is valid; a present mismatched link still
+fails preview project validation. Vercel runtime configuration remains on its
+selected environment and in the vault. The publisher independently fetches
+immutable source configuration for region/Fluid/production-cron settings and
+never executes product source. See the product README and VERCEL_DEPLOYMENTS.md
+for deployment receipts and the manual entry point.
+
+The prebuilt deployment prepare step maps `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`,
+`VERCEL_PROJECT_ID` and `VERCEL_PROJECT_NAME` from the existing protected
+`vercel-prebuilt-control` environment variables, just as publication does. Forks
+must supply their own identifiers there; no values belong in source. A variable
+being present in the GitHub environment does not make it a step environment
+variable without this explicit mapping.
+
+### Clean native release test prerequisites
+
+Before the unsigned Thingtime Node suite, the Electron release worker builds
+`commander-indexer` from the checked-out source with the locked Cargo workspace,
+exports its exact debug executable as `THINGTIME_TEST_COMMANDER_INDEXER`, and
+verifies that executable exists. Tests use disposable fixture databases rather
+than an installed app helper. This runs before signing credential access; the
+contract check enforces the ordering. A product entry-point compile correction
+ships separately on `main`.
+
+### Verified PR alias promotion
+
+The protected preview publisher checks the immutable candidate's shell and
+`/api/root-data` before replacing a working PR alias, then repeats verification
+at the alias with a fresh PR/head fence. A failed post-assignment check restores
+the captured predecessor only while the alias still belongs to that attempt;
+a concurrent successor is preserved. Uncertain publication or rollback keeps
+the upload receipt/candidate for inspection. Scheduled reconciliation uses the
+same promotion path. A shell or unrelated API canary alone is not application
+bootstrap acceptance. Run `node --test .github/scripts/preview-alias-promotion.test.mjs`
+and the existing publisher `--self-test` before publishing controller changes.
+
+### Reviewed retained-source preview maintenance
+
+A trusted manual main-branch dispatch may pass `maintenance_artifact_commit`,
+`maintenance_manifest_path` and `maintenance_manifest_sha256` with a positive
+`pr_number`. Empty defaults retain ordinary exact-current-head publication.
+The pinned canonical-main commit must contain a reviewed schema-v1 manifest at
+`ops/preview-maintenance/<id>/manifest.json` and its `protection.patch` sibling.
+The manifest binds the current PR authorization head, exact retained incumbent
+deployment/base, reviewed implementation commit, patch digest and resulting tree.
+The controller verifies merged-main ancestry and immutable blob/digest provenance;
+a separate build without deployment secrets applies the patch and checks the
+full tree plus gateway source fences. The protected publisher rechecks the
+current head, original incumbent and source receipt, then uses ordinary immutable
+candidate checks and conditional alias rollback. No arbitrary source URL or
+old-head override is accepted.
+
+Maintenance metadata reports the actual retained baseline and patched tree, with
+the current head identified only as authorization. It uses a separate GitHub
+maintenance environment and never reports ordinary current-head success.
+Scheduled reconciliation preserves its active alias until a healthy ordinary
+publication replaces it; canonical closed-PR/inactivity retention still applies.
+Unknown provenance is preserved for review. Do not dispatch before the matching
+main caller/artifact PR has merged.
+
+Retrying the exact maintenance intent reconciles an already-published matching
+READY alias or a verified matching candidate without a new build/upload. GitHub
+deployment records are read back by exact maintenance environment/source/intent
+before creation and after an uncertain response; already-successful statuses
+are left intact. A concurrent successor or a different intent is never adopted.
+
+The maintenance build uses only its existing read-only GitHub token. Provenance
+reads have one finite absolute budget across requests, retries and response bodies.
+Only explicit quota403/429, temporary service errors and network failures retry;
+permission403 fails immediately. Retry-After/reset waits must fit within that
+budget. Errors expose fixed endpoint classes and numeric rate metadata, with no
+raw provider body or credential output. A terminal quota failure requires fresh
+recovery evidence before another hosted attempt; permission is not broadened.
+
+### Preview publication diagnostics — 14 November 2026
+
+The canonical PR publisher emits passive `[preview-publication]` records around
+configuration, preview-master readiness, deployment preparation, CLI upload and
+uncertain-upload reconciliation, deployment readiness, alias/smoke checks, GitHub
+reporting and retention. Each record contains only a fixed stage, `started`,
+`succeeded` or `failed` status, and monotonic elapsed milliseconds. Nested spans
+overlap and must not be summed. Clock or logging failures do not alter publication.
+No arguments, URLs, provider responses, error messages or credentials are added
+to these timing records. Existing retries, deadlines, gates and stage order are
+unchanged; collect evidence from the next normally scheduled rollout rather than
+dispatching another deployment for diagnostics.
+
+### Refresh a retained preview runtime environment
+
+Changing Vercel's automation default does not update deployed runtime values.
+Vercel's `redeploy` operation also retains a prebuilt deployment's old settings.
+Use the default-branch Develop S3 PR preview dispatcher with
+`refresh_deployment_id` set to the exact current incumbent. To reuse a bundle,
+set `refresh_artifact_run_id` to its original successful controller run. Both
+the unexpired bundle and protected upload receipt must match that deployment,
+PR, current head and source. The controller makes a fresh `deploy --prebuilt`
+publication; it explicitly delivers the sole current automation default through
+the child process environment and the name-only runtime `--env` option. No
+credential values enter arguments, receipts or metadata. Platform rejection of
+the override fails publication rather than claiming rotation acceptance.
+
+Cross-run bundle and receipt downloads use the same protected-controller
+credential as their metadata verification (`CONFLICT_RESOLVER_PAT`, falling back
+to `github.token`). This adds no credential or permission. Installation-token
+quota exhaustion fails before publication; it must not weaken receipt checks.
+A failed-job rerun retains its reusable workflow revision, so a workflow change
+requires a fresh canary dispatch or an explicitly reconciled all-jobs rerun.
+
+An empty artifact run ID rebuilds the same current source on GitHub. Reviewed
+retained-source maintenance requires its existing pinned manifest inputs and
+must retain the exact canonical manifest/tree/patch receipt, or use the rebuild path; it never substitutes the PR's newer feature head.
+Owners, production, changed heads, forks, missing receipts and changed alias
+bindings are refused. The existing protected-alias restore, smoke, current-head
+and rollback gates still apply. Concurrent replacement of the incumbent aborts
+the refresh. Dispatch one canary first and verify its new deployment identity,
+refresh provenance and real proxied operation before a bounded rollout.
+Keep the old credential only for that finite rollout; revoke it after every
+active consumer is freshly published or retired through normal retention.
+
+Ordinary receipts created before retained-source maintenance omitted the
+authorization head. Refresh accepts that absence only when the protected receipt's
+source is independently the exact current ordinary PR head. Explicit null or
+mismatched heads and maintenance receipts still require their original proof.
+
+An exact-source refresh avoids a redundant retention sweep only after the
+canonical current-head/trust/liveness check refreshes the policy and proves an
+open, non-draft same-repository PR, with pruning explicitly false and inactive
+expiry explicitly null. Any changed or uncertain predicate retains the full
+sweep. Normal publication and closed-PR cleanup are unchanged.
+
+## Parallel Vercel deployments
+
+The product's main-branch listener calls the protected parallel publisher on a
+push or manual dispatch. Enable the repository variable
+`THINGTIME_DEPLOYMENT_PROFILES_ENABLED=true` after checking production exposes
+`api.integration-ci-deployment-profiles` 1.x. Register a parallel profile in
+Thingtime Admin and enroll it on the preview data authority. The existing
+publisher continues using its original target until an administrator saves a
+disabled `legacy` profile for that exact target. Disabling publishing stops
+future builds; it does not remove production domains or decommission a server.
+
+For each test profile create a dedicated GitHub environment
+`vercel-deployment-<profile-id>`, restrict deployment branches to `main`,
+and set its team-scoped `VERCEL_DEPLOY_TOKEN` secret and independent
+`VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_ID`, and
+`VERCEL_PROJECT_NAME` variables. The destination must have no Git connection,
+no user-defined Vercel environment variables, and only project-owned
+`vercel.app` domains. Configure the Vercel team-specific OIDC issuer and
+enroll the project for access to the preview gateway as described in the
+product runbook. The publisher rechecks the saved target and latest main
+revision before assigning the test alias. Personal tokens, database URLs and
+vault keys must stay out of project configuration and build artifacts.
+
+The hourly GitHub scheduler asks the production API to run due jobs over
+signed HTTPS requests. UTC schedules and execution claims live in Thingtime.
+HTTP 204 indicates a skipped dispatch. Check the product job's execution
+history for completed runs. The controller never prints the response body.

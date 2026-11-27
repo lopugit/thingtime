@@ -79,6 +79,13 @@ function assertPrReleaseContract() {
   const importCredentials = workflow.indexOf("      - name: Import Developer ID and notarization credentials\n");
   assert.ok(unsignedTests >= 0 && selectDistribution > unsignedTests, "source checks precede distribution selection");
   assert.ok(importCredentials > selectDistribution, "distribution selection precedes signing credential import");
+  const nativeChecks = workflow.slice(unsignedTests, selectDistribution);
+  const indexerBuild = nativeChecks.indexOf("cargo build --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer");
+  const indexerExport = nativeChecks.indexOf('export THINGTIME_TEST_COMMANDER_INDEXER="${GITHUB_WORKSPACE}/filesystem-indexer/target/debug/commander-indexer"');
+  const indexerExecutable = nativeChecks.indexOf('test -x "${THINGTIME_TEST_COMMANDER_INDEXER}"');
+  const nativeTests = nativeChecks.indexOf("swift test --package-path macos/ThingtimeNode");
+  assert.ok(indexerBuild >= 0 && indexerExport > indexerBuild && indexerExecutable > indexerExport && nativeTests > indexerExecutable,
+    "native tests build, export and validate their isolated Rust helper before execution and before signing access");
   assert.match(workflow, /0\) distribution="unsigned"/u, "an entirely absent credential set selects the temporary unsigned lane");
   assert.match(workflow, /6\) distribution="signed"/u, "a complete credential set selects the signed lane");
   assert.match(workflow, /Incomplete signing configuration/u, "partial credential sets fail closed rather than publishing an ambiguous artifact");

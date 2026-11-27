@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { findPendingReview, reviewScope } from "./lopu-review-queue.mjs";
+import { findPendingReview, readGitHub, reviewScope } from "./lopu-review-queue.mjs";
 
 const repo = "example/project";
 const url = `https://github.com/${repo}/actions/runs/123`;
@@ -91,6 +94,76 @@ test("an active review permits exactly one newest unadmitted follow-up", async (
     throw new Error("Unexpected read");
   };
   assert.equal(await findPendingReview({ repo, prNumber: "627", eventName: "push", read }), url);
+});
+
+// `findPendingReview` is fail-closed by design, so the reader underneath it is
+// the only place a transient API blip can be absorbed. Drive the real reader
+// through a fake `gh` on PATH rather than a stubbed transport: a fixture copy
+// of the retry classifier is exactly the drift this cover exists to prevent.
+function fakeGh(body) {
+  const dir = mkdtempSync(join(tmpdir(), "lopu-review-queue-"));
+  const counter = join(dir, "attempts");
+  const gh = join(dir, "gh");
+  writeFileSync(counter, "0");
+  writeFileSync(gh, `#!/usr/bin/env bash\nn=$(( $(cat '${counter}') + 1 ))\nprintf '%s' "$n" >'${counter}'\n${body}\n`);
+  chmodSync(gh, 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = `${dir}:${path}`;
+  const waited = [];
+  return {
+    waited,
+    wait: (ms) => waited.push(ms),
+    attempts: () => Number(readFileSync(counter, "utf8")),
+    [Symbol.dispose]: () => { process.env.PATH = path; },
+  };
+}
+const succeedAfter = (n, failure) => `if [ "$n" -le ${n} ]; then\n${failure}\nexit 1\nfi\nprintf '{"total_count":0,"group_members":[]}'`;
+
+test("a transient read is retried on the bounded ladder instead of reddening a PR check", () => {
+  const gh = fakeGh(succeedAfter(2, "echo 'gh: Server Error (HTTP 502)' >&2"));
+  try {
+    const ladder = [2000, 4000, 8000];
+    assert.deepEqual(readGitHub("repos/a/b/actions/runs/1/jobs", { wait: gh.wait, ladder }), {
+      total_count: 0, group_members: [],
+    });
+    assert.equal(gh.attempts(), 3, "the blip is absorbed by re-reading, not by guessing the queue state");
+    assert.deepEqual(gh.waited, [2000, 4000], "2/4/8s, the same ladder the shell gh_read_retry readers use");
+    assert.deepEqual(ladder, [8000], "one ladder is shared by the whole process, so a five-minute job cannot time out");
+  } finally { gh[Symbol.dispose](); }
+});
+
+test("a transport failure with no HTTP status is retried and names its class for the log", () => {
+  const gh = fakeGh(succeedAfter(1, "echo 'error connecting to api.github.com' >&2"));
+  try {
+    assert.ok(readGitHub("repos/a/b", { wait: gh.wait, ladder: [1] }));
+    assert.equal(gh.attempts(), 2);
+  } finally { gh[Symbol.dispose](); }
+
+  const dead = fakeGh("echo 'error connecting to api.github.com' >&2\nexit 1");
+  try {
+    assert.throws(
+      () => readGitHub("repos/a/b", { wait: dead.wait, ladder: [1, 2, 3] }),
+      // The original message said only "Lopu queue read failed", which is why
+      // the first observed instance could not be classified from its own log.
+      (error) => error.message === "Lopu queue read failed (exit 1)" && error.status === undefined,
+    );
+    assert.equal(dead.attempts(), 4, "the ladder bounds the retries; an exhausted budget still gives a verdict");
+    assert.deepEqual(dead.waited, [1, 2, 3]);
+  } finally { dead[Symbol.dispose](); }
+});
+
+test("a definite answer is never slept on: 404 resolves instantly and a bare 403 stays fatal", () => {
+  for (const [status, expected] of [[404, 404], [403, 403], [401, 401], [422, 422]]) {
+    const gh = fakeGh(`echo 'gh: nope (HTTP ${status})' >&2\nexit 1`);
+    try {
+      assert.throws(() => readGitHub("repos/a/b", { wait: gh.wait, ladder: [1, 2, 3] }), (error) => {
+        assert.equal(error.status, expected);
+        return true;
+      });
+      assert.equal(gh.attempts(), 1, `HTTP ${status} is an answer, not a blip`);
+      assert.deepEqual(gh.waited, [], "a real permission or scope failure must not spend the shared ladder");
+    } finally { gh[Symbol.dispose](); }
+  }
 });
 
 test("branch names are encoded and exact PR selectors take precedence", async () => {

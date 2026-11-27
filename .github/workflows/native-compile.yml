@@ -1,0 +1,124 @@
+name: Native compile (protected, isolated, unsigned)
+
+# Trusted implementation only. Admission to github-actions and registration of
+# this dispatch entry must precede execution. Candidate workflow files never run.
+on:
+  workflow_call:
+    inputs:
+      source_pr:
+        description: Open owner PR in lopugit/thingtime to compile
+        required: true
+        type: string
+      source_sha:
+        description: Exact current 40-character PR head SHA
+        required: true
+        type: string
+      mode:
+        description: Inert preflight first; native requires separate explicit selection
+        required: false
+        default: preflight
+        type: string
+  workflow_dispatch:
+    inputs:
+      source_pr:
+        description: Open owner PR in lopugit/thingtime to compile
+        required: true
+        type: string
+      source_sha:
+        description: Exact current 40-character PR head SHA
+        required: true
+        type: string
+      mode:
+        description: Inert preflight first; native requires separate explicit selection
+        required: false
+        default: preflight
+        type: choice
+        options: [preflight, native]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: native-compile-${{ inputs.source_pr }}
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    if: >-
+      github.repository == 'lopugit/thingtime' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == github.repository_owner && (
+        (github.ref == 'refs/heads/github-actions' &&
+         github.workflow_ref == 'lopugit/thingtime/.github/workflows/native-compile.yml@refs/heads/github-actions') ||
+        (github.ref == 'refs/heads/main' &&
+         github.workflow_ref == 'lopugit/thingtime/.github/workflows/native-compile-listener.yml@refs/heads/main'))
+    runs-on: macos-15
+    timeout-minutes: ${{ inputs.mode == 'native' && 65 || 10 }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - name: Check out admitted immutable controller source only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: a0d410b29f251ffcc0ec399c085ea501b767379d # H1: independently reviewed helper source
+          path: trusted-controller
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/native-compile.yml
+      - name: Validate source and acquire candidate as opaque data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_PR: ${{ inputs.source_pr }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_PR" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          gh api "repos/lopugit/thingtime/pulls/$SOURCE_PR" > "$RUNNER_TEMP/native-pr.json"
+          /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.py \
+            validate "$RUNNER_TEMP/native-pr.json" "$SOURCE_SHA"
+          [[ "$MODE" == preflight || "$MODE" == native ]]
+          if [[ "$MODE" == native ]]; then
+            gh api "repos/lopugit/thingtime/tarball/$SOURCE_SHA" > "$RUNNER_TEMP/native-candidate.tar.gz"
+          fi
+      - name: Prepare trusted compiler tools before isolation
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          if [[ "$MODE" == native ]]; then
+            command -v xcodegen >/dev/null || brew install xcodegen
+          fi
+          /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.test.py
+      - name: Run admitted supervisor with an empty inherited environment
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MODE: ${{ inputs.mode }}
+          CONTROL_SHA: a0d410b29f251ffcc0ec399c085ea501b767379d # H1, independent of caller/candidate
+        run: |
+          set -euo pipefail
+          test "$(git -C trusted-controller rev-parse HEAD)" = "$CONTROL_SHA"
+          sudo -n /usr/bin/env -i \
+            DEVELOPER_DIR="$DEVELOPER_DIR" \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_OS="$RUNNER_OS" RUNNER_TEMP="$RUNNER_TEMP" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_REF="$GITHUB_REF" \
+            GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_ACTOR="$GITHUB_ACTOR" \
+            GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" \
+            SUDO_UID="$(id -u)" SUDO_USER="$(id -un)" \
+            /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.py build \
+            "$RUNNER_TEMP/native-candidate.tar.gz" "$RUNNER_TEMP/native-compile-report" \
+            "$SOURCE_SHA" "$CONTROL_SHA" "$RUNNER_TEMP/native-pr.json" "$MODE"
+      - name: Preserve sanitized compile and isolation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-compile-evidence
+          path: ${{ runner.temp }}/native-compile-report
+          if-no-files-found: warn
+          retention-days: 7

@@ -27,6 +27,26 @@ const TRANSIENT_HTTP_STATUS = /\b(?:408|429|500|502|503|504)\b/u;
 // structurally by isTruncatedJsonRead() below instead of by message.
 const TRANSIENT_READ_FAILURE =
   /\b(?:408|429|500|502|503|504)\b|stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|[Uu]nexpected end of JSON input|TLS handshake timeout|i\/o timeout|server closed idle connection|client connection force closed/u;
+// An exhausted PRIMARY installation budget answers HTTP 403 carrying
+// "API rate limit exceeded", not 429, so neither classifier above sees it and
+// the first read threw (run 40990132440 on 2026-10-30, and the same shape eight
+// days earlier in run 39789495402). That turned one shared, self-healing
+// account-wide condition into a red check on every open PR at once.
+//
+// The REST wrapper prints a status, so that half pairs status AND message for
+// the same reason resolve-pr-conflicts.yml's gh_read_retry pairs them: a bare
+// 403 is a real permission failure and must still fail fast. gh prints the two
+// on one line in either order depending on the wrapper, hence the alternation.
+//
+// The GraphQL wrapper prints NO status line and says "already exceeded"
+// ("GraphQL: API rate limit already exceeded for site ID installation.", the
+// exact text that failed PR #1201 in run 39789495402), so pairing on a status
+// there would never match. It does not need one: the `GraphQL:` prefix means gh
+// decoded a GraphQL error document rather than an HTTP rejection, and no
+// permission error is spelled this way. Both wordings are accepted on that
+// branch, which is why `already` is optional.
+const GH_BUDGET_EXHAUSTED =
+  /\bHTTP (?:403|429)(?:[^0-9]|$)[\s\S]*API rate limit (?:already )?exceeded|API rate limit (?:already )?exceeded[\s\S]*\bHTTP (?:403|429)(?:[^0-9]|$)|GraphQL: [\s\S]*API rate limit (?:already )?exceeded|You have exceeded a secondary rate limit/u;
 const CENTRAL_RUN_TITLE = /^Lopu CodeQL PR #(\d+) @ ([0-9a-f]{40,64})$/u;
 const ACTIVE_RUN_STATUSES = [
   "queued",
@@ -85,6 +105,17 @@ function ghJson(args, { attempts = 4 } = {}) {
       return output.trim() ? JSON.parse(output) : null;
     } catch (error) {
       const failure = commandFailureText(error);
+      // Published resets run most of an hour out, so the 2-8s backoff below
+      // cannot clear an exhausted budget and burning the remaining attempts on
+      // it only delays the same answer. Tag it and let main() defer instead:
+      // this job is scheduled and replans from live state, so the next run does
+      // the work. One shared installation budget is never a defect in any PR.
+      if (GH_BUDGET_EXHAUSTED.test(failure)) {
+        throw Object.assign(
+          new Error(`gh ${args.join(" ")} deferred: ${failure}`),
+          { budgetExhausted: true },
+        );
+      }
       const transient = TRANSIENT_READ_FAILURE.test(failure)
         || isTruncatedJsonRead(output, error);
       if (attempt === attempts || !transient) {
@@ -328,6 +359,18 @@ function dispatchAnalysisWithInput(repository, candidate) {
       return;
     } catch (error) {
       const failure = commandFailureText(error);
+      // Budget exhaustion is checked ahead of the status classifier because it
+      // is the one rejection that proves the opposite of a transport reset:
+      // GitHub refused this POST before creating anything, so no duplicate run
+      // can exist and nothing is lost by deferring the whole pass. Replaying it
+      // is still pointless -- the reset is most of an hour out -- so this does
+      // not retry, it hands the condition to main()'s deferral.
+      if (GH_BUDGET_EXHAUSTED.test(failure)) {
+        throw Object.assign(
+          new Error(`CodeQL dispatch for PR #${candidate.number} deferred: ${failure}`),
+          { budgetExhausted: true },
+        );
+      }
       // This POST deliberately keeps the status-only classifier and does not
       // use TRANSIENT_READ_FAILURE. A transport reset or a torn-down body says
       // nothing about whether GitHub already accepted the dispatch, so
@@ -556,6 +599,46 @@ function selfTest() {
     "a rejecting status stays fatal",
   );
 
+  // Budget exhaustion. gh prints the status and the message on one line, and
+  // the observed ordering differs between the REST wrapper and the GraphQL
+  // one, so both orderings are covered. The exact run 40990132440 text is used
+  // verbatim rather than paraphrased.
+  const exhausted = [
+    "gh: API rate limit exceeded for installation. If you reach out to GitHub Support for help, please include the request ID 7C20:110F0C:26A8434:299759D:6AE3FCA4 and timestamp 2026-10-30 02:10:44 UTC. (HTTP 403)",
+    "gh: HTTP 403: API rate limit exceeded for installation (https://api.github.com/repos/lopugit/thingtime/pulls?state=open)",
+    "gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again.",
+    // The statusless GraphQL wording, verbatim from run 39789495402 on PR #1201.
+    "GraphQL: API rate limit already exceeded for site ID installation.",
+  ];
+  for (const failure of exhausted) {
+    assert.equal(
+      GH_BUDGET_EXHAUSTED.test(failure),
+      true,
+      `an exhausted installation budget must defer, not fail: ${failure.slice(0, 60)}`,
+    );
+  }
+  // A bare permission failure is a real defect and must still fail fast, which
+  // is why status and message are paired rather than matched alone. The same
+  // pairing keeps an unrelated 403 and a rate-limit note from a *different*
+  // request from combining into a false deferral.
+  const fatal = [
+    "gh: Resource not accessible by integration (HTTP 403)",
+    "gh: Must have admin rights to Repository. (HTTP 403)",
+    "gh: Bad credentials (HTTP 401)",
+    "gh: Not Found (HTTP 404)",
+    "GraphQL: Resource protected by organization SAML enforcement (HTTP 403)",
+    // A REST rate-limit message with no status pairing stays fatal: only the
+    // statusless GraphQL wrapper is trusted on its prefix alone.
+    "API rate limit exceeded for installation.",
+  ];
+  for (const failure of fatal) {
+    assert.equal(
+      GH_BUDGET_EXHAUSTED.test(failure),
+      false,
+      `a non-budget rejection must stay fatal: ${failure}`,
+    );
+  }
+
   process.stdout.write("codeql-open-pr-backfill self-test: OK\n");
 }
 
@@ -616,6 +699,23 @@ async function main() {
 }
 
 main().catch((error) => {
+  // Deferral is not failure. Every read this job performs is idempotent and
+  // every dispatch it issues is re-derived from live state on the next run, so
+  // an exhausted account-wide budget has cost nothing but this pass. Exiting 0
+  // keeps the shared condition visible in the log without painting a check red
+  // on PRs that did not cause it; a dispatch rejected the same way simply is
+  // not queued, and the next run selects it again.
+  if (error?.budgetExhausted) {
+    process.stderr.write(`${error.message}\n`);
+    writeSummary([
+      "## Lopu CodeQL backfill",
+      "GitHub's shared installation API budget is exhausted; this pass was deferred to the next scheduled run.",
+    ]);
+    process.stdout.write(
+      "::notice::GitHub's shared installation API budget is exhausted; deferring the CodeQL backfill to the next scheduled run.\n",
+    );
+    return;
+  }
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exitCode = 1;
 });

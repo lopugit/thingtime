@@ -83,6 +83,8 @@ graphify-out/graph.html
 graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
 graphify-out/snapshots/**/.staging-*
+# Query freshness stamps are machine-local even when aliases resolve a snapshot.
+graphify-out/snapshots/**/cache/
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 
@@ -101,3 +103,7 @@ ds-bundle/
 
 # Ephemeral validated admin model plan generated for one Lopu invocation.
 .lopu-waterfall-action/
+
+# This protected controller branch has no product app. Managed worktree bootstrap
+# may copy ignored app setup; keep that local scratch out of controller graphs.
+/remix/

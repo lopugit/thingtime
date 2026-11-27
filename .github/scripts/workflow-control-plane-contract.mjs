@@ -542,7 +542,9 @@ function assertObservableLabelCleanup(rebase) {
   );
   assert.match(
     scan,
-    /GH_TOKEN="\$token" gh api --method DELETE/u,
+    // gh_budgeted (gh-budget.sh) wraps the same call; the token still
+    // travels only through the environment prefix, never an argument.
+    /GH_TOKEN="\$token" gh_budgeted api --method DELETE/u,
     "rebase detector label cleanup: switches credentials without exposing them",
   );
   assert.match(
@@ -806,7 +808,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     siblingStartBarrier,
-    /\[ "\$SECONDS" -ge "\$deadline" \]/u,
+    /while \[ "\$\(poll_now\)" -lt "\$deadline" \]/u,
     "the barrier is bounded, so a sibling that never gets a runner cannot strand this leg up to its own 60-minute job timeout",
   );
   assert.doesNotMatch(
@@ -891,12 +893,12 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     orderingHold,
-    /while \[ "\$SECONDS" -lt "\$deadline" \]/u,
+    /while \[ "\$\(poll_now\)" -lt "\$deadline" \]/u,
     "the hold is bounded, so a wedged sibling cannot strand the analyzer up to its own 60-minute job timeout",
   );
   assert.match(
     orderingHold,
-    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( SECONDS \+ sibling_grace \)\)/u,
+    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( \$\(poll_now\) \+ sibling_grace \)\)/u,
     "a sibling that succeeded without publishing — the adopted push where NEITHER leg uploads — releases on a grace window instead of idling out the whole hold",
   );
   assert.match(
@@ -958,6 +960,22 @@ export function assertControlPlaneContract() {
   assert.match(codeqlHandoff, /^      actions: write$/mu);
   assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
   assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
+  // Nothing re-enters this privileged hop until the PR head moves, so a
+  // single-attempt dispatch converts a transient HTTP 500 from
+  // POST /actions/workflows/{id}/dispatches into a red check that outlives the
+  // outage (observed on PR #1035 @ 4952b234, run 39462996775). Pin the retry
+  // as a property — a bounded loop around the dispatch that only escalates
+  // once the budget is exhausted — rather than pinning one spelling of it.
+  assert.match(
+    codeqlHandoff,
+    /until gh workflow run codeql-analysis\.yml[\s\S]*?\n\s*do\n[\s\S]*?\n\s*done\b/u,
+    "the CodeQL dispatch retries instead of leaving a transient API outage red on the PR",
+  );
+  assert.match(
+    codeqlHandoff,
+    /\[ "\$attempt" -ge "\$attempts" \][\s\S]*?no unprivileged analysis was queued[\s\S]*?exit 1/u,
+    "an exhausted dispatch budget still fails closed, because no analysis was queued",
+  );
   assert.doesNotMatch(
     codeqlHandoff,
     /actions\/checkout|codeql-action\/(?:init|analyze)|LOPU_AGENT_BACKEND|ANTHROPIC|OPENAI|\bsecrets\./u,
@@ -1117,6 +1135,30 @@ export function assertControlPlaneContract() {
     /!TRANSIENT_HTTP_STATUS\.test\(failure\)\) \{\n\s*throw new Error\(`CodeQL dispatch for PR/u,
     "the mutating CodeQL dispatch stays status-only and never replays on a transport reset",
   );
+  // An exhausted installation budget is an account-wide, self-healing
+  // condition, never a defect in any PR, but GitHub reports the primary limit
+  // as HTTP 403 rather than 429, so the classifiers above left it fatal and one
+  // outage reddened every open PR at once (run 40990132440; run 39789495402
+  // eight days earlier). Pin the deferral as a property: the condition is
+  // recognised, it is NOT retried into the backoff -- the published reset is
+  // most of an hour out -- and the process exits 0 so the next scheduled pass
+  // replans from live state. Pin the fail-fast half too, or the repair could
+  // regress into swallowing a real permission failure.
+  assert.match(
+    codeqlBackfill,
+    /const GH_BUDGET_EXHAUSTED\s*=\s*\/[^\n]*HTTP \(\?:403\|429\)[^\n]*API rate limit/u,
+    "the backfill recognises an exhausted installation budget by status and message together",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(GH_BUDGET_EXHAUSTED\.test\(failure\)\) \{[\s\S]*?budgetExhausted: true/u,
+    "an exhausted budget is tagged for deferral rather than burned through the transient backoff",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(error\?\.budgetExhausted\) \{[\s\S]*?return;\n\s*\}\n\s*process\.stderr\.write\(`\$\{error\.stack[\s\S]*?process\.exitCode = 1/u,
+    "a deferred pass exits 0 while every other failure still fails the job",
+  );
   assert.doesNotMatch(
     codeqlBackfill,
     /ANTHROPIC|OPENAI|actions\/checkout/u,
@@ -1207,8 +1249,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewBuildJob,
-    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
-    "develop preview builds only the exact SHA authorized by the protected controller",
+    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.source_sha \}\}/u,
+    "develop preview builds only the exact source SHA authorized by the protected controller",
   );
   assert.match(
     developPreviewBuildJob,
@@ -1250,6 +1292,11 @@ export function assertControlPlaneContract() {
     resolve(scripts, "deploy-develop-pr-preview.mjs"),
     "utf8",
   );
+
+  assert.match(developPreviewController, /source_sha=\$\{maintenance\?\.retainedSourceSha \?\? pullRequest\.head\.sha\}/u,
+    "ordinary builds remain exact head; retained baseline requires explicit validated maintenance intent");
+  assert.match(developPreviewBuildJob, /Reconstruct exact reviewed retained source without secrets[\s\S]*node control\/\.github\/scripts\/preview-maintenance\.mjs/u,
+    "maintenance overlay must be reconstructed by protected controller code before building");
   assert.match(
     developPreviewController,
     /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
@@ -1257,7 +1304,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: !config\.maintenanceCandidate, pullRequest, expectedReady, maintenance: config\.maintenance \}\)/u,
     "develop preview publishes its expected URL and estimate before releasing the build plan",
   );
   assert.match(
@@ -1267,7 +1314,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /THINGTIME_GIT_COMMIT_SHA:\s*pullRequest\.head\.sha/u,
+    /THINGTIME_GIT_COMMIT_SHA:\s*sourceSha\(config, pullRequest\)/u,
     "develop previews publish the exact PR SHA into the runtime",
   );
   const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
@@ -1278,10 +1325,28 @@ export function assertControlPlaneContract() {
     /github\.event\.client_payload\.admin_preview == '1'[\s\S]*environment: vercel-develop-pr-control/u,
     "admin preview dispatches are authenticated in the protected controller environment",
   );
-  assert.doesNotMatch(
-    adminPreviewPrepareJob,
-    /VERCEL_API_TOKEN|secrets\.(?!CONFLICT_RESOLVER_PAT\b)/u,
-    "admin preview preparation may use only the existing repository automation PAT, never a Vercel or other credential",
+  // Policy admission already requires this exact protected HMAC credential.
+  // Keep the exception closed to those two names; builds still receive none.
+  const assertAdminPrepareCredentials = (job) => {
+    assert.doesNotMatch(
+      job,
+      /VERCEL_API_TOKEN|secrets\.(?!(?:CONFLICT_RESOLVER_PAT|THINGTIME_CI_ROUTER_SECRET)\b)/u,
+      "admin preview preparation permits only its repository PAT and scoped policy HMAC, never Vercel or unrelated credentials",
+    );
+    assert.match(
+      job,
+      /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u,
+      "admin preparation binds the policy HMAC to its exact existing secret name",
+    );
+  };
+  assertAdminPrepareCredentials(adminPreviewPrepareJob);
+  assert.throws(
+    () => assertAdminPrepareCredentials(adminPreviewPrepareJob.replace("secrets.THINGTIME_CI_ROUTER_SECRET", "secrets.VERCEL_DEPLOY_TOKEN")),
+    /never Vercel or unrelated credentials/u,
+  );
+  assert.throws(
+    () => assertAdminPrepareCredentials(`${adminPreviewPrepareJob}\n      VERCEL_API_TOKEN: forbidden`),
+    /never Vercel or unrelated credentials/u,
   );
   assert.match(
     adminPreviewPrepareJob,

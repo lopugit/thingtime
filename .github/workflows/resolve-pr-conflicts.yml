@@ -1060,8 +1060,15 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/lopu-pr-status.mjs
-          sparse-checkout-cone-mode: false
+          sparse-checkout: .github/scripts
+
+      # Changed paths per exact PR head and base from earlier scans. Data only;
+      # .github/scripts/pr-files-inventory.sh validates it and documents scope.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lopu-pr-files-cache.json
+          key: lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: lopu-pr-files-v1-
 
       - name: Scan open PRs and assign deterministic resolver ownership
         id: scan
@@ -1165,9 +1172,37 @@ jobs:
           # Total time budget for verdicts, and the pause between re-queries.
           MERGEABLE_POLL_SECONDS: "500"
           MERGEABLE_POLL_INTERVAL: "15"
+          # Point on this step's clock after which the optional changed-file
+          # hydration starts no further per-PR read. `timeout-minutes: 15`
+          # (900s) is the hard wall and a cancelled step publishes NO
+          # `prs`/`any`, so the advisory scan must never spend the
+          # authoritative one's budget. 600s leaves >=300s for classification,
+          # label sync and comments, and is ~2x the ~280s 140 open PRs need at
+          # the measured ~2s per single-attempt paginated read.
+          FILES_INVENTORY_DEADLINE_SECONDS: "600"
           STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
         run: |
           set -euo pipefail
+
+          # Exhausting the one shared installation API budget is repository
+          # wide and self-heals at a published reset. This detector runs on
+          # base pushes and pull_request_target, so letting `set -e` propagate
+          # that read failure reports red on EVERY open PR for an outage no PR
+          # caused or can fix. Defer instead, exactly as this step already
+          # does for every other unsatisfiable precondition. The sentinel is a
+          # file, not a variable: gh_read_retry runs inside command
+          # substitution, so a subshell assignment would be lost.
+          LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"
+          rm -f "$LOPU_GH_BUDGET_SENTINEL"
+          defer_on_exhausted_budget() {
+            local code=$?
+            [ "$code" -ne 0 ] || return 0
+            [ -e "$LOPU_GH_BUDGET_SENTINEL" ] || return 0
+            echo "::notice::Deferring this conflict scan: GitHub's shared installation API budget was exhausted mid-scan. That is an upstream budget reset, not a defect in any PR, and a later detector re-scans."
+            printf 'prs=[]\nany=false\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          trap defer_on_exhausted_budget EXIT
 
           # "Am I the control-plane revision?" — see CONTROL-PLANE IDENTITY
           # at the top of this file. Either this run started on github-actions,
@@ -1310,6 +1345,15 @@ jobs:
           # fail on the first attempt), so the status and that exact message
           # are matched together. gh prints both on one line but in the
           # opposite order, which is why this stays two tests, not one regex.
+          # That replay horizon is minutes, not the 2-8s spanned here, and for
+          # a persistently oversize PR the refusal is indefinite (the promotion
+          # authorizer below records that too), so the retry pays only where
+          # failure would stop the step. `LOPU_SLOW_DIFF_RETRY=false` lets one
+          # caller whose failure path is an already-supported "inventory
+          # incomplete" degradation decline it: job 124090191975 spent 867s of
+          # a 900s timeout replaying 28 ungeneratable diffs, was cancelled
+          # before publishing any `prs`/`any`, and reddened the unrelated PR
+          # that started it. The default still retries.
           # Keep every notice on stderr so
           # command-substitution JSON stays clean, and surface
           # auth/schema/permission failures
@@ -1327,13 +1371,30 @@ jobs:
               : > "$errors"
               if gh api "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                  || grep -Eq "$transport" "$errors" \
                  || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                      && grep -Fq "$slow_diff" "$errors"; }; then
+                      && grep -Fq "$slow_diff" "$errors" \
+                      && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; then
                 if [ "$attempt" -lt 4 ]; then
                   delay="$((1 << attempt))"
                   echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -1715,6 +1776,7 @@ jobs:
             inventory="$(jq -c '[{
               number,
               headRefName:.head.ref,
+              headRefOid:.head.sha,
               baseRefName:.base.ref,
               isCrossRepository:(.head.repo.full_name != .base.repo.full_name),
               isDraft:(.draft == true),
@@ -1766,6 +1828,7 @@ jobs:
                     nodes {
                       number
                       headRefName
+                      headRefOid
                       baseRefName
                       isCrossRepository
                       isDraft
@@ -1793,7 +1856,7 @@ jobs:
               return 1
             fi
             inventory="$(jq -c '[.[].data.repository.pullRequests.nodes[]
-              | {number, headRefName, baseRefName, isCrossRepository,
+              | {number, headRefName, headRefOid, baseRefName, isCrossRepository,
                  isDraft, mergeable, mergeStateStatus,
                  labels:(.labels.nodes // []),
                  files:[], filesTotal:0, filesIncomplete:true}]' "$response")"
@@ -1801,35 +1864,8 @@ jobs:
             printf '%s\n' "$inventory"
           }
 
-          # Keep expensive diff generation out of the shared GraphQL query:
-          # one large PR can time out every otherwise healthy PR in the page.
-          # Hydrate changed paths independently after mergeability settles.
-          # Failure preserves explicit incomplete state and does not abort the
-          # repository scan. Diagnostics must stay on stderr, never JSON stdout.
-          complete_large_pr_files() {
-            local inventory="$1" encoded pr number pages
-            while IFS= read -r encoded; do
-              [ -n "$encoded" ] || continue
-              pr="$(base64 --decode <<<"$encoded")"
-              number="$(jq -r '.number' <<<"$pr")"
-              pages="$RUNNER_TEMP/lopu-pr-files-$number.json"
-              if ! gh_read_retry --paginate \
-                  "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
-                rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels use only its available changed paths (inventory incomplete)." >&2
-                continue
-              fi
-              inventory="$(jq -c \
-                --argjson number "$number" \
-                --slurpfile response "$pages" \
-                '($response[0] | add // [] | map(.filename) | unique) as $files
-                 | map(if .number == $number
-                       then . + {files:$files, filesTotal:($files | length), filesIncomplete:false}
-                       else . end)' <<<"$inventory")"
-              rm -f "$pages"
-            done < <(jq -r '.[] | select(.filesIncomplete == true or .filesTotal > (.files | length)) | @base64' <<<"$inventory")
-            printf '%s\n' "$inventory"
-          }
+          # Changed-path hydration and its cross-run cache: see the helper.
+          . .github/scripts/pr-files-inventory.sh
 
           query() {
             if [ -n "$PR_BATCH_B64" ]; then
@@ -2203,6 +2239,14 @@ jobs:
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
+      # always(): a scan cancelled by timeout-minutes still saves the exact
+      # paths it read; the helper writes this marker only for a changed cache.
+      - if: always() && hashFiles('.lopu-pr-files-cache.save') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lopu-pr-files-cache.json
+          key: lopu-pr-files-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
   # Creation-time promotion conflicts do not have a PR yet, so the ordinary
   # detector cannot own them. The promoter first creates an immutable empty
   # reservation commit, then dispatches this fixed github-actions revision. Validate
@@ -2559,7 +2603,15 @@ jobs:
     timeout-minutes: 5
     permissions:
       actions: write
+      contents: read
     steps:
+      - name: Check out the trusted API budget helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Dispatch one trusted github-actions worker per bounded PR batch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2573,6 +2625,8 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+          . .github/scripts/gh-budget.sh
+          trap 'gh_budget_defer "PR batch handoff"' EXIT
           # Every base push can produce several equivalent detector events
           # (push, pull_request_target, check_run and workflow_run). Their
           # immutable worker batches used to accumulate behind the one Lopu
@@ -2587,7 +2641,7 @@ jobs:
           # The new batch below re-derives live refs and mergeability, so those
           # never-started snapshots are obsolete.
           queued_worker_ids="$(
-            gh api --paginate \
+            gh_budgeted api --paginate \
               "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=queued&per_page=100" \
               --jq '
                 .workflow_runs[]
@@ -2605,12 +2659,12 @@ jobs:
           while IFS= read -r queued_run_id; do
             [ -n "$queued_run_id" ] || continue
             live_status="$(
-              gh api "repos/$REPO/actions/runs/$queued_run_id" --jq '.status' \
+              gh_budgeted api "repos/$REPO/actions/runs/$queued_run_id" --jq '.status' \
                 2>/dev/null || printf 'unknown'
             )"
             case "$live_status" in
               queued)
-                if gh api --method POST \
+                if gh_budgeted api --method POST \
                     "repos/$REPO/actions/runs/$queued_run_id/cancel" \
                     >/dev/null 2>&1
                 then
@@ -2633,7 +2687,7 @@ jobs:
               while IFS= read -r cancelled_run_id; do
                 [ -n "$cancelled_run_id" ] || continue
                 cancelled_status="$(
-                  gh api "repos/$REPO/actions/runs/$cancelled_run_id" --jq '.status' \
+                  gh_budgeted api "repos/$REPO/actions/runs/$cancelled_run_id" --jq '.status' \
                     2>/dev/null || printf 'completed'
                 )"
                 case "$cancelled_status" in
@@ -2659,7 +2713,7 @@ jobs:
           # event or scheduled sweep then uses the discoverable matrix format.
           legacy_worker_ids="$(
             for legacy_status in pending in_progress; do
-              gh api --paginate \
+              gh_budgeted api --paginate \
                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$legacy_status&per_page=100" \
                 --jq '
                   .workflow_runs[]
@@ -2696,7 +2750,7 @@ jobs:
           fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
           fleet_state=''
           if fleet_state="$(
-            gh api "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded" \
+            gh_budgeted api "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded" \
               2>"$RUNNER_TEMP/lopu-fleet-read.err"
           )"; then
             owned_numbers="$(jq -c '
@@ -2716,7 +2770,7 @@ jobs:
             priority_owned_numbers='[]'
             priority_fleet_error="$RUNNER_TEMP/lopu-priority-fleet-read.err"
             if priority_fleet_state="$(
-              gh api "repos/$REPO/actions/concurrency_groups/$priority_fleet_group_encoded" \
+              gh_budgeted api "repos/$REPO/actions/concurrency_groups/$priority_fleet_group_encoded" \
                 2>"$priority_fleet_error"
             )"; then
               priority_owned_numbers="$(jq -c '
@@ -2870,7 +2924,7 @@ jobs:
                     }
                   }
                 ' \
-                | gh api --method POST \
+                | gh_budgeted api --method POST \
                     "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                     --input -
             done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$selections")
@@ -2928,6 +2982,22 @@ jobs:
           SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
         run: |
           set -euo pipefail
+
+          # Same shared-budget deferral as the conflict detector above, where
+          # `any=false` is already this step's "nothing to review" answer.
+          # Duplicate GITHUB_OUTPUT keys resolve to the last value, so
+          # appending false only ever declines work, never invents it.
+          LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"
+          rm -f "$LOPU_GH_BUDGET_SENTINEL"
+          defer_on_exhausted_budget() {
+            local code=$?
+            [ "$code" -ne 0 ] || return 0
+            [ -e "$LOPU_GH_BUDGET_SENTINEL" ] || return 0
+            echo "::notice::Deferring this review scan: GitHub's shared installation API budget was exhausted mid-scan. A later detector re-selects after the reset."
+            echo 'any=false' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          trap defer_on_exhausted_budget EXIT
 
           verified_lopu_publication() {
             local message="$1" markers marker_count marker_kind run_id pr_number run_json jobs_json expected_job
@@ -3039,8 +3109,24 @@ jobs:
               : >"$errors"
               if gh "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
@@ -3049,7 +3135,8 @@ jobs:
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                    || grep -Eq "$transport" "$errors" \
                    || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                        && grep -Fq "$slow_diff" "$errors"; }; } \
+                        && grep -Fq "$slow_diff" "$errors" \
+                        && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -4065,7 +4152,7 @@ jobs:
          || github.workflow_ref
          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
@@ -4143,8 +4230,24 @@ jobs:
               : >"$errors"
               if gh "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
@@ -4153,7 +4256,8 @@ jobs:
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                    || grep -Eq "$transport" "$errors" \
                    || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                        && grep -Fq "$slow_diff" "$errors"; }; } \
+                        && grep -Fq "$slow_diff" "$errors" \
+                        && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -5455,7 +5559,7 @@ jobs:
       && inputs.pr_batch_b64 == ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
@@ -7462,7 +7566,7 @@ jobs:
           || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
       && inputs.branch == ''
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 360
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write

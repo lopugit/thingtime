@@ -41,11 +41,23 @@ test('redundancy requires complete graph-only managed diffs including rename sou
   assert.equal(redundant({ ...p, head: { ...p.head, ref: 'codex/graph-maintenance' } }, files), false);
   assert.ok(redundant({ ...p, head: { ...p.head, ref: 'lopu/feature-stack-a' }, body: 'Feature Stack id: a' }, files));
 });
-test('approval is exact-head/base, bot-owned, latest, and respects requested changes', () => {
+test('approval is exact-head, bot-owned, latest, and respects requested changes', () => {
   assert.ok(approved(pull(), [review()]));
   for (const r of [{ ...review(), commit_id: base }, { ...review(), body: '' },
-    { ...review(), user: { login: 'outsider' } }, { ...review(), state: 'DISMISSED' }]) assert.equal(approved(pull(), [r]), false);
-  const p = pull(); p.base.sha = 'c'.repeat(40); assert.equal(approved(p, [review()]), false);
+    { ...review(), user: { login: 'outsider' } }, { ...review(), state: 'DISMISSED' },
+    // A marker naming another head, or one truncated/hand-edited into an
+    // ill-formed shape, is still not an approval of this head.
+    { ...review(), body: `<!-- thingtime-lopu-merge-ready:v1 head=${base} base=${base} -->` },
+    { ...review(), body: `<!-- thingtime-lopu-merge-ready:v1 head=${head} -->` },
+    { ...review(), body: `<!-- thingtime-lopu-merge-ready:v1 head=${head} base=nope -->` },
+    { ...review(), body: `<!-- thingtime-lopu-merge-ready:v1 head=${head.slice(1)} base=${base} -->` }]) {
+    assert.equal(approved(pull(), [r]), false);
+  }
+  // Regression: GitHub's pulls API advances base.sha only on synchronization,
+  // and the marker records baseRefOid, so a moved base must not expire an
+  // approval of an unchanged head. PR #1254 sat clean, approved and green for
+  // six days because this returned false.
+  const p = pull(); p.base.sha = 'c'.repeat(40); assert.ok(approved(p, [review()]));
   assert.equal(approved(pull(), [review(), { ...review(), id: 2, state: 'CHANGES_REQUESTED', user: { login: 'human' } }]), false);
   assert.equal(approved(pull(), [review(), { ...review(), id: 2, state: 'DISMISSED' }]), false);
 });
@@ -60,9 +72,14 @@ test('missing, skipped-only, failed, cancelled, pending, spoofed and newer check
   assert.equal(tested(checks().map(c => ({ ...c, app: { slug: 'spoof' } })), [], 'main'), false);
   assert.equal(tested(checks(), [{ id: 1, context: 'security', state: 'failure' }], 'main'), false);
 });
+// The live base tip is deliberately NOT p.base.sha: that is what GitHub really
+// reports once the base branch has advanced past the PR's last synchronization,
+// and modelling them as equal is what hid the settlement deadlock.
+const baseTip = 'd'.repeat(40);
 function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false,
-  mergeable = true, mergeableState = 'clean', failChecks = false, extraChecks = [] } = {}) {
-  const p = pull(), writes = []; let reads = 0;
+  mergeable = true, mergeableState = 'clean', failChecks = false, extraChecks = [],
+  baseMovesAt = Infinity, badBaseRef = false } = {}) {
+  const p = pull(), writes = []; let reads = 0, baseReads = 0;
   p.mergeable = mergeable; p.mergeable_state = mergeableState;
   const api = async (path, mode, body) => {
     if (mode === 'PATCH' || mode === 'PUT') {
@@ -74,7 +91,12 @@ function fixture({ graph = false, changeAt = Infinity, unresolved = false, failR
       return structuredClone(p);
     }
     if (failRead) throw new Error('API unavailable');
-    if (path.startsWith('git/ref/heads/')) return { object: { sha: path.endsWith('/main') ? base : head } };
+    if (path.startsWith('git/ref/heads/')) {
+      if (!path.endsWith('/main')) return { object: { sha: head } };
+      baseReads++;
+      if (badBaseRef) return { object: {} };
+      return { object: { sha: baseReads >= baseMovesAt ? 'e'.repeat(40) : baseTip } };
+    }
     if (path.includes('/files')) return [{ filename: graph ? 'graphify-out/test' : 'src/test' }];
     if (path.includes('/reviews')) return [review()];
     if (path.includes('/check-runs')) return [...(failChecks ? checks().map(c => ({ ...c, conclusion: 'failure' })) : checks()), ...extraChecks];
@@ -131,6 +153,23 @@ test('head races at either snapshot or final fence cannot mutate', async () => {
   for (const changeAt of [2, 3, 4]) {
     const f = fixture({ changeAt }); assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'changed'); assert.deepEqual(f.writes, []);
   }
+});
+test('an advanced base branch settles; a base moving mid-settlement does not', async () => {
+  // Regression for the merge deadlock: every candidate above runs with a live
+  // base tip that is already past p.base.sha, which is the normal state of
+  // 'develop'. Settlement must proceed instead of reporting 'changed' forever.
+  const f = fixture(); assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'merged');
+  // The race this fence exists for is still caught at every base read after the
+  // anchoring one: both snapshots and the final identity fence re-read the tip.
+  for (const baseMovesAt of [2, 3, 4]) {
+    const g = fixture({ baseMovesAt });
+    assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'changed');
+    assert.deepEqual(g.writes, []);
+  }
+  // An incomplete base ref payload fails closed rather than merging.
+  const h = fixture({ badBaseRef: true });
+  await assert.rejects(settle({ repo, number: 42, ...h, apply: true }));
+  assert.deepEqual(h.writes, []);
 });
 test('unresolved threads and failed API reads fail closed', async () => {
   const f = fixture({ unresolved: true }); assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'unresolved-review'); assert.deepEqual(f.writes, []);

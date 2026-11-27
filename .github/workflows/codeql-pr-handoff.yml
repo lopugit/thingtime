@@ -44,8 +44,30 @@ jobs:
             exit 1
           }
 
-          gh workflow run codeql-analysis.yml \
+          # The dispatch API itself is the only remaining failure mode here,
+          # and it fails transiently: GitHub answers
+          # POST /actions/workflows/{id}/dispatches with HTTP 500 under load.
+          # A single attempt turns that outage into a permanent red check on
+          # the PR, because nothing re-enters this privileged hop until the
+          # head moves. Retry instead. A retry can duplicate the analysis when
+          # GitHub creates the dispatch and still answers 500, which is safe by
+          # construction: codeql-analysis.yml fences concurrency on the
+          # analyzed snapshot with `queue: max` and no-ops a scope whose
+          # analysis already exists. Only an exhausted budget is a real red
+          # check, because then no unprivileged analysis was queued at all.
+          attempt=1
+          attempts=4
+          until gh workflow run codeql-analysis.yml \
             --repo "$REPO" \
             --ref "$DEFAULT_BRANCH" \
             -f "pr_number=$PR_NUMBER" \
             -f "expected_head_sha=$EXPECTED_HEAD_SHA"
+          do
+            if [ "$attempt" -ge "$attempts" ]; then
+              echo "::error::GitHub rejected the CodeQL dispatch for PR #$PR_NUMBER on all $attempts attempts; no unprivileged analysis was queued for $EXPECTED_HEAD_SHA."
+              exit 1
+            fi
+            echo "::warning::GitHub rejected the CodeQL dispatch for PR #$PR_NUMBER (attempt $attempt of $attempts); retrying."
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done

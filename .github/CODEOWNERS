@@ -3,3 +3,6 @@
 /.github/CODEOWNERS @lopugit
 /.github/workflows/develop-pr-preview.yml @lopugit
 /.github/scripts/deploy-develop-pr-preview.mjs @lopugit
+/.github/workflows/deploy-vercel-prebuilt.yml @lopugit
+/.github/scripts/deploy-vercel-prebuilt.mjs @lopugit
+/.github/scripts/deploy-vercel-prebuilt.test.mjs @lopugit

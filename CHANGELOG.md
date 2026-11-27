@@ -1,4 +1,146 @@
+## 2026-11-25 — All-branch rebuild leaves Lopu's agent fleet
+
+- Split the all-branch workflow into a deterministic `build` job (rebuild and first union check, own `lopu-all-branch` lane) and a `doctor` job that alone joins `lopu-agent-fleet` and only runs for a repairable failure with a model credential. Reviews and resolutions no longer wait ~20–40 minutes behind every rebuild.
+- Hand the exact failing tree across as a pack of locally created objects plus the recorded input tips. The doctor stands down without model spend when develop, main, a merged PR head or `all` moved while it waited, verifies the restored working tree, and pushes with a lease so it never overwrites a newer union.
+
+## 2026-11-25 — Parallel environment publishing
+
+- Publish opt-in main, develop and eligible PR builds to separate aliases. Recheck the saved lane, trusted PR author and actor, source workflow run, GitHub SHA and Vercel destination before promotion. PR builds run separately from publishing credentials, and nonproduction acceptance never sends a project bypass to PR code.
+
+## 2026-11-21 — Database-managed deployment targets and daily job dispatch
+
+- Add a parallel prebuilt publisher for dedicated Vercel test projects and a protected dispatcher for Thingtime job schedules. The existing production publisher can honor a saved deployment profile.
+
+## 2026-11-14 — Align retained artifact download authority
+
+- Use the existing protected-controller credential, with the existing built-in
+  token fallback, for both cross-run refresh artifact downloads and metadata
+  verification. Keep exact artifact, receipt, current-source and alias fences.
+- Cover the pinned download action, credential scope and unchanged same-run path.
+
+## 2026-11-14 — Bound refresh receipt compatibility and retention work
+
+- Accept pre-maintenance ordinary receipts only when the absent authorization
+  head is independently equal to the exact source; preserve explicit and
+  maintenance head requirements.
+- Avoid a redundant retention sweep only for a freshly verified open refresh
+  whose complete current policy preserves all open versions. Changed or
+  uncertain policy, head, draft/fork or liveness uses the full cleanup path.
+
+## 2026-11-14 — Fresh preview runtime environment publication
+
+- Add an explicit incumbent-bound manual refresh that reuses an exact successful
+  GitHub bundle and protected receipt, or rebuilds the same pinned source.
+- Deliver the current project automation default only through protected runtime
+  environment injection; retain current-head, alias rollback and source gates.
+
 # Control-plane changelog
+
+## 2026-11-14 — Avoid unrelated PR preview detail reads
+
+- PR-scoped retention skips only valid explicitly different PR summaries, keeping
+  unknown metadata, complete pagination, keeper discovery and fresh mutation
+  fences. Global reconciliation is unchanged; live timing remains to be measured.
+
+## 2026-11-14 — Accept optional CodeQL upload quota metadata
+
+- Keep core quota mandatory while accepting a rate-limit response that omits
+  the optional upload family, following GitHub's published contract. Real job
+  diagnostics exposed the earlier unsupported assumption about this family.
+- Continue enforcing valid advertised upload counters and authoritative reset
+  headers. Missing metadata is not invented capacity; the official action still
+  enforces upload authorization and quota, and processing must complete.
+
+## 2026-11-14 — Retain CodeQL results through SARIF quota exhaustion
+
+- Separate query execution from the pinned official SARIF upload, retaining
+  exact-source raw/processed results and hashes before bounded quota waiting.
+- Wait for live core/upload quota with the built-in token, then require the
+  accepted upload receipt to complete processing before Analyze can pass.
+- Keep official ref, SHA, category, fork and native transport behavior. Failed
+  or ambiguous uploads remain failed with retained evidence; no blind replay.
+
+## 2026-11-13 — Preserve native-provider guards during preview admission
+
+- Accept the existing native-home provider assertions around the required
+  gateway database fence. The controller previously rejected this valid source
+  shape as `database-fence-missing`, preventing protected-preview backports from
+  publishing. Missing, commented, reordered and unrecognized guards still fail.
+
+## 2026-11-13 — Authenticate protected checks and review exact preview retirements
+
+- Share project-verified, expiring automation authentication across protected
+  publishers and health checks, refusing redirects and redacting credentials.
+- Add manual exact-ID retirement dry-runs and sanitized policy/decision artifacts;
+  preserve active builds, all aliases/current targets, stable/gateway owners,
+  open/unknown PRs and saved grace. Default automatic retention is unchanged.
+- Align the admin preparation credential contract with its existing signed-policy
+  read while retaining strict secret-free builds and negative credential checks.
+- Stage the protected-fetch dependency in every storage-gate sparse checkout and
+  initialize runner-local report paths inside a runner step, with regressions.
+- This source change enables neither project protection nor preview deletion;
+  the thin listener input rollout and live acceptance remain separate.
+
+## 2026-11-02 — Pass the existing team slug into prebuilt prepare
+
+- Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before
+  preview configuration reads it. Add a prepare-step regression so publication
+  job mappings cannot conceal a missing prepare input. No credentials or release
+  protection changed.
+
+## 2026-10-30 — Remove orphan preview deployments
+
+- Extend protected scheduled and PR-close cleanup to legacy and ordinary branch
+  deployments with complete inventories and fresh ownership/PR/alias fences.
+- Preserve production, stable branches, gateway owners and current aliases;
+  require open PRs for ordinary prebuilt feature previews and remove exact late
+  uploads after closure. Add required regression coverage and rollout checks.
+- Consume saved admin retention policy through capability-negotiated signed CI
+  reads; honor disabled/grace/superseded/inactivity settings and fresh mutation
+  fences. Add trusted zero-PR manual reconciliation; roll out the product policy
+  endpoint before activating this controller.
+
+
+## 2026-10-27 — Verify Darwin kernel groups after numeric drop
+
+- Replace the invalid empty Python directory-group assertion with exact kernel
+  credential verification through the fixed public system-library accessor.
+  Retain clearing and fail closed on unexpected groups, IDs or accessor errors.
+- Record allowlisted trusted pre-policy failure stages/errno/exit codes without
+  arbitrary output or arguments. The observed baseline exit remains unproven;
+  successful cleanup artifacts do not establish isolation or native acceptance.
+
+## 2026-10-27 — Bound native probe and detached-process lifecycle
+
+- Replace post-policy sudo transitions with verified numeric identity drop,
+  split denial subprobes, detach watchdog capture pipes, and retain sanitized
+  process-state diagnostics without weakening absence or network denial.
+- Require bounded watchdog readiness before mutation and expose sanitized
+  failure evidence independently of successful cleanup; keep raw logs private.
+- Cap inert preflight jobs at 10 minutes. The observed inert timeout/remaining
+  UID failure is recorded separately from unproven runtime cause; hosted
+  preflight and native acceptance remain required.
+
+## 2026-10-27 — Preserve control transport during isolated native preflight
+
+- Verify actual Actions daemon UIDs, synchronize only runner TCP state after
+  PF flushing, and fail closed on bounded post-policy hostname/TLS checks.
+- Default to inert exact-source preflight, short bootstrap watchdog, owned
+  process-group reap and bounded cleanup. Keep candidate/root/broker egress
+  denied; no DNS exception, resolver change or hosted acceptance is claimed.
+- The earlier hosted run lost runner communication without build/cleanup
+  evidence; its exact runtime cause remains unproven.
+
+
+## 2026-10-27 — Prepare protected unsigned native compilation
+
+- Separate admitted controller code from immutable candidate native source;
+  extract and execute candidate files only as a fresh unprivileged identity
+  after PF outbound denial, with root watchdog cleanup and provenance artifacts.
+- Add adversarial archive/import and cleanup regressions. Document separate
+  controller/main-listener admission and hosted verification; no signing,
+  release, installation, or full-build acceptance is claimed from local tests.
+
 
 Everything in this repository's **executable CI** lives on the `github-actions`
 branch: the workflows, the automation scripts, and the actions they call. The
@@ -14,6 +156,81 @@ verbatim, and CI changes are recorded here from now on.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
+
+## 2026-10-26 — Verify the API before reporting a PR preview ready
+
+- Probe the public root-data API through the stable PR alias after assignment.
+  Reject gateway-origin failures, redirects and HTML/error fallbacks even when
+  the page shell succeeds; retain bounded propagation retries and source fences.
+- Cover healthy-shell/API-421 refusal and inherited source-origin stripping.
+  The exact-origin runtime configuration and policy bump from PR #1236 remain
+  the source of alias admission. Live rollout remains a separate check.
+  **Codex (AI)**
+
+## 2026-10-26 — Admit the exact ordinary PR alias at the Preview gateway
+
+- Add each PR's verified public alias as its sole explicit relay source origin.
+  Previously the direct Vercel deployment URL worked while the published PR
+  alias returned HTTP 421 for API reads. Bump the PR upload policy so existing
+  same-head deployments rebuild, retaining their aliases until replacement.
+  Prior-policy backend deployments remain outside the new-policy cleanup sweep
+  and age out normally. Dedicated previews keep their own database path and
+  reject incoming relays.
+  **Codex (AI)**
+
+## 2026-10-26 — Initialize preview upload receipts on the runner
+
+- Move the protected receipt path out of job-level expressions into a runner
+  initialization step. This repairs workflow validation before jobs start,
+  retaining receipt artifacts, secretless builds and exact-source publication.
+- Add a regression for context placement and shell execution with spaced paths.
+  Protected rollout and subsequent live preview acceptance remain separate.
+  **Codex (AI)**
+
+## 2026-10-26 — Route ordinary PR previews through the controlled preview gateway
+
+- Keep future ordinary PR builds and deployments in the custom `develop`
+  credential scope while routing their logical gateway to the controlled
+  standard Preview owner. Retain existing PR hostnames as compatibility URLs,
+  preserve legacy deployments, and require the current trusted-main preview owner.
+
+## 2026-10-26 — Verify canonical alias propagation within a bounded deadline
+
+- Allow exact manifest/API/static acceptance up to 90 seconds after alias
+  publication, abort pending reads at the deadline and retain sanitized mismatch
+  evidence. Preserve pre-upload bindings and guarded rollback on failure.
+- Preserve existing preflight notes under `.github/TESTING.md`, removing the
+  root testing file that violated the bare controller tree contract.
+- Reproduce delayed edge readiness with a virtual-clock regression instead of
+  treating a successful upload as accepted gateway activation.
+
+## 2026-10-26 — Publish environment gateway owners and explicit branch backends
+
+- Map production, custom develop and standard preview to controlled gateway
+  origins, retaining the existing Mongo/auth credential scopes. Build a separate
+  preview-target master from trusted main source; arbitrary PRs cannot own it.
+- Keep dedicated backend opt-in on ordinary branches, force canonical owners to
+  proxy, and refuse missing bootstrap secrets or stale deployment provenance.
+- Snapshot aliases before uploads, restore them on failed acceptance, and retire
+  the PR controller's competing stable-develop promotion path.
+
+## 2026-10-23 — Build every Vercel deployment on GitHub Actions
+
+- Reconcile already-READY output after an interrupted publisher without another
+  build or upload; skip unchanged aliases and GitHub status writes.
+
+- Reuse the protected preview controller's repository automation credential for
+  final GitHub verification and status receipts; keep it out of product builds.
+
+- Bind both required Vercel CLI project identifiers in the protected publisher;
+  a project.json link alone does not override a lone inherited project ID.
+
+- Add a protected prebuilt publisher for production, Preview and matching custom
+  environments, with secret-free compilation on GitHub-hosted Ubuntu runners.
+- Preserve exact commit/target verification, environment runtime settings,
+  production crons and stable branch domains. Skip stale and already-ready work.
+- Accept an intentionally disconnected Vercel Git integration in the existing
+  prebuilt PR controller while still rejecting a mismatched project link.
 
 ## 2026-10-18 — Diagnose OpenAI preflight failures safely
 

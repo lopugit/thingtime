@@ -69,12 +69,27 @@ export function publishedPreviewResponseIssue(response) {
   return `http-${response.status}`;
 }
 
-export async function verifyPublishedPreview(url, { fetcher = fetch, pause = delay } = {}) {
+export async function verifyPublishedPreview(url, { fetcher = fetch, pause = delay, verifyApi = false } = {}) {
   let reason = 'unreachable';
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const response = await fetcher(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(30_000) });
       reason = publishedPreviewResponseIssue(response);
+      if (!reason && verifyApi) {
+        const api = await fetcher(new URL('/api/root-data', url).href, {
+          method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(30_000),
+          headers: { Accept: 'application/json' }
+        });
+        // A healthy static shell does not establish that this alias can relay
+        // API work. Do not follow redirects or accept an HTML fallback/error.
+        reason = api.status !== 200 ? `api-http-${api.status}`
+          : api.headers.get(FALLBACK_HEADER) === 'missing' ? 'api-missing-build'
+          : !/^application\/json(?:\s*;|$)/i.test(api.headers.get('content-type') || '') ? 'api-not-json' : null;
+        if (!reason) {
+          const data = await api.json();
+          if (!data || typeof data !== 'object' || Array.isArray(data)) reason = 'api-invalid-json';
+        } else await api.body?.cancel();
+      }
       if (!reason) return;
     } catch { reason = 'unreachable'; }
     if (attempt < 4) await pause(1000 * (attempt + 1));

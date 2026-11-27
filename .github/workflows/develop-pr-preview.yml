@@ -4,10 +4,45 @@ on:
   workflow_call:
     inputs:
       pr_number:
-        description: Existing open same-repository PR to preview in the develop environment
+        description: Existing open same-repository PR to preview with the shared development gateway
         required: false
         default: 0
         type: number
+      refresh_deployment_id:
+        description: Exact incumbent to freshly publish with current runtime environment
+        required: false
+        default: ''
+        type: string
+      refresh_artifact_run_id:
+        description: Original successful controller run with bundle and receipt; empty rebuilds exact source
+        required: false
+        default: ''
+        type: string
+      maintenance_artifact_commit:
+        description: Reviewed canonical-main commit containing a retained-source protection manifest
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_path:
+        description: Pinned ops/preview-maintenance/<id>/manifest.json path
+        required: false
+        default: ''
+        type: string
+      maintenance_manifest_sha256:
+        description: SHA256 of the exact reviewed maintenance manifest bytes
+        required: false
+        default: ''
+        type: string
+      retirement_deployment_ids:
+        description: JSON array of reviewed deployment IDs; manual PR 0 maintenance only
+        required: false
+        default: ''
+        type: string
+      retirement_dry_run:
+        description: Verify the exact retirement selection without changing deployments
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -27,7 +62,8 @@ jobs:
     name: Dispatch trusted default-branch controller
     # The protected controller revalidates the exact current same-repository PR
     # and its actor. The PR may target develop, main, or another branch; the
-    # deployment target remains the isolated develop environment.
+    # Vercel stays on custom develop credentials; the gateway follows the
+    # controlled Preview master through explicit runtime overrides.
     # Description/status edits do not change the build input. In particular,
     # our own summary must not enqueue another preview which edits it again.
     if: github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base)
@@ -93,11 +129,22 @@ jobs:
       pull-requests: write
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
+      should_refresh: ${{ steps.plan.outputs.should_refresh }}
+      refresh_run_attempt: ${{ steps.plan.outputs.refresh_run_attempt }}
       pr_number: ${{ steps.plan.outputs.pr_number }}
       head_sha: ${{ steps.plan.outputs.head_sha }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
       expected_ready_at: ${{ steps.plan.outputs.expected_ready_at }}
     env:
+      PREVIEW_REFRESH_DEPLOYMENT_ID: ${{ inputs.refresh_deployment_id || '' }}
+      PREVIEW_REFRESH_RUN_ID: ${{ inputs.refresh_artifact_run_id || '' }}
+      PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
+      PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
+      PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -124,6 +171,9 @@ jobs:
           # phase may use Lopu's existing repository automation PAT; the
           # separate untrusted build job still receives no secrets.
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          VERCEL_API_TOKEN: ${{ (inputs.maintenance_artifact_commit != '' || inputs.refresh_deployment_id != '') && secrets.VERCEL_DEVELOP_DEPLOY_TOKEN || '' }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare
 
   build:
@@ -138,10 +188,31 @@ jobs:
       - name: Check out the authorized exact PR SHA
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ needs.prepare.outputs.head_sha }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
           path: product
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Check out protected maintenance reconstruction helper
+        if: inputs.maintenance_artifact_commit != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          path: control
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Reconstruct exact reviewed retained source without secrets
+        if: inputs.maintenance_artifact_commit != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit }}
+          PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path }}
+          PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 }}
+          PREVIEW_MAINTENANCE_PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          PREVIEW_MAINTENANCE_PRODUCT_DIR: ${{ github.workspace }}/product
+          PREVIEW_MAINTENANCE_RECEIPT_PATH: ${{ runner.temp }}/maintenance-source.json
+        run: node control/.github/scripts/preview-maintenance.mjs
 
       - name: Install pinned package manager
         run: |
@@ -170,7 +241,7 @@ jobs:
           VERCEL_ENV: preview
           VERCEL_TARGET_ENV: develop
           VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.head_ref }}
-          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.head_sha }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.source_sha }}
           VERCEL_GIT_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
           VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
           VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
@@ -184,7 +255,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
-          path: ${{ runner.temp }}/vercel-prebuilt.tgz
+          path: |
+            ${{ runner.temp }}/vercel-prebuilt.tgz
+            ${{ runner.temp }}/maintenance-source.json
           if-no-files-found: error
           retention-days: 1
 
@@ -203,6 +276,14 @@ jobs:
       issues: write
       pull-requests: write
     env:
+      PREVIEW_REFRESH_DEPLOYMENT_ID: ${{ inputs.refresh_deployment_id || '' }}
+      PREVIEW_REFRESH_RUN_ID: ${{ inputs.refresh_artifact_run_id || '' }}
+      PREVIEW_MAINTENANCE_ARTIFACT_COMMIT: ${{ inputs.maintenance_artifact_commit || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_PATH: ${{ inputs.maintenance_manifest_path || '' }}
+      PREVIEW_MAINTENANCE_MANIFEST_SHA256: ${{ inputs.maintenance_manifest_sha256 || '' }}
+      PREVIEW_RETIREMENT_DEPLOYMENT_IDS: ${{ inputs.retirement_deployment_ids || '' }}
+      PREVIEW_RETIREMENT_DRY_RUN: ${{ inputs.retirement_dry_run || false }}
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -216,6 +297,9 @@ jobs:
       PREVIEW_MISSING_BUILD_PAGE: ${{ vars.PREVIEW_MISSING_BUILD_PAGE }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
+      - name: Initialize protected Preview upload receipt path
+        run: printf '%s\n' "VERCEL_PREVIEW_RECEIPT_PATH=$RUNNER_TEMP/pr-preview-upload-receipt.json" "PREVIEW_RETIREMENT_REPORT_PATH=$RUNNER_TEMP/preview-retirement-report.json" >> "$GITHUB_ENV"
+
       - name: Check out protected deployment controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -230,31 +314,55 @@ jobs:
           name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
           path: ${{ runner.temp }}/prebuilt-artifact
 
+      - name: Download exact original GitHub bundle for environment refresh
+        if: needs.prepare.outputs.should_refresh == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: develop-preview-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.pr_number }}
+          run-id: ${{ inputs.refresh_artifact_run_id }}
+          github-token: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          path: ${{ runner.temp }}/prebuilt-artifact
+
+      - name: Download protected original upload receipt
+        if: needs.prepare.outputs.should_refresh == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-preview-receipt-${{ inputs.refresh_artifact_run_id }}-${{ needs.prepare.outputs.refresh_run_attempt }}
+          run-id: ${{ inputs.refresh_artifact_run_id }}
+          github-token: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          path: ${{ runner.temp }}/refresh-receipt
+
       - name: Validate and extract untrusted preview bundle
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         run: >-
           python3 .github/scripts/extract-vercel-prebuilt.py
           "$RUNNER_TEMP/prebuilt-artifact/vercel-prebuilt.tgz"
           "$RUNNER_TEMP/validated-prebuilt"
 
       - name: Install pinned Vercel publisher without deployment credentials
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
 
       - name: Upload and publish GitHub-built preview
-        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        if: (needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success') || needs.prepare.outputs.should_refresh == 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          PREVIEW_REFRESH_RECEIPT_PATH: ${{ runner.temp }}/refresh-receipt/pr-preview-upload-receipt.json
+          PREVIEW_MAINTENANCE_RECEIPT_PATH: ${{ runner.temp }}/prebuilt-artifact/maintenance-source.json
           VERCEL_PREBUILT_DIR: ${{ runner.temp }}/validated-prebuilt
         run: node .github/scripts/deploy-develop-pr-preview.mjs
 
       - name: Reconcile or clean up without a new build
-        if: needs.prepare.outputs.should_build != 'true'
+        if: needs.prepare.outputs.should_build != 'true' && needs.prepare.outputs.should_refresh != 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           RECOVERY_GH_TOKEN: ${{ github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
@@ -264,9 +372,29 @@ jobs:
         if: needs.prepare.outputs.should_build == 'true' && needs.build.result != 'success'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
+
+      - name: Preserve protected Preview upload receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-preview-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr-preview-upload-receipt.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Preserve sanitized retirement policy and candidate decisions
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-retirement-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/preview-retirement-report.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   admin_prepare:
     name: Authorize admin-selected preview sources
@@ -289,6 +417,7 @@ jobs:
       head_sha: ${{ steps.plan.outputs.head_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
     env:
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -311,6 +440,8 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-admin-pr-previews.mjs --prepare
 
   admin_build:
@@ -392,6 +523,7 @@ jobs:
       issues: write
       pull-requests: read
     env:
+      THINGTIME_DEPLOYMENT_PROFILES_ENABLED: ${{ vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
       VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -441,6 +573,8 @@ jobs:
       - name: Publish or clean up exact-SHA admin previews
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
           VERCEL_PREBUILT_ROOT: ${{ runner.temp }}/validated-admin-prebuilt
