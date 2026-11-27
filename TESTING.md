@@ -14260,6 +14260,12 @@ separate from deterministic discovery/lease tests.
 - [ ] Verify idle application sockets retire after the configured idle timeout
       and subsequent requests reconnect successfully. Record production recovery as
       pending until the affected production path is independently verified.
+- [ ] Billing guard (2026-11-27): the home pool's `maxIdleTimeMS` stays at
+      `HOME_POOL_MAX_IDLE_MS` (5 s). `attachDatabasePool` keeps the Fluid
+      instance billed at full 2 GB for idle timeout + 100 ms after every
+      checkout, so a longer value turns sparse traffic into an always-on
+      instance. After a change, compare a day's Fluid Provisioned Memory
+      GB-hr in the FOCUS billing export, not only request latency.
 ### Transfer speed windows (2026-10-19)
 
 - Check each decimal bit unit and logical file/folder/inode unit independently
