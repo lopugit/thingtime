@@ -48,7 +48,9 @@ test('real status wiring reuses one bounded application client without adopting 
     connections++;
     assert.equal(this.options.maxPoolSize, 10);
     assert.equal(this.options.minPoolSize, 0);
-    assert.equal(this.options.maxIdleTimeMS, 60_000);
+    // Short on purpose: attachDatabasePool keeps the 2 GB Fluid instance
+    // billed for this long after every checkout.
+    assert.equal(this.options.maxIdleTimeMS, 5_000);
     return this;
   });
   t.mock.method(MongoClient.prototype, 'close', async () => { closes++; });

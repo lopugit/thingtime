@@ -27,6 +27,8 @@ export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectio
 // accumulate unbounded open connections.
 const clientCache = new Map<string, Promise<any>>();
 const MAX_CUSTOM_CLIENTS = 6;
+/** Idle socket lifetime for the home pool; also how long Fluid stays billed after a DB call. */
+export const HOME_POOL_MAX_IDLE_MS = 5_000;
 
 const getClientCachedFor = async (uri: string, isHome: boolean) => {
   await requireGatewayDatabaseAccess();
@@ -58,7 +60,13 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
             minPoolSize: 0,
             // Driver 6.21 retires idle sockets even with minPoolSize zero.
             // Warm serverless workers must not retain their peak pool forever.
-            maxIdleTimeMS: 60_000,
+            // Keep this short: attachDatabasePool (mongodb.ts) holds the Fluid
+            // instance open via waitUntil for this long + 100 ms after EVERY
+            // connection checkout, and Vercel bills the full 2 GB for it. At
+            // 60 s, a database call more often than once a minute kept a
+            // 2 GB instance billed around the clock. Vercel's pooling guide
+            // suggests ~5 s; a warm reconnect in syd1 costs ~0.1–0.3 s.
+            maxIdleTimeMS: HOME_POOL_MAX_IDLE_MS,
             serverSelectionTimeoutMS: 5000,
             connectTimeoutMS: 5000,
             socketTimeoutMS: 30000,
