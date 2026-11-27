@@ -116,7 +116,7 @@ export const readServerConnectionTotals = async (db: any, checkedAt: string): Pr
 };
 
 export const createConnectionInventoryReader = (dependencies = {
-  now: Date.now, runtimeId: mongoConnectionTracker.runtimeId, local: mongoConnectionTracker.snapshot,
+  now: Date.now, get runtimeId() { return mongoConnectionTracker.runtimeId; }, local: mongoConnectionTracker.snapshot,
   publish: publishMongoConnectionSnapshots, collection: getHomeThingsCollection, existingDb: getExistingHomeMongoDb
 }) => async ({ cursor = null, limit = 50 }: ConnectionInventoryPage = {}): Promise<MongoConnectionInventory> => {
   const now = dependencies.now(), checkedAt = new Date(now).toISOString();

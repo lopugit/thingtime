@@ -1,0 +1,33 @@
+# Cloudflare API Worker. See README.md and PLAN/cloudflare-workers-migration.md.
+# Reached only through the router's service binding (no public route).
+name = "thingtime-api"
+main = "src/index.ts"
+# Keep at or below the runtime bundled with the pinned wrangler so `wrangler dev` matches production.
+compatibility_date = "2025-10-11"
+compatibility_flags = ["nodejs_compat"]
+account_id = "c4c10efa6c608143e219a875305aa82c"
+workers_dev = false
+
+[vars]
+API_WORKER_VERSION = "1.1.0"
+# Required: any other mode lets the shared auth code fall back to a public dev secret.
+NODE_ENV = "production"
+# MongoDB connection-pool shards (Durable Objects). Total connections are about
+# shards × (pool size + monitoring sockets), independent of traffic.
+POOL_SHARDS = "2"
+
+# Secrets (wrangler secret put): MONGODB_CONNECTION_STRING, MONGO_PASS, and for routes that
+# read a session the same JWT_PUBLIC_KEY / JWT_PRIVATE_KEY / JWT_KEY_ID / JWT_ISSUER / JWT_SECRET
+# as Vercel production. Until they are set, those routes are handed back to Vercel.
+
+[[durable_objects.bindings]]
+name = "MONGO_POOL"
+class_name = "MongoPoolShard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MongoPoolShard"]
+
+[observability]
+enabled = true
+head_sampling_rate = 0.1

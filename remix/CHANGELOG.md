@@ -181,6 +181,41 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-27: **API endpoints can run on Cloudflare too, from the same code.**
+  - **Marking an endpoint:** add `cloudflare: { featureVersion, methods }` to its
+    `apiDocs.ts` entry. Its docs gain a "Cloudflare deployment" note, and
+    `cloudflare/api` (generated route list) serves it through the shared request
+    pipeline `app/api/utils/http/routeExecution.ts`, which Nitro's dispatcher now
+    calls too.
+  - **MongoDB state:** moved behind `mongodb/runtimeState.ts`. Node keeps one
+    process-wide state. Cloudflare runs requests in a fixed pool of Durable
+    Object shards, each with its own client pool, so connections stay bounded by
+    the shard count.
+  - **Connection tracker:** its runtime id is now created on first use, because
+    Workers refuse randomness at import.
+  - **Routing and fallback:** the router sends a `worker` group's endpoints to
+    Cloudflare only if the API Worker's manifest lists them, and replays a
+    refused or failed GET on Vercel. Vercel-only deployments are unchanged.
+  - **Endpoints:** `GET /api/v1/automation/switches` is served on Cloudflare.
+    `auth/me`, `auth/account-hints` and `marketing/publications` are marked, but
+    go to Vercel until the Worker has the JWT keys. The Cloudflare build reports
+    each endpoint's own version.
+  - **Safety:** the Worker runs with `NODE_ENV=production` and serves a route
+    only if it never reads a session (`sessionFree`) or the JWT keys are set.
+    Outside production mode the shared auth code would accept a public
+    development secret.
+  - **`discussionCursor`:** its development key is now created on first use, for
+    the same reason as the tracker.
+
+- 2026-11-27: **A Cloudflare router Worker sits in front of a test path on
+  thingtime.com.** `cloudflare/router` sends each route group to Vercel or a
+  future Cloudflare API Worker, chosen in a KV route table that
+  `scripts/routes.mjs` switches in about 90 s with no deploy. Any router error
+  passes the request straight through to Vercel. It is deployed to the
+  thingtime.com Cloudflare account (Workers Paid) on `thingtime.com/__cf/*`
+  only, so live traffic is unchanged. `/__cf/via/<path>` routes a real path
+  through it. Phase 1 of `PLAN/cloudflare-workers-migration.md`.
+
 - 2026-11-27: **The health check and `auth/me` stop doing heavy work on every
   call.** `health/nitro`'s storage readiness scans the whole `things`
   collection (~2.8 s) and was cached for 30 s, while the storage monitor calls it

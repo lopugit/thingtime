@@ -1,3 +1,22 @@
+## Cloudflare router and API Worker (`cloudflare/`, 2026-11-27)
+
+- [ ] `npm --prefix cloudflare/router test`, `npm --prefix cloudflare/api test`
+  and `npm --prefix cloudflare/api run check` pass. The check fails when
+  `routes.generated.ts` no longer matches the `cloudflare` entries in `apiDocs.ts`.
+- [ ] `https://thingtime.com/__cf/health` lists the API Worker's operations and
+  the active route table. With a group set to `worker`,
+  `/__cf/via/<marked endpoint>` answers with `x-thingtime-route: <group>; worker`.
+  An unmarked endpoint answers `vercel (not on worker)`. A refused or failed
+  Worker GET answers `vercel (worker refused)` or `vercel (worker failed)` with
+  the Vercel body.
+- [ ] Repeated database calls through the Worker stay fast after the first. A
+  second call that hangs for ~30 s means a request reused another context's
+  socket: check that `runtimeState.ts` scoping wraps the Durable Object's
+  `fetch`.
+- [ ] Vercel-only behaviour is unchanged: Nitro's dispatcher and
+  `executeApiRoute` produce the same responses (`test:api-capabilities`, MongoDB
+  unit tests).
+
 ## Automation switches (Admin → Automation, 2026-11-25)
 
 - [ ] With every switch off (the default), open a signed-in page, keep using it
