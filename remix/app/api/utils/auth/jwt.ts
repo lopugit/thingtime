@@ -87,7 +87,7 @@ const getLegacySecret = ({ allowDevFallback }: { allowDevFallback: boolean }) =>
   return new TextEncoder().encode(LEGACY_DEV_SECRET);
 };
 
-export type JwtClaims = { sub: string; jti: string };
+export type JwtClaims = { sub: string; jti: string; exp?: number };
 export type PublicJwks = { keys: Array<Record<string, unknown>> };
 
 // Sign a JWT carrying the user id (sub) + session id (jti) so the session can
@@ -135,7 +135,7 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
     try {
       const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
       if (!payload.sub || !payload.jti) return null;
-      return { sub: String(payload.sub), jti: String(payload.jti) };
+      return { sub: String(payload.sub), jti: String(payload.jti), ...(payload.exp === undefined ? {} : { exp: payload.exp }) };
     } catch {
       // Try the legacy HS256 verifier below for sessions minted before ES256.
     }
@@ -147,7 +147,7 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
   try {
     const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
     if (!payload.sub || !payload.jti) return null;
-    return { sub: String(payload.sub), jti: String(payload.jti) };
+    return { sub: String(payload.sub), jti: String(payload.jti), ...(payload.exp === undefined ? {} : { exp: payload.exp }) };
   } catch {
     return null;
   }

@@ -2,7 +2,7 @@
 const invalid = () => new Error('Native folder batch framing was invalid.');
 class FolderBatchStream {
     constructor(request, exchange, fail) {
-        if (request.method !== 'folder-sync.request' || request.parameters.action !== 'upload-batch' || typeof exchange !== 'function') throw invalid();
+        if (request.method !== 'folder-sync.request' || !['upload-batch', 'upload-single'].includes(request.parameters.action) || typeof exchange !== 'function') throw invalid();
         this.request = request; this.exchange = exchange; this.fail = fail;
         this.pending = Buffer.alloc(0); this.callbacks = new Set(); this.sequence = 0; this.response = null; this.closed = false; this.error = null;
     }
@@ -38,7 +38,7 @@ class FolderBatchStream {
     close() { this.closed = true; this.callbacks.clear(); this.pending = Buffer.alloc(0); }
 }
 function encodeBatchInput(request) {
-    if (request.method !== 'folder-sync.request' || request.parameters.action !== 'upload-batch') throw invalid();
+    if (request.method !== 'folder-sync.request' || !['upload-batch', 'upload-single'].includes(request.parameters.action)) throw invalid();
     const bytes = Buffer.from(JSON.stringify(request)); if (bytes.length > 600_000) throw invalid();
     const header = Buffer.alloc(4); header.writeUInt32BE(bytes.length); return Buffer.concat([header, bytes]);
 }

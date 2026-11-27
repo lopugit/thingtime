@@ -45,10 +45,13 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 		let runnerCalls = 0,
 			publications = 0,
 			runnerError: unknown;
+		let heldExecution: Promise<void> | undefined;
+		const executionGate = { release: () => {} };
 		await (mock as any).module(new URL('./pagedForegroundSync.ts', import.meta.url).href, {
 			namedExports: {
 				runPagedForegroundCloudSync: async (_saved: unknown, binding: typeof scope, input: ForegroundSyncInput, signal: AbortSignal) => {
 					runnerCalls++;
+					await heldExecution;
 					const run = (await journal.read(binding))!;
 					assert.ok(run, 'operation must already be durable before automatic discovery');
 					const operation = run.operations[0];
@@ -90,6 +93,16 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 		});
 		const { resumeNativeSyncJobs } = await import('./NativeSyncBootstrap');
 		const { nativeSyncTasks } = await import('./nativeSyncTasks.client');
+		const executionSettled = () => new Promise<void>((resolve, reject) => {
+			let unsubscribe = () => {};
+			const timeout = setTimeout(() => { unsubscribe(); reject(Error('The admitted upload did not settle.')); }, 5_000);
+			const check = () => {
+				if (nativeSyncTasks.read()?.active) return;
+				clearTimeout(timeout); unsubscribe(); resolve();
+			};
+			unsubscribe = nativeSyncTasks.subscribe(check);
+			check();
+		});
 		const { setDesktopSyncScheduled } = await import('./desktopSyncWindow.client');
 		const globals = ['window', 'document', 'navigator', 'indexedDB', 'IDBKeyRange'] as const;
 		const originals = new Map(globals.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
@@ -133,7 +146,10 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 							...request,
 							origin,
 							roots: [{ id: rootId, name: 'Fixture' }],
-							capabilities: { fileAccessVersion: '1.11.0', fileUploadVersion: '1.0.0' },
+							conditions: { network: 'wifi', charging: true },
+							// The byte planner is replaced above; the host still negotiates
+							// the current device budget before exercising durable retry.
+							capabilities: { fileAccessVersion: '1.17.0', fileResourceLimitsVersion: '1.1.0', fileUploadVersion: '1.0.0', fileSymbolicLinksVersion: '1.0.0' },
 							apiCapabilities: { schemaVersion: 1, origin, features: { 'api.things': { version: '1.38.0' } } },
 							uploadedPart: request.upload ? { ...request.upload, version: entry.version, size: entry.size, sha256: 'b'.repeat(64) } : undefined
 						};
@@ -189,8 +205,13 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				await journal.persist(run);
 				// These are the production coordinator's normal bounded discovery passes,
 				// used by the shell's online/visibility/30s callbacks, not upload calls.
-				await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
-				assert.equal(runnerCalls, 1);
+				heldExecution = new Promise<void>(resolve => { executionGate.release = resolve; });
+				try {
+					await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
+					assert.equal(nativeSyncTasks.read()?.active, true, 'discovery returns after admission while the upload remains held');
+				} finally { executionGate.release(); }
+				await executionSettled();
+				assert.equal(runnerCalls, 1, nativeSyncTasks.read()?.progress.message ?? "Native retry runner was not admitted");
 				assert.equal(runnerError instanceof SyncConnectionWait, transient);
 				assert.equal(nativeSyncTasks.read()?.status, transient ? 'paused' : 'error');
 				assert.equal(nativeSyncTasks.read()?.waiting, transient);
@@ -214,6 +235,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				if (transient) assert.equal((await journal.jobs({ scope, currentScope: () => scope }).read())?.retryAt, waitingJob!.retryAt);
 				now = (waitingJob?.retryAt ?? now) + 1;
 				await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
+				await executionSettled();
 				assert.equal(runnerCalls, transient ? 2 : 1);
 				assert.equal(publications, transient ? 1 : 0);
 				assert.deepEqual(attempts, transient && cloudStatus !== 503 ? ['operation-original', 'operation-original'] : ['operation-original']);
@@ -228,6 +250,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 			}
 			assert.deepEqual([...enteredHttp].sort(), [401, 403, 409, 503], 'all real HTTP coordinator scenarios must execute');
 		} finally {
+			executionGate.release();
 			nativeSyncTasks.invalidate();
 			clock.mock.restore();
 			journal?.close();

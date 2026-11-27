@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Switch, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -116,12 +117,12 @@ export function RecordingAutomationPage() {
 		setPersonalSupported(false);
 		setSavedSupported(false);
 		void load();
-		const timer = setInterval(() => {
-			if (!document.hidden) void load();
+		const timer = activityInterval('timer:components/Lopu/RecordingAutomationPage:1', 'Recording Automation Page', () => {
+			if (!document.hidden) return load();
 		}, 15_000);
 		return () => {
 			generation.current++;
-			clearInterval(timer);
+			clearActivityInterval(timer);
 		};
 	}, [load]);
 

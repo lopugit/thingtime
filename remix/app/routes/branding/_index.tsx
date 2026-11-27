@@ -2,73 +2,50 @@ import { Box, Flex, Heading, SimpleGrid, Text } from '@chakra-ui/react';
 import React from 'react';
 
 import { BrandAssetSection } from '~/components/Branding/BrandAssetSection';
-import type { ManifestVariant } from '~/components/Branding/BrandAssetSection';
+import type { ManifestSurfaces, ManifestVariant } from '~/components/Branding/BrandAssetSection';
 import { Eyebrow } from '~/components/Branding/BrandAssetSection';
+import { BrandImageryStudio } from '~/components/Branding/BrandImageryStudio';
 import { BrandPressKit } from '~/components/Branding/BrandPressKit';
-import type { PressKitItem } from '~/components/Branding/BrandPressKit';
-import { LOGO_DEFAULT_COLOURS, LOGO_FULL_MATRIX, LOGO_ICON_MATRIX, LOGO_THEMES } from '~/components/Branding/logoMatrix';
+import type { ImageryManifestItem, PressKitItem } from '~/components/Branding/BrandPressKit';
+import { DEFAULT_SCENE } from '~/components/Branding/brandScenes';
+import type { BrandSceneOptions } from '~/components/Branding/brandScenes';
+import { LOGO_DEFAULT_COLOURS } from '~/components/Branding/logoMatrix';
+import { BRAND_LOGO_VARIANTS } from '~/components/Branding/logoVariants';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_PALETTE } from '~/theme/tokens';
 import brandingAssets from '~/components/Branding/brandingAssets.generated.json';
+import brandingImagery from '~/components/Branding/brandingImagery.generated.json';
+import brandingSurfaces from '~/components/Branding/brandingSurfaces.generated.json';
 
 // /branding — Thingtime's brand-resources page, styled after the big-league
 // brand centres (full-width sections, one asset per section, imagery first)
-// with the Prism design language + rainbow soul. Ready-made files come from
-// remix/public/branding (npm run branding-assets); the custom exporter renders
-// anything else client-side from the same voxel matrix.
+// with the Prism design language + rainbow soul. Every logo cut comes from the
+// registry in logoVariants.ts and ships transparent, on light and on dark;
+// ready-made files live in remix/public/branding (npm run branding-assets) and
+// the custom exporter renders anything else client-side from the same voxels.
+// The imagery gallery and the studio share one scene engine (brandScenes.ts):
+// "Remix" on a gallery picture hands its options to the studio below it.
 
 const MONO = 'var(--tt-font-mono, "JetBrains Mono", monospace)';
 const HEAD = 'var(--tt-font-heading, "Space Grotesk", sans-serif)';
 
 const RAINBOW_GRADIENT = `linear-gradient(90deg, var(--tt-rainbow-1, #f34a4a), var(--tt-rainbow-2, #ffbc48), var(--tt-rainbow-3, #58ca70), var(--tt-rainbow-4, #47b5e6), var(--tt-rainbow-5, #a555e8), var(--tt-rainbow-1, #f34a4a))`;
 
-const SECTIONS = [
-  {
-    slug: 'logo',
-    eyebrow: '01 · Wordmark',
-    title: 'The wordmark',
-    description:
-      'Nine voxel glyphs spelling Thingtime — the full lock-up for headers, docs, decks and anywhere the brand introduces itself. It ships trimmed to the pixel: no baked-in whitespace, ever.',
-    matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.default,
-    alt: 'Thingtime logo — the full-colour voxel wordmark spelling Thingtime'
-  },
-  {
-    slug: 'icon',
-    eyebrow: '02 · Icon',
-    title: 'The tree',
-    description:
-      'Thingtime distilled to five voxels — a leafy little tree. Reach for it when space is tight: avatars, favicons, app grids, pixel jewellery.',
-    matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.default,
-    alt: 'Thingtime icon — the five-voxel tree logo mark'
-  },
-  {
-    slug: 'logo-pink',
-    eyebrow: '03 · Wordmark · pink',
-    title: 'Wordmark in hotpink',
-    description:
-      'The single-colour cut for stickers, stamps, embroidery and moments that call for maximum 🩷. Same voxels, one colour.',
-    matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.pink,
-    alt: 'Thingtime logo — single-colour hotpink voxel wordmark'
-  },
-  {
-    slug: 'icon-pink',
-    eyebrow: '04 · Icon · pink',
-    title: 'The tree in hotpink',
-    description: 'The five-voxel tree in one colour — engraving, laser cutting, single-ink print, tiny UI moments.',
-    matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.pink,
-    alt: 'Thingtime icon — single-colour hotpink voxel tree logo mark'
-  }
-];
+// The lock-ups and their hotpink cuts get a full-width section each; the fun
+// cuts share one gallery section. Numbering follows the page top to bottom.
+const LOGO_SECTIONS = BRAND_LOGO_VARIANTS.filter((variant) => variant.group !== 'fun');
+const FUN_CUTS = BRAND_LOGO_VARIANTS.filter((variant) => variant.group === 'fun');
+const numbered = (position: number, label: string) => `${String(position).padStart(2, '0')} · ${label}`;
+const FUN_POSITION = LOGO_SECTIONS.length + 1;
 
 const ANCHORS = [
   { href: '#logo', label: 'Wordmark' },
+  { href: '#logo-square', label: 'Square' },
   { href: '#icon', label: 'Icon' },
   { href: '#logo-pink', label: 'Pink' },
-  { href: '#press-kit', label: 'Press kit' },
+  { href: '#fun', label: 'Fun cuts' },
+  { href: '#press-kit', label: 'Imagery' },
+  { href: '#studio', label: 'Studio' },
   { href: '#colours', label: 'Colours' },
   { href: '#usage', label: 'Usage' }
 ];
@@ -78,18 +55,29 @@ const WORDMARK_SWATCHES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'x']
   .map((key) => LOGO_DEFAULT_COLOURS[key])
   .concat(['hotpink']);
 
-const USAGE_RULES = [
-  { emoji: '🟩', text: 'Keep the voxels square — scale the logo, never stretch or squash it.' },
-  { emoji: '🌬️', text: 'Give it room to breathe. The exporter’s padding options bake in clear space for you.' },
-  { emoji: '🌗', text: 'Any calm background works — pick the surface that keeps contrast comfy.' },
-  { emoji: '🚫', text: 'Please don’t recolour, rearrange or add effects to the voxels. The pink cut is the only remix.' }
+const USAGE_IDEAS = [
+  { emoji: '🎨', text: 'Go ahead and change, modify and create any variations you want! 🎨' },
+  { emoji: '🟩', text: 'Scale, stretch, squash or rearrange the voxels to make a version that feels like yours.' },
+  { emoji: '🌬️', text: 'Try the exporter’s padding options when you want a little extra room around your design.' },
+  { emoji: '🌗', text: 'Play with colours, effects and backgrounds; choose the contrast that feels right for your space.' }
 ];
+
+// What the studio opens on: the square logo over rolling hills.
+const STUDIO_START: BrandSceneOptions = { ...DEFAULT_SCENE, logo: 'logo-square', backdrop: 'sky', pattern: 'hills', seed: 7, logoSize: 0.85 };
 
 const Inner = (props: React.ComponentProps<typeof Box>) => <Box maxW="1240px" mx="auto" px={{ base: '20px', md: '40px' }} {...props} />;
 
 export default function Branding() {
   const lopu = useLopu();
   const manifestBySlug = new Map<string, ManifestVariant>(brandingAssets.variants.map((variant) => [variant.slug, variant as ManifestVariant]));
+  const surfacesBySlug = brandingSurfaces as Record<string, ManifestSurfaces>;
+  const [studioScene, setStudioScene] = React.useState<BrandSceneOptions>(STUDIO_START);
+
+  const remix = (scene: BrandSceneOptions) => {
+    setStudioScene(scene);
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById('studio')?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+  };
 
   const copyColour = async (hex: string) => {
     try {
@@ -136,9 +124,10 @@ export default function Branding() {
           .
         </Heading>
         <Text mt="20px" maxW="640px" fontSize={{ base: '16px', md: '18px' }} lineHeight={1.7} color="var(--tt-text, #5a5a66)">
-          Logos, colours and ready-to-post imagery — everything on this page is free to use when you talk about
-          Thingtime. Grab a ready-made size, or export any variant at any resolution with your own padding. Every asset
-          is trimmed to the pixel.
+          Logos, colours and ready-to-post imagery — everything on this page is yours to play with.
+          Every logo comes transparent, on light and on dark: grab a ready-made size, or export any cut at
+          any resolution with your own padding. Then take a finished picture from the gallery, or build
+          your own in the studio.
         </Text>
         <Flex mt="28px" gap="8px" flexWrap="wrap">
           {ANCHORS.map((anchor) => (
@@ -166,15 +155,52 @@ export default function Branding() {
 
       {/* One section per variant */}
       <Inner>
-        {SECTIONS.map((section) => (
-          <BrandAssetSection key={section.slug} {...section} manifest={manifestBySlug.get(section.slug)} />
+        {LOGO_SECTIONS.map((variant, index) => (
+          <BrandAssetSection
+            key={variant.slug}
+            variant={variant}
+            eyebrow={numbered(index + 1, variant.name)}
+            manifest={manifestBySlug.get(variant.slug)}
+            surfaces={surfacesBySlug[variant.slug]}
+          />
         ))}
 
-        <BrandPressKit items={brandingAssets.presskit as PressKitItem[]} />
+        {/* Fun cuts: the same section at gallery density, two to a row. */}
+        <Box as="section" id="fun" pt={{ base: '72px', md: '112px' }}>
+          <Eyebrow>{numbered(FUN_POSITION, 'Fun cuts')}</Eyebrow>
+          <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
+            Ten ways to play
+          </Heading>
+          <Text mt="12px" mb={{ base: '28px', md: '40px' }} maxW="620px" fontSize={{ base: '15px', md: '16px' }} lineHeight={1.65} color="var(--tt-text, #5a5a66)">
+            Same voxels, ten different moods — rainbow dips, arcade extrusions, glitches and sprinkles. Each one comes
+            transparent, on light and on dark, in every size, just like the originals.
+          </Text>
+          <SimpleGrid columns={{ base: 1, lg: 2 }} spacingX="32px" spacingY={{ base: '48px', md: '64px' }}>
+            {FUN_CUTS.map((variant, index) => (
+              <BrandAssetSection
+                key={variant.slug}
+                compact
+                variant={variant}
+                eyebrow={`Fun · ${String(index + 1).padStart(2, '0')}`}
+                manifest={manifestBySlug.get(variant.slug)}
+                surfaces={surfacesBySlug[variant.slug]}
+              />
+            ))}
+          </SimpleGrid>
+        </Box>
+
+        <BrandPressKit
+          items={brandingAssets.presskit as PressKitItem[]}
+          imagery={brandingImagery.items as ImageryManifestItem[]}
+          eyebrow={numbered(FUN_POSITION + 1, 'Imagery')}
+          onRemix={remix}
+        />
+
+        <BrandImageryStudio eyebrow={numbered(FUN_POSITION + 2, 'Studio')} scene={studioScene} onChange={setStudioScene} />
 
         {/* Colours */}
         <Box as="section" id="colours" pt={{ base: '72px', md: '112px' }}>
-          <Eyebrow>06 · Colours</Eyebrow>
+          <Eyebrow>{numbered(FUN_POSITION + 3, 'Colours')}</Eyebrow>
           <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
             The palette
           </Heading>
@@ -221,12 +247,12 @@ export default function Branding() {
 
         {/* Usage */}
         <Box as="section" id="usage" pt={{ base: '72px', md: '112px' }} pb={{ base: '80px', md: '128px' }}>
-          <Eyebrow>07 · Usage</Eyebrow>
+          <Eyebrow>{numbered(FUN_POSITION + 4, 'Usage')}</Eyebrow>
           <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
-            Use it kindly
+            Make it your own
           </Heading>
           <SimpleGrid columns={{ base: 1, md: 2 }} spacingX="40px" spacingY="20px" mt="24px" maxW="880px">
-            {USAGE_RULES.map((rule) => (
+            {USAGE_IDEAS.map((rule) => (
               <Flex key={rule.text} gap="14px" alignItems="flex-start">
                 <Text fontSize="20px" lineHeight="28px" aria-hidden>
                   {rule.emoji}
@@ -252,3 +278,9 @@ export default function Branding() {
     </Box>
   );
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "pageTitle": "Brand resources"
+} as const;

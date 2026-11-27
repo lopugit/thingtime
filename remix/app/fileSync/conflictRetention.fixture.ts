@@ -70,7 +70,7 @@ export async function retentionFixture() {
 				body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
 			if (url.origin === 'https://objects.test') {
 				puts++;
-				assert.deepEqual(init.body, data);
+				assert.deepEqual(new Uint8Array(await new Response(init.body).arrayBuffer()), data);
 				return new Response(null);
 			}
 			assert.equal(init.headers['X-Thingtime-Expected-Actor'], scope.ownerId);

@@ -2,19 +2,38 @@ import { createHash } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { TIMELINE_EVENT_MAX_BYTES, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_SNAPSHOT_PARTS_ADAPTER, TIMELINE_SNAPSHOT_PART_CHARS, TIMELINE_SNAPSHOT_MAX_BYTES, parseTimelineSnapshotPart, parseTimelineSnapshotReference, timelineSnapshotPartId, type TimelineSnapshotPart, type TimelineSnapshotSide } from '../../../timeline/snapshotParts.ts';
-import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
+import { COLLECTION_SCHEMA_VERSIONS, MAX_STORABLE_NESTING } from '../../../schemas/registry.ts';
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
 import { timelineEventThingId, timelineFolderId } from './repository.ts';
 
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 export const timelineSnapshotPartThingId = (ownerId: string, id: string) => `timeline-snapshot-part-${digest(JSON.stringify([ownerId, id]))}`;
 
+// Each inline side leaves space in the bounded event envelope for its sibling
+// and control fields. Broad/deep content uses the same relational parts as
+// large text; these are processing windows, never content admission ceilings.
+const fitsInlineSnapshot = (snapshot: TimelineSnapshot): boolean => {
+ const stack: Array<{ entries: Iterator<unknown>; depth: number }> = [{ entries: [snapshot].values(), depth: 0 }];
+ let nodes = 0;
+ while (stack.length) {
+  const frame = stack[stack.length - 1];
+  const child = frame.entries.next();
+  if (child.done) { stack.pop(); continue; }
+  if (++nodes > 90_000 || frame.depth > 90) return false;
+  const value = child.value;
+  if (value && typeof value === 'object') {
+   stack.push({ entries: (Array.isArray(value) ? value : Object.values(value)).values(), depth: frame.depth + 1 });
+  }
+ }
+ return true;
+};
+
 /** Mongo accepts Things larger than the bounded history transport. Retain their
  * exact content in separate parts instead of making those Things uneditable. */
 export function splitLargeThingSnapshot(snapshot: TimelineSnapshot | null, ownerId: string, eventId: string, side: TimelineSnapshotSide) {
  if (!snapshot) return { snapshot, parts: [] as TimelineSnapshotPart[] };
  const text = JSON.stringify(snapshot); const bytes = Buffer.byteLength(text);
- if (bytes <= TIMELINE_EVENT_MAX_BYTES / 2 - 4096) return { snapshot, parts: [] as TimelineSnapshotPart[] };
+ if (bytes <= TIMELINE_EVENT_MAX_BYTES / 2 - 4096 && fitsInlineSnapshot(snapshot)) return { snapshot, parts: [] as TimelineSnapshotPart[] };
  if (snapshot.adapter !== 'thing-content' || snapshot.version !== 1 || bytes > TIMELINE_SNAPSHOT_MAX_BYTES) throw new Error('Unsupported large Timeline snapshot');
  const value = snapshot.value as any;
  const retainedBytes = Buffer.byteLength(JSON.stringify({ crystal: value.crystal ?? null, extended: value.extended ?? null, tags: value.tags ?? [] }));
@@ -68,7 +87,7 @@ export async function readTimelineSnapshot(things: any, ownerId: string, eventId
  }
  const text = pieces.join('');
  if (text.length !== reference.characters || Buffer.byteLength(text) !== reference.bytes || digest(text) !== reference.sha256) throw new Error('Timeline snapshot content does not match its receipt');
- const value = copyBoundedJson(JSON.parse(text), { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: 94, maxNodes: 100_000, sortKeys: true }, 'Timeline snapshot') as any;
+ const value = copyBoundedJson(JSON.parse(text), { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: MAX_STORABLE_NESTING + 2, maxNodes: Infinity, sortKeys: true }, 'Timeline snapshot') as any;
  if (value?.adapter !== 'thing-content' || value.version !== 1 || Object.keys(value).length !== 3) throw new Error('Invalid retained Thing snapshot');
  return value;
 }

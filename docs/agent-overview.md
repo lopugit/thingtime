@@ -29,6 +29,81 @@ and optional comma-separated `activeStatuses`, `blockedStatuses`, and
 that group. The classification values are part of the cursor context; start a
 new scan when schemas, filters, view, or classifications change.
 
+Clients using multi-select filters negotiate `api.agent-overview` **2.1.0**.
+Use `statuses`, `projectIds`, and `taskLevels` as JSON string arrays in the
+query, such as `statuses=["In review, external","active"]`. JSON preserves
+punctuation and whitespace in each value. Repeated query keys and comma-separated
+lists are also accepted. Each list matches any selected value. The dimensions
+combine with one another and with search. Use `[]` to clear a selection.
+When supplied, `statuses` and `projectIds` take precedence over the existing
+single-value `status` and `projectId` filters. Responses include the effective
+selection arrays alongside the original scalar fields. Use `availableStatuses`
+and `projects` to populate filter choices from all authorized scanned records
+regardless of the current selection.
+
+Task cards using archive filtering and activity fields negotiate
+`api.agent-overview` **2.2.0**. `archive=active|archived|all` defaults to
+`active`; an invalid or repeated value is rejected. The filter uses the task
+Thing's optional boolean `crystal.archived`, which a private saved Action can
+toggle through the ordinary authorized Things update path. An archived task
+also removes its descendants from the active board without rewriting them.
+The archived view includes that task and its descendants, and `all` shows both.
+An exact `taskId` still returns the selected task and its relational detail,
+including `selectedChildren`, the authorized direct task children and tasks
+under an agent assigned to that selected task. This detail list is independent
+of the board archive filter and row pagination.
+Archive changes do not alter task status, visibility, ownership or content.
+The board's saved task Schema needs an optional `archived` boolean and its
+archive/restore Action must verify the exact task and its write permission.
+The owner-home Things library Archive action is a separate placement feature
+and cannot serve Character-authored work graphs.
+
+Task rows now include `archived`, `effectiveArchived`, the nearest authorized
+`archivedAncestorId` (or `null`), and a semantic `statusGroup`
+(`complete`, `blocked`, `waiting`, `todo`, `active`, or `other`),
+`openQuestionCount`, `openQuestions` and all `questions` with open items first.
+Each inline question includes only its ID, title, body, answer, status, task
+ID and source timestamps. `lastActivityAt` is the newest valid
+source creation/update timestamp among the authorized task and its directly
+related progress, question, todo and agent Things; it is `null` when none is
+known. A child task's own activity belongs to that child card. The row's
+`relatedRecordsComplete` and `coverage.relatedRecordsComplete`/
+`coverage.archiveTreeComplete` are false for a partial scan: a timestamp may
+then be only the latest seen, question counts are lower bounds, and an unseen
+archived ancestor may not yet be resolved. The adapter does not infer agent
+runtime or activity from status. The saved page owns colours,
+relative-time formatting and question presentation. Status classification
+uses the page's configured groups; waiting and todo retain their distinct
+semantic groups. Archive selection is part of cursor context.
+
+To author a saved default with an explicit clear value, bind the input with
+`{ "ttArg": "query.taskLevels", "fallback": "taskLevelsDefault" }` and set
+the page block argument `taskLevelsDefault` to `top-level`. An absent query key
+uses the fallback. A cleared multi-select sends `[]` to the adapter.
+For typed source input references, negotiate `api.things` **1.60.0** on create,
+`api.things-update` **1.25.0** on update and `api.webpages-resolve` **1.17.0**
+on resolve.
+For optional saved source `retainOnInputChange`, negotiate `api.things`
+**1.65.0** on create, `api.things-update` **1.29.0** on update and
+`api.webpages-resolve` **1.20.0** on resolve. It lists unique existing source
+input names whose changes may keep the prior authorized result visible while
+the next read loads. Singular ID keys such as `taskId` are excluded; identity
+and access changes still clear protected results. Omit it for the default
+empty list.
+
+Use `taskLevels=top-level` for a page that opens on top-level tasks. A task
+with an authorized task or agent parent is a `subtasks` match. A task with no
+such parent, including a task linked directly to a project or one with a
+detached or unresolved parent, is a `top-level` match. Existing orphan,
+unresolved-parent, and cycle indicators remain available. Selecting both
+levels, passing an empty `taskLevels`, or using `taskLevels=all` shows all task
+rows. Omit `taskLevels` to keep the legacy hierarchy with project and agent
+rows. The Projects and Agents views
+continue showing their own rows. Task counts and task-related reports, questions
+and todos follow the level filter. An exact `taskId` still reads its selected
+task and related records directly. Filters apply before paging and changing a
+selection requires a new cursor.
+
 The adapter supports hierarchy, projects, agents, kanban, reports, and
 questions views. It returns raw status values and numeric hierarchy `depth`; display
 labels, indentation, titles and other layout belong to the saved Thing page.
@@ -49,6 +124,11 @@ usage from status or elapsed wall time and does not capture ChatGPT/Codex
 messages, tool calls, process state, billing or agent runtime.
 
 ## Saved Things and reporting
+
+For a connected ChatGPT/Codex account, use the [private reporting gateway](agent-reporting.md)
+to authorize a distinct task Character and reuse this saved workspace through
+MCP. Its independent `agents.report` permission is separate from Things access;
+the read adapter itself does not create that delegation.
 
 Author the page and its reusable components, schema references, and any
 write Actions in Thingtime's Builder as saved Things. Use the normal ACL-checked

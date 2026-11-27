@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
+import { isBrowserOnlyRoute } from './app-shell-routing.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -22,6 +25,51 @@ if (readJson(join(serverFunctionDir, '.vc-config.json')).maxDuration < 300) {
 }
 const tracedServerPackage = readJson(join(serverFunctionDir, 'package.json'));
 await verifyClaudeOAuthArtifacts();
+
+// Resolve from the emitted function so a healthy workspace install cannot hide
+// a missing trace. Require bcrypt's packaged binding, not a runner-local build.
+const requireServer = createRequire(resolve(serverFunctionDir, 'package.json'));
+const emittedModules = join(realpathSync(serverFunctionDir), 'node_modules') + sep;
+const bcryptManifest = realpathSync(requireServer.resolve('bcrypt/package.json'));
+const requireBcrypt = createRequire(bcryptManifest);
+const bcryptLoader = realpathSync(requireBcrypt.resolve('node-gyp-build'));
+if (![bcryptManifest, bcryptLoader].every((file) => file.startsWith(emittedModules))) {
+	throw new Error('Vercel server output does not contain the traced bcrypt package and loader.');
+}
+const bcryptDir = dirname(bcryptManifest);
+const bcryptBinding = realpathSync(requireBcrypt(bcryptLoader).path(bcryptDir));
+if (dirname(bcryptBinding) !== join(bcryptDir, 'prebuilds', `${process.platform}-${process.arch}`)) {
+	throw new Error('Vercel server output must use bcrypt’s packaged native binding.');
+}
+const vercelBcryptBinding = realpathSync(join(bcryptDir, 'prebuilds', 'linux-x64', 'bcrypt.glibc.node'));
+if (!vercelBcryptBinding.startsWith(emittedModules) ||
+	(process.platform === 'linux' && process.arch === 'x64' && bcryptBinding !== vercelBcryptBinding)) {
+	throw new Error('Vercel server output must contain and select the packaged Linux x64 glibc binding.');
+}
+if (process.platform === 'linux') {
+	// Vercel's Amazon Linux 2023 runtime provides glibc 2.34. The CI host can
+	// load newer symbols, so a successful import on its own misses that failure.
+	const versionInfo = execFileSync('readelf', ['--version-info', vercelBcryptBinding], {
+		encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }
+	});
+	const versions = [...versionInfo.matchAll(/\bName: (GLIBC_[\w.]+)/g)].map(([, version]) => version);
+	if (versions.length === 0 || versions.some((version) => {
+		const [, minor, patch = '0'] = /^GLIBC_2\.(\d+)(?:\.(\d+))?$/.exec(version) ?? [];
+		return !(Number(minor) < 34 || (Number(minor) === 34 && Number(patch) === 0));
+	})) {
+		throw new Error(`Vercel bcrypt binding requires unsupported glibc symbols (${versions.join(', ') || 'none found'}).`);
+	}
+	console.log(`[verify] Vercel Linux x64 bcrypt binding requires ${versions.join(', ')} (glibc 2.34 compatible).`);
+}
+const bcrypt = requireServer('bcrypt');
+const passwordFixture = 'Thingtime Vercel fixture Ω';
+// bcrypt 5.1.1 generated both fixture hashes with a fixed salt and cost 4.
+const legacyHashes = ['2a', '2b'].map((prefix) => `$${prefix}$04$abcdefghijklmnopqrstuuSAmpzWGtLS2ogU./eAWhKD5L3C2VD7W`);
+const freshHash = bcrypt.hashSync(passwordFixture, 4);
+if (![...legacyHashes, freshHash].every((hash) => bcrypt.compareSync(passwordFixture, hash)) ||
+	bcrypt.getRounds(freshHash) !== 4 || bcrypt.compareSync('Wrong fixture', freshHash)) {
+	throw new Error('Vercel bcrypt binding failed existing and fresh password hash checks.');
+}
 
 const filesBelow = (dir) =>
 	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -85,6 +133,21 @@ for (const host of ['https://maps.googleapis.com', 'https://maps.gstatic.com'])
 	if (!appScriptSources.includes(host)) throw new Error('Missing Maps SDK host: ' + host);
 for (const host of ['https://maps.googleapis.com', 'https://mapsresources-pa.googleapis.com'])
 	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Maps service host: ' + host);
+for (const host of ['https://api.mapbox.com', 'https://events.mapbox.com'])
+	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Mapbox service host: ' + host);
+if (appScriptSources.includes('https://api.mapbox.com')) throw new Error('Native Mapbox SDK must load from the bundled application assets.');
+
+// The loader names a fixed versioned same-origin path. Verify the deployed
+// bytes are the exact npm distribution rather than a missing or stale copy.
+const mapboxVersion = readJson('node_modules/mapbox-gl/package.json').version;
+if (mapboxVersion !== '3.30.0') throw new Error('Mapbox SDK package and saved map loader versions differ.');
+for (const file of ['mapbox-gl.js', 'mapbox-gl.css']) {
+	const source = readFileSync(join('node_modules/mapbox-gl/dist', file));
+	const deployedPath = join('.vercel/output/static/vendor/mapbox-gl', `v${mapboxVersion}`, file);
+	if (!existsSync(deployedPath) || createHash('sha256').update(readFileSync(deployedPath)).digest('hex') !== createHash('sha256').update(source).digest('hex')) {
+		throw new Error(`Mapbox SDK asset missing or changed: ${file}`);
+	}
+}
 
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
@@ -159,7 +222,9 @@ if (!hasFilesystemRoute) {
 const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
-const rootIndex = routes.findIndex((route) => route.src === '^/$');
+const rootIndex = routes.findIndex((route) => route.src === '^/$' && !isBrowserOnlyRoute(route));
+const browserRootIndex = routes.findIndex((route) => route.src === '^/$' && isBrowserOnlyRoute(route));
+const browserShellIndex = routes.findIndex((route) => route.src === '^/(?:.*)$' && isBrowserOnlyRoute(route));
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
 const wellKnownDiscoveryIndex = routes.findIndex(
@@ -256,6 +321,23 @@ if (serverFallbackIndex !== -1) {
 	if (routes[socialMetaIndex]?.headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
 		throw new Error('Vercel output does not disable browser caching for public social HTML.');
 	}
+	// Browsers must take the static shell before the social controller, so page
+	// loads cost no function invocation; unfurlers still reach the controller.
+	for (const [name, index] of [
+		['browser root', browserRootIndex],
+		['browser shell', browserShellIndex]
+	]) {
+		const route = routes[index];
+		if (index === -1 || route.dest !== '/index.html' || route.headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
+			throw new Error(`Vercel output does not serve the ${name} route as the static, uncached shell.`);
+		}
+	}
+	if (browserRootIndex > rootIndex) {
+		throw new Error('Vercel output sends browser homepage loads to the social controller.');
+	}
+	if (browserShellIndex < apiIndex || browserShellIndex < filesystemIndex || browserShellIndex < socialCardIndex || browserShellIndex > socialMetaIndex) {
+		throw new Error('Vercel output orders the browser shell route outside the API, social card and social page boundaries.');
+	}
 	const cardHeaders = routes[socialCardIndex]?.headers;
 	if (
 		cardHeaders?.['Cache-Control'] !== 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' ||
@@ -269,15 +351,15 @@ const authorizeHeadersIndex = routes.findIndex(
 	(route) =>
 		route.continue === true &&
 		typeof route.src === 'string' &&
-		route.src.includes('/authorize') &&
+		['/authorize', '/authorize/', '/credentials/import', '/credentials/import/'].every(path => new RegExp(route.src).test(path)) &&
 		route.headers?.['X-Frame-Options'] === 'DENY' &&
 		route.headers?.['Content-Security-Policy'] === authorizeCsp
 );
 if (authorizeHeadersIndex === -1) {
-	throw new Error('Vercel output config does not frame-deny the /authorize consent page.');
+	throw new Error('Vercel output config does not frame-deny the consent and credential review pages.');
 }
 if (authorizeHeadersIndex > spaIndex) {
-	throw new Error('Vercel output stamps /authorize frame-deny headers after the SPA fallback.');
+	throw new Error('Vercel output stamps consent and credential review frame-deny headers after the SPA fallback.');
 }
 
 const cspHeadersIndex = routes.findIndex(
@@ -290,7 +372,7 @@ if (cspHeadersIndex > spaIndex) {
 	throw new Error('Vercel output stamps the global CSP after the SPA fallback.');
 }
 if (cspHeadersIndex > authorizeHeadersIndex) {
-	throw new Error('Vercel output stamps the global CSP after the /authorize override, so /authorize would lose frame-ancestors.');
+	throw new Error('Vercel output stamps the global CSP after the frame-deny override, so sensitive pages would lose frame-ancestors.');
 }
 const designBundlesHeadersIndex = routes.findIndex(
 	(route) =>
@@ -320,7 +402,8 @@ if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
 	const isolatedSdk = route.src === '^/library/sdk\\.html$' && csp === librarySdkCsp;
-	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp && !isolatedSdk) {
+	if (typeof csp === 'string' && csp.includes('wasm-unsafe-eval') && !(route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$' && csp === mediaWorkerCsp)) throw new Error('WebAssembly compilation permission must stay scoped to the fixed media worker.');
+	if (typeof csp === 'string' && getDirectiveSources(csp, 'script-src').includes("'unsafe-eval'") && csp !== designBundlesCsp && !isolatedSdk) {
 		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside isolated design/SDK documents (route ${route.src}).`);
 	}
 }
@@ -356,7 +439,7 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and consent and credential review frame-deny.'
 );
 
 const draftHeaders = routes.find(route => route.src === '^/draft-preview(?:/.*)?$' && route.headers?.['Content-Security-Policy'] === draftPreviewCsp);

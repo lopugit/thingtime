@@ -1,7 +1,11 @@
 export async function finishLopuWorkflow(rootId: string, status: 'completed' | 'needs-attention' | 'stopped') {
  'use step';
+ const { requireGatewayDatabaseAccess, withGatewayWork, runAdmittedGatewayWork } = await import('../deployment/environmentGateway');
  const { finalizeLopuWorkflow } = await import('./continuationFinalization.server');
- return finalizeLopuWorkflow(rootId, status);
+ return withGatewayWork(async () => {
+   await requireGatewayDatabaseAccess();
+   return runAdmittedGatewayWork(() => finalizeLopuWorkflow(rootId, status));
+ });
 }
 
 /** One invocation executes at most one checkpoint. Step retries only observe a
@@ -12,6 +16,14 @@ export async function runLopuPart(
 	failures: number
 ): Promise<{ next: string | null; reason: string; delay: number; pending?: boolean }> {
 	'use step';
+  const { requireGatewayDatabaseAccess, withGatewayWork, runAdmittedGatewayWork } = await import('../deployment/environmentGateway');
+  return withGatewayWork(async () => {
+    await requireGatewayDatabaseAccess();
+    return runAdmittedGatewayWork(() => runLopuPartAdmitted(rootId, previousRequestId, failures));
+  });
+}
+
+async function runLopuPartAdmitted(rootId: string, previousRequestId: string | null, failures: number): Promise<{ next: string | null; reason: string; delay: number; pending?: boolean }> {
 	const { Binary } = await import('mongodb');
 	const { getHomeThingsCollection } = await import('../mongodb/collections');
 	const { AI_TASK_KIND, AI_TASK_HEADER } = await import('./backgroundTaskCore');

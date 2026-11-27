@@ -1,3 +1,5 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 
 import { json } from '~/api/http';
@@ -10,7 +12,7 @@ type CleanupDependencies = {
 };
 
 const defaultDependencies: CleanupDependencies = {
-	getSecret: () => process.env.CRON_SECRET,
+	getSecret: () => scheduledJobSecret(),
 	reap: reapExpiredAttachments
 };
 
@@ -36,6 +38,7 @@ export const createAttachmentCleanupLoader = (overrides: Partial<CleanupDependen
 			}
 
 			const result = await dependencies.reap();
+      recordScheduledPassResult('/api/v1/attachments/cleanup',result);
 			return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 		});
 };

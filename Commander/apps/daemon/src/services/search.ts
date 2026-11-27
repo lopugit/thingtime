@@ -138,6 +138,7 @@ export class SearchService {
     const child = spawn(binary, [], { stdio: ['pipe', 'pipe', 'pipe'] });
     this.#rust = child;
     createInterface({ input: child.stdout }).on('line', (line) => {
+      if (this.#rust !== child) return;
       const next = this.#pending.shift();
       if (!next) return;
       clearTimeout(next.timer);
@@ -166,6 +167,8 @@ export class SearchService {
       stderrBytes += chunk.length;
       if (text) process.stderr.write(`[commander-search] ${text}\n`);
     });
+    // stdin errors are emitted separately even when write has a callback.
+    child.stdin.on('error', (error) => this.#failRust(error, child));
     child.once('error', (error) => this.#failRust(error, child));
     child.once('exit', (code, signal) =>
       this.#failRust(new Error(`Rust search core exited (${signal ?? code ?? 'unknown'})`), child),

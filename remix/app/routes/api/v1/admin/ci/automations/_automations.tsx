@@ -20,7 +20,7 @@ export const action = ({ request }: { request: Request }) =>
       return json({ ok: false, error: 'Choose GitHub Actions or Vercel Sandbox' }, { status: 400 });
     }
     const providerReadiness = validateCiExecutionProvider(body.executionProvider);
-    if (!providerReadiness.ok) {
+  if (providerReadiness.ok === false) {
       return json(
         { ok: false, error: providerReadiness.error, missing: providerReadiness.missing },
         { status: 409 }

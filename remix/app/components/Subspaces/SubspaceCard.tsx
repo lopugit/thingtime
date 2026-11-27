@@ -1,6 +1,8 @@
 import React from 'react';
-import { Box, Button, Center, Flex, Image, Text } from '@chakra-ui/react';
+import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
+
+import { PresentedImage } from '~/components/Media/PresentedImage';
 
 import { ACCESS_META, subspaceAccent, type PublicSubspace } from './subspaceTypes';
 
@@ -18,17 +20,17 @@ export const SubspaceIcon = (props: { subspace: Pick<PublicSubspace, 'branding' 
 	const accent = subspaceAccent(subspace);
 	if (subspace.branding?.iconUrl) {
 		return (
-			<Image
-				src={subspace.branding.iconUrl}
-				alt={subspace.name}
+			<Box
 				width={size}
 				height={size}
 				borderRadius="999px"
-				objectFit="cover"
+				overflow="hidden"
 				flexShrink={0}
 				border={`2px solid ${accent}`}
 				background="var(--tt-surface-alt, #f5f5f7)"
-			/>
+			>
+				<PresentedImage src={subspace.branding.iconUrl} alt={subspace.name} presentation={subspace.branding.iconPresentation} />
+			</Box>
 		);
 	}
 	return (

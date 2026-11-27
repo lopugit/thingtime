@@ -29,6 +29,8 @@ let orphanAppStorageReconciliationPlan: NamespaceModule['orphanAppStorageReconci
 let deletionStorageFenceDecision: ThingsModule['deletionStorageFenceDecision'];
 let legacyInteractionLazyConversionIsSafe: ThingsModule['legacyInteractionLazyConversionIsSafe'];
 let sanitizeShareId: ThingsModule['sanitizeShareId'];
+let createThing: ThingsModule['createThing'];
+let upsertThing: ThingsModule['upsertThing'];
 let uncertainAppStorageLedgerMatch: ThingsModule['uncertainAppStorageLedgerMatch'];
 let uncertainAppUserStorageLedgerMatch: ThingsModule['uncertainAppUserStorageLedgerMatch'];
 let uncertainUserStorageLedgerMatch: ThingsModule['uncertainUserStorageLedgerMatch'];
@@ -40,7 +42,8 @@ test.before(async () => {
 		root: remixRoot,
 		configFile: false,
 		appType: 'custom',
-		server: { middlewareMode: true },
+		// Module-only SSR evaluation must not allocate HMR sockets or watchers.
+		server: { middlewareMode: true, hmr: false, ws: false, watch: null },
 		resolve: { alias: { '~': path.join(remixRoot, 'app') } }
 	});
 	const namespace = (await vite.ssrLoadModule('/app/api/utils/apps/namespace.ts')) as NamespaceModule;
@@ -64,6 +67,8 @@ test.before(async () => {
 	deletionStorageFenceDecision,
 	legacyInteractionLazyConversionIsSafe,
 	sanitizeShareId,
+	createThing,
+	upsertThing,
 	uncertainAppStorageLedgerMatch,
 	uncertainAppUserStorageLedgerMatch,
 	uncertainUserStorageLedgerMatch,
@@ -386,6 +391,26 @@ test('generic Thing ids cannot squat protected control-plane namespaces', () => 
 	assert.equal(diagnostic?.ok, false);
 	assert.equal(diagnostic?.status, 400);
 	assert.equal(sanitizeShareId('ordinary-user-thing'), 'ordinary-user-thing');
+});
+
+test('generic creation and upsert cannot squat storage journal or recovery destinations', async () => {
+	for (const prefix of ['storage-pending-', 'storage-recovery-']) {
+		const shareId = `${prefix}${'a'.repeat(64)}`;
+		const input = { shareId, thingtime: ['data'], crystal: { arbitrary: 'payload' } };
+		const sanitized: any = sanitizeShareId(shareId);
+		assert.equal(sanitized?.ok, false);
+		assert.equal(sanitized?.status, 400);
+		// Both real generic write funnels reject before any database access,
+		// including PUT's existing-id lookup and its create-on-missing branch.
+		for (const result of [await createThing('owner', input), await upsertThing('owner', input)]) {
+			assert.equal(result.ok, false);
+			if (result.ok === false) {
+				assert.equal(result.status, 400);
+				assert.match(result.error, /reserved prefix/);
+			}
+		}
+	}
+	assert.equal(sanitizeShareId('storage-my-notes'), 'storage-my-notes');
 });
 
 // The demo/app seed is the only seeder that mints DATA things, and

@@ -17,7 +17,7 @@ const rejects = async (work: Promise<unknown>, status: number, pattern: RegExp) 
 const signature = (command: Record<string, unknown>) => createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.keys(command).sort().map(key => [key, command[key]])))).digest('hex');
 const snapshot = { adapter: 'thing-content', version: 1, value: { crystal: {} } };
 
-function harness() {
+function harness(options:{epoch?:(things:any,ownerId:string,thingId:string,session:any)=>Promise<void>}={}) {
 	let rows: any[] = []; let charge = 0; let clock = Date.parse('2026-10-13T09:00:00.000Z'); let position = 100;
 	const session = { inTransaction: () => true };
 	const match = (row: any, filter: any) => Object.entries(filter).every(([key, value]: any) => {
@@ -47,6 +47,7 @@ function harness() {
 	const appended: TimelineEvent[] = []; let race: (() => Promise<void>) | null = null; let foreign: { rows: any[]; events: [string, TimelineEntry][] } | null = null;
 	const service = createVersionNameService({
 		collection: async () => things as any,
+  ...(options.epoch?{epoch:options.epoch}:{}),
 		transaction: async work => {
 			const before = [...rows]; const priorEvents = new Map(events); const oldCharge = charge;
 			try { return await work(session); }
@@ -171,4 +172,14 @@ test('page name reads are one bounded owner-scoped batch and refuse envelopes th
 		assert.throws(() => versionNameFromDoc({ ...row, ...patch }), /Timeline version name envelope/, JSON.stringify(patch));
 	row.targetId = timelineEventThingId('user-1', 'other-thing');
 	await assert.rejects(readTimelineVersionNames(h.things, 'user-1', ['saved']), /does not match its record/);
+});
+
+test('set and clear share the held-content epoch transaction, roll back on refusal, and do not bump for stored replay or no-op',async()=>{
+ let refuse=true,touches=0;
+ const h=harness({epoch:async(_things,ownerId,thingId,session)=>{assert.equal(ownerId,'user-1');assert.equal(thingId,'page-1');assert.ok(session.inTransaction());touches++;if(refuse)throw Error('held content epoch changed');}});
+ await assert.rejects(h.service('user-1',name(81)),/epoch changed/);assert.equal(h.rows().length,0);assert.equal(h.events().has(timelineVersionNameEventId(uuid(81))),false);
+ refuse=false;const saved=await h.service('user-1',name(81));assert.ok(saved.name);assert.equal(touches,2);await h.service('user-1',name(81));assert.equal(touches,2);
+ await h.service('user-1',name(82,{name:saved.name.name,expectedRevision:saved.name.revision}));assert.equal(touches,2,'same-name no-op retains its epoch');
+ refuse=true;await assert.rejects(h.service('user-1',name(83,{name:null,expectedRevision:saved.name.revision})),/epoch changed/);assert.equal(h.rows()[0].timelineVersionNameCleared,false);
+ refuse=false;await h.service('user-1',name(83,{name:null,expectedRevision:saved.name.revision}));assert.equal(h.rows()[0].timelineVersionNameCleared,true);const count=touches;await h.service('user-1',name(83,{name:null,expectedRevision:saved.name.revision}));assert.equal(touches,count);
 });

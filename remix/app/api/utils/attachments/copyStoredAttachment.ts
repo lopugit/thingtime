@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from './attachmentBlobs';
 import type { AttachmentResult } from './attachments';
 import type { AttachmentAccessViewer } from './attachmentAccess';
 import type { AttachmentDoc, AttachmentStore } from './attachmentStore';
@@ -63,6 +64,8 @@ export const copyStoredAttachment = async (
 			const fresh = await deps.read(viewer, source.shareId);
 			if (!fresh.ok || fresh.doc.ownerId !== source.ownerId || fresh.doc.objectKey !== source.objectKey ||
 				fresh.doc.objectVersionId !== source.objectVersionId || fresh.doc.objectSizeBytes !== source.objectSizeBytes ||
+        attachmentPhysicalObject(fresh.doc).versionId !== attachmentPhysicalObject(source).versionId ||
+        attachmentPhysicalObject(fresh.doc).objectKey !== attachmentPhysicalObject(source).objectKey ||
 				(fresh.doc.attachmentLinked === true) !== linked ||
 				(linked && (!isDeepStrictEqual(fresh.doc.crystal, source.crystal) || fresh.doc.moderation?.status === 'nsfw')) ||
 				(fresh.doc.attachmentPurpose || 'post') !== sourcePurpose ||
@@ -81,7 +84,8 @@ export const copyStoredAttachment = async (
 			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
 		}
 		const copyRequestId = requestId || deps.uuid();
-		const started = await deps.start(viewer.id, { requestId: copyRequestId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
+		const started = await deps.start(viewer.id, { requestId: copyRequestId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose,
+			...(source.crystal.livePhoto && source.crystal.contentType !== 'application/octet-stream' ? { livePhoto: source.crystal.livePhoto } : {}) });
 		if (!started.ok) throw started;
 		if (typeof started.upload.id !== 'string') throw new Error('Copy upload is unavailable');
 		cleanupId = started.upload.id;
@@ -101,6 +105,7 @@ export const copyStoredAttachment = async (
 			!destination.attachmentExpiresAt || destination.attachmentExpiresAt <= deps.now()) throw new Error('Copy upload is unavailable');
 		const plan = deps.plan(source.objectSizeBytes);
 		const s3 = deps.getS3();
+    const physical = attachmentPhysicalObject(source);
 		// Mark before starting any S3 write. A timed-out copy can still have an
 		// in-flight part; cleanup must keep its reservation until settlement.
 		await deps.store.markPartsIssued(viewer.id, cleanupId, deps.now());
@@ -109,7 +114,7 @@ export const copyStoredAttachment = async (
 			const start = (partNumber - 1) * plan.partSizeBytes;
 			await s3.copyUploadPart({
 				objectKey: destination.objectKey, uploadId: destination.uploadId, partNumber,
-				sourceObjectKey: source.objectKey, sourceVersionId: source.objectVersionId,
+				sourceObjectKey: physical.objectKey, sourceVersionId: physical.versionId!,
 				// S3 rejects byte-range copies of sources below 5 MiB. A one-part
 				// copy needs no range and still exactly matches its reservation.
 				...(plan.partCount > 1 ? { range: { start, end: Math.min(source.objectSizeBytes, start + plan.partSizeBytes) - 1 } } : {}),

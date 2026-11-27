@@ -84,3 +84,12 @@ test('geo is opt-in and retained by both post transport forms', () => {
     assert.deepEqual(buildThingCreateRequestPayload({ ...base, geo: { lat: 0, lng: 0 } }).geo, { lat: 0, lng: 0 });
   }
 });
+
+test('unified typed post and comment creation transport explicit presentation metadata', () => {
+  for (const thingtime of [['post'], ['post', 'comment'], ['comment']]) {
+    const crystal = { type: 'text', text: 'body', renderComponent: { id: 'saved-component' } };
+    const payload = buildThingCreateRequestPayload({ thingtime, crystal, targetId: 'parent' });
+    assert.deepEqual(payload.crystal, crystal);
+    assert.deepEqual(payload.thingtime, thingtime);
+  }
+});

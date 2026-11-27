@@ -35,3 +35,8 @@ test('photo sources never inherit legacy iOS folder publication or recovery capa
  }
  assert.equal(supportsMobileFolderPublication({ id: root.id, name: 'Folder' }, { platform: 'ios', fileAccessVersion: '1.1.1', fileStagingVersion: '1.2.0', filePublicationVersion: '1.0.0' }), true);
 });
+
+test('granted Photos access does not make a draft without a cloud destination runnable', () => {
+ assert.equal(root.photoAccess, 'full');
+ assert.throws(() => parseFileSyncConfiguration({ ...config(), paused: false, remoteFolderId: '' }));
+});

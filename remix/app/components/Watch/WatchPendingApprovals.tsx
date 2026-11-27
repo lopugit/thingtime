@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -48,16 +49,16 @@ export const WatchPendingApprovals = ({ user: explicitUser, embedded = false }: 
 				/* Origins without this feature do not acquire a polling loop. */
 			}
 		})();
-		const timer = window.setInterval(poll, 15_000);
-		document.addEventListener('visibilitychange', poll);
-		window.addEventListener('focus', poll);
-		window.addEventListener('thingtime:watch-approval-offered', poll);
+		const timer = activityInterval('timer:components/Watch/WatchPendingApprovals:1', 'Watch Pending Approvals', poll, 15_000);
+		activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('visibilitychange', poll);
+		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('focus', poll);
+		activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').addEventListener('thingtime:watch-approval-offered', poll);
 		return () => {
 			controller.abort();
-			window.clearInterval(timer);
-			document.removeEventListener('visibilitychange', poll);
-			window.removeEventListener('focus', poll);
-			window.removeEventListener('thingtime:watch-approval-offered', poll);
+			clearActivityInterval(timer);
+			activityEvents(document, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('visibilitychange', poll);
+			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('focus', poll);
+			activityEvents(window, 'events:components/Watch/WatchPendingApprovals', 'WatchPendingApprovals').removeEventListener('thingtime:watch-approval-offered', poll);
 		};
 	}, [user?.id, user?.temporary]);
 

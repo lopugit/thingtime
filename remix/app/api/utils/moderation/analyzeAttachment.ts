@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 // Post-upload moderation orchestrator. Runs asynchronously after an
 // attachment reaches `ready` (fire-and-forget from completeAttachmentUpload;
 // the admin sweep re-runs anything still pending/unstamped). Loads the doc,
@@ -193,9 +194,10 @@ export const createAnalyzeReadyAttachment =
 		await stampModeration(things, shareId, { status: 'pending', provider: choice.provider.name }, { allowOverwriteOf: [null, 'pending'], now });
 
 		try {
+      const physical = attachmentPhysicalObject({ ...doc, shareId, objectKey: String(doc.objectKey) });
 			const signed = await deps.getS3().signDownload({
-				objectKey: String(doc.objectKey),
-				versionId: String(doc.objectVersionId || ''),
+				objectKey: physical.objectKey,
+				versionId: physical.versionId ?? '',
 				contentDisposition: attachmentContentDisposition(String(doc.crystal?.name || 'attachment'), false),
 				contentType
 			});

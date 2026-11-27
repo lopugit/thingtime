@@ -40,7 +40,7 @@ export type TimelineReceipt = { formatVersion: 1; eventId: string; ownerId: stri
 export type TimelineEntry = { event: TimelineEvent; receipt: TimelineReceipt };
 export type TimelineScope = { ownerId: string; apiOrigin: string; dataPlane: string };
 
-const budget = { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 96, maxNodes: 200_000, sortKeys: true };
+export const TIMELINE_EVENT_JSON_BUDGET = { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 96, maxNodes: 200_000, sortKeys: true };
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, expected: string[]) => {
 	if (Object.keys(value).length !== expected.length || expected.some(key => !Object.prototype.hasOwnProperty.call(value, key))) throw new Error('Invalid Timeline fields');
@@ -56,7 +56,7 @@ const snapshot = (value: unknown) => {
 
 /** A strict detached canonical copy; unknown fields and lossy JSON are refused. */
 export function parseTimelineEvent(input: unknown): TimelineEvent {
-	const value: unknown = copyBoundedJson(input, budget, 'Timeline event');
+	const value: unknown = copyBoundedJson(input, TIMELINE_EVENT_JSON_BUDGET, 'Timeline event');
 	if (!object(value)) throw new Error('Invalid Timeline event');
 	keys(value, ['formatVersion', 'id', 'ownerId', 'thingId', 'branchId', 'parentIds', 'operationId', 'actorId', 'source', 'clientId', 'occurredAt', 'mode', 'operation', 'label', 'before', 'after', 'dependencies']);
 	validateTimelineEventFields(value);
@@ -103,7 +103,7 @@ export function parseTimelineReceipt(input: unknown): TimelineReceipt {
 }
 
 export function parseTimelineEntry(input: unknown): TimelineEntry {
-	const value: unknown = copyBoundedJson(input, { ...budget, maxBytes: TIMELINE_EVENT_MAX_BYTES + 2048 }, 'Timeline entry');
+	const value: unknown = copyBoundedJson(input, { ...TIMELINE_EVENT_JSON_BUDGET, maxBytes: TIMELINE_EVENT_MAX_BYTES + 2048 }, 'Timeline entry');
 	if (!object(value)) throw new Error('Invalid Timeline entry');
 	keys(value, ['event', 'receipt']);
 	const event = parseTimelineEvent(value.event);

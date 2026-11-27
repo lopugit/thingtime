@@ -2,6 +2,13 @@
 import CryptoKit
 import XCTest
 
+private final class ReadGuardCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observed: [MobileFolderBulkReader.ReadGuard] = []
+    func record(_ value: MobileFolderBulkReader.ReadGuard) { lock.lock(); observed.append(value); lock.unlock() }
+    var values: [MobileFolderBulkReader.ReadGuard] { lock.lock(); defer { lock.unlock() }; return observed }
+}
+
 @MainActor final class MobileFolderBulkReaderTests: XCTestCase {
     private func fixture() throws -> (URL, Data, MobileFolderReader.Entry) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -23,6 +30,68 @@ import XCTest
         try Data("replacement".utf8).write(to: root.appendingPathComponent("file"), options: .atomic)
         XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry, sha256: payload.sha256))
     }
+    func testReadGuardReportsOnlyProvenFailureWithoutChangingThrownError() throws {
+        let (root, bookmark, entry) = try fixture()
+        func expect(_ source: MobileFolderReader.Entry, _ guardFailure: MobileFolderBulkReader.ReadGuard,
+                    sha256: String? = nil, failure: MobileFolderStore.Failure = .changed) {
+            let capture = ReadGuardCapture()
+            do { _ = try MobileFolderBulkReader.read(bookmark: bookmark, expected: source, sha256: sha256, observer: { capture.record($0) }); XCTFail("Source accepted") }
+            catch MobileFolderStore.Failure.changed { if case .changed = failure {} else { XCTFail("Wrong error") } }
+            catch MobileFolderStore.Failure.invalid { if case .invalid = failure {} else { XCTFail("Wrong error") } }
+            catch MobileFolderStore.Failure.limit { if case .limit = failure {} else { XCTFail("Wrong error") } }
+            catch { XCTFail("Unexpected error type for \(guardFailure.rawValue): \(type(of: error))") }
+            XCTAssertEqual(capture.values, [guardFailure])
+        }
+        let invalid = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: entry.version, kind: entry.kind,
+            size: 262_145, sha256: entry.sha256, fingerprint: entry.fingerprint)
+        expect(invalid, .invalidShape, failure: .invalid)
+        let older = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: "0:0:0:0:0:0:0", kind: entry.kind,
+            size: entry.size, sha256: entry.sha256, fingerprint: entry.fingerprint)
+        expect(older, .firstInspectVersion)
+        let wrongFingerprint = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: entry.version, kind: entry.kind,
+            size: entry.size, sha256: entry.sha256,
+            fingerprint: .init(partSizeBytes: entry.fingerprint!.partSizeBytes, partCount: 1, sha256: String(repeating: "0", count: 64)))
+        expect(wrongFingerprint, .firstInspectFingerprint)
+        expect(entry, .rawDigest, sha256: String(repeating: "0", count: 64))
+        try Data("replacement".utf8).write(to: root.appendingPathComponent("file"), options: .atomic)
+        expect(entry, .firstInspectIdentityInodeChanged)
+        try FileManager.default.removeItem(at: root.appendingPathComponent("file"))
+        expect(entry, .firstInspectAbsent)
+    }
+    func testIdentityGuardClassifiesSavedDescriptorWithoutExposingValues() throws {
+        let (_, bookmark, entry) = try fixture()
+        let parts = entry.version.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        XCTAssertEqual(parts.count, 7)
+        let device = try XCTUnwrap(UInt64(parts[0]))
+        let inode = try XCTUnwrap(UInt64(parts[1]))
+        func source(id: String, version: String) -> MobileFolderReader.Entry {
+            .init(path: entry.path, id: id, version: version, kind: entry.kind,
+                  size: entry.size, sha256: entry.sha256, fingerprint: entry.fingerprint)
+        }
+        func expect(_ source: MobileFolderReader.Entry, _ reason: MobileFolderBulkReader.ReadGuard) {
+            let capture = ReadGuardCapture()
+            XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: source, observer: { capture.record($0) })) { error in
+                guard case MobileFolderStore.Failure.changed = error else { return XCTFail("Changed source must remain refused") }
+            }
+            XCTAssertEqual(capture.values, [reason])
+        }
+        let otherDevice = String(device == UInt64.max ? 0 : device + 1)
+        let otherInode = String(inode == UInt64.max ? 0 : inode + 1)
+        let changedDeviceVersion = ([otherDevice, parts[1]] + Array(parts.dropFirst(2))).joined(separator: ":")
+        let changedInodeVersion = ([parts[0], otherInode] + Array(parts.dropFirst(2))).joined(separator: ":")
+        // The strongest signal comes first: a matching full stamp with a different saved ID.
+        expect(source(id: "legacy", version: entry.version), .firstInspectIdentitySameVersion)
+        expect(source(id: "legacy", version: changedInodeVersion), .firstInspectIdentityMalformed)
+        expect(source(id: "\(otherDevice):\(parts[1])", version: changedInodeVersion), .firstInspectIdentityVersionInconsistent)
+        expect(source(id: "\(otherDevice):\(parts[1])", version: changedDeviceVersion), .firstInspectIdentityDeviceChanged)
+        expect(source(id: "\(parts[0]):\(otherInode)", version: changedInodeVersion), .firstInspectIdentityInodeChanged)
+        let equivalentID = "\(parts[0]):0\(parts[1])"
+        let equivalentVersion = ([parts[0], "0\(parts[1])"] + Array(parts.dropFirst(2))).joined(separator: ":")
+        expect(source(id: equivalentID, version: equivalentVersion), .firstInspectIdentityRepresentation)
+        let capture = ReadGuardCapture()
+        XCTAssertNoThrow(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry, observer: { capture.record($0) }))
+        XCTAssertTrue(capture.values.isEmpty)
+    }
     func testAliasesAndResourceBoundsFailClosed() throws {
         let (_, _, entry) = try fixture()
         XCTAssertThrowsError(try MobileFolderBulkReader.validate([]))
@@ -41,10 +110,15 @@ import XCTest
         let (root, bookmark, entry) = try fixture()
         // A canonical alias is detected on case-sensitive test filesystems.
         let alias = root.appendingPathComponent("FILE")
-        if !FileManager.default.fileExists(atPath: alias.path) {
-            try Data("alias".utf8).write(to: alias)
+        do {
+            // Simulator lookup and exclusive creation can disagree about case aliases.
+            // Exclusive creation protects the original on case-insensitive hosts.
+            try Data("alias".utf8).write(to: alias, options: .withoutOverwriting)
             XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry))
             try FileManager.default.removeItem(at: alias)
+        } catch CocoaError.fileWriteFileExists {
+            // Independent case aliases cannot be constructed on this filesystem.
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("file")), Data(repeating: 42, count: 131_073))
         }
         try FileManager.default.removeItem(at: root.appendingPathComponent("file"))
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("file"), withDestinationURL: root)

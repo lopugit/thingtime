@@ -4,13 +4,14 @@ import { mediaPageLink } from './mediaGalleryCore';
 import { attachmentCountLimit } from '../../schemas/attachmentLimits';
 import { planAttachmentReorder, planAttachmentSync } from '../../api/utils/attachments/attachmentCore';
 
-test('large post galleries preserve every id and reject duplicates during reorder and edit', () => {
+test('large post and comment galleries preserve every id and reject duplicates during reorder and edit', () => {
 	const ids = Array.from({ length: 80 }, (_, i) => `media-${i}`);
 	const requested = [...ids].reverse();
 	assert.deepEqual(planAttachmentReorder(requested, ids, attachmentCountLimit()), { ok: true, orderedIds: requested });
 	assert.equal(planAttachmentSync([...requested, 'new-video'], ids, [], attachmentCountLimit()).ok, true);
 	assert.equal(planAttachmentSync([...requested, ids[0]], ids, [], attachmentCountLimit()).ok, false);
-	assert.equal(planAttachmentSync(requested, ids, [], attachmentCountLimit('comment')).ok, false);
+	assert.equal(planAttachmentSync(requested, ids, [], attachmentCountLimit('comment')).ok, true);
+	assert.equal(planAttachmentSync([...requested, ids[0]], ids, [], attachmentCountLimit('comment')).ok, false);
 });
 
 test('media permalinks omit legacy secret keys and preserve composition context', () => {

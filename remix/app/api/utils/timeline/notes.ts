@@ -10,6 +10,7 @@ import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { StorageMutationError, currentContentStorageSizeBytes, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore.ts';
 import { readTimelineEntries, timelineEventThingId, timelineFolderId } from './repository.ts';
+import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { explainTimelineEntry } from './explain.ts';
 
 /** One protected relational Thing per note. The event stays immutable: a note
@@ -42,7 +43,11 @@ export async function readTimelineNotes(things: any, ownerId: string, eventIds: 
 
 const dependencies = {
 	collection: getThingsCollection, transaction: withMongoTransaction, debit: applyUserStorageDelta, billable: () => !isCustomMongoEndpointActive(), now: () => new Date(),
-	entries: readTimelineEntries, explain: explainTimelineEntry
+	entries: readTimelineEntries, explain: explainTimelineEntry,
+ epoch: async (things: any, ownerId: string, thingId: string, session: any) => {
+  const doc = await things.findOne({ shareId: thingId, ownerId }, { session, projection: { shareId: 1, ownerId: 1, executionHold: 1 } });
+  await recordCreationContentEpoch(things, doc, doc, session);
+ }
 };
 export function createNoteService(overrides: Partial<typeof dependencies> = {}) {
 	const deps = { ...dependencies, ...overrides };
@@ -84,6 +89,7 @@ export function createNoteService(overrides: Partial<typeof dependencies> = {}) 
 		};
 		if (deps.billable()) { doc.storageClass = 'content'; doc.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION; doc.sizeBytes = thingStorageSizeBytes(doc); await deps.debit(ownerId, doc.sizeBytes, session); }
 		await things.insertOne(doc, { session });
+  await deps.epoch(things, ownerId, command.thingId, session);
 		return { ok: true, note };
 	};
 	return async (ownerId: string, input: TimelineNoteCommand, context: { signal?: AbortSignal } = {}): Promise<TimelineNoteResult> => {
@@ -91,7 +97,9 @@ export function createNoteService(overrides: Partial<typeof dependencies> = {}) 
 		if (command.command === 'remove-note') return deps.transaction(async session => {
 			const doc = await things.findOne({ ownerId, thingtime: TIMELINE_NOTE_KIND, shareId: timelineNoteThingId(ownerId, command.noteId) }, { session });
 			if (!doc) return { ok: true, removed: true, noteId: command.noteId };
+   const note = noteFromDoc(doc);
 			await things.deleteOne({ shareId: doc.shareId, ownerId }, { session });
+   await deps.epoch(things, ownerId, note.thingId, session);
 			// Refund only exact current-version accounting; a stale or malformed stamp leaves the ledger to reconciliation.
 			const refund = doc.storageClass === 'content' ? currentContentStorageSizeBytes(doc) : null;
 			if (refund !== null && refund > 0) await deps.debit(ownerId, -refund, session);

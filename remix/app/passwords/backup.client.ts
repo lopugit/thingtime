@@ -27,7 +27,7 @@ export async function createPasswordBackup(ownerId: string, signal?: AbortSignal
         item.details.thingtime.files = attached.filter(file => file.entryId === record.id).map(file => {
           const path = backupFilePath(file);
           files.push({ entryId: record.id, fileId: file.id, path });
-          return { path, name: file.metadata.name, size: file.metadata.size, archivePath: file.metadata.archivePath, role: file.metadata.role };
+          return { id: file.id, path, name: file.metadata.name, size: file.metadata.size, archivePath: file.metadata.archivePath, role: file.metadata.role };
         });
         yield encoder.encode(`${count++ ? ',' : ''}${JSON.stringify(item)}`); progress?.(`${count} entries prepared`);
       }

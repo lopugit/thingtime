@@ -22,6 +22,7 @@ describe('Commander active HTTP capability registry', () => {
       );
     }
     expect(manifest.features['commander.accounts-login']?.version).toBe('1.1.0');
+    expect(manifest.features['commander.index-status']?.version).toBe('1.1.1');
     expect(manifest.features['commander.native-oauth-callback']?.version).toBe('1.0.1');
     expect(manifest.features['commander.oauth-callback']?.version).toBe('1.0.1');
     expect(resolveCommanderRoute('POST', '/api/unregistered')).toBeUndefined();

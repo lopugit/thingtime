@@ -1,9 +1,13 @@
+import { ACCOUNT_CONFIG_MARKER, accountConfigurationRepository, accountConfigurationVaultReady, emptyAccountConfigurations, type AccountConfigurations } from './accountConfiguration';
+import { normalizeImagePresentation, type ImagePresentation } from '~/components/Media/imagePresentation';
+import { effectiveConnectorConfirmations, type ConnectorConfirmationPatch, type ConnectorConfirmations } from '../chatgpt/connectorProtections';
+import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { Binary, ObjectId, type ClientSession } from 'mongodb';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -59,6 +63,8 @@ export type UserDoc = {
 	bio?: string | null;
 	avatarUrl?: string | null;
 	bannerUrl?: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId?: string | null;
 	bannerAttachmentId?: string | null;
 	emailVerified: boolean;
@@ -87,6 +93,8 @@ export type PublicUser = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId: string | null;
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
@@ -143,6 +151,8 @@ export type PublicProfile = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	createdAt: string;
 	temporary?: boolean;
 };
@@ -193,6 +203,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		bio: typeof user.bio === 'string' ? user.bio : null,
 		avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 		bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+		...projectProfilePresentation(user, 'avatar'),
+		...projectProfilePresentation(user, 'banner'),
 		avatarAttachmentId: profileAttachmentIdFromRecord(user, 'avatar'),
 		bannerAttachmentId: profileAttachmentIdFromRecord(user, 'banner'),
 		avatarLinkedUrl: linkedProfileMediaUrl(user, 'avatar'),
@@ -225,6 +237,12 @@ export const toPublicUserWithStorage = async (user: any): Promise<PublicUser> =>
 	return toPublicUser(user, await getSubscription('user', userId));
 };
 
+export const projectProfilePresentation = (user: any, slot: 'avatar' | 'banner'): Partial<Record<'avatarPresentation' | 'bannerPresentation', ImagePresentation>> => {
+	const key = slot === 'avatar' ? 'avatarPresentation' : 'bannerPresentation';
+	const presentation = effectiveProfileMediaUrl(user, slot) && normalizeImagePresentation(user.crystal?.[key] ?? user[key]);
+	return presentation ? { [key]: presentation } : {};
+};
+
 export const toPublicProfile = (user: any): PublicProfile => ({
 	id: String(user._id),
 	username: user.username,
@@ -232,6 +250,8 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 	bio: typeof user.bio === 'string' ? user.bio : null,
 	avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 	bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+	...projectProfilePresentation(user, 'avatar'),
+	...projectProfilePresentation(user, 'banner'),
 	createdAt: new Date(user.createdAt).toISOString(),
 	temporary: user.meta?.temporary === true
 });
@@ -326,6 +346,8 @@ const userThingToDoc = (thing: any): any => {
 		bio: thing.crystal?.bio ?? null,
 		avatarUrl: thing.crystal?.avatarUrl ?? null,
 		bannerUrl: thing.crystal?.bannerUrl ?? null,
+		avatarPresentation: thing.crystal?.avatarPresentation,
+		bannerPresentation: thing.crystal?.bannerPresentation,
 		avatarAttachmentId: thing.avatarAttachmentId ?? null,
 		bannerAttachmentId: thing.bannerAttachmentId ?? null,
 		email: secure.email || '',
@@ -427,6 +449,87 @@ export const findUserById = async (id: string) => {
 	if (thing) return userThingToDoc(thing);
 	return legacy;
 };
+
+/**
+ * Serialize a credential import with changes to the authoritative admin record.
+ * A dedicated private stamp acquires the document write fence without changing
+ * profile data, edit timestamps, or a legacy twin's authorization.
+ */
+export const fenceCurrentAdminCredentialImport = async (userId: string, session: ClientSession): Promise<boolean> => {
+	const things = await getThingsCollection();
+	const thing = await things.findOne({ thingtime: 'user', shareId: userId }, {
+		session, projection: { secureAdmin: 1, 'crystal.username': 1, secureCredentialImportAt: 1 }
+	});
+	const stamp = (previous: unknown) => new Date(Math.max(Date.now(), previous instanceof Date ? previous.getTime() + 1 : 0));
+	if (thing) {
+		if (thing.secureAdmin !== true && !isEnvAdmin(thing.crystal?.username)) return false;
+		const updated = await things.updateOne({ _id: thing._id }, {
+			$set: { secureCredentialImportAt: stamp(thing.secureCredentialImportAt) }
+		}, { session });
+		return updated.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(userId)) return false;
+	const users = await getUsersCollection();
+	const legacy = await users.findOne({ _id: new ObjectId(userId) }, {
+		session, projection: { username: 1, 'meta.admin': 1, secureCredentialImportAt: 1 }
+	});
+	if (!legacy || !isAdminDoc(legacy)) return false;
+	const updated = await users.updateOne({ _id: legacy._id }, {
+		$set: { secureCredentialImportAt: stamp(legacy.secureCredentialImportAt) }
+	}, { session });
+	return updated.matchedCount === 1;
+};
+
+/** Fence a trusted internal authorization predicate against the current
+ * Things-first account root in the caller's home transaction. The predicate
+ * receives the same decoded account representation as normal authentication.
+ * A denied Thing never falls through to an older, more permissive legacy twin. */
+export const createCurrentAccountAuthorizationFence = (dependencies = {
+  getThings: getThingsCollection, getUsers: getUsersCollection
+}) => async (id: string, predicate: (user: any) => boolean, session: ClientSession, token: string): Promise<boolean> => {
+  if (typeof session?.inTransaction !== 'function' || !session.inTransaction() || typeof token !== 'string' || !token) throw new Error('Account authorization requires an active transaction and fence token');
+  const things = await dependencies.getThings();
+  const options = { session };
+  const filter = { shareId: id, thingtime: 'user' };
+  const row = await things.findOne(filter, options);
+  // Always change the stamp, even if an internal caller reuses its token.
+  const stamp = () => `${token}:${lopuSettingsRevision()}`;
+  if (row) {
+    if (predicate(userThingToDoc(row)) !== true) return false;
+    const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { accountAuthorizationFence: stamp() } }, options);
+    return result.matchedCount === 1;
+  }
+  if (!ObjectId.isValid(id)) return false;
+  const legacy = await dependencies.getUsers();
+  const legacyFilter = { _id: new ObjectId(id) };
+  const user = await legacy.findOne(legacyFilter, options);
+  if (!user || predicate(user) !== true) return false;
+  const result = await legacy.updateOne(legacyFilter, { $set: { accountAuthorizationFence: stamp() } }, options);
+  return result.matchedCount === 1;
+};
+export const fenceCurrentAccountAuthorization = createCurrentAccountAuthorizationFence();
+
+/** A delegated private upload publication must serialize with the current
+ * account's upload-permission change or deletion, as well as session revoke.
+ * Keep the same Things-first identity and permission policy as ordinary auth. */
+export async function fencePrivateUploadPermission(id: string, token: string, session: any, signal: AbortSignal) {
+	if (!session?.inTransaction()) throw Error('Upload authorization requires the publication transaction');
+	const options = { session, signal };
+	const things = await getThingsCollection();
+	const filter = { shareId: id, thingtime: 'user' };
+	const row = await things.findOne(filter, options);
+	const eligible = (user: any) => user && user.accountKind !== 'service' && userPrivateUploadsEnabled(user);
+	if (row) {
+		if (!eligible(userThingToDoc(row))) return false;
+		const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { fileSyncPublicationFence: token } }, options);
+		return result.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(id)) return false;
+	const legacy = await getUsersCollection(), legacyFilter = { _id: new ObjectId(id) };
+	if (!eligible(await legacy.findOne(legacyFilter, options))) return false;
+	const result = await legacy.updateOne(legacyFilter, { $set: { fileSyncPublicationFence: token } }, options);
+	return result.matchedCount === 1;
+}
 
 // Batch form for bounded admin directories. Preserve caller order and the
 // same Things-first migration precedence as findUserById, while replacing up
@@ -938,8 +1041,6 @@ export const getUsersReadReceiptsMap = async (userIds: string[]): Promise<Record
 // routes project them to host/db summaries before responding.
 export type SavedMongoEndpoint = { id: string; name: string; url: string; createdAt: string };
 
-export const MAX_SAVED_MONGO_ENDPOINTS = 20;
-
 const normalizeSavedMongoEndpoints = (value: any): SavedMongoEndpoint[] =>
 	Array.isArray(value)
 		? value
@@ -952,78 +1053,118 @@ const normalizeSavedMongoEndpoints = (value: any): SavedMongoEndpoint[] =>
 				}))
 		: [];
 
-export const getUserMongoEndpoints = async (userId: string): Promise<SavedMongoEndpoint[]> => {
-	const things = await getThingsCollection();
-	const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
-	if (thing) return normalizeSavedMongoEndpoints(unpackSecure((thing as any).secure).meta?.mongoEndpoints);
-	if (!ObjectId.isValid(userId)) return [];
-	const doc = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.mongoEndpoints': 1 } });
-	return normalizeSavedMongoEndpoints(doc?.meta?.mongoEndpoints);
+/** Migrate once, atomically with the account's authoritative marker. Read-only
+ * legacy access remains available if the deployment lacks its vault key; new
+ * writes never fall back to plaintext/BinData credentials. */
+const assertAccountConfigurationMarker = (meta: unknown) => {
+  if (meta && typeof meta === 'object' && Object.prototype.hasOwnProperty.call(meta, ACCOUNT_CONFIG_MARKER) &&
+      (meta as Record<string, unknown>)[ACCOUNT_CONFIG_MARKER] !== true)
+    throw new Error('Saved account configuration has an unsupported migration marker.');
 };
-
-// Append a saved endpoint. The cap + duplicate-URL checks run INSIDE the CAS
-// round so a racing add can't slip past either; a check failure still counts
-// as 'mutated' (the blob was rewritten unchanged) and reports via `failure`.
-export const addUserMongoEndpoint = async (
-	userId: string,
-	input: { name: string; url: string }
-): Promise<{ ok: true; endpoint: SavedMongoEndpoint } | { ok: false; error: string }> => {
-	const endpoint: SavedMongoEndpoint = {
-		id: new ObjectId().toHexString(),
-		name: input.name,
-		url: input.url,
-		createdAt: new Date().toISOString()
-	};
-
-	let failure: string | null = null;
-	const apply = (list: SavedMongoEndpoint[]): SavedMongoEndpoint[] | null => {
-		failure = null;
-		if (list.length >= MAX_SAVED_MONGO_ENDPOINTS) {
-			failure = `You can save at most ${MAX_SAVED_MONGO_ENDPOINTS} MongoDB endpoints`;
-			return null;
-		}
-		if (list.some((entry) => entry.url === endpoint.url)) {
-			failure = 'That MongoDB endpoint is already saved';
-			return null;
-		}
-		return [...list, endpoint];
-	};
-
-	const result = await mutateUserThingSecure(userId, (secure) => {
-		const next = apply(normalizeSavedMongoEndpoints(secure.meta?.mongoEndpoints));
-		if (next) secure.meta!.mongoEndpoints = next;
-	});
-	if (result === 'mutated') return failure ? { ok: false, error: failure } : { ok: true, endpoint };
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return { ok: false, error: 'User not found' };
-	const users = await getUsersCollection();
-	const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.mongoEndpoints': 1 } });
-	if (!doc) return { ok: false, error: 'User not found' };
-	const next = apply(normalizeSavedMongoEndpoints(doc.meta?.mongoEndpoints));
-	if (!next) return { ok: false, error: failure || 'Could not save MongoDB endpoint' };
-	await users.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.mongoEndpoints': next, updatedAt: new Date() } });
-	return { ok: true, endpoint };
+const loadAccountConfigurationOwner = async (userId: string, session?: ClientSession) => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
+  if (thing) {
+    const payload = strictVaultPayload((thing as any).secure); assertAccountConfigurationMarker(payload.meta);
+    return { collection: things, doc: thing as any, thing: true, payload };
+  }
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  const legacy = await users.findOne({ _id: new ObjectId(userId) }, { projection: { meta: 1, updatedAt: 1 }, ...(session ? { session } : {}) });
+  if (!legacy) return null;
+  assertAccountConfigurationMarker(legacy.meta);
+  return { collection: users, doc: legacy as any, thing: false, payload: { meta: legacy.meta || {} } as SecurePayload };
 };
-
-// Remove a saved endpoint by id. Returns whether an entry was actually removed.
+const legacyAccountConfigurations = (meta: any): AccountConfigurations => ({
+  mongoEndpoints: normalizeSavedMongoEndpoints(meta?.mongoEndpoints),
+  deploymentLinks: normalizeSavedDeploymentLinks(meta?.deploymentLinks)
+});
+const userAccountConfiguration = async <T>(userId: string, mutate?: (state: AccountConfigurations) => T): Promise<{ state: AccountConfigurations; result: T | undefined } | null> => {
+  const initial = await loadAccountConfigurationOwner(userId);
+  if (!initial) return null;
+  if (initial.payload.meta !== undefined && (!initial.payload.meta || typeof initial.payload.meta !== 'object' || Array.isArray(initial.payload.meta)))
+    throw new Error('Saved account configuration metadata is invalid.');
+  if (!accountConfigurationVaultReady()) {
+    if (mutate || initial.payload.meta?.[ACCOUNT_CONFIG_MARKER] === true) throw new Error('Secure Vault is unavailable for saved account configuration.');
+    return { state: legacyAccountConfigurations(initial.payload.meta), result: undefined };
+  }
+  try { return await withHomeMongoTransaction(async session => {
+    const owner = await loadAccountConfigurationOwner(userId, session);
+    if (!owner) return null;
+    if (owner.payload.meta !== undefined && (!owner.payload.meta || typeof owner.payload.meta !== 'object' || Array.isArray(owner.payload.meta)))
+      throw new Error('Saved account configuration metadata is invalid.');
+    const meta = owner.payload.meta ||= {};
+    const migrated = meta[ACCOUNT_CONFIG_MARKER] === true;
+    const repository = accountConfigurationRepository(await getThingsCollection(), userId, session);
+    const state = migrated ? await repository.read() : legacyAccountConfigurations(meta);
+    const before = migrated ? structuredClone(state) : emptyAccountConfigurations();
+    const result = mutate?.(state);
+    if (!migrated || mutate) {
+      await repository.write(before, state);
+      meta[ACCOUNT_CONFIG_MARKER] = true;
+      delete meta.mongoEndpoints; delete meta.deploymentLinks;
+      const now = new Date();
+      const filter = owner.thing ? { shareId: userId, thingtime: 'user', secureVersion: owner.doc.secureVersion ?? { $exists: false } }
+        : { _id: owner.doc._id, updatedAt: owner.doc.updatedAt ?? { $exists: false } };
+      const update = owner.thing ? { secure: packSecure(owner.payload), secureVersion: (owner.doc.secureVersion ?? 0) + 1, updatedAt: now }
+        : { meta, updatedAt: now };
+      const saved = await owner.collection.updateOne(filter as any, { $set: update }, { session });
+      if (saved.matchedCount !== 1) throw new SecureWriteContendedError(userId);
+    }
+    return { state, result };
+  }); } catch (error) {
+    if (mutate) throw error;
+    // A failed/uncertain migration must not disable an existing configuration.
+    // Recheck the authoritative marker before considering legacy fallback: a
+    // concurrently committed migration or deletion must never resurrect arrays.
+    const current = await loadAccountConfigurationOwner(userId);
+    if (current && current.payload.meta?.[ACCOUNT_CONFIG_MARKER] !== true &&
+        (!current.payload.meta || (typeof current.payload.meta === 'object' && !Array.isArray(current.payload.meta))))
+      return { state: legacyAccountConfigurations(current.payload.meta), result: undefined };
+    throw error;
+  }
+};
+const exactUserAccountConfiguration = async (userId: string, id: string, family: 'endpoint' | 'link') => {
+  const initial = await loadAccountConfigurationOwner(userId);
+  if (!initial) return null;
+  if (initial.payload.meta?.[ACCOUNT_CONFIG_MARKER] !== true) {
+    if (!accountConfigurationVaultReady()) {
+      const legacy = legacyAccountConfigurations(initial.payload.meta);
+      return (family === 'endpoint' ? legacy.mongoEndpoints : legacy.deploymentLinks).find(entry => entry.id === id) || null;
+    }
+    const migrated = await userAccountConfiguration(userId);
+    const latest = await loadAccountConfigurationOwner(userId);
+    if (latest?.payload.meta?.[ACCOUNT_CONFIG_MARKER] !== true)
+      return (family === 'endpoint' ? migrated?.state.mongoEndpoints : migrated?.state.deploymentLinks)?.find(entry => entry.id === id) || null;
+  }
+  if (!accountConfigurationVaultReady()) throw new Error('Secure Vault is unavailable for saved account configuration.');
+  return withHomeMongoTransaction(async session => {
+    const repository = accountConfigurationRepository(await getThingsCollection(), userId, session);
+    return family === 'endpoint' ? repository.readEndpoint(id) : repository.readLink(id);
+  });
+};
+export const getUserMongoEndpoint = async (userId: string, id: string): Promise<SavedMongoEndpoint | null> =>
+  exactUserAccountConfiguration(userId, id, 'endpoint') as Promise<SavedMongoEndpoint | null>;
+export const getUserDeploymentLink = async (userId: string, id: string): Promise<SavedDeploymentLink | null> =>
+  exactUserAccountConfiguration(userId, id, 'link') as Promise<SavedDeploymentLink | null>;
+export const getUserMongoEndpoints = async (userId: string): Promise<SavedMongoEndpoint[]> =>
+  (await userAccountConfiguration(userId))?.state.mongoEndpoints || [];
+export const addUserMongoEndpoint = async (userId: string, input: { name: string; url: string }): Promise<{ ok: true; endpoint: SavedMongoEndpoint } | { ok: false; error: string }> => {
+  const endpoint = { id: new ObjectId().toHexString(), name: input.name, url: input.url, createdAt: new Date().toISOString() };
+  const operation = await userAccountConfiguration(userId, state => {
+    if (state.mongoEndpoints.some(entry => entry.url === endpoint.url)) return { ok: false as const, error: 'That MongoDB endpoint is already saved' };
+    state.mongoEndpoints.push(endpoint); return { ok: true as const, endpoint };
+  });
+  return operation?.result || { ok: false, error: 'User not found' };
+};
 export const removeUserMongoEndpoint = async (userId: string, endpointId: string): Promise<boolean> => {
-	let removed = false;
-	const result = await mutateUserThingSecure(userId, (secure) => {
-		const list = normalizeSavedMongoEndpoints(secure.meta?.mongoEndpoints);
-		const next = list.filter((entry) => entry.id !== endpointId);
-		removed = next.length !== list.length;
-		secure.meta!.mongoEndpoints = next;
-	});
-	if (result === 'mutated') return removed;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return false;
-	const users = await getUsersCollection();
-	const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.mongoEndpoints': 1 } });
-	const list = normalizeSavedMongoEndpoints(doc?.meta?.mongoEndpoints);
-	const next = list.filter((entry) => entry.id !== endpointId);
-	if (next.length === list.length) return false;
-	await users.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.mongoEndpoints': next, updatedAt: new Date() } });
-	return true;
+  const operation = await userAccountConfiguration(userId, state => {
+    const before = state.mongoEndpoints.length;
+    state.mongoEndpoints = state.mongoEndpoints.filter(entry => entry.id !== endpointId);
+    return state.mongoEndpoints.length !== before;
+  });
+  return operation?.result || false;
 };
 
 // ── Saved deployment links (cross-deployment account sync) ──────────────────
@@ -1050,8 +1191,6 @@ export type SavedDeploymentLink = {
   lastSyncSummary: Record<string, any> | null;
 };
 
-export const MAX_DEPLOYMENT_LINKS = 10;
-export const MAX_DEPLOYMENT_PATH_RULES = 50;
 
 const DEPLOYMENT_SYNC_MODES: DeploymentSyncMode[] = ['push', 'pull', 'two-way', 'off'];
 
@@ -1064,7 +1203,6 @@ const normalizeDeploymentPathRules = (value: any): DeploymentLinkPathRule[] =>
             typeof rule.path === 'string' &&
             DEPLOYMENT_SYNC_MODES.includes(rule.mode)
         )
-        .slice(0, MAX_DEPLOYMENT_PATH_RULES)
         .map((rule) => ({ path: rule.path, mode: rule.mode }))
     : [];
 
@@ -1095,69 +1233,19 @@ const normalizeSavedDeploymentLinks = (value: any): SavedDeploymentLink[] =>
         }))
     : [];
 
-export const getUserDeploymentLinks = async (userId: string): Promise<SavedDeploymentLink[]> => {
-  const things = await getThingsCollection();
-  const thing = await things.findOne(
-    { shareId: String(userId), thingtime: 'user' } as any,
-    { projection: { secure: 1 } }
-  );
-  if (thing) return normalizeSavedDeploymentLinks(unpackSecure((thing as any).secure).meta?.deploymentLinks);
-  if (!ObjectId.isValid(userId)) return [];
-  const doc = await (await getUsersCollection()).findOne(
-    { _id: new ObjectId(userId) },
-    { projection: { 'meta.deploymentLinks': 1 } }
-  );
-  return normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
-};
-
-// Append a deployment link. Cap + duplicate checks run INSIDE the CAS round so
-// a racing add can't slip past either (same contract as addUserMongoEndpoint).
-// A duplicate is the same (baseUrl, remoteUserId) pair — you can link two
-// DIFFERENT remote accounts on one deployment, but not the same account twice.
+export const getUserDeploymentLinks = async (userId: string): Promise<SavedDeploymentLink[]> =>
+  (await userAccountConfiguration(userId))?.state.deploymentLinks || [];
 export const addUserDeploymentLink = async (
-  userId: string,
-  input: Omit<SavedDeploymentLink, 'id' | 'createdAt' | 'lastSyncAt' | 'lastSyncSummary'>
+  userId: string, input: Omit<SavedDeploymentLink, 'id' | 'createdAt' | 'lastSyncAt' | 'lastSyncSummary'>
 ): Promise<{ ok: true; link: SavedDeploymentLink } | { ok: false; error: string }> => {
-  const link: SavedDeploymentLink = {
-    ...input,
-    id: new ObjectId().toHexString(),
-    pathRules: normalizeDeploymentPathRules(input.pathRules),
-    createdAt: new Date().toISOString(),
-    lastSyncAt: null,
-    lastSyncSummary: null
-  };
-
-  let failure: string | null = null;
-  const apply = (list: SavedDeploymentLink[]): SavedDeploymentLink[] | null => {
-    failure = null;
-    if (list.length >= MAX_DEPLOYMENT_LINKS) {
-      failure = `You can link at most ${MAX_DEPLOYMENT_LINKS} deployments`;
-      return null;
-    }
-    if (list.some((entry) => entry.baseUrl === link.baseUrl && entry.remoteUserId === link.remoteUserId)) {
-      failure = 'That deployment account is already linked';
-      return null;
-    }
-    return [...list, link];
-  };
-
-  const result = await mutateUserThingSecure(userId, (secure) => {
-    const next = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
-    if (next) secure.meta!.deploymentLinks = next;
+  const link: SavedDeploymentLink = { ...input, id: new ObjectId().toHexString(), pathRules: normalizeDeploymentPathRules(input.pathRules),
+    createdAt: new Date().toISOString(), lastSyncAt: null, lastSyncSummary: null };
+  const operation = await userAccountConfiguration(userId, state => {
+    if (state.deploymentLinks.some(entry => entry.baseUrl === link.baseUrl && entry.remoteUserId === link.remoteUserId))
+      return { ok: false as const, error: 'That deployment account is already linked' };
+    state.deploymentLinks.push(link); return { ok: true as const, link };
   });
-  if (result === 'mutated') return failure ? { ok: false, error: failure } : { ok: true, link };
-  if (result === 'contended') throw new SecureWriteContendedError(userId);
-  if (!ObjectId.isValid(userId)) return { ok: false, error: 'User not found' };
-  const users = await getUsersCollection();
-  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
-  if (!doc) return { ok: false, error: 'User not found' };
-  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
-  if (!next) return { ok: false, error: failure || 'Could not link that deployment' };
-  await users.updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
-  );
-  return { ok: true, link };
+  return operation?.result || { ok: false, error: 'User not found' };
 };
 
 // Patch a link in place (settings edits + post-sync bookkeeping). Only the
@@ -1194,49 +1282,20 @@ export const updateUserDeploymentLink = async (
     });
   };
 
-  const result = await mutateUserThingSecure(userId, (secure) => {
-    secure.meta!.deploymentLinks = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
+  const operation = await userAccountConfiguration(userId, state => {
+    state.deploymentLinks = apply(state.deploymentLinks); return updated;
   });
-  if (result === 'mutated') return updated;
-  if (result === 'contended') throw new SecureWriteContendedError(userId);
-  if (!ObjectId.isValid(userId)) return null;
-  const users = await getUsersCollection();
-  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
-  if (!doc) return null;
-  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
-  if (!updated) return null;
-  await users.updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
-  );
-  return updated;
+  return operation?.result || null;
 };
 
-// Remove a link by id. Returns the removed link (the route best-effort revokes
-// its remote session) or null when no entry matched.
-export const removeUserDeploymentLink = async (
-  userId: string,
-  linkId: string
-): Promise<SavedDeploymentLink | null> => {
-  let removed: SavedDeploymentLink | null = null;
-  const result = await mutateUserThingSecure(userId, (secure) => {
-    const list = normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks);
-    removed = list.find((entry) => entry.id === linkId) || null;
-    secure.meta!.deploymentLinks = list.filter((entry) => entry.id !== linkId);
+// The removed secret remains server-local for ordinary remote revocation.
+export const removeUserDeploymentLink = async (userId: string, linkId: string): Promise<SavedDeploymentLink | null> => {
+  const operation = await userAccountConfiguration(userId, state => {
+    const removed = state.deploymentLinks.find(entry => entry.id === linkId) || null;
+    state.deploymentLinks = state.deploymentLinks.filter(entry => entry.id !== linkId);
+    return removed;
   });
-  if (result === 'mutated') return removed;
-  if (result === 'contended') throw new SecureWriteContendedError(userId);
-  if (!ObjectId.isValid(userId)) return null;
-  const users = await getUsersCollection();
-  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
-  const list = normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
-  removed = list.find((entry) => entry.id === linkId) || null;
-  if (!removed) return null;
-  await users.updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.deploymentLinks': list.filter((entry) => entry.id !== linkId), updatedAt: new Date() } }
-  );
-  return removed;
+  return operation?.result || null;
 };
 
 // Set (or clear, with null) the user's active theme shareId in meta.
@@ -1881,6 +1940,10 @@ export type UpdateProfileInput = {
 	bannerUrl?: unknown;
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
+	avatarPresentation?: unknown;
+	bannerPresentation?: unknown;
+	avatarPresentationSource?: unknown;
+	bannerPresentationSource?: unknown;
 	birthday?: unknown;
 	hideEmailOnProfile?: unknown;
 };
@@ -1985,6 +2048,25 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
+		const presentationUpdates: Partial<Record<'avatar' | 'banner', ImagePresentation | null>> = {};
+		const presentationSources: Partial<Record<'avatar' | 'banner', string>> = {};
+		for (const slot of ['avatar', 'banner'] as const) {
+			const key = `${slot}Presentation` as const;
+			const sourceKey = `${slot}PresentationSource` as const;
+			if (hasOwn(input, sourceKey)) {
+				const source = input[sourceKey];
+				if (!hasOwn(input, key) || media[slot].touched || typeof source !== 'string' || !source) {
+					return { ok: false, status: 400, error: 'An expected image source can only accompany an edit to the current image' };
+				}
+				presentationSources[slot] = source;
+			}
+			if (!hasOwn(input, key)) continue;
+			const presentation = normalizeImagePresentation(input[key]);
+			if (presentation === undefined) return { ok: false, status: 400, error: 'Invalid image presentation' };
+			presentationUpdates[slot] = presentation;
+		}
+		const touchesPresentation = Object.keys(presentationUpdates).length > 0;
+
 		// Birthday and email visibility are PRIVATE state — both live in the secure
 		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
@@ -2002,7 +2084,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			hideEmailOnProfile = input.hideEmailOnProfile;
 		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && !touchesPresentation && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
@@ -2035,7 +2117,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 
 		// Private-only updates never touch the crystal or attachments, so the
 		// transactional write below is skipped entirely for them.
-		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
+		if (Object.keys(set).length || media.avatar.touched || media.banner.touched || touchesPresentation) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {
 					const things = await dependencies.getThings();
@@ -2062,6 +2144,13 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 						user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
 						if (!user) return false;
 						kind = 'legacy';
+					}
+
+					for (const slot of ['avatar', 'banner'] as const) {
+						const expected = presentationSources[slot];
+						if (expected !== undefined && expected !== effectiveProfileMediaUrl(user, slot)) {
+							throw new AttachmentBindingError(409, 'Profile image changed while it was being edited');
+						}
 					}
 
 					const current: ProfileAttachmentRefs = {
@@ -2095,6 +2184,19 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 					const rootSet: Record<string, unknown> = {};
 					const rootUnset: Record<string, ''> = {};
 					const profileSet: Record<string, unknown> = { ...set };
+					const previousProfile = kind === 'thing' ? user.crystal || {} : user;
+					for (const slot of ['avatar', 'banner'] as const) {
+						const urlKey = `${slot}Url` as const;
+						const previousUrl = previousProfile[urlKey] ?? null;
+						const nextUrl = hasOwn(externalUrlUpdates, slot) ? externalUrlUpdates[slot] : previousUrl;
+						const sourceChanged = current[slot] !== desired[slot] || (!desired[slot] && previousUrl !== nextUrl);
+						const next = presentationUpdates[slot];
+						if (next && !desired[slot] && !nextUrl) throw new AttachmentBindingError(400, 'Choose an image before applying its presentation');
+						if (next !== undefined || (sourceChanged && previousProfile[`${slot}Presentation`])) {
+							profileSet[`${slot}Presentation`] = next ?? null;
+						}
+					}
+
 					for (const slot of ['avatar', 'banner'] as const) {
 						if (!media[slot].touched) continue;
 						if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
@@ -2143,6 +2245,36 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 
 export const updateUserProfile = createUpdateUserProfile();
 
+// Connector protections are private account metadata. Updating a subset
+// merges it in the same CAS path as other secure account preferences.
+export const getUserConnectorConfirmations = async (userId: string): Promise<ConnectorConfirmations> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+  if (thing) return effectiveConnectorConfirmations(unpackSecure((thing as any).secure).meta?.connectorConfirmations);
+  const legacy = ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.connectorConfirmations': 1 } }) : null;
+  return effectiveConnectorConfirmations(legacy?.meta?.connectorConfirmations);
+};
+
+export const setUserConnectorConfirmations = async (
+  userId: string, patch: ConnectorConfirmationPatch
+): Promise<ConnectorConfirmations> => {
+  let next = effectiveConnectorConfirmations();
+  const result = await mutateUserThingSecure(userId, secure => {
+    next = { ...effectiveConnectorConfirmations(secure.meta!.connectorConfirmations), ...patch };
+    secure.meta!.connectorConfirmations = next;
+  });
+  if (result === 'mutated') return next;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    { $set: { ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [`meta.connectorConfirmations.${key}`, value])), updatedAt: new Date() } },
+    { projection: { 'meta.connectorConfirmations': 1 }, returnDocument: 'after' }
+  );
+  if (!legacy) throw new Error('Account not found.');
+  return effectiveConnectorConfirmations(legacy.meta?.connectorConfirmations);
+};
+
 // Personal instructions are private secure metadata: never part of a profile,
 // Thing crystal, search index, admin roster, or another viewer's prompt.
 export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
@@ -2178,4 +2310,28 @@ export const setCharacterIdentity = async (userId: string, expectedOwner: string
     secure.meta!.character = next;
   });
   if (result !== 'mutated') throw new Error('Character update did not complete');
+};
+
+// Private password-confirmation preference; omitted from every public user projection.
+export const getUserPasswordVerification = async (userId: string): Promise<{window: VerificationWindow; revision:string|null;changedAt?:number;reuseRecentDeviceVerification:boolean;epoch:string|null}> => {
+  const thing=await(await getThingsCollection()).findOne({shareId:userId,thingtime:'user'} as any,{projection:{secure:1,passwordVerificationEpoch:1}});
+  const legacy=!thing&&ObjectId.isValid(userId)?await(await getUsersCollection()).findOne({_id:new ObjectId(userId)},{projection:{'meta.passwordVerification':1,passwordVerificationEpoch:1}}):null;
+  const stored=(thing?unpackSecure((thing as any).secure).meta:legacy?.meta)?.passwordVerification;
+  const {verificationWindow}=await import('~/passwords/verificationPolicy');
+  return {window:verificationWindow(stored?.window??'5m'),revision:stored?.revision??null,changedAt:stored?.changedAt??0,reuseRecentDeviceVerification:stored?.reuseRecentDeviceVerification===undefined?true:stored.reuseRecentDeviceVerification===true,epoch:(thing as any)?.passwordVerificationEpoch??legacy?.passwordVerificationEpoch??null};
+};
+
+export const setUserPasswordVerification = async (userId: string, window: VerificationWindow, expectedRevision: string | null, reuseRecentDeviceVerification=true) => {
+  const { verificationWindow } = await import('~/passwords/verificationPolicy');
+  const settings = { window: verificationWindow(window), revision: crypto.randomUUID(), changedAt: Date.now(),reuseRecentDeviceVerification };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta?.passwordVerification?.revision ?? null) !== expectedRevision) throw new Error('Password confirmation settings changed. Reload before saving.');
+    secure.meta ??= {}; secure.meta.passwordVerification = settings;
+  });
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (result === 'mutated') return settings;
+  if (!ObjectId.isValid(userId)) throw new Error('Password confirmation settings could not be saved.');
+  const legacy = await (await getUsersCollection()).updateOne({_id:new ObjectId(userId),'meta.passwordVerification.revision':expectedRevision} as any,{$set:{'meta.passwordVerification':settings,updatedAt:new Date()}});
+  if (!legacy.matchedCount) throw new Error('Password confirmation settings changed. Reload before saving.');
+  return settings;
 };

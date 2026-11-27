@@ -131,11 +131,15 @@ test('sourceBindingToParams round-trips and keeps the design param', () => {
   assert.equal(sourceBindingToParams(written, { action: 'NOPE' }).toString(), 'design=antd');
 });
 
-test('parseSourceInputsJson accepts scalar objects only', () => {
+test('parseSourceInputsJson accepts scalars and explicit ttArg path bindings', () => {
   assert.deepEqual(parseSourceInputsJson('  '), { ok: true, inputs: undefined });
   assert.deepEqual(parseSourceInputsJson('{}'), { ok: true, inputs: undefined });
   assert.deepEqual(parseSourceInputsJson('{"a":"b","c":1,"d":true}'), { ok: true, inputs: { a: 'b', c: 1, d: true } });
+  assert.deepEqual(parseSourceInputsJson('{"a":{"ttArg":"query.filter","fallback":"defaultFilter"}}'), {
+    ok: true, inputs: { a: { ttArg: 'query.filter', fallback: 'defaultFilter' } }
+  });
   assert.equal(parseSourceInputsJson('{"a":{"nested":1}}').ok, false);
+  assert.equal(parseSourceInputsJson('{"a":{"ttArg":"query.filter","fallback":"query.__proto__"}}').ok, false);
   assert.equal(parseSourceInputsJson('{"bad key":1}').ok, false);
   assert.equal(parseSourceInputsJson('not json').ok, false);
   assert.equal(parseSourceInputsJson('[1,2]').ok, false);

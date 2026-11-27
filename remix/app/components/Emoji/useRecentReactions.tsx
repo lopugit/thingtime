@@ -3,12 +3,14 @@ import React from 'react';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { beginRecentReaction, createRecentReactionState, reactionPickerScope, receiveRecentReactions, recordRecentReaction, type RecentReactionState } from './reactionPickerState';
 
 // Recently-used reaction tokens for the picker. Server (users.meta) is the
 // source of truth, but we seed synchronously from a per-account localStorage
-// snapshot so "Recently Used" paints instantly (optimistic rendering) and then
-// reconcile with the lazy fetch. Keyed per user so switching accounts never
-// shows the previous account's recents.
+// snapshot so "Recently Used" paints instantly and then reconciles with a
+// shared fetch. The origin, database and actor scope prevent cross-account or
+// endpoint reuse. Older user-only snapshots are intentionally not migrated.
 //
 // The list is per-account and identical for every consumer, so it lives in one
 // module-level store per viewer rather than in each hook instance. Previously
@@ -19,10 +21,9 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 // The store fixes both — one request per viewer, one list every subscriber
 // sees.
 
-const keyFor = (userId: string | null) => `tt-recent-reactions:${userId || 'anon'}`;
+const keyFor = (scopeKey: string) => `tt-recent-reactions:v2:${scopeKey}`;
 
-type RecentStore = {
-  list: string[];
+type RecentStore = RecentReactionState & {
   fetched: boolean;
   inflight: Promise<void> | null;
   subscribers: Set<() => void>;
@@ -30,21 +31,20 @@ type RecentStore = {
 
 const stores = new Map<string, RecentStore>();
 
-const storeFor = (userId: string | null): RecentStore => {
-  const key = keyFor(userId);
+const storeFor = (scopeKey: string): RecentStore => {
+  const key = keyFor(scopeKey);
   let store = stores.get(key);
   if (!store) {
-    store = { list: readLocalCache<string[]>(key) || [], fetched: false, inflight: null, subscribers: new Set() };
+    store = { ...createRecentReactionState(readLocalCache(key)), fetched: false, inflight: null, subscribers: new Set() };
     stores.set(key, store);
   }
   return store;
 };
 
-// Replace the list and tell every mounted consumer. The array identity only
-// changes when the contents do, which keeps useSyncExternalStore stable.
-const publish = (userId: string | null, store: RecentStore, list: string[]) => {
-  store.list = list;
-  writeLocalCache(keyFor(userId), list);
+// Persist the changed snapshot and tell every mounted consumer. The snapshot
+// keeps its identity between updates, as useSyncExternalStore requires.
+const publish = (scopeKey: string, store: RecentStore) => {
+  writeLocalCache(keyFor(scopeKey), store.list);
   store.subscribers.forEach((notify) => notify());
 };
 
@@ -52,7 +52,9 @@ export const useRecentReactions = () => {
   const api = useApi();
   const user = useCurrentUser();
   const userId = user?.id ?? null;
-  const store = storeFor(userId);
+  const dataPlane = useDataPlane();
+  const scopeKey = reactionPickerScope(typeof window === 'undefined' ? '' : window.location.origin, dataPlane, userId);
+  const store = storeFor(scopeKey);
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -81,7 +83,8 @@ export const useRecentReactions = () => {
         const resp = await apiRef.current.v1.things.reactionsRecent();
         if (resp?.ok && Array.isArray(resp.recentReactions)) {
           store.fetched = true;
-          publish(userId, store, resp.recentReactions);
+          receiveRecentReactions(store, resp.recentReactions);
+          publish(scopeKey, store);
         }
       } catch {
         // keep the optimistic snapshot
@@ -89,17 +92,18 @@ export const useRecentReactions = () => {
         store.inflight = null;
       }
     })();
-  }, [userId, store]);
+  }, [userId, scopeKey, store]);
 
-  // Prepend a just-used token (optimistic); if the server returned the fresh
-  // MRU, trust it exactly.
+  // Order is captured before the toggle starts, so a slow response cannot
+  // promote an older selection over a more recent successful one.
+  const beginRecent = React.useCallback(() => beginRecentReaction(store), [store]);
   const pushRecent = React.useCallback(
-    (token: string, serverList?: string[] | null) => {
-      const next = serverList && serverList.length ? serverList : [token, ...store.list.filter((entry) => entry !== token)];
-      publish(userId, store, next);
+    (token: string, serverList?: string[] | null, order = beginRecentReaction(store)) => {
+      recordRecentReaction(store, token, serverList, order);
+      publish(scopeKey, store);
     },
-    [userId, store]
+    [scopeKey, store]
   );
 
-  return { recent, pushRecent };
+  return { recent, pushRecent, beginRecent, scopeKey };
 };

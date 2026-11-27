@@ -23,6 +23,7 @@ import {
 	type SocialPreview
 } from './socialPreview';
 import { pageTitle } from '../../../utils/pageTitle';
+import { socialPreviewShareUrl } from '../../../utils/socialPreviewDesign';
 
 export type SocialMetaTag = { attr: 'property' | 'name'; key: string; content: string };
 
@@ -94,14 +95,14 @@ export const socialPageIsIndexable = (path: string, preview: SocialPreview): boo
 
 export const socialMetaFromPreview = (origin: string, preview: SocialPreview): SocialMeta => {
 	const path = normaliseSocialPreviewPath(preview.path);
-	const canonical = `${origin}${path === '/index.html' ? '/' : path}`;
-	const image = preview.variant === 'app' ? `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}` : socialPreviewCardUrl(origin, path, preview.revision);
+	const canonical = socialPreviewShareUrl(origin, path, preview);
+	const image = socialPreviewCardUrl(origin, path, preview.revision, preview);
 	const tags = buildSocialMetaTags(origin, path, {
 		title: preview.title,
 		description: preview.description,
 		type: preview.article ? 'article' : preview.publicContent && preview.kind === 'profile' ? 'profile' : 'website',
 		image,
-		...(preview.variant !== 'app' ? { imageAlt: `Thingtime preview card: ${preview.title}` } : {})
+		imageAlt: `Thingtime preview card: ${preview.title}`
 	});
 	const ogUrl = tags.find((tag) => tag.key === 'og:url')!;
 	ogUrl.content = canonical;
@@ -166,11 +167,12 @@ export const socialMetaFromPreview = (origin: string, preview: SocialPreview): S
 // Path → meta. Any data-plane failure degrades to a safe, noindex page rather
 // than returning the static shell's wrong canonical/title on a deep URL.
 export const fallbackSocialMeta = (request: Request): SocialMeta =>
-	socialMetaFromPreview(getRequestOrigin(request), staticSocialPreview(new URL(request.url).pathname));
+	socialMetaFromPreview(getRequestOrigin(request), staticSocialPreview(new URL(request.url).pathname + new URL(request.url).search));
 
 export const resolveSocialMeta = async (request: Request): Promise<SocialMeta> => {
 	const origin = getRequestOrigin(request);
-	const path = new URL(request.url).pathname;
+	const url = new URL(request.url);
+	const path = url.pathname + url.search;
 	try {
 		return socialMetaFromPreview(origin, await resolveSocialPreview(origin, path));
 	} catch {

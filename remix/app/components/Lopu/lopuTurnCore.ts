@@ -993,6 +993,7 @@ export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'sum
 };
 
 export type LopuMessageMeta = {
+ deviceTranscript?: true;
  requestId?: string | null;
  continuation?: boolean;
  continuationSafe?: boolean; recoveryFailures?: number;
@@ -1018,6 +1019,10 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 	const raw = (message as { lopu?: unknown } | null | undefined)?.lopu;
 	if (!raw || typeof raw !== 'object') return null;
 	const record = raw as Record<string, unknown>;
+	if (record.deviceTranscript === true && record.role === 'assistant') return {
+		requestId: stringOrNull(record.requestId), role: 'assistant', deviceTranscript: true, model: null, effort: null, speed: null,
+		provider: null, providerLabel: null, toolCalls: [], stopReason: null, usage: null, billing: null, costMicros: null
+	};
 	const calls = Array.isArray(record.toolCalls) ? record.toolCalls : [];
 	const toolCalls: LopuMessageToolCall[] = [];
 	for (const call of calls) {

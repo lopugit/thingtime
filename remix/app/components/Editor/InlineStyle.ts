@@ -3,7 +3,7 @@ import { sanitizeEditorJsInlineHtml } from './inlineHtmlText';
 import { inlineStyleToTokens, sanitizeInlineStyle, tokensToInlineStyle } from './styleTokens';
 import type { TextStyleTokens } from './styleTokens';
 
-const fieldFor = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>('[contenteditable="true"]');
+const fieldFor = (node: Node) => (node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest<HTMLElement>('[contenteditable="true"]');
 
 /** Split at selection boundaries, so changing a styled substring cannot affect its neighbours. */
 export const applySelectionStyle = (
@@ -15,6 +15,8 @@ export const applySelectionStyle = (
 ): boolean => {
 	const field = fieldFor(range.startContainer);
 	if (!field || field !== fieldFor(range.endContainer) || !field.isConnected || range.collapsed) return false;
+	const document = field.ownerDocument,
+		window = document.defaultView!;
 	const before = document.createRange();
 	before.selectNodeContents(field);
 	before.setEnd(range.startContainer, range.startOffset);
@@ -23,7 +25,8 @@ export const applySelectionStyle = (
 	after.setStart(range.endContainer, range.endOffset);
 	const selected = range.cloneContents();
 	let middle: Node = selected;
-	let ancestor = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+	let ancestor =
+		range.commonAncestorContainer.nodeType === 1 ? (range.commonAncestorContainer as Element) : range.commonAncestorContainer.parentElement;
 	while (ancestor && ancestor !== field) {
 		const clone = ancestor.cloneNode(false);
 		clone.appendChild(middle);
@@ -99,6 +102,10 @@ export const applySelectionStyle = (
 };
 
 export class InlineStyle {
+	private ownerDocument?: Document;
+	constructor({ config }: { config?: { ownerDocument?: Document } } = {}) {
+		this.ownerDocument = config?.ownerDocument;
+	}
 	static get isInline() {
 		return true;
 	}
@@ -116,6 +123,7 @@ export class InlineStyle {
 		};
 	}
 	render() {
+		const document = this.ownerDocument ?? globalThis.document;
 		const button = document.createElement('button');
 		button.type = 'button';
 		button.className = 'ce-inline-tool';
@@ -129,6 +137,8 @@ export class InlineStyle {
 		const saved = range.cloneRange();
 		const field = fieldFor(saved.startContainer);
 		if (!field || field !== fieldFor(saved.endContainer)) return;
+		const document = field.ownerDocument,
+			window = document.defaultView!;
 		const originalHtml = field.innerHTML;
 		const prefix = document.createRange();
 		prefix.selectNodeContents(field);
@@ -156,7 +166,7 @@ export class InlineStyle {
 			return null;
 		};
 		let initial: TextStyleTokens = {};
-		let ancestor = saved.startContainer instanceof Element ? saved.startContainer : saved.startContainer.parentElement;
+		let ancestor = saved.startContainer.nodeType === 1 ? (saved.startContainer as Element) : saved.startContainer.parentElement;
 		const ancestors: Element[] = [];
 		while (ancestor && ancestor !== field) {
 			ancestors.unshift(ancestor);
@@ -176,6 +186,7 @@ export class InlineStyle {
 			if (range) applySelectionStyle(range, tokens, initial, clearExisting, false);
 		};
 		openStyleDialog({
+			ownerDocument: document,
 			initial,
 			title: 'Selected text style',
 			emPixels: parseFloat(getComputedStyle(field).fontSize) || 16,

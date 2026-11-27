@@ -1,3 +1,4 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
 import { timingSafeEqual } from 'node:crypto';
 
 import { json } from '~/api/http';
@@ -18,7 +19,7 @@ type PeerSyncLoaderDependencies = {
 };
 
 const defaults: PeerSyncLoaderDependencies = {
-	getCronSecret: () => process.env.CRON_SECRET,
+	getCronSecret: () => scheduledJobSecret(),
 	getIdentity: getPeerSigningIdentity,
 	getSelfOrigin: getSelfPeerOrigin,
 	sync: syncPeerMesh

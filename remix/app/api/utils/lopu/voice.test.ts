@@ -207,7 +207,7 @@ test('a rejected or empty provider answer is a user-facing error, never the raw 
 
 test('buildPlainCompletionRequest keeps effort "none" out of Anthropic and Gemini bodies', () => {
 	const base = { system: 's', messages: [], model: 'm', maxTokens: 10, effort: 'none' as const, speed: 'normal' as const };
-	assert.throws(() => buildPlainCompletionRequest(provider('anthropic'), 'https://api.anthropic.com', base), /OAuth runtime/);
+	assert.throws(() => buildPlainCompletionRequest(provider('anthropic'), 'https://api.anthropic.com', base), /selected SDK transport/);
 	assert.equal('thinkingConfig' in (buildPlainCompletionRequest(provider('google'), 'https://g.example', base).body.generationConfig as any), false);
 });
 

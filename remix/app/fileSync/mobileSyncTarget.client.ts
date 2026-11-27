@@ -1,3 +1,5 @@
+import { isSyncConnectionFailure } from './syncConnectionWait';
+import { SyncConditionsWait } from './foregroundSyncContext';
 import type { LocalTrashContext } from './localTrash';
 import { getNativeBridge } from '../utils/nativeBridge';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
@@ -58,7 +60,12 @@ export async function approveMobileSyncTarget(
 		if (!approved.writeApproval || JSON.stringify(approved.writeApproval) !== JSON.stringify(approval))
 			throw Error('Native folder write approval is unavailable.');
 	};
-	await checkApproval(consent === 'existing' ? 'write-check' : 'write-approve');
+	try { await checkApproval(consent === 'existing' ? 'write-check' : 'write-approve'); }
+	catch (cause) {
+		signal.throwIfAborted();
+		if (consent !== 'existing' || isSyncConnectionFailure(cause) || cause instanceof SyncConditionsWait) throw cause;
+		throw Error('Native folder write approval is unavailable.');
+	}
 	const recheckApproval = async () => {
 		if (supportsNativeWriteApprovalCheck(bridge)) await checkApproval('write-check');
 	};

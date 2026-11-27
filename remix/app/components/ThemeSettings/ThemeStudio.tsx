@@ -207,6 +207,9 @@ const ActionButton = ({ onClick, children, tone = 'default', ...props }: any) =>
 const COLOR_FIELDS: { key: string; label: string; hint?: string }[] = [
 	{ key: 'accent', label: 'Accent', hint: 'CTAs + highlights' },
 	{ key: 'accentTint', label: 'Accent tint' },
+	{ key: 'focusBorder', label: 'Focus border', hint: 'selected controls; choose a contrasting colour' },
+	{ key: 'focusGlowStart', label: 'Focus glow start', hint: 'left side of the gradient halo' },
+	{ key: 'focusGlowEnd', label: 'Focus glow end', hint: 'right side of the gradient halo' },
 	{ key: 'ink', label: 'Ink', hint: 'headings + borders' },
 	{ key: 'text', label: 'Body text' },
 	{ key: 'muted', label: 'Muted text' },
@@ -419,6 +422,7 @@ export const ThemeStudio = () => {
 					{COLOR_FIELDS.map((field) => (
 						<Row key={field.key} label={field.label} hint={field.hint} customKey={`color.${field.key}`}>
 							<ColorControl
+								label={field.label}
 								value={(theme.colors as any)[field.key]}
 								onChange={(v) => setColor(field.key, v)}
 							/>
@@ -491,6 +495,12 @@ export const ThemeStudio = () => {
 							step={1}
 							format={(v: number) => `${v}px`}
 						/>
+					</Row>
+					<Row label="Focus glow softness" hint="blur around focused controls" customKey="general.focusGlowBlur">
+						<Flex alignItems="center" gap={2}><Input type="number" aria-label="Focus glow softness" min={0} step={1} value={g.focusGlowBlur} width="96px" onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) setGeneral('focusGlowBlur', value); }} /><Text fontSize="sm">px</Text></Flex>
+					</Row>
+					<Row label="Focus glow strength" hint="0% turns the glow off; the focus border stays visible" customKey="general.focusGlowOpacity">
+						<StepControl value={g.focusGlowOpacity} onChange={(v: number) => setGeneral('focusGlowOpacity', v)} min={0} max={1} step={0.02} format={(v: number) => `${Math.round(v * 100)}%`} />
 					</Row>
 					<Row label="Shadows" customKey="general.shadow">
 						<Flex background="var(--tt-surface-alt, #f5f5f7)" borderRadius="var(--tt-radius-md, 12px)" padding="4px" gap="4px">

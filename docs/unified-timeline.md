@@ -376,7 +376,10 @@ missing-record refusals still clear it; private diagnostics remain live-only.
 
 `api.timeline` 1.5.0 and `api.themes` / `api.themes-delete` 1.1.0 add approved
 modern saved-theme create, update and delete revisions to the same relational
-Timeline folder. `theme-content` version 1 is shared by client and server. It
+Timeline folder. `api.timeline` 1.19.0 adds `theme-content` version 2 for
+focus border/glow colours, blur and strength. Current dedicated theme writes use
+version 2; version 1 keeps its original allowlist and remains readable. Both
+versions are shared by client and server. The approved projection
 whitelists name, optional display title, versioned theme tokens, tags, visibility
 and folder placement; private root/crystal extensions are not copied. Historical
 partial token documents stay partial: current defaults are never substituted.

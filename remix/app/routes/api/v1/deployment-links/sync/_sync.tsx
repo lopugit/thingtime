@@ -1,7 +1,7 @@
 import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getUserDeploymentLinks, updateUserDeploymentLink } from '~/api/utils/auth/users';
+import { getUserDeploymentLink, updateUserDeploymentLink } from '~/api/utils/auth/users';
 import { runDeploymentSync } from '~/api/utils/deployments/sync';
 import { isFail } from '~/api/utils/things/things';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -36,8 +36,7 @@ export const action = async ({ request }: { request: Request }) => {
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!id) return json({ ok: false, error: 'Link id is required' }, { status: 400 });
 
-  const links = await getUserDeploymentLinks(user.id);
-  const link = links.find((entry) => entry.id === id);
+  const link = await getUserDeploymentLink(user.id, id);
   if (!link) return json({ ok: false, error: 'Link not found' }, { status: 404 });
 
   const report = await runDeploymentSync(user, link, { dryRun: !!body?.dryRun });

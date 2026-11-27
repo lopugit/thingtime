@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-09-01
+Last updated: 2026-11-21
 
 ## Project
 
@@ -17,6 +17,31 @@ Last updated: 2026-09-01
   `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` and are
   served from the nearest edge PoP (`x-vercel-cache: HIT`); authed requests
   never use `anon=1` URLs, so they can never hit those cache entries.
+
+## Parallel test projects
+
+Open Admin → Deployment profiles to add a target, edit its label or test alias,
+or disable publishing. A parallel profile uses its own Vercel project with an
+existing `vercel.app` domain. Its GitHub environment is
+`vercel-deployment-<profile-id>`. The publisher validates that environment’s
+team and project IDs separately from the saved profile before deploying.
+Enable the repository variable `THINGTIME_DEPLOYMENT_PROFILES_ENABLED` after
+the production profile API is live. The protected controller README describes
+the per-target deployment credential and branch policy.
+
+The pilot uses Vercel workload identity and the existing preview data gateway.
+Its deployment includes only a profile ID and test origin as build metadata.
+See [environment gateway enrollment](docs/environment-api-gateway.md) for
+the required trust and database isolation checks. Keep the existing project
+operational while it owns a gateway. Disabling a publisher stops new uploads.
+Retirement also requires independent hosting for the database and vault
+bootstrap, verification on the replacement, and deliberate production-domain
+cutover.
+
+Admin → Settings → Scheduled jobs controls the enabled state and earliest UTC hour for
+each job. The GitHub dispatcher checks hourly. A shared database claim keeps
+both the dispatcher and the legacy native schedules to one run per due UTC
+day. The parallel test publisher omits native cron jobs.
 
 ## Repository-root build contract
 
@@ -56,8 +81,8 @@ Last updated: 2026-09-01
   changed when develop storage was provisioned. The production role gained the
   required `s3:PutObjectTagging` action used by tagged multipart initiation.
 - Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
-  record its value here). `remix/vercel.json` invokes
-  `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
+  record its value here). Root `vercel.json` invokes
+  `GET /api/v1/attachments/cleanup` daily at 02:17 UTC; Vercel sends the
   exact `Authorization: Bearer <CRON_SECRET>` header automatically. The route
   has no cookie, PAT, app-token, or service-account fallback, processes at most
   1,000 cleanup intents with a 25-second wall-clock budget, and leaves failed
@@ -72,6 +97,41 @@ Last updated: 2026-09-01
   `/api/v1/vercel/deployments?limit=50` response was verified with
   `source: "api"`, `hasError: false`, and more than 25 branch destinations after
   promotion.
+
+### Production attachment writer fence
+
+The project WAF rule `rule_require_stable_production_aliases_wFBCR0`
+(`Require stable production aliases`) is in Log mode. It matches requests
+when Vercel classifies the request as Production and its hostname is outside
+this list:
+
+- `thingtime.com`, `thingtime.vercel.app`
+- `thingtime.com.au`, `www.thingtime.com`, `www.thingtime.com.au`
+- `thingtime-git-main-lopugits-projects.vercel.app`
+- `thingtime-lopugits-projects.vercel.app`
+
+On 2026-11-10 the rule denied generated production URLs at the edge while
+preserving stable aliases and Preview traffic. Vercel Cron also used the
+generated production URL. The next `recordings/run` and `peers/sync` requests
+received HTTP 403. After restoring Log, both schedules reached the application
+again. Keep the attachment deduplication gate off until a writer fence also
+preserves live Cron traffic, including attachment cleanup.
+[Vercel WAF rule configuration](https://vercel.com/docs/vercel-firewall/vercel-waf/rule-configuration)
+[Vercel Cron request targeting](https://vercel.com/docs/schedules/cron-jobs#how-cron-jobs-work)
+
+After promoting a shared-blob-compatible build, verify the stable origins and
+the actual Cron target before blocking exact retired production hostnames.
+Inventory immutable deployment URLs and any extra aliases that still point to
+retired production builds. Keep the new Cron target outside that list. A
+method-and-path exception for cleanup would leave the old attachment reaper
+reachable with its deployed scheduler credential.
+
+Before activating attachment deduplication, let in-flight old writers drain
+and independently verify every production data-plane writer, including any
+local or private runtime. An unreachable local API leaves its writer scope
+unknown. Once aliases can share physical bytes, promote or roll back only to
+builds that honor the shared-blob lifecycle. Promoting an old build to a stable
+alias would bypass a hostname-only ingress fence.
 
 ## Develop Custom Environment
 
@@ -99,7 +159,7 @@ Last updated: 2026-09-01
   The same development values are assigned to the `develop` Custom Environment
   and generic Preview; Production keeps separate values.
 - Vercel Cron invokes Production deployments only. Develop cleanup is therefore
-  targeted at minute 17 every hour by a dedicated AWS EventBridge API
+  targeted daily at 02:17 UTC by a dedicated AWS EventBridge API
   Destination using the develop `CRON_SECRET`; its IAM invocation role is
   limited to that one destination. The app route still rejects missing, wrong,
   user, PAT, and service-account credentials.
@@ -430,3 +490,21 @@ deployment webhook is configured:
   otherwise the live poll decides. Without that check a failed sibling build
   would show a healthy deployment as failed in the footer and in
   `/api/v1/health/vercel` until the next event for that branch arrived.
+
+# GitHub Actions prebuilt migration — 2026-10-23
+
+Production, Preview and custom environments build on GitHub Actions through
+the protected `github-actions` controller. Product source compilation on Vercel
+is disabled by `git.deploymentEnabled: false`, the always-skip ignore command,
+and a guard in the canonical root build entry point. Native Git linkage and
+source deploy hooks are removed during verified cutover.
+
+- [Deployment workflow](https://github.com/lopugit/thingtime/actions/workflows/deploy-vercel-prebuilt.yml)
+- [Project dashboard](https://vercel.com/lopugits-projects/thingtime)
+- [Production](https://thingtime.com)
+- [Develop](https://dev.thingtime.com)
+- PR preview aliases: `https://pr-<number>.previews.dev.thingtime.com`
+
+The `vercel-prebuilt-control` GitHub environment allows the default branch
+only. Product compilation receives no deployment secret; a separate protected
+job validates and uploads the prebuilt artifact. See README for fork setup.

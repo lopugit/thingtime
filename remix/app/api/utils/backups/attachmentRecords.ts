@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import { createHash } from 'node:crypto';
 import { type TimelineSnapshot } from '../../../timeline/contract';
 import { parseCloudFile, type CloudFileContent } from '../../../fileSync/cloudFile';
@@ -34,6 +35,8 @@ export const backupAttachmentProjection = {
 	objectSizeBytes: 1,
 	objectKey: 1,
 	objectVersionId: 1,
+  attachmentBlob: 1,
+  attachmentRedundantDeleteAfter: 1,
 	attachmentPurpose: 1,
 	attachmentProfileSlot: 1,
 	attachmentLinked: 1,
@@ -46,7 +49,7 @@ export const backupAttachmentProjection = {
 	attachmentMpuEmptyVerifiedAt: 1,
 	uploadId: 1,
 	attachmentSortIndex: 1,
-	moderation: 1,
+	'moderation.status': 1,
 	appId: 1,
 	sandbox: 1,
 	sandboxSpace: 1
@@ -163,7 +166,8 @@ export async function backupAttachmentFromDoc(
 	let content: CloudFileContent | null = null;
 	if (!doc.attachmentLinked) {
 		const stored = await head(doc);
-		if (stored.attachmentId !== doc.shareId || stored.versionId !== doc.objectVersionId || stored.sizeBytes !== doc.objectSizeBytes)
+		const physical = attachmentPhysicalObject(doc);
+    if (stored.attachmentId !== physical.attachmentId || stored.versionId !== physical.versionId || stored.sizeBytes !== doc.objectSizeBytes)
 			throw Error('Attachment backup storage identity changed');
 		const fingerprint = fingerprintFromVerifiedHead(stored);
 		if (!fingerprint) throw Error('Attachment backup needs a verified canonical fingerprint');
@@ -193,7 +197,7 @@ export function backupAttachmentItem(record: BackupAttachment, ordinal: number):
 		thingId: value.id,
 		revision: 'snapshot-' + createHash('sha256').update(backupJson(value)).digest('hex'),
 		snapshot: { adapter: BACKUP_ATTACHMENT_ADAPTER, version: 1, value },
-		content: value.content ? { size: value.content.size, fingerprint: value.content.fingerprint } : null
+		content: value.content ? { size: value.content.size, fingerprint: value.content.size === 0 ? null : value.content.fingerprint } : null
 	});
 }
 export function backupAttachmentItemContent(item: BackupItem): CloudFileContent | null {

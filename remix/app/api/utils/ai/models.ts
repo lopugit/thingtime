@@ -322,7 +322,7 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
         'crystal.enabled': 1,
         'crystal.providerAvailable': 1,
         'crystal.lastSyncedAt': 1,
-        'crystal.publicCatalogAvailable': 1, 'crystal.catalogSource': 1, 'crystal.catalogCheckedAt': 1
+        'crystal.publicCatalogAvailable': 1, 'crystal.catalogSource': 1, 'crystal.catalogCheckedAt': 1, 'crystal.providerEfforts':1,'crystal.providerEffortsCheckedAt':1,'crystal.providerEffortsVersion':1
       });
       for (const [modelId, doc] of docs) enabledById.set(modelId, doc.crystal);
     } catch (error) {
@@ -346,6 +346,9 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
     const models = entries.map((entry) => {
       const stored = enabledById.get(entry.modelId);
       const model = publicAiModel(entry, stored?.enabled !== false, providers);
+      if (entry.provider==='anthropic' && stored?.providerEffortsVersion==='2026-10-21' && stored?.providerEffortsCheckedAt instanceof Date && Number.isFinite(stored.providerEffortsCheckedAt.getTime()) && Array.isArray(stored?.providerEfforts) && stored.providerEfforts.every((effort:unknown)=>['low','medium','high','xhigh','max'].includes(effort as string))) {
+        model.efforts=['low','medium','high','xhigh','max'].filter(effort=>stored.providerEfforts.includes(effort)) as typeof model.efforts;
+      }
       model.providerAvailable = typeof stored?.providerAvailable === 'boolean' ? stored.providerAvailable : null;
       model.lastSyncedAt = stored?.lastSyncedAt instanceof Date ? stored.lastSyncedAt.toISOString() : null;
       model.publicCatalogAvailable = typeof stored?.publicCatalogAvailable === 'boolean' ? stored.publicCatalogAvailable : null;

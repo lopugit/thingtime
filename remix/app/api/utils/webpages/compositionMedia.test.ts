@@ -4,7 +4,6 @@ import { compositionAttachmentIds } from '../actions/compositionMediaCore';
 import { compositionMediaIds, createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
 import { canView, fail, type ThingDoc } from '../things/things';
 import { HTML_MAX_DEPTH, HTML_MAX_NODES } from '../../../components/Kinds/htmlRenderPolicy';
-import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
@@ -25,6 +24,7 @@ test('foreign public component media keeps its own audience without trusting pag
 	const media = { shareId: 'authored-image', ownerId: component.ownerId, targetId: 'other-post', thingtime: ['attachment'], attachmentPurpose: 'post' as const };
 	assert.deepEqual([...compositionMediaIds(composition)], ['authored-image']);
 	assert.equal(await read(viewer, media, root.shareId), true);
+	assert.equal(await read(viewer, { ...media, acl: ['tt:user', '-tt:user'], aclGeneration: 'child-generation', aclBaseline: ['tt:user'], aclBaselineVersion: 1, aclEntryCount: 0 } as any, root.shareId), true, 'Contextual inheritance replaces a relational standalone baseline without retaining its fence');
 	assert.equal(await read(viewer, { ...media, shareId: 'bound', targetId: nested.shareId }, root.shareId), true);
 	assert.equal(await read(viewer, { ...media, shareId: 'guessed-foreign-private' }, root.shareId), false);
 	assert.equal(await read(viewer, { ...media, ownerId: root.ownerId }, root.shareId), false);
@@ -124,7 +124,7 @@ test('authored HTML discovery uses renderer bounds and screens CSS values indepe
 	assert.deepEqual(ids(`<div style='background: url("${url('unclosed')})'></div>`), []);
 	assert.deepEqual(ids('<span></span>'.repeat(HTML_MAX_NODES - 1) + `<img src='${url('over-node-limit')}'>`), []);
 	assert.deepEqual(ids('<div>'.repeat(HTML_MAX_DEPTH) + `<img src='${url('over-depth-limit')}'>` + '</div>'.repeat(HTML_MAX_DEPTH)), []);
-	assert.deepEqual(ids(' '.repeat(MAX_WEBPAGE_HTML_CHARS) + `<img src='${url('over-size-limit')}'>`), []);
+	assert.deepEqual(ids(' '.repeat(24_000) + `<img src='${url('after-large-markup')}'>`), ['after-large-markup']);
 	assert.deepEqual(ids(`<textarea><img src='${url('raw-text')}'></textarea><noscript><img src='${url('noscript')}'></noscript>`), []);
 	assert.deepEqual(ids(`<head><noscript><img src='${url('repaired-body')}'></noscript></head>`), ['repaired-body'], 'Detached DOMParser repairs invalid head content with scripting disabled');
 });

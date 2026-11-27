@@ -193,3 +193,10 @@ browser — the isolation verdict would sit on "Checking host isolation…" fore
 The dev server uses `devCsp`, which *does* allow inline scripts, so this is
 invisible to local QA; `scripts/verify-vercel-output.mjs` asserts it at build
 time instead.
+
+The shared local-tree menu stays independent of the authenticated application API
+graph. The routed first-party app supplies a lazy persisted-Thing controller via
+`PersistedThingMenuLoaderContext`; the single-file embed keeps its local JSON
+menu and existing secure document load/save contract. Never infer a persisted
+Thing subject from arbitrary embedded values or a local property path. Keep one
+menu presentation mounted when asynchronously adding authenticated capabilities.

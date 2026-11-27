@@ -2,11 +2,12 @@
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	DEVICE_CONTROL_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_THINGTIME, STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
+import { attachmentBlobBytesForAccounting } from '../attachments/attachmentBlobs.ts';
 import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
 import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
 
@@ -21,6 +22,12 @@ export class InvalidAttachmentStorageEnvelopeError extends Error {
   }
 }
 
+export const thingStorageJsonPayload = (doc: { crystal?: unknown; extended?: unknown; tags?: unknown }) => ({
+  crystal: doc.crystal ?? null,
+  extended: doc.extended ?? null,
+  tags: doc.tags ?? []
+});
+
 // One versioned logical byte definition for every billable Thing. Ordinary
 // Things measure the exact UTF-8 JSON stored in the customer-controlled payload
 // fields. Protected attachment Things additionally add their verified root
@@ -29,6 +36,11 @@ export class InvalidAttachmentStorageEnvelopeError extends Error {
 // indexes, and replication remain excluded shared physical costs.
 export const thingStorageSizeBytes = (doc: {
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   crystal?: unknown;
   extended?: unknown;
   tags?: unknown;
@@ -40,12 +52,11 @@ export const thingStorageSizeBytes = (doc: {
   timelineNoteVersion?: unknown;
   secure?: unknown;
 }): number => {
+  const blobBytes = attachmentBlobBytesForAccounting(doc);
+  if (blobBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
+  if (blobBytes !== undefined) return blobBytes;
   const payloadBytes = Buffer.byteLength(
-    JSON.stringify({
-      crystal: doc.crystal ?? null,
-      extended: doc.extended ?? null,
-      tags: doc.tags ?? []
-    }),
+    JSON.stringify(thingStorageJsonPayload(doc)),
     'utf8'
   );
   const objectBytes = attachmentObjectSizeBytesForAccounting(doc);
@@ -67,6 +78,11 @@ export const thingStorageSizeBytes = (doc: {
 export const currentContentStorageSizeBytes = (doc: {
   schemaVersion?: unknown;
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   storageClass?: unknown;
   storageAccountingVersion?: unknown;
   sizeBytes?: unknown;
@@ -118,7 +134,9 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
-  'post-discovery',
+  'backup-job', 'backup-job-event',
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
+  'post-discovery', 'app-allowlist-entry', 'acl-entry', 'session-resource-grant', 'account-config-entry',
 	'lopu-recording-settings',
 	'lopu-background-task',
 	'lopu-recording-job',
@@ -164,7 +182,7 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'subscription-tier',
   'user',
 	'waitlist',
-	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_THINGTIME
 ] as const;
 const CONTROL_PLANE_THINGTIMES = new Set<string>(CONTROL_PLANE_STORAGE_THINGTIMES);
 
@@ -187,6 +205,23 @@ export const nonSandboxStorageCandidateExpression = {
 };
 export const realStorageSourceExpression = {
   $eq: [{ $type: '$sandboxExpiresAt' }, 'missing']
+};
+
+// The same source-stamp proof is required by reconciliation and release
+// readiness. Keep malformed/legacy candidates outside this match rather than
+// silently dropping them from the billable census.
+export const currentStorageSourceMatch = {
+  schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  thingtime: { $type: 'array' },
+  storageClass: 'content',
+  storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+  sizeBytes: { $type: 'number', $gte: 0, $lte: Number.MAX_SAFE_INTEGER },
+  $expr: {
+    $and: [
+      realStorageSourceExpression,
+      { $eq: ['$sizeBytes', { $convert: { input: '$sizeBytes', to: 'long', onError: null, onNull: null } }] }
+    ]
+  }
 };
 
 export const billableStorageCandidateExpression = {

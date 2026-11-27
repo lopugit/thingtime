@@ -6,9 +6,10 @@ import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getAttachmentDownload, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
+import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
 import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
+import { EMPTY_CONTENT_SHA256 } from '~/fileSync/contentFingerprint';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
 
@@ -16,6 +17,7 @@ type ContentDependencies = {
 	getUser: typeof getCurrentUser;
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
+	downloadTarget: typeof getAttachmentDownloadTarget;
 	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
 	rangeFetch: typeof fetchStoredObject;
@@ -25,6 +27,7 @@ const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
 	download: getAttachmentDownload,
+	downloadTarget: getAttachmentDownloadTarget,
 	fingerprint: getAttachmentFingerprint,
 	enrichViewer: withFriendIds,
 	rangeFetch: fetchStoredObject
@@ -41,6 +44,9 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			} catch {
 				return json({ ok: false, error: 'Invalid attachment byte range' }, { status: 400 });
 			}
+			const target = url.searchParams.has('target');
+			if (target && (!range || url.searchParams.get('target') !== '1' || [...url.searchParams.keys()].some(key => !['id', 'target', 'range', 'version', 'offset', 'length'].includes(key) || url.searchParams.getAll(key).length !== 1)))
+				return json({ ok: false, error: 'Signed targets require one owned exact range without other modes' }, { status: 400 });
 			const retained = url.searchParams.has('retained');
 			if (retained && (!range || url.searchParams.getAll('retained').length !== 1 || url.searchParams.get('retained') !== '1' || url.searchParams.has('sharedRoot') || url.searchParams.has('key')))
 				return json({ ok: false, error: 'Retention reads require an owned exact byte range' }, { status: 400 });
@@ -70,6 +76,13 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
+			if (target) {
+				if (!user?.id) return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
+				const result = await dependencies.downloadTarget({ id: user.id }, url.searchParams.get('id'), range!);
+				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+				if ((await dependencies.getUser(actorRequest))?.id !== user.id) return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
+				return json(result);
+			}
 			const audience = await dependencies.enrichViewer(
 				withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
 			);
@@ -83,10 +96,13 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 				return json(result);
 			}
+			const contentViewer = audience || sharedRoot
+				? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) }
+				: null;
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
-				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
+				contentViewer,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
 				retained ? range!.version : undefined
@@ -158,9 +174,33 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			}
 			if (url.searchParams.get('cache') === 'bytes') {
 				if (result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await fetchStoredObject(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
-				if (!upstream.ok || !upstream.body) return new Response(null, { status: 502 });
-				return new Response(upstream.body, {
+				const upstream = await dependencies.rangeFetch(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
+				if (!upstream.ok || (!upstream.body && result.size !== 0) ||
+					(result.size === 0 && upstream.headers.has('Content-Length') && upstream.headers.get('Content-Length') !== '0'))
+					return new Response(null, { status: 502 });
+				if (result.size === 0) {
+					const verified = await dependencies.fingerprint(contentViewer, url.searchParams.get('id'));
+					if (verified.ok === false) return json({ ok: false, error: verified.error }, { status: verified.status });
+					if (verified.version !== result.version || verified.size !== 0 || verified.fingerprint.algorithm !== 'sha256-parts-v1' ||
+						verified.fingerprint.partCount !== 0 || verified.fingerprint.sha256 !== EMPTY_CONTENT_SHA256)
+						return new Response(null, { status: 502 });
+					if (upstream.body) {
+						const reader = upstream.body.getReader();
+						try {
+							// A zero-byte GET may have an empty stream, but must never
+							// smuggle bytes behind the verified zero-size receipt.
+							for (let emptyChunks = 0; emptyChunks < 16; emptyChunks++) {
+								const chunk = await reader.read();
+								if (chunk.done) break;
+								if (chunk.value.byteLength || emptyChunks === 15) return new Response(null, { status: 502 });
+							}
+						} catch { return new Response(null, { status: 502 }); }
+						finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+					}
+				}
+				// Fetch permits a successful zero-byte object to have a null body.
+				// Return actual empty bytes only after its authorized storage GET succeeds.
+				return new Response(result.size === 0 ? new Uint8Array(0) : upstream.body, {
 					headers: {
 						ETag: etag,
 						'Content-Type': result.contentType,

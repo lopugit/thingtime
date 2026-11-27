@@ -1,0 +1,36 @@
+name: Native compile
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_pr:
+        description: Pull request number to compile
+        required: true
+        type: string
+      source_sha:
+        description: Exact immutable pull request head SHA
+        required: true
+        type: string
+      mode:
+        description: Run inert isolation preflight before explicitly selecting native compilation
+        required: false
+        default: preflight
+        type: choice
+        options: [preflight, native]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  compile:
+    if: >-
+      github.repository == 'lopugit/thingtime' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner
+    uses: lopugit/thingtime/.github/workflows/native-compile.yml@4a3cefc61e5b4a9008cc544ddd01ddfa12f6ae12
+    with:
+      source_pr: ${{ inputs.source_pr }}
+      source_sha: ${{ inputs.source_sha }}
+      mode: ${{ inputs.mode }}

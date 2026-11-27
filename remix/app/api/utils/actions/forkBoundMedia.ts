@@ -16,7 +16,7 @@ export const createListForkBoundMediaDocuments = (collection = getHomeThingsColl
 				...(doc.thingtime?.includes('comment') ? { attachmentPurpose: 'comment' } :
 					{ $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] }) })) }
 		]
-	} as any, { projection: { shareId: 1, ownerId: 1, targetId: 1, attachmentSortIndex: 1, thingtime: 1, acl: 1, schemaVersion: 1, moderation: 1, attachmentPurpose: 1, attachmentState: 1, updatedAt: 1 } })
+	} as any, { projection: { shareId: 1, ownerId: 1, targetId: 1, attachmentSortIndex: 1, thingtime: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, aclEntryCount: 1, schemaVersion: 1, moderation: 1, attachmentPurpose: 1, attachmentState: 1, updatedAt: 1 } })
 		.sort({ createdAt: 1, shareId: 1 }).limit(limit + 1).toArray() as Array<{ shareId: string; ownerId: string; targetId: string; attachmentSortIndex?: unknown }>;
 	if (found.length > limit) throw new Error('The copied app has too many attached files');
 	return orderAttachmentDocsByStoredSort(found).filter((file) => typeof file.targetId === 'string' && targets.get(file.targetId) === file.ownerId) as unknown as ThingDoc[];

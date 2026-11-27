@@ -29,10 +29,12 @@ const chunk = (value, size) => {
 const entries = faces
 	.map((file) => {
 		const base64 = readFileSync(join(fontDir, file)).toString('base64');
+		// An array keeps the generated AST shallow; thousands of chained + nodes
+		// overflow parser traversal stacks even though the resulting bytes are valid.
 		const lines = chunk(base64, 200)
 			.map((line) => `\t\t\t'${line}'`)
-			.join(' +\n');
-		return `\t{\n\t\tfile: '${file}',\n\t\tbase64:\n${lines}\n\t}`;
+			.join(',\n');
+		return `\t{\n\t\tfile: '${file}',\n\t\tbase64: [\n${lines}\n\t\t].join('')\n\t}`;
 	})
 	.join(',\n');
 

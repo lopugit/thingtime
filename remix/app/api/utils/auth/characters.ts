@@ -2,10 +2,10 @@ import { getSubscriptions } from '../subscriptions/subscriptions';
 import { verifyPassword } from './passwords';
 import { randomUUID } from 'node:crypto';
 import { MAX_DISPLAY_NAME_CHARS } from '~/schemas/registry';
-import { createAccountLink } from '../accounts/accountLinks';
+import { getCharacterCreation, saveCharacterCreation } from '../accounts/accountLinks';
 import { getHomeThingsCollection, getSessionsCollection } from '../mongodb/collections';
 import { createUserAccount } from './registerUser';
-import { characterIdentity, characterSelectionAllowed } from './characterCore';
+import { characterIdentity, characterSelectionAllowed, normalizeCharacterUsername } from './characterCore';
 import { findUserById, findUserByUsername, findUsersByIds, setCharacterIdentity, toPublicUser, toPublicUserWithStorage, updateUserProfile } from './users';
 import { revokedSessionPipeline } from './sessions';
 
@@ -37,27 +37,39 @@ export async function createCharacter(owner: any, input: any) {
   if (input.displayName.trim().length > MAX_DISPLAY_NAME_CHARS) return fail(400, `Display name is too long (max ${MAX_DISPLAY_NAME_CHARS})`);
   if (!['switch', 'inherit', 'password'].includes(input.loginMode)) return fail(400, 'Choose switch, inherit or password');
   if (input.loginMode === 'inherit' && !owner.passwordHash) return fail(400, 'Set an account password before choosing inherited login');
-  const username = `character-${input.requestId.toLowerCase()}`;
-  const existing = await findUserByUsername(username);
-  if (existing) {
-    if (characterIdentity(existing)?.ownerId !== ownerId) return fail(409, 'This Character creation ID is already in use');
-    if (existing.displayName !== input.displayName.trim() || characterIdentity(existing)?.loginMode !== input.loginMode) return fail(409, 'This creation ID belongs to a different Character request');
-    if (input.loginMode === 'password' && (typeof input.password !== 'string' || !(await verifyPassword(input.password, existing.passwordHash)))) return fail(409, 'This creation ID belongs to a different Character request');
+  const chosenUsername = normalizeCharacterUsername(input.username);
+  if (chosenUsername === null) return fail(400, 'Username must start with a letter or number and contain only letters, numbers, dots, underscores or hyphens');
+  const requestId = input.requestId.toLowerCase();
+  const username = chosenUsername || `character-${requestId}`;
+  const creation = { username, displayName: input.displayName.trim(), loginMode: input.loginMode };
+  const resolveExisting = async () => {
+    const receipt = await getCharacterCreation(ownerId, requestId);
+    // Old generated IDs are retained for pre-receipt creations. A chosen
+    // handle alone is never proof that it belongs to this request.
+    const existing = receipt ? await findUserById(receipt.targetId) : await findUserByUsername(`character-${requestId}`);
+    if (!receipt && !existing) return null;
+    const previous = receipt?.request ?? { username: existing?.username, displayName: existing?.displayName, loginMode: characterIdentity(existing)?.loginMode };
+    if (!existing || characterIdentity(existing)?.ownerId !== ownerId ||
+        previous.username !== creation.username || previous.displayName !== creation.displayName || previous.loginMode !== creation.loginMode ||
+        (input.loginMode === 'password' && (typeof input.password !== 'string' || !(await verifyPassword(input.password, existing.passwordHash))))) {
+      return fail(409, 'This creation ID belongs to a different Character request');
+    }
     return { ok: true as const, character: await descriptor(existing) };
-  }
+  };
+  const existing = await resolveExisting();
+  if (existing) return existing;
   const created = await createUserAccount({
-    username, displayName: input.displayName.trim(), email: '', emailOptional: true,
+    username, displayName: creation.displayName, email: '', emailOptional: true,
     password: input.loginMode === 'password' ? input.password : `${randomUUID()}-${randomUUID()}`,
     character: { ownerId, loginMode: input.loginMode, disabled: false },
     onCreated: async (user, session) => {
-      const link = await createAccountLink({ linkKind: 'character', userId: ownerId, targetId: String(user._id), createdBy: ownerId, session });
-      if (!link.ok) throw new Error('Character ownership could not be saved');
+      await saveCharacterCreation({ ownerId, requestId, targetId: String(user._id), request: creation, session });
     }
   });
   if (created.ok === false) {
-    // A concurrent retry may win the unique username insert. Resolve that
-    // committed account with the same ownership/request checks above.
-    if (created.status === 409 && await findUserByUsername(username)) return createCharacter(owner, input);
+    // A transaction may lose either the handle or stable request-ID race.
+    // Resolve once after rollback; never recursively retry a handle collision.
+    if (created.status === 409) return await resolveExisting() ?? created;
     return created;
   }
   return { ok: true as const, character: await descriptor(created.user) };
@@ -77,7 +89,7 @@ export async function updateCharacter(owner: any, input: any) {
     if (input.operation === 'disable') {
       await (await getSessionsCollection()).updateMany({ userId: String(user._id) }, revokedSessionPipeline(new Date()));
       // Owner sessions keep their principal; stop acting as the disabled Character.
-      await (await getSessionsCollection()).updateMany({ userId: String(owner._id), 'meta.activeCharacterId': String(user._id) }, { $unset: { 'meta.activeCharacterId': '' } });
+      await (await getSessionsCollection()).updateMany({ userId: String(owner._id), 'meta.activeCharacterId': String(user._id) }, { $unset: { 'meta.activeCharacterId': '' }, $set: { 'meta.characterSelectionRevision': randomUUID() } });
     }
   } else return fail(400, 'Unknown Character operation');
   return { ok: true as const, character: await descriptor(await findUserById(String(user._id))) };
@@ -87,8 +99,18 @@ export async function selectSessionCharacter(principal: any, session: any, chara
   const id = characterId === null ? String(principal._id) : characterId;
   const target = typeof id === 'string' ? await findUserById(id) : null;
   if (!characterSelectionAllowed(principal, target)) return fail(403, 'That identity is not available to this session');
-  const result = await (await getSessionsCollection()).updateOne({ jti: session.jti, userId: String(principal._id), revokedAt: null },
-    id === String(principal._id) ? { $unset: { 'meta.activeCharacterId': '' } } : { $set: { 'meta.activeCharacterId': id } });
+  const owner = String(principal._id);
+  const selection = id === owner ? null : id;
+  const existing = { $ifNull: ['$meta.activeCharacterId', null] };
+  const unchanged = selection === null ? { $in: [existing, [null, owner]] } : { $eq: [existing, selection] };
+  // Every actual identity transition invalidates credentials bound to this
+  // session selection, even if the principal later switches back.
+  const result = await (await getSessionsCollection()).updateOne({ jti: session.jti, userId: owner, revokedAt: null }, [{
+    $set: {
+      'meta.activeCharacterId': selection ?? '$$REMOVE',
+      'meta.characterSelectionRevision': { $cond: [unchanged, '$meta.characterSelectionRevision', randomUUID()] }
+    }
+  }]);
   if (!result.matchedCount) return fail(401, 'Session expired');
   return { ok: true as const, user: await toPublicUserWithStorage(target) };
 }

@@ -1,9 +1,21 @@
+import { isCssPropertyName, isSafeWebpageCssValue, normalizeCssPropertyName } from '~/schemas/cssDeclarationNames';
+import { splitCssPriority } from '../ElementInspector/cssDeclarations';
+import { useInlineCssDeclarations } from '../ElementInspector/useInlineCssDeclarations';
+import { authoredHtmlPropValue } from '../Kinds/htmlRenderPolicy';
+import { collectionSource, indexCollectionRows } from './collectionSource';
+import { PAGE_COLLECTION_REQUIREMENTS } from '~/schemas/authoredControls';
 import { useFormatClock } from './useFormatClock';
-import { resolveBlockProps } from './templateBlocks';
+import { resolveBlockArguments, resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
+import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
+import { useContentExecutionHeld } from './ContentExecutionHold';
+import { createPortal } from 'react-dom';
+import { BuilderOverlayHost } from './BuilderOverlayHost';
+import { blockChromePath, canAddBlockChildren, ownsBlockTarget, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
 import { componentTextOverrides } from './componentTextOverrides';
 import { builderPoint, builderRect } from './builderCoordinates';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -12,6 +24,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import { HtmlThingRenderer, HtmlBlockElement } from '../Kinds/HtmlThingRenderer';
+import { ComponentUploadEnabled } from './ComponentUpload';
 import { NativeControlsEnabled } from './NativeComponentControls';
 import { defaultsFromArgs, sanitizeArgSpecs, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
@@ -34,6 +47,7 @@ const InlineRichTextEditor = React.lazy(() => import('./InlineRichTextEditor').t
 // what you edit is exactly what viewers see.
 
 export type ComponentThingLike = {
+	executionHeld?: boolean;
 	id: string;
 	crystal: Record<string, any>;
 };
@@ -75,19 +89,30 @@ export type BuilderChrome = {
 	onMediaToBlock?: (blockId: string, files: File[]) => void;
 };
 
-// Figma-style custom css record → React inline style (kebab → camel, custom
-// properties pass through). Values were bounded by the server gate.
-export const cssRecordToStyle = (css?: Record<string, string>, mediaUrl?: (url: string) => string): React.CSSProperties | undefined => {
-	if (!css) return undefined;
-	const out: Record<string, string> = {};
-	for (const [key, value] of Object.entries(css)) {
-		if (!value || typeof value !== 'string') continue;
-		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = mediaUrl
-			? mapCssMediaUrls(value, mediaUrl)
-			: value;
-	}
-	return Object.keys(out).length ? (out as React.CSSProperties) : undefined;
-};
+const cssStyleMembers = new Set([
+ 'cssText', 'length', 'parentRule', 'item', 'getPropertyValue', 'getPropertyPriority', 'setProperty', 'removeProperty',
+ 'getPropertyCSSValue', 'getPropertyShorthand', 'isPropertyImplicit'
+]);
+
+// Screen live drafts before saving. Ordinary declarations also appear in
+// initial markup. CSSOM handles priority and values that cannot be safely
+// interpolated into a serialized style attribute, such as data URLs with ';'.
+function useBlockCss(ref: React.RefObject<HTMLElement>, css: Record<string, string> | undefined, mediaUrl: (url: string) => string, editorOnly?: string[]) {
+ const declarations: Record<string, string> = Object.create(null);
+ const style: Record<string, string> = {};
+ for (const [key, source] of Object.entries(css || {})) {
+  const name = normalizeCssPropertyName(key);
+  if (!isCssPropertyName(name) || typeof source !== 'string' || !isSafeWebpageCssValue(source) || editorOnly?.includes(name)) continue;
+  const mapped = mapCssMediaUrls(source, mediaUrl);
+  declarations[name] = mapped;
+  const { value, priority } = splitCssPriority(mapped);
+  if (!value || priority || /[;\\]|\/\*/.test(value)) continue;
+  const prop = name.startsWith('--') ? name : name.replace(/^-ms-/, 'ms-').replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
+  if (!cssStyleMembers.has(prop) && !Object.prototype.hasOwnProperty.call(Object.prototype, prop)) style[prop] = value;
+ }
+ useInlineCssDeclarations(ref, css ? declarations : undefined);
+ return Object.keys(style).length ? style as React.CSSProperties : undefined;
+}
 
 const DRAG_MIME = 'application/x-tt-block-id';
 
@@ -151,7 +176,7 @@ const DropWell = ({
 		<Flex
 			as="button"
 			type="button"
-			aria-label="Add the first block"
+			aria-label={label || "Add a block"}
 			className="ttDropWell"
 			data-testid={`dropwell-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}${index ? `-${index}` : ''}`}
 			flexDirection="column"
@@ -271,6 +296,7 @@ const EdgeInsertStrip = ({
 			justifyContent="center"
 			opacity={active ? 1 : coarse ? 0.45 : 0}
 			_hover={{ opacity: 1 }}
+			_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)' }}
 			transition="opacity 0.1s ease"
 			cursor="copy"
 			sx={CHROME_TOUCH_SX}
@@ -411,30 +437,14 @@ const BlockFrame = ({
 	const selected = !live && chrome?.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
 	const frameRef = React.useRef<HTMLDivElement>(null);
-	const [chipBelow, setChipBelow] = React.useState(false);
-	React.useLayoutEffect(() => {
-		const frame = frameRef.current;
-		if (!frame || !chrome?.seamlessMode || !(hovered || selected)) return;
-		const owner = frame.ownerDocument;
-		const view = owner.defaultView;
-		const place = () => {
-			const clearance = owner === document ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tt-nav-clearance')) || 0 : 0;
-			const rect = frame.getBoundingClientRect();
-			setChipBelow(rect.top < clearance + 14 && rect.bottom < (view?.innerHeight || 0) - 32);
-		};
-		place();
-		owner.addEventListener('scroll', place, true);
-		view?.addEventListener('resize', place);
-		return () => {
-			owner.removeEventListener('scroll', place, true);
-			view?.removeEventListener('resize', place);
-		};
-	}, [chrome?.seamlessMode, hovered, selected]);
+	const style = useBlockCss(frameRef, block.css, mediaUrl);
+	const register = React.useContext(BlockChromeElements);
+	React.useLayoutEffect(() => register?.(block.id, frameRef.current), [register, block.id, layout]);
 
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
 	if (!chrome || live)
 		return (
-			<Box data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+			<Box ref={frameRef} data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={style}>
 				{null}
 				{children}
 				{null}
@@ -495,7 +505,7 @@ const BlockFrame = ({
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
-			style={cssRecordToStyle(block.css, mediaUrl)}
+			style={style}
 			onContextMenu={
 				layout && chrome.onContextMenu && !locked
 					? (event: React.MouseEvent) => {
@@ -524,12 +534,20 @@ const BlockFrame = ({
 				zIndex: 5
 			}}
 			cursor={chrome.seamlessMode === 'edit' ? 'text' : 'pointer'}
-			onMouseEnter={(event) => {
-				if (live) return;
+			onFocus={(event) => {
+				if (!ownsBlockTarget(event.target, event.currentTarget)) return;
 				event.stopPropagation();
 				chrome.onHover(block.id);
 			}}
-			onMouseLeave={() => {
+			onMouseEnter={(event) => {
+				// React dispatches ancestor enter handlers before descendants. Only
+				// the actual target boundary may claim hover after layout re-entry.
+				if (live || !ownsBlockTarget(event.target, event.currentTarget)) return;
+				event.stopPropagation();
+				chrome.onHover(block.id);
+			}}
+			onMouseLeave={(event) => {
+				if ((event.relatedTarget as Element | null)?.closest?.('.ttBlockChip')) return;
 				if (!live) chrome.onHover(null);
 			}}
 			onMouseOver={(event) => {
@@ -565,109 +583,11 @@ const BlockFrame = ({
 				chrome.onSelect(block.id, event.currentTarget as HTMLElement);
 			}}
 		>
-			{layout && (hovered || selected) && (
-				<Flex
-					className="ttBlockChip"
-					position="absolute"
-					top={chipBelow ? undefined : '-14px'}
-					bottom={chipBelow ? '-14px' : undefined}
-					left="6px"
-					// above the insert strips (also z 6): the strip renders later in
-					// the DOM and would otherwise hit-test OVER the chip's whole
-					// central band, eating its clicks and drags
-					zIndex={7}
-					alignItems="center"
-					columnGap="6px"
-					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-					fontSize="11px"
-					fontWeight={700}
-					lineHeight="1"
-					textTransform="uppercase"
-					letterSpacing="0.06em"
-					paddingX="10px"
-					paddingY="7px"
-					borderRadius="var(--tt-radius-pill, 999px)"
-					background={tone}
-					color="var(--tt-accent-contrast, #ffffff)"
-					boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
-					pointerEvents={locked ? 'none' : 'auto'}
-					draggable={!locked}
-					sx={CHROME_TOUCH_SX}
-					onDragStart={(event) => {
-						// a press on the ⊞ chip action that wanders a few pixels is a
-						// CLICK, not a block move
-						if ((event.target as HTMLElement).closest?.('.ttChipAction')) {
-							event.preventDefault();
-							return;
-						}
-						event.stopPropagation();
-						event.dataTransfer.setData(DRAG_MIME, block.id);
-						event.dataTransfer.effectAllowed = 'move';
-					}}
-					cursor={locked ? 'default' : 'grab'}
-					title={locked ? 'Native app screen — this block is locked' : 'Drag to move this block'}
-				>
-					{locked ? '🔒' : '⠿'} {blockLabel(block)}
-					{!locked && chrome.onContextMenu ? (
-						<Box
-							as="button"
-							type="button"
-							className="ttChipAction"
-							aria-label="Wrap this block"
-							title="Wrap with a block (row / column / grid)"
-							data-testid={`wrap-block-${block.id}`}
-							marginLeft="2px"
-							fontSize="12px"
-							lineHeight="1"
-							opacity={0.85}
-							_hover={{ opacity: 1, transform: 'scale(1.15)' }}
-							cursor="pointer"
-							onClick={(event: React.MouseEvent) => {
-								event.preventDefault();
-								event.stopPropagation();
-								const rect = builderRect(event.currentTarget);
-								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
-								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6, true);
-							}}
-						>
-							⊞
-						</Box>
-					) : null}
-					{!locked && chrome.onContextMenu ? (
-						// the FULL menu (duplicate / move / delete / advanced editor) —
-						// the only path to it on touch devices, where long-press never
-						// fires contextmenu
-						<Box
-							as="button"
-							type="button"
-							className="ttChipAction"
-							aria-label="Block menu"
-							title="Block menu — duplicate, move, delete, wrap, advanced editor"
-							data-testid={`menu-block-${block.id}`}
-							marginLeft="2px"
-							paddingX="3px"
-							fontSize="12px"
-							lineHeight="1"
-							opacity={0.85}
-							_hover={{ opacity: 1, transform: 'scale(1.15)' }}
-							cursor="pointer"
-							onClick={(event: React.MouseEvent) => {
-								event.preventDefault();
-								event.stopPropagation();
-								const rect = builderRect(event.currentTarget);
-								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
-								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6);
-							}}
-						>
-							⋯
-						</Box>
-					) : null}
-				</Flex>
-			)}
+
 			{children}
 			{/* overlay insert strips on the parent-axis seams — zero layout
 			    impact, so the edit canvas is pixel-identical to view mode */}
-			{layout && (
+			{layout && (hovered || (!chrome.hoverId && selected)) && (
 				<EdgeInsertStrip
 					side={parentDirection === 'column' ? 'top' : 'left'}
 					containerId={containerId}
@@ -676,7 +596,7 @@ const BlockFrame = ({
 					testIdPrefix={testIdPrefix}
 				/>
 			)}
-			{layout && (
+			{layout && (hovered || (!chrome.hoverId && selected)) && (
 				<EdgeInsertStrip
 					side={parentDirection === 'column' ? 'bottom' : 'right'}
 					containerId={containerId}
@@ -744,7 +664,7 @@ const typographyFromCss = (css?: Record<string, string>): Record<string, unknown
 	const out: Record<string, unknown> = {};
 	for (const [cssKey, prop] of Object.entries(TYPO_CSS_KEYS)) {
 		const value = css[cssKey];
-		if (!value) continue;
+		if (!value || !isSafeWebpageCssValue(value)) continue;
 		// Main's `.root *` pre-wrap rule ties a text element's own class on
 		// specificity and is injected later, so an author's white-space only
 		// holds when it is marked important
@@ -793,8 +713,12 @@ for (const [key, style] of Object.entries(TEXT_STYLES)) {
 // (liveComponent.tsx useThingSource) keyed by the block id. Kept as a thin
 // alias so the block view and every dedicated thing page fetch, cache, and
 // gate on exactly the same code.
-const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean): { scope: Record<string, unknown> } =>
-	useThingSource({ source: block.source, cacheId: block.id, argValues, interactive });
+const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean, executionHeld = false): { scope: Record<string, unknown> } => {
+	const collection = block.source?.collection;
+	const cursorPages = collection && block.source ? collectionSource({ ...collection, action: block.source.action }) : null;
+	return useThingSource({ source: block.source, cacheId: block.id, argValues, interactive, executionHeld,
+		cursorPages: cursorPages ?? undefined, collectionMinimum: collection ? PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve'] : undefined });
+};
 
 const ComponentBlockView = ({
 	block,
@@ -811,19 +735,24 @@ const ComponentBlockView = ({
 	confirm?: TtActionConfirmHandler;
 	onUnowned?: TtActionUnownedHandler;
 }) => {
+	const held = useContentExecutionHeld(component?.executionHeld);
+	interactive = interactive && !held;
 	const crystal = component?.crystal;
+	const inheritedScope = React.useContext(ComponentDataScope);
+	const markerInstance = React.useContext(ComponentInstanceIdentity);
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
-	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
+	const boundArgs = resolveBlockArguments(block, inheritedScope, !!markerInstance);
+	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: boundArgs });
 	const argValues = React.useMemo(
 		() => ({
 			...defaultsFromArgs(specs),
 			...(crystal?.savedArgs && typeof crystal.savedArgs === 'object' ? crystal.savedArgs : {}),
-			...(block.args || {})
+			...boundArgs
 		}),
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
 	);
-	const source = useBlockSource({ ...block, source: block.source ?? crystal?.source }, argValues, interactive);
+	const source = useBlockSource({ ...block, source: block.source ?? crystal?.source }, argValues, interactive, held);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
 		const authored = componentTextOverrides(crystal.render, block.args, chrome?.seamlessMode === 'edit');
@@ -890,8 +819,10 @@ const ComponentBlockView = ({
 
 	return (
 		<LiveTemplate
+			argumentKey={JSON.stringify(Object.keys(block.argBindings || {}).map(name => [name, boundArgs[name]]))}
+			executionHeld={held}
 			render={resolved}
-			scope={{ ...argValues, ...source.scope }}
+			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope, ...(inheritedScope.page ? { page: inheritedScope.page } : {}) }}
 			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
 			onUnowned={onUnowned}
 			confirm={confirm}
@@ -978,32 +909,71 @@ export type WebpageBlocksRendererProps = {
 };
 
 const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
- const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
- return <LiveTemplate render={{ tag: 'span' }} scope={{ ...props.block.args, ...source.scope }}
+ const inheritedScope = React.useContext(ComponentDataScope);
+ const args = resolveBlockArguments(props.block, inheritedScope);
+ const source = useBlockSource(props.block, args, !!props.interactive);
+ const block = { ...props.block, source: undefined, args: undefined, argBindings: undefined };
+ const scope = { ...args, ...source.scope };
+ const binding = props.block.source?.collection;
+ const data = React.useMemo(() => binding && Array.isArray(source.scope.result) ? indexCollectionRows(source.scope.result, binding.groupBy) : undefined, [binding, source.scope.result]);
+ const parentPage = inheritedScope.page as { collections?: Record<string, unknown> } | undefined;
+ const collections = React.useMemo(() => binding ? { ...parentPage?.collections, [binding.as]: data } : undefined, [binding, data, parentPage?.collections]);
+ if (props.block.source?.passive === true) return (
+  <ComponentDataScope.Provider value={{ ...inheritedScope, ...scope, ...(collections ? { page: { ...parentPage, collections } } : {}) }}>
+   <BlockView {...props} block={block} />
+  </ComponentDataScope.Provider>
+ );
+ return <LiveTemplate render={{ tag: 'span' }} scope={scope}
+  argumentKey={JSON.stringify(Object.keys(props.block.argBindings || {}).map(name => [name, args[name]]))}
   interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
   confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
-  <BlockView {...props} block={{ ...props.block, source: undefined, args: undefined }} />
+  <BlockView {...props} block={block} />
  </LiveTemplate>;
 };
 
 /** Authored DOM elements are the selection boundary themselves. No wrapper div
  * breaks a summary, a grid, or a row. Repeated rows share one editable template. */
 const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const held = useContentExecutionHeld();
  const { block, chrome } = props;
+ const register = React.useContext(BlockChromeElements);
+ const authoredRef = React.useRef<HTMLElement>(null);
+ const mediaUrl = useSharedMediaUrl();
+ React.useLayoutEffect(() => register?.(block.id, authoredRef.current), [register, block.id, block.tag, block.type, chrome?.seamlessMode]);
  const scope = React.useContext(ComponentDataScope);
+ const runtime = useWebpageRuntime();
  const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
+ if (block.tag === 'tt-mapbox') attributes.pointsSource = block.props?.pointsSource;
+ const reveal = attributes['data-tt-reveal'];
+ React.useLayoutEffect(() => {
+  // An authored target can reveal itself when its bound selection changes.
+  // No global selector, navigation, polling or focus theft is involved.
+  const selected = (typeof reveal === 'string' && reveal !== '') || (typeof reveal === 'number' && Number.isFinite(reveal)) || reveal === true;
+  if (!editing && props.interactive && selected) {
+   authoredRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+ }, [editing, props.interactive, reveal, runtime.identity]);
  if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
  const selected = chrome?.selectedId === block.id;
  const hovered = chrome?.hoverId === block.id;
+ const hidden = attributes.hidden === true || (typeof attributes.hidden === 'string' && authoredHtmlPropValue('hidden', attributes.hidden) !== false);
+ const style = useBlockCss(authoredRef, block.css, mediaUrl, editing
+  ? [...(hidden ? ['display', 'min-height'] : []), ...(selected || hovered ? ['outline', 'outline-offset'] : [])]
+  : undefined);
+
  const children = attributes.transparent === true || block.tag === 'select'
   ? (block.children || []).map(child => <BlockView {...props} key={child.id} block={child} />)
   : <BlockList {...props} blocks={block.children || []} containerId={block.id} />;
  const editorProps: Record<string, any> = {
+  ref: authoredRef,
   'data-block-id': block.id,
-  style: { ...cssRecordToStyle(block.css), ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
+  style: { ...style, ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
   ...(editing ? {
+   ...(hidden ? { hidden:false, style:{ ...style, display:'block', minHeight:44, ...(selected || hovered ? { outline:'2px solid var(--tt-accent, hotpink)', outlineOffset:'2px' } : {}) } } : {}),
+   onFocus: (event: React.FocusEvent<HTMLElement>) => { if (!ownsBlockTarget(event.target, event.currentTarget)) return; event.stopPropagation(); chrome.onHover(block.id); },
+   onMouseLeave: (event: React.MouseEvent<HTMLElement>) => { if (!(event.relatedTarget as Element | null)?.closest?.('.ttBlockChip')) chrome.onHover(null); },
    onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
    onClick: (event: React.MouseEvent<HTMLElement>) => {
     if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
@@ -1018,22 +988,37 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   } : {})
  };
  if (block.type === 'condition') {
-  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, scope) === 'yes';
+  // Page conditions see the selected page runtime's bounded URL query. Keep
+  // inherited Component data intact; an inert Builder/preview runtime must not
+  // replace a nested Component's own query scope with an empty object.
+  const conditionScope = runtime.pageId ? { ...scope, query: runtime.query } : scope;
+  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, conditionScope) === 'yes';
   if (!editing) return matches === !!block.condition?.negate ? null : <>{children}</>;
   return <div {...editorProps} style={{ ...editorProps.style, ...(editing ? { padding: '4px', border: '1px dashed var(--tt-border, #ddd)' } : { display: 'contents' }) }}>
    {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
   </div>;
  }
- if (block.type === 'collection' && attributes.transparent === true) return <ComponentCollection {...attributes} renderItem={() => children} />;
+ // Expanded Component collections still own their saved source binding. The
+ // collection loader requires this same live-control context as a Component;
+ // without it the live page silently renders an empty catalogue.
+ const collection = block.type === 'collection' && !editing
+  ? <NativeControlsEnabled.Provider value={!!props.interactive}><ComponentCollection {...attributes} renderItem={() => children} /></NativeControlsEnabled.Provider>
+  : null;
+ if (block.type === 'collection' && attributes.transparent === true && !editing) return collection;
  if (block.type === 'collection') return <div {...editorProps}>
   {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
-   <ComponentCollection {...attributes} renderItem={() => children} />}
+   collection}
  </div>;
  const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
  const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
- return <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
+ const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}
+  markerContent={block.tag === 'tt-mapbox' && block.children?.length ? children : undefined}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
+ if (block.tag === 'tt-upload') return <ComponentUploadEnabled.Provider value={!!props.interactive && !editing && runtime.source === 'user' && !runtime.sharedRun}>{element}</ComponentUploadEnabled.Provider>;
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select' || block.tag === 'tt-menu' || block.tag === 'tt-rich-text'
+  ? <NativeControlsEnabled.Provider value={!held && (block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing)}>{element}</NativeControlsEnabled.Provider>
+  : element;
 };
 
 const BlockView = (
@@ -1059,6 +1044,9 @@ const BlockView = (
 	} = props;
 	const mediaUrl = useSharedMediaUrl();
 
+	const plainRef = React.useRef<HTMLDivElement>(null);
+	const style = useBlockCss(plainRef, block.css, mediaUrl);
+
 	// Inspector typography (font-size, color, …) must reach the text itself,
 	// not just the wrapper — explicit sizes in the typo presets and the rich
 	// document scale would otherwise always win over block.css.
@@ -1077,7 +1065,7 @@ const BlockView = (
 		[cssTypo]
 	);
 
-	if ((block.source || block.args) && block.type !== 'component') return <SourceBlock {...props} />;
+	if ((block.source || block.args || block.argBindings) && block.type !== 'component') return <SourceBlock {...props} />;
 	if (['element', 'collection', 'condition'].includes(block.type)) return <AuthoredBlock {...props} />;
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
@@ -1281,7 +1269,7 @@ const BlockView = (
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
 		return (
-			<Box data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+			<Box ref={plainRef} data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)} style={style}>
 				{body}
 			</Box>
 		);
@@ -1344,14 +1332,117 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 	);
 };
 
+// One shared toolbar owns the entire ancestor path. A portal keeps it clear of
+// zero-padding ancestors, authored overflow and native element content rules.
+const BlockChromeElements = React.createContext<((id: string, element: HTMLElement | null) => (() => void)) | null>(null);
+
+const BlockChromeOverlay = ({ blocks, chrome, elements }: { blocks: WebpageBlock[]; chrome: BuilderChrome; elements: Map<string, HTMLElement> }) => {
+ const overlayHost = React.useContext(BuilderOverlayHost);
+ const [pinned, setPinned] = React.useState<{ id: string; x: number; y: number; left: number; top: number } | null>(null);
+ const acknowledgedPin = React.useRef<string | null>(null);
+ const activeId = pinned?.id || chrome.hoverId || chrome.selectedId;
+ const path = blockChromePath(blocks, activeId);
+ const active = path[path.length - 1];
+ const [position, setPosition] = React.useState<{ left: number; top: number } | null>(null);
+ const toolbarRef = React.useRef<HTMLDivElement>(null);
+ const [maxHeight, setMaxHeight] = React.useState<number>();
+ const mounted = !!position;
+ // Selecting a breadcrumb moves the toolbar. Ignore incidental mouseover on
+ // the canvas newly exposed underneath it until the user actually moves there.
+ React.useEffect(() => {
+  if (!pinned) return;
+  const element = elements.get(pinned.id);
+  const selection = blockChromeSelectionState(pinned.id, chrome.selectedId, acknowledgedPin.current);
+  if (!element || selection === 'changed' || chrome.seamlessMode === 'view') { setPinned(null); return; }
+  if (selection === 'acknowledged') acknowledgedPin.current = pinned.id;
+  const owner = element.ownerDocument;
+  const release = (event: PointerEvent) => {
+   const insideChrome = !!(event.target as Element | null)?.closest?.('.ttBlockChip');
+   if (shouldReleaseBlockChromePin(pinned, { x: event.clientX, y: event.clientY }, insideChrome, event.type === 'pointerdown')) setPinned(null);
+  };
+  owner.addEventListener('pointermove', release, true);
+  owner.addEventListener('pointerdown', release, true);
+  return () => { owner.removeEventListener('pointermove', release, true); owner.removeEventListener('pointerdown', release, true); };
+ }, [pinned, elements, chrome.selectedId, chrome.seamlessMode]);
+ React.useLayoutEffect(() => {
+  const element = activeId ? elements.get(activeId) : null;
+  if (!element) { setPosition(null); return; }
+  const owner = element.ownerDocument;
+  const view = owner.defaultView;
+  let host = owner;
+  while (host.defaultView?.frameElement) host = host.defaultView.frameElement.ownerDocument;
+  const hostView = host.defaultView;
+  const pageControls = host.querySelector<HTMLElement>('[data-testid="builder-mode-toolbar"]');
+  const place = () => {
+   const rect = element.getBoundingClientRect();
+   const measured = toolbarRef.current?.getBoundingClientRect();
+   const toolbar = measured || { width: 160, height: 36 };
+   const clearance = parseFloat(view?.getComputedStyle(owner.documentElement).getPropertyValue('--tt-nav-clearance') || '') || 0;
+   const viewport = { width: view?.innerWidth || owner.documentElement.clientWidth, height: view?.innerHeight || owner.documentElement.clientHeight };
+   const hostClearance = parseFloat(hostView?.getComputedStyle(host.documentElement).getPropertyValue('--tt-builder-toolbar-clearance') || '') || 0;
+   const origin = builderPoint(element, 0, 0);
+   const scaleY = builderPoint(element, 0, 1).y - origin.y;
+   const hostBottom = Math.min((hostView?.innerHeight || viewport.height) - hostClearance, pageControls?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY);
+   const bottomClearance = blockChromeBottomInset(viewport.height, hostBottom, origin.y, scaleY);
+   setMaxHeight(Math.max(0, viewport.height - clearance - bottomClearance - 16));
+   const next = blockChromePosition({ frame: pinned ? { left: pinned.left - 6, top: pinned.top + toolbar.height - 2, bottom: pinned.top } : rect, toolbar, viewport, clearance, bottomClearance });
+   setPosition(previous => previous?.left === next.left && previous.top === next.top ? previous : next);
+  };
+  place();
+  owner.addEventListener('scroll', place, true);
+  view?.addEventListener('resize', place);
+  if (host !== owner) { host.addEventListener('scroll', place, true); hostView?.addEventListener('resize', place); }
+  const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+  observer?.observe(element);
+  if (toolbarRef.current) observer?.observe(toolbarRef.current);
+  if (pageControls) observer?.observe(pageControls);
+  return () => { owner.removeEventListener('scroll', place, true); view?.removeEventListener('resize', place); if (host !== owner) { host.removeEventListener('scroll', place, true); hostView?.removeEventListener('resize', place); } observer?.disconnect(); };
+ }, [activeId, elements, blocks, mounted, pinned, chrome.seamlessMode]);
+ if (!active || !position || chrome.seamlessMode === 'view') return null;
+ const element = elements.get(active.id);
+ if (!element) return null;
+ const select = (id: string, event: React.MouseEvent) => { const target = elements.get(id); acknowledgedPin.current = null; setPinned({ id, x: event.clientX, y: event.clientY, ...position }); chrome.onSelect(id, target); chrome.onHover(id); };
+ return createPortal(<Flex ref={toolbarRef} className="ttBlockChip" role="toolbar" aria-label="Block path and insertion" position="fixed"
+  left={`${position.left}px`} top={`${position.top}px`} zIndex="dropdown" width="max-content" maxWidth="calc(100vw - 16px)" maxHeight={maxHeight === undefined ? "calc(100dvh - 32px - var(--tt-nav-clearance, 0px) - var(--tt-builder-toolbar-clearance, 0px))" : `${maxHeight}px`} overflowY="auto" flexWrap="wrap" alignItems="center" gap="2px"
+  padding="4px" borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-card, #fff)" color="var(--tt-accent, hotpink)"
+  border="1px solid var(--tt-accent, hotpink)" boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0,0,0,.05))"
+  fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px" sx={{ ...CHROME_TOUCH_SX, '@media (pointer: coarse)': { '& button': { minHeight: '44px', minWidth: '44px' } } }}
+  onMouseOver={event => event.stopPropagation()} onMouseEnter={() => chrome.onHover(active.id)} onPointerDown={event => event.stopPropagation()}>
+  {path.map((item, index) => <React.Fragment key={item.id}>
+   {index > 0 && <Box as="span" aria-hidden="true">/</Box>}
+   <Box as="button" type="button" className="ttChipAction" padding="6px" minHeight="32px" borderRadius="6px"
+    _hover={{ background: 'var(--tt-accent-tint, #fff5fa)' }} _focusVisible={{ outline: '2px solid currentColor' }}
+    draggable={item.id === active.id && item.type !== 'native'}
+    onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData(DRAG_MIME, item.id); event.dataTransfer.effectAllowed = 'move'; }}
+    title={item.id === active.id && item.type !== 'native' ? 'Drag to move this block' : undefined}
+    maxWidth="100%" overflowWrap="anywhere" textAlign="left" aria-label={`Select ${blockLabel(item)}`} aria-pressed={chrome.selectedId === item.id} data-testid={`breadcrumb-${item.id}`}
+    onClick={event => { event.preventDefault(); event.stopPropagation(); select(item.id, event); }}>{blockLabel(item)}</Box>
+  </React.Fragment>)}
+  {active.type !== 'native' && <Box as="button" type="button" className="ttChipAction" padding="6px" minHeight="32px"
+   aria-label="Add a block after this block" title="Add a block after this block" data-testid={`inline-add-${active.id}`}
+   onClick={event => { event.preventDefault(); event.stopPropagation(); const siblings = path.length > 1 ? path[path.length - 2].children || [] : blocks; chrome.onInsert(path.length > 1 ? path[path.length - 2].id : null, siblings.findIndex(item => item.id === active.id) + 1, event.currentTarget); }}>+</Box>}
+  {canAddBlockChildren(active) && <Box as="button" type="button" className="ttChipAction" padding="6px 8px" minHeight="32px"
+   background="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, white)" borderRadius="6px" whiteSpace="nowrap"
+   _focusVisible={{ outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' }} data-testid={`add-child-${active.id}`}
+   onClick={event => { event.preventDefault(); event.stopPropagation(); chrome.onInsert(active.id, active.children?.length || 0, event.currentTarget); }}>+ Add a block</Box>}
+  {active.type !== 'native' && chrome.onContextMenu && <Box as="button" type="button" className="ttChipAction" padding="6px" minHeight="32px"
+   aria-label="Wrap this block" title="Wrap with a block (row / column / grid)" data-testid={`wrap-block-${active.id}`}
+   onClick={event => { event.stopPropagation(); select(active.id, event); const rect = builderRect(event.currentTarget); chrome.onContextMenu?.(active.id, rect.left, rect.bottom + 6, true); }}>⊞</Box>}
+  {active.type !== 'native' && chrome.onContextMenu && <Box as="button" type="button" className="ttChipAction" padding="6px" minHeight="32px"
+   aria-label="Block menu" data-testid={`menu-block-${active.id}`} onClick={event => { event.stopPropagation(); select(active.id, event); const rect = builderRect(event.currentTarget); chrome.onContextMenu?.(active.id, rect.left, rect.bottom + 6); }}>⋯</Box>}
+ </Flex>, overlayHost?.current || element.ownerDocument.body);
+};
+
 export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => {
-	// bare is bare in BOTH modes — the edit canvas must not add root gaps the
-	// live page doesn't have (true WYSIWYG includes the spacing between blocks)
-	if (props.bare) return <BlockList {...props} containerId={null} />;
-	// identical root spacing in both modes — WYSIWYG includes the gaps
-	return (
-		<Flex flexDirection="column" width="100%" rowGap={4}>
-			<BlockList {...props} containerId={null} />
-		</Flex>
-	);
+ const held = useContentExecutionHeld();
+ const elements = React.useMemo(() => new Map<string, HTMLElement>(), []);
+ const register = React.useCallback((id: string, element: HTMLElement | null) => {
+  if (element) elements.set(id, element);
+  return () => { if (elements.get(id) === element) elements.delete(id); };
+ }, [elements]);
+ const content = <BlockList {...props} interactive={!!props.interactive && !held} renderNative={held ? undefined : props.renderNative} containerId={null} />;
+ return <BlockChromeElements.Provider value={register}>
+  {props.bare ? content : <Flex flexDirection="column" width="100%" rowGap={4}>{content}</Flex>}
+  {props.chrome && <BlockChromeOverlay blocks={props.blocks} chrome={props.chrome} elements={elements} />}
+ </BlockChromeElements.Provider>;
 };

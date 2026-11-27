@@ -1,9 +1,9 @@
-import { TIMELINE_EVENT_MAX_BYTES, type TimelineEntry, type TimelineSnapshot } from '../../../timeline/contract.ts';
+import { type TimelineEntry, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { parseBranchMergeRequest, type BranchMergeRequest, type BranchMergePreview } from '../../../timeline/branchMerge.ts';
 import { componentBlocks, componentVersion, mergeComponentVersions, parseComponentMergeContext } from '../../../timeline/componentMerge.ts';
 import { readRecordedComponentEntries } from './service.ts';
 import { COMPONENT_BINDING_PREFIX } from '../../../timeline/componentBindings.ts';
-import { copyBoundedJson } from '../../../utils/boundedJson.ts';
+import { copyTimelineContent } from '../../../timeline/contentJson.ts';
 import { mergeVersionValues } from '../../../timeline/versions.ts';
 import { getThingsCollection } from '../mongodb/collections';
 import { StorageMutationError } from '../storage/storageCore';
@@ -24,7 +24,7 @@ const defaults = {
 };
 const checkedPreview = (preview: BranchMergePreview): { ok: true; preview: BranchMergePreview } => {
 	try {
-		copyBoundedJson(preview, { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 100, maxNodes: 200_000 }, 'Branch merge preview');
+		copyTimelineContent(preview, 'Branch merge preview', 4);
 	} catch {
 		return refuse(413, 'This comparison is too large to preview. Its recorded versions are still retained.');
 	}
@@ -103,13 +103,12 @@ export function createBranchMergeService(overrides: Partial<typeof defaults> = {
 		}
 		if (sourceEvents.some((event) => event.dependencies.some((link) => !link.thingId.startsWith(COMPONENT_BINDING_PREFIX))))
 			refuse(422, 'This version has dependencies this comparison cannot yet merge.');
-		const bytes = new TextEncoder().encode(JSON.stringify(preview)).byteLength;
 		const entries = await readRecordedComponentEntries(
 			things,
 			ownerId,
 			sourceEvents.flatMap((event) => event.dependencies),
 			deps.entries,
-			TIMELINE_EVENT_MAX_BYTES - bytes - 256 * 1024
+			Infinity
 		);
 		const componentVersions = [baseValue, currentValue, incomingValue].map((value, index) =>
 			componentVersion(sourceEvents[index], componentBlocks(snapshot(value)), entries)

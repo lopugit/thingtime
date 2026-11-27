@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 // Synthetic metadata only; the checker enforces an OS-level loopback boundary.
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,7 +8,7 @@ import { SyncProgressViewer } from '../app/components/Devices/SyncProgressViewer
 import { useMountedRef } from '../app/hooks/useMountedRef';
 import type { SyncProgressRow, SyncProgressSource, SyncProgressState } from '../app/fileSync/progressProjection';
 import type { ForegroundSyncProgress } from '../app/fileSync/foregroundSync';
-import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { settingsFixtureCapabilities } from './lib/settings-fixture-capabilities';
 const scope = { origin: location.origin, ownerId: 'progress-fixture', dataPlane: 'home', deviceId: 'synthetic-device', rootId: 'synthetic-root' };
 const rows: SyncProgressRow[] = [];
 const add = (path: string, size: number, kind: 'file' | 'folder' = 'file', confirmed = false) => {
@@ -26,7 +27,7 @@ const source: SyncProgressSource = { async *rows() { for (const row of rows) yie
 const layoutKey = 'progress-fixture-layout', originalFetch = window.fetch.bind(window);
 window.fetch = async function(input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
-	if (url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
+	if (url.pathname.includes('thingtime-capabilities')) return Response.json(settingsFixtureCapabilities(location.origin));
 	if (url.pathname === '/api/v1/webpages/resolve') {
 		const pages = JSON.parse(localStorage.getItem(layoutKey) || '{}');
 		const selected = pages[url.searchParams.get('id') || ''] ?? null;
@@ -67,6 +68,6 @@ function Fixture() {
 		}} uploadPriorities={{ scope, excludedPaths: ['Private'], ignoreRules: 'node_modules/' }} progress={progress} status={status} />
 	</Box></ChakraProvider>;
 }
-const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture /> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
+const router = createMemoryRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
 createRoot(document.getElementById('root')!).render(<React.StrictMode><RouterProvider router={router} /></React.StrictMode>);
 Object.assign(window, { progressFixture: { total: rows.length, layout: () => Object.values(JSON.parse(localStorage.getItem(layoutKey) || '{}')).find((page: any) => JSON.stringify(page.crystal.blocks).includes('sync-progress-title')) } });

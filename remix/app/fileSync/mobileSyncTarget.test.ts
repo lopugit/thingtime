@@ -218,7 +218,7 @@ for (const platform of ['macos', 'ios'] as const) test(`${platform}: resuming wi
   if (input.action === 'write-check') throw Error('Native approval was removed');
   return parse(input, {});
  };
- await assert.rejects(approveMobileSyncTarget(saved, scope, new AbortController().signal, request, capable, 'existing'), /approval was removed/);
+ await assert.rejects(approveMobileSyncTarget(saved, scope, new AbortController().signal, request, capable, 'existing'), { message: 'Native folder write approval is unavailable.' });
  assert.deepEqual(calls.map(c => c.action), ['list', 'write-check']);
 });
 

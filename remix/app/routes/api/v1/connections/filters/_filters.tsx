@@ -1,3 +1,4 @@
+import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -8,7 +9,7 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // POST — create ({ name, prompt, action, enabled }), update ({ id, … }), or
 // delete ({ id, remove: true }). Filters classify connected feeds server-side
 // ('warn' veils matched posts behind a Show button, 'hide' drops them).
-export const loader = async ({ request }: { request: Request }) => {
+export const loader = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -19,10 +20,10 @@ export const loader = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Listing filters very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
   const result = await listFeedFilters(user.id);
-  return json({ ok: true, filters: result.filters });
-};
+  return json({ ok: true, ownerId: user.id, filters: result.filters }, { headers: { 'Cache-Control': 'private, no-store' } });
+});
 
-export const action = async ({ request }: { request: Request }) => {
+export const action = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -51,4 +52,4 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
   return json({ ok: true, filter: result.filter });
-};
+});

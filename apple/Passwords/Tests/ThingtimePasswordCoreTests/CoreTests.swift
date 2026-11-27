@@ -3,6 +3,13 @@ import CryptoKit
 import Security
 @testable import ThingtimePasswordCore
 final class CoreTests: XCTestCase {
+    func testMissingSessionAndInaccessibleProtectedStoreAreDistinct() throws {
+        XCTAssertNoThrow(try PasswordSessionStore.validateLoadStatus(errSecSuccess))
+        XCTAssertThrowsError(try PasswordSessionStore.validateLoadStatus(errSecItemNotFound)) { XCTAssertEqual($0 as? PasswordProviderError, .invalidSession) }
+        for status in [errSecMissingEntitlement, errSecInteractionNotAllowed, errSecAuthFailed, errSecNotAvailable] {
+            XCTAssertThrowsError(try PasswordSessionStore.validateLoadStatus(status)) { XCTAssertEqual($0 as? PasswordProviderError, .sessionUnavailable) }
+        }
+    }
     func testSessionKeychainRequiresProtectedSharedStorage() throws {
         // Missing or unexpanded signing configuration must never fall back to
         // a private/default Keychain that the provider cannot safely share.

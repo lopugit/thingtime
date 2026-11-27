@@ -1,3 +1,4 @@
+import { canonicalResourceLimitFields } from './configuration';
 import { parseCloudWrite, type CloudWrite } from './cloudWrite';
 import { parseCloudFolder, type CloudFolder } from './cloudFolder';
 import { parseBatchScopeConfiguration, UPLOAD_BATCH_DESCRIPTOR_BYTES, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES } from './uploadBatch';
@@ -150,7 +151,7 @@ export function folderBatchCanonicalBytes(value: unknown): Uint8Array {
 		saved = d.configuration,
 		c = saved.configuration;
 	const fields = [
-		'thingtime-folder-batch-v1',
+		c.resourceLimits ? 'thingtime-folder-batch-v2' : 'thingtime-folder-batch-v1',
 		d.batchId,
 		s.origin,
 		s.ownerId,
@@ -173,6 +174,7 @@ export function folderBatchCanonicalBytes(value: unknown): Uint8Array {
 		String(c.excludedPaths.length),
 		...c.excludedPaths,
 		c.ignoreRules ?? '',
+		...(c.resourceLimits ? canonicalResourceLimitFields(c.resourceLimits) : []),
 		String(d.members.length)
 	];
 	for (const { ordinal, write, parent } of d.members) {

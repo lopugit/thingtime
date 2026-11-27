@@ -9,7 +9,7 @@ import {
 } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
 import {
   getPrConflictResolverModelWaterfall,
-  setPrConflictResolverModelWaterfall
+  setPrConflictResolverModelWaterfall, readPublishedAiWorkflowModelCatalog
 } from '~/api/utils/settings/prConflictResolverModelWaterfall';
 
 // A full-catalog waterfall of composed variant ids is a few tens of KB; keep
@@ -17,12 +17,12 @@ import {
 const MAX_BODY_BYTES = 64 * 1024;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
-const responseBody = (waterfall: PRConflictResolverModelId[]) => ({
+const responseBody = (waterfall: PRConflictResolverModelId[],models=AI_WORKFLOW_BASE_MODELS) => ({
   ok: true,
   key: PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
   waterfall: [...waterfall],
   // Base models only; waterfall entries compose them as `<id>[:effort][:fast]`.
-  models: AI_WORKFLOW_BASE_MODELS.map((model) => ({
+  models: (models.some(model=>model.id==='default')?models:[AI_WORKFLOW_BASE_MODELS[0],...models]).map((model) => ({
     id: model.id,
     label: model.label,
     provider: model.provider,
@@ -32,6 +32,7 @@ const responseBody = (waterfall: PRConflictResolverModelId[]) => ({
 });
 
 type HandlerDependencies = {
+  getCatalog?:typeof readPublishedAiWorkflowModelCatalog;
   requireAdmin: typeof requireAdmin;
   getWaterfall: typeof getPrConflictResolverModelWaterfall;
   setWaterfall: typeof setPrConflictResolverModelWaterfall;
@@ -53,7 +54,7 @@ export const createPrConflictResolverModelWaterfallHandlers = (dependencies: Han
     }
 
     const waterfall = await dependencies.getWaterfall();
-    return json(responseBody(waterfall), { headers: NO_STORE_HEADERS });
+    return json(responseBody(waterfall,await dependencies.getCatalog?.()), { headers: NO_STORE_HEADERS });
   };
 
   // POST /api/v1/settings/pr-conflict-auto-resolver-model-waterfall
@@ -75,20 +76,25 @@ export const createPrConflictResolverModelWaterfallHandlers = (dependencies: Han
     }
 
     const body = await readJsonBody(request, MAX_BODY_BYTES);
-    const validated = validatePrConflictResolverModelWaterfall(body?.waterfall);
+    const validated = validatePrConflictResolverModelWaterfall(body?.waterfall,(await dependencies.getCatalog?.())?.filter(model=>model.enabled&&model.available));
     if (validated.ok === false) {
       return json({ ok: false, error: validated.error }, { status: 400, headers: NO_STORE_HEADERS });
     }
 
-    const waterfall = await dependencies.setWaterfall(validated.waterfall, gate.user.id);
-    return json(responseBody(waterfall), { headers: NO_STORE_HEADERS });
+    try {
+      const waterfall = await dependencies.setWaterfall(validated.waterfall, gate.user.id);
+      return json(responseBody(waterfall,await dependencies.getCatalog?.()), { headers: NO_STORE_HEADERS });
+    } catch(error) {
+      if(error instanceof TypeError)return json({ok:false,error:'Model options changed. Reload and try again.'},{status:409,headers:NO_STORE_HEADERS});
+      throw error;
+    }
   };
 
   return { loader, action };
 };
 
 const handlers = createPrConflictResolverModelWaterfallHandlers({
-  requireAdmin,
+  requireAdmin, getCatalog:readPublishedAiWorkflowModelCatalog,
   getWaterfall: getPrConflictResolverModelWaterfall,
   setWaterfall: setPrConflictResolverModelWaterfall
 });

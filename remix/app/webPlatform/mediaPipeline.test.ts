@@ -90,3 +90,40 @@ test('secure host fences cancellation, replacement and disposal without trusting
 	host.receive({ type: 'tt-platform-media-start', requestId: 4, file });
 	assert.equal(ports.length, 2);
 });
+
+test('image settings and exports are optional for legacy saved video programs, strict when supplied', () => {
+ const legacy = { ...program.media!, output: Object.fromEntries(Object.entries(program.media!.output).filter(([key]) => !key.startsWith('image'))) };
+ assert.equal(resolveMediaSettings(legacy as any, defaults).format, 'mp4');
+ for (const patch of [{ imageQuality: 0 }, { imageQuality: '80' }, { imageQuality: NaN }, { imageQuality: 101 }, { imageFormat: {} }, { imageBackground: 'url(https://example.com)' }])
+  assert.throws(() => validateMediaSettings({ ...defaults, ...patch }));
+ for (const [type, extension] of Object.entries({ 'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif','image/gif':'gif' })) {
+  const blob = new Blob(['encoded'], { type });
+  assert.ok(mediaExport({ blob, name: `output.${extension}` }));
+  assert.throws(() => mediaExport({ blob, name: 'output.html' }));
+ }
+});
+
+test('Start uses current parameters without replacing the selected file surface', async () => {
+ const { createHostMediaPipeline } = await import('./hostMediaPipeline');
+ let current = { ...defaults };
+ const sent: any[] = [];
+ const host = createHostMediaPipeline(program.media!, () => current, () => ({ postMessage: value => sent.push(value), terminate() {}, onmessage: null, onerror: null }), () => {});
+ current = { ...current, videoBitrate: 250000 };
+ host.receive({ type:'tt-platform-media-start', requestId:1, file:new Blob(['video'], {type:'video/mp4'}) });
+ assert.equal(sent[0].settings.videoBitrate, 250000);
+ host.dispose();
+});
+
+test('cancel during image codec loading cannot start or publish a stale job', async () => {
+ const { createHostMediaPipeline } = await import('./hostMediaPipeline');
+ let finish!: (assets: any) => void;
+ const sent: any[] = [], received: any[] = [];
+ const host = createHostMediaPipeline(program.media!, defaults, () => ({ postMessage:value=>sent.push(value), terminate() {}, onmessage:null, onerror:null }), (_,value)=>received.push(value), () => new Promise(resolve=>{finish=resolve;}));
+ host.receive({ type:'tt-platform-media-start', requestId:1, file:new Blob(['image'], {type:'image/png'}) });
+ host.receive({ type:'tt-platform-media-cancel', requestId:2 });
+ finish({magick:new Uint8Array()});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(sent.length,0);
+ assert.equal(received.filter(value=>value.type==='complete').length,0);
+ host.dispose();
+});

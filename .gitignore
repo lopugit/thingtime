@@ -77,7 +77,7 @@ graphify-out/graph.json
 graphify-out/manifest.json
 graphify-out/GRAPH_REPORT.md
 graphify-out/cost.json
-graphify-out/.work/
+graphify-out/.work
 graphify-out/.locks/
 # cache: Graphify's mutable semantic/ names are input keys and can be rewritten
 # with different valid bytes. Only immutable semantic-cas variants are tracked;
@@ -85,8 +85,9 @@ graphify-out/.locks/
 graphify-out/cache/*
 !graphify-out/cache/semantic-cas/
 !graphify-out/cache/semantic-cas/**
-# Root HTML is a compatibility alias; retain portable HTML inside snapshots.
+# HTML is local derived visualization; immutable portable graph data stays tracked.
 graphify-out/graph.html
+graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
 graphify-out/snapshots/**/.staging-*
 graphify-out/snapshots/**/cache/
@@ -120,3 +121,16 @@ macos/ThingtimeWidgets/release-upload/
 
 # Query stamps are local even when a query targets a portable snapshot.
 graphify-out/snapshots/**/cache/last_query_stamp
+
+# Generated browser extension download and task-owned isolated acceptance state.
+remix/public/downloads/thingtime-passwords-extension.zip
+.task-password-qa/
+
+# Python bytecode from native release verification tests.
+iOS/scripts/__pycache__/
+
+# Separate linked Rust/Swift boundary acceptance products
+apple/FileSync/.build-embedded/
+
+# Dependency-derived PDF.js font and decoder assets
+remix/public/pdfjs/

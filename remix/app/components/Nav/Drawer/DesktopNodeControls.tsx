@@ -1,4 +1,5 @@
 import React from 'react';
+import { deviceServicePresentation } from '~/components/Devices/deviceStatusPresentation';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { PermissionRecoveryControls } from '~/components/Devices/PermissionRecoveryControls';
 import { getElectronBridge, type ThingtimeNodeStatus } from '~/utils/electronBridge';
@@ -53,7 +54,7 @@ export function DesktopNodeControls({ active }: { active: boolean }) {
 		<Box borderTop="1px solid" borderColor="blackAlpha.100" pt={4} mt={4} minW={0}>
 			<Text fontSize="sm" fontWeight="600">Thingtime Node</Text>
 			<Text fontSize="sm" color="gray.600" role="status" overflowWrap="anywhere">
-				{status ? `Status: ${status.serviceStatus}${status.version ? ` · Desktop ${status.version}` : ''}` : 'Checking node status…'}
+				{status ? `Status: ${deviceServicePresentation(status.serviceStatus, status.lastSeenAt).label}${status.version ? ` · Desktop ${status.version}` : ''}` : 'Checking node status…'}
 			</Text>
 			<Flex gap={2} mt={3} flexWrap="wrap" aria-label="Thingtime Node controls">
 				<Button size="sm" onClick={() => void control('start')} isDisabled={!!busy || status?.serviceStatus === 'running'}>

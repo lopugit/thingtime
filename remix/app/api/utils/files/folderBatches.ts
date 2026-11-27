@@ -163,7 +163,7 @@ export function createFolderBatchService(
 							const p = d.members[i].parent;
 							return p.kind !== 'member' || confirmed.has(p.ordinal);
 						})
-						.slice(0, 8);
+						.slice(0, Math.min(8, d.configuration.configuration.resourceLimits?.transferConcurrency ?? 8));
 					if (!wave.length) break;
 					try {
 						check();

@@ -109,8 +109,8 @@ without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
 skips an unsupported row and then reports complete coverage. Ready owned
 attachments, saved themes, drafts/templates/tombstones and all seven Timeline families
-have dedicated exporters, along with approved account profile content and private
-preferences. Credentials/security state and other managed families still need
+have dedicated exporters, along with stored notification history and approved account profile content and private
+preferences. Subscription authority is recorded as an explicit source exclusion. Credentials/security state and other managed families still need
 coverage; ordinary real accounts cannot yet rely on this producer for a complete
 account backup. Settings in
 other collections and device-local data also need separate coverage contracts.
@@ -135,6 +135,67 @@ the producer rather than exceed MongoDB's 64-index limit or scan all accounts.
 The modern default plan uses 52 slots; the full legacy-compatible plan uses 64.
 No worker endpoints, scheduling, quota admission, encryption or Timeline backup
 lifecycle receipts are introduced by this internal producer.
+
+### Stored references and historical notifications — 2026-11-06
+
+The owner census now validates ordinary stored composition, explicit render
+Component, schema, Action, media and active theme/algorithm references against
+its own pinned source rows. It does not fetch current revisions or another
+owner's content. Reference discovery never supplies an ACL, grant, destination
+identity or permission to execute an archived Action.
+
+Private SQLite scratch retains records, aliases and deduplicated persisted
+component contexts. Generator frames traverse stored trees without the
+renderer count/depth or 512-instance policies; cancellation and authorization
+checks occur during traversal. RAM includes one materialized source record,
+its parser tree/scopes and bounded metadata pages, rather than the account graph.
+Scratch uses available disk and is removed on normal exits. A transformed
+recursive component context is explicitly unsupported; identical contexts and
+ordinary Action cycles terminate. Runtime-selected outputs, render/media merge
+formats, formatted media and repeated scalar media interpolation remain explicit
+unsupported discovery, never silently certified prefixes. Public/system/foreign
+dependency capture remains a required separate authorized path.
+
+Valid dangling or external pointers do **not** prevent preservation of the
+owner's data. The producer appends `backup-reference-coverage` v1 evidence pages
+with at most 128 issues each and an encoded-byte flush below the manifest item budget. A single oversized diagnostic is represented by UTF-8 byte count and SHA-256, explicitly labelled as diagnostic metadata; the full saved reference stays in its original retained source record. Discovery completeness applies specifically to
+`ordinary-composition-and-account-selections`; resolution, unsupported traversal
+and excluded authority are separate measured fields. `wholeAccountReady` is
+always false. Duplicate owner aliases are unresolved ambiguity: real Action
+execution orders equal-version aliases by `createdAt`, whereas shared composition
+uses `updatedAt` and `shareId`. The backup does not invent a winner. Required
+functional restore must refuse unresolved or unsupported closure even though
+those source records remain recoverable.
+
+Evidence IDs use the archive-only `~.backup-coverage:<snapshot UUID>:<16-digit
+page>` namespace. Canonical generic Thing creation rejects its dot. The portable
+reader binds the UUID and contiguous page sequence to the enclosing header;
+other adapters cannot use the reserved namespace. Evidence is included in the
+sealed manifest and receives no new user-Thing destination on restore review.
+This is an additive archive adapter with an explicit compatibility boundary:
+older readers may reject new snapshots containing the namespace/adapter. Old
+snapshots and their existing adapters remain readable by the updated reader.
+
+`notification-content` v1 retains only approved stored message/actor fields,
+subject links and historical time/read/history-only state. The generic streamed
+payload primitive stores it as `backup-notification-content` v1 without a new
+message-size cap. It never loads a newer actor profile, captures delivery keys,
+provider diagnostics, secret envelopes or live dedupe authority, nor re-emits a
+notification. Live subscription entitlement records are instead represented by
+`backup-source-exclusion` v1 (`live-entitlement-authority`); their private payloads
+are not read or restored. Other managed families still need approved exporters
+or explicit reviewed exclusion contracts and otherwise refuse census admission.
+
+`npm --prefix remix run test:backups:references` uses a disposable replica, real
+signup and canonical API handlers/utils. It completes the actual legacy-index
+migration/cache-drain path, captures five ordinary records and two notifications
+including large detail, updates a component after the server snapshot, compares
+independent API readbacks, deletes ordinary sources and the first vault, and
+recovers from the independent copy. A permitted foreign pointer survives with
+unresolved evidence while its private target remains unreadable. The fixture
+also compares the two real alias entry points. This proves the internal capture
+worker and offline readers; native UI, public backup admission, complete
+credential/settings/device coverage and full-account restore remain open.
 
 ### Canonical Timeline history in the vault
 
@@ -225,17 +286,39 @@ of 128 at the same Mongo timestamp. Each reference must match the exact draft,
 post/comment purpose and a durable binding without profile slots or expiry.
 Linked media retains only its URL; it does not become an independently saved file.
 
-`thingSnapshots.ts` retains small ordinary `thing-content` snapshots inline and
-larger ones as canonical payloads in the existing verified chunk store. It does
-not create a second content schema. The retained record limit is 128 MiB; the
-existing canonical Thing depth/node bounds still apply. Each ordinary payload is
-processed before reading the next row, rather than collecting 128 large records.
-The writer owns a copy of input bytes, writes at most 8 MiB per chunk and checks
-access/readback between chunks. At most 16 ranges describe one retained record.
-These records are bounded, not zero-copy: JSON validation/encoding and offline
-reading can hold multiple record-sized buffers. Size the worker memory and Mongo
-history window for this work. This is separate from streaming arbitrarily large
-file bytes through the existing range transport.
+`thingSnapshots.ts` retains legacy-valid small `thing-content@1` snapshots inline.
+Other ordinary content uses `backup-thing-content@2`, with descriptor
+`{codec:"canonical-json-utf8-v1",sha256}` and the same approved canonical content
+projection. Version 1 bytes, IDs and its bounded reader remain unchanged; unknown
+adapter/codec versions refuse. Version 2 removes the backup-only 100,000-node,
+94-level JSON and 128 MiB serialized-payload ceilings. It does not widen source
+storage or destination-writer contracts or declare complete account coverage.
+
+The general inert JSON encoder walks iteratively, escapes strings in bounded
+fragments and emits at most 64 KiB at a time. Sorted object keys follow the legacy
+JSON integer-property ordering. Accessors, hidden properties, non-JSON values
+and live cycles refuse. Existing local flatted persistence is a different graph
+format: its saved strings/tags remain exact inert content, without guessing Dates
+or evaluating function tags. Native Date/cyclic objects are not valid server
+ordinary-content values and are not silently converted.
+
+Capture measures a pinned Thing's exact canonical size/SHA, then streams it into
+8 MiB immutable chunks and eight-range pages with readback. There is no aggregate
+record buffer or range-count ceiling; the existing safe-integer size/multipart
+protocol remains authoritative. The second pass must match the measured size
+and hash. Interrupted writes never produce an inventory item/plan seal, and
+identical pinned replay safely reuses immutable objects after lost acknowledgement.
+Interrupted account enumeration still requires a new database boundary/ID.
+
+Offline v2 reads reuse the installed `@streamparser/json` parser, check multipart
+and whole-payload hashes, then stream canonical re-encoding before returning one
+materialized Thing. No whole-record bytes/text are collected. The source/result
+Thing, largest scalar and property enumeration/sorting still need their actual
+runtime memory. Strict hidden/extra-property validation reflects a full own-key
+list even for arrays, so temporary reflection memory scales with container width; this is bounded per record, not a guarantee of constant RAM for
+an arbitrarily large individual Thing. Backpressure keeps encoded buffers, range
+pages and whole-backup traversal bounded. MongoDB's BSON limits, available memory,
+disk capacity and snapshot-history window remain concrete runtime constraints.
 
 `openBackupDraft` and `openBackupThingSnapshot` validate canonical payloads from
 a sealed offline vault. Drafts additionally bind owner, ID, mode and revision;
@@ -634,3 +717,314 @@ with 401, and rejects an unscoped retained read with 400. Targeted lint passes;
 the full TypeScript check retains 91 existing diagnostics with none in the
 changed retention/backup/route files. Live provider, installed app, full-account
 coverage and large-scale acceptance remain open.
+
+
+## Account restore admission and durable review plans
+
+`api/utils/backups/accountRestorePlan.ts` is a local/native worker planning
+boundary. It reads a sealed independent vault without contacting the original
+account or source files. It does not call destination writers, expose a mutation
+endpoint, sign in, replace an account, replay historical receipts or restore
+permissions. Actual writer coordination and full-account delivery remain open.
+
+`prepareAccountRestorePlan` requires an explicit UUID v4 plan ID, source snapshot,
+source authorization and destination owner/origin/root/revision/capability values.
+The same ID resumes immutable accepted pages; a new ID allocates distinct content
+identities. Those identities are allocation intentions, never permission to write
+or overwrite anything. Changing source seal, destination or contracts requires a
+new plan and review. Destination capability values are bound into review; they
+must be negotiated and authorization rechecked by a future writer coordinator.
+
+The planner validates each retained byte stream once and decodes the existing
+canonical ordinary, file, attachment, theme, draft, account and Timeline formats.
+Account files require metadata-only descriptors and exact owned attachment
+fingerprint/size/version closure. The shared stored-composition discoverer and
+remapper identify executable references and aliases. Executable cycles are valid;
+folder containment cycles, missing/foreign references, ambiguous aliases and
+unsupported adapters/versions become explicit review issues. Malformed known
+payloads, corrupt bytes and contradictory file closure refuse plan sealing.
+Context-dependent composition, template media, draft and historical relationship
+closure remain explicitly incomplete rather than being silently assumed complete.
+
+A private SQLite index supplies bounded pagination and is discarded on close.
+Account planning uses available-disk mode with a 2 MiB SQLite cache, disabled
+memory mapping and disk temporary storage; it imposes no application total-graph
+size ceiling. A caller can explicitly request a disk resource budget. Actual
+filesystem capacity and SQLite format limits still apply. Existing selected-tree
+and cloud-capture consumers retain their current workspace policies.
+It is not durable task state or a server/Vercel database. Immutable
+`restore-plans/<planId>/header.json`, `pages/<ordinal>.json` and `sealed.json`
+objects use the existing provider key grammar and compare-on-replay storage.
+The plan seal binds the exact source descriptor, destination, contracts, ordered
+review records, discovered family counts and issues. It means **plan sealed**,
+not restoration complete. No source snapshot or backup format is changed.
+
+`openAccountRestorePlan` checks the exact review hash, source seal hash and
+normalized destination. Before exposing its bounded record iterator, it verifies
+all pages and pins their hashes in fresh private scratch storage; each page is
+checked against its pin before yielding records. Callers must close the returned
+plan in `finally`, including for never-consumed handles. Iterator completion,
+early break and errors also close scratch automatically; explicit close is
+idempotent. Scratch loss requires
+reopening and revalidating the immutable pages, never trusting scratch receipts.
+
+The versioned `AccountRestoreCoverage` contract separates `planIntegrity`,
+`sourceCoverage`, `writerReadiness` and `wholeAccountReady`. Existing portable v1
+headers describe coverage in prose, so their source coverage remains `unknown`.
+Missing managed/security/settings/device families cannot be inferred absent from
+an inventory that lacks them. No canonical writer coordinator is shipped here;
+writer readiness is `unavailable` and whole-account readiness is always false.
+Reference discovery is explicitly `partial`, including schema-specific and
+managed relationships beyond the current discoverers. All plans include
+machine-readable unverified-coverage, incomplete-reference-discovery and
+writers-unavailable issues. There is deliberately no positive whole-account-ready fixture.
+
+`test:backups` exercises an actual independent sealed mixed graph after removing
+live source records and the first vault, large retained ordinary content,
+executable and structural cycles, foreign dependencies, unsupported versions,
+accepted-page interruption/reopen, destination/review changes, corrupt retained
+bytes and page mutation between validation and iteration. Separate file fixtures
+cover exact independent attachment bytes and contradictory closure refusal.
+These are worker/storage tests, not installed restore UI, full account restore,
+live S3 durability, complete history import or measured 100 GB–100 TB acceptance.
+
+
+When a source contains ordinary-record v1 entries, coverage records their legacy
+serializer envelope as `sourceFormatLimitations`: 100,000 JSON nodes and 128 MiB
+of retained JSON payload. Sources containing only v2 ordinary records do not
+advertise those v1 limitations. These are legacy processing budgets, not a
+product data-size contract. The streaming codec retains v1 reader compatibility
+and removes these backup-only limits for new v2 entries. Managed-family coverage,
+reference discovery and destination writers remain independently gated;
+`wholeAccountReady` stays false. Tests cover a scalar beyond 128 MiB, more than
+100,000 nodes, deep content, fixed legacy bytes, independent source loss and
+immutable retry. A fresh-worker regression separately measures reflection/heap/RSS for 500,000
+array elements under a 128 MiB JS heap; bounded chunk writes alone are not total
+RAM evidence. These are not 100 GB/100 TB physical-transfer measurements.
+
+
+Interrupted preparation revalidates the sealed source inventory and bytes before
+resealing the same review. Accepted review pages are reused immutably, but this
+phase does not checkpoint a long full-byte validation pass; durable verification
+checkpoints remain a separate large-volume acceptance requirement.
+
+
+## Selected ordinary graph execution primitives — 2026-11-06
+
+`api/utils/backups/ordinaryRestoreTransaction.ts` provides internal atomic and
+resumable creation primitives for an **explicitly selected, closed ordinary
+content graph** within the explicit `ordinary-composition-v1` reference domain.
+Its separate `thingtime-selected-ordinary-restore-v1` review is
+not a whole-account restore plan. Existing account plans remain non-executable,
+writer readiness remains unavailable for whole-account restoration, and
+`wholeAccountReady` remains false. No public restore endpoint, MCP or installed
+restore workflow is added.
+
+Reviews bind the new operation identity, independent source seal, exact selected
+command hashes/count, destination owner/origin/root/revision and compatible
+semantic contracts. The runtime rechecks its canonical capability registry and
+current authenticated principal. The initial lane supports the principal's own
+full browser/service session on the home data plane; Character delegation,
+scoped credentials and other planes require their own compatible contract.
+Fresh session writes inside each content transaction fence revocation, using
+actual write conflicts rather than snapshot-only reads, consistent with
+[MongoDB transaction guidance](https://www.mongodb.com/docs/manual/core/transactions-production-consideration/). Secrets
+never enter reviews, receipts or checkpoints.
+
+Available-disk scratch indexing verifies every fresh allocation, record pin,
+explicit parent and folder-before-child order before destination content writes.
+Top-level records must name the selected destination; nested parents must be
+reviewed allocated folders. Null/missing parents and other owned folders refuse.
+The reusable strict stored-reference index checks all persisted contexts,
+including optional pointers. Functional commands require exact remapped IDs, so
+an existing destination alias can never shadow the reviewed program. Direct
+Data `parentId` relationships must also point inside the selected graph. It
+refuses unresolved/ambiguous/dynamic references
+or unsupported traversal. This first writer lane supplies no attachment
+identities, so media dependencies and managed families refuse before content
+mutation. Browser HTTP-request bodies/query values and schema-specific/custom
+relationships have no complete remapping contract in this lane; HTTP-request
+programs explicitly refuse, while pure browser compute/return is supported. Executable cycles use preallocated independent IDs; schemas precede
+their data and components precede pages that capture them.
+
+The resumable primitive first accepts a protected, accounted Timeline admission
+containing the small immutable review, recoverable through the owner Timeline
+API. It then accepts the entire immutable command-intent chain
+as accounted protected Timeline effects. A server-only scalar checkpoint on the
+selected folder tracks phase, chain, planned/applied counts and a content epoch.
+It contains no growing list or archived authority. Each canonical Thing write,
+new immutable revision, effect receipt and counter increment commits together.
+Restart revalidates the review/source records, reads accepted intents/effects,
+and never repeats an accepted write or replaces later owner edits. Every retry
+still checks current account/session and destination ownership; pending work and
+completion require the original root revision. No receipt uses server-local
+SQLite. An exact completed replay returns its recorded outcome before reading
+source records or opening scratch; it still requires current owner authorization
+and never rewrites later destination edits. The atomic alternative rolls back the complete selected graph when its
+single Mongo transaction cannot commit; large graphs use the per-record path.
+
+Newly created content carries a protected execution hold, excluded from ordinary
+snapshots and generic write input. Server/browser Action admission checks the
+new operation's exact completion effect through direct IDs, keys, shared roots
+and child invocation. Renderers also suppress source loading, local/pseudo
+controls, native/upload mounts and stale async callbacks while held. Content and
+ordinary editing remain available. Completion streams current owned content
+through containment/closure validation, preserving valid user edits. Canonical
+ordinary mutation recording advances the old/new held root epochs on edits,
+moves, deletion or ownership changes; the final bounded transaction requires an
+unchanged epoch, complete effect set, current authorization and destination CAS.
+Historical imported receipts can never satisfy a new operation's hold.
+
+`api.things` 1.52.0 projects derived `executionHeld` and owner-only
+`creationProgress:{phase,planned,applied,count}`. Component browse 1.1.0 and
+Webpage resolve 1.13.0 preserve the hold; Actions run 1.43.0 enforces admission.
+The checkpoint's phase is durable progress, not a process-liveness assertion.
+Activating restore on a shared database requires compatible execution admission
+and hold-aware clients on every active host; one origin manifest does not prove
+that fleet rollout.
+Folder status badges, job supervision and the restore product workflow are not
+implemented by this phase. Source/managed/account/settings/security/device
+coverage, file bytes/adapters, general credential modes, installed acceptance,
+provider durability and measured 100 GB–100 TB restoration remain required.
+
+Run `test:backups:ordinary-restore` for an isolated real-replica proof using real
+signup/Action Request handlers and canonical Things writers. It captures eight
+synthetic records, copies the sealed vault, removes source content and the first
+vault, revokes the original session, and continues through the pinned private
+local-vault access boundary without source-account access. It checks independent readback, hierarchy/schema provenance, Action
+cycles, intent interruption, actual child-process death after a committed effect,
+resume, later edits, completion races, held browser/server/shared admission and
+unsupported-scope refusal. This is not Nitro HTTP or production/provider proof. An existing same-key
+destination Action, unsupported HTTP-payload references and outside local
+relationships must refuse before any restored content write.
+`test:content-execution:browser` separately checks synthetic API projections at
+desktop/mobile sizes, hold/release, nested native/local controls and delayed
+callbacks. Browser fixture evidence is distinct from the real-replica proof.
+The full generic Thing route's selected-origin refresh/cache behavior remains
+an installed/real-app acceptance gate; the focused synthetic browser fixture
+does not establish that complete route journey.
+
+### Reviewed account-file publication — 6 November 2026
+
+`accountFileRestore.ts` is a trusted worker primitive for a selected, complete
+file-history graph. It reuses folders already created by ordinary graph restore;
+it does not introduce a second folder writer, public restore endpoint or MCP.
+The reviewed map binds each source folder to its exact current destination
+revision and protected original creation/completion provenance. Names, parent
+relationships and original folder content remain in the ordinary restored
+Things. Missing historical parent folders require recovery before this phase;
+an incomplete map or history graph refuses rather than inventing a path.
+
+One immutable command hash binds the source seal, fresh file identities,
+destination account/origin/root/revision, capabilities and full selected history.
+The private `openIndexedSealedBackup` SQLite index verifies metadata once, pins
+exact descriptors/ranges, and reauthorizes lookups and chunk reads. Normalized
+Timeline events are reconstructed from verified archived links; missing parents,
+foreign-file parents, unsupported snapshots and omitted archived versions or
+branch heads refuse. File snapshots retain names, placement, inert symlink
+metadata and exact content identity. Compact managed placement records retain
+their canonical adapter and remapped folder IDs. Source receipts remain data.
+
+`accountFileRestoreBytes.ts` exhausts full source fingerprint verification into a
+private temporary file before reserving an upload. The worker pins the complete
+runtime scope once and checks every stage against the reviewed destination
+before source reads. It uses normal upload approval, quota, deterministic
+requests, signed multipart transport, network-stall deadlines and stored-byte
+verification. Staging uses private, expiring `file-import` drafts without fabricated
+native-sync provenance. Only the trusted canonical transaction can consume a
+ready, unexpired owned draft; public commit bodies cannot opt into consumption.
+The binding and checkpoint commit together, and an interrupted stage stays hidden
+from the ordinary library. Streaming parts keep RAM bounded; cancellation/close removes
+normal staging. A process crash can leave private temporary files for local
+cleanup, as with the existing scratch workspace; scratch never grants authority.
+
+Each canonical file write, new audit receipt and scalar checkpoint commits with
+a current Request/session fence and exact destination checks. Reviewed mapped
+folders and fresh files carry execution holds; accounted hold assignment refuses
+active foreign operations. Current canonical file and managed-placement writes
+advance the same root epoch. Bounded final hierarchy/content checks precede one
+epoch/CAS completion. User edits, moves and revocation prevent stale completion.
+Completed replay reauthorizes the current owner/root and needs no source vault;
+it never overwrites later edits.
+
+Historical events receive fresh same-file parent and attachment references and
+fresh archive branch IDs with preserved branch names. The newly restored live
+file keeps its own Published head. Source Trash state is an explicit reviewed finalization: after byte/history work, a conditional canonical Trash commit retains that state. Completed replay never re-trashes a file the owner later untrashed or edited. Normal retention/upload audit effects and
+imported source events are distinct records: restoration creates new audit
+history, not additional original revisions. Product History grouping/filtering
+for these audit effects is not implemented in this phase.
+
+The existing reachable writer contracts deliberately advance to `api.files`
+1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 for active restore
+epoch fencing. Public retained-version inputs and ordinary upload permissions
+are unchanged. Restore admission negotiates those versions on the exact origin;
+all writers sharing its database must deploy the fence-aware implementation.
+
+Only moderation policy status enters attachment inventory projection. Provider
+moderation diagnostics and timestamps are intentionally excluded before JSON
+bounding; portable attachment metadata and byte identities remain unchanged.
+Current account-file snapshots also retain inert symlink metadata. Empty byte wrappers use the existing null-fingerprint manifest representation while retaining the exact empty attachment content identity.
+
+Run `pnpm --dir remix run test:backups:file-restore` for canonical synthetic
+signup/upload/file/Timeline handlers, a private replica and the durable local
+object adapter. This phase does not establish public restore/jobs/UI, complete
+managed/account/security adapters, live S3/provider durability, installed/native
+acceptance or measured 100 GB–100 TB operation. `wholeAccountReady` stays false.
+
+
+### Bounded authenticated Workflow continuation
+
+The server coordinator uses private `backup-job`/`backup-job-event` control Things,
+home-plane storage accounting and the original full account session reference.
+It does not persist a JWT. The ID-only Workflow obtains its run identity inside
+the supported Vercel runtime; pause/cancel invalidate the lease, and retry/resume
+fence out an older sleeping run. Cursor and hash references advance in one
+session/lease-fenced transaction. An uncertain accepted reply is recovered from
+its original operation and immutable receipt, never from a newly allocated job.
+Generic Things, inherited reads, export and bulk operations cannot expose or
+mutate those control roots. This is a server authority boundary, not a UI rule.
+
+The source producer selects BSON `atClusterTime` before any payload pages, then
+uses that exact timestamp across bounded census/dependency reads. Its immutable
+reference index and contexts continue entirely from retained approved sidecars
+once census finishes. A transient snapshot error retries the same timestamp;
+expired history fails closed and requires a new operation. Processing batch sizes
+are not account limits. The snapshot history window still bounds source census
+feasibility; small synthetic cadence evidence does not prove large-account
+capture can finish within a deployed provider's history window.
+
+`backupEngine.server.ts` composes that producer, exact-version attachment range
+capture, canonical multipart fingerprint verification and canonical v1 manifest
+hashing. Worker instances retain fixed scalar cursors, not an in-memory complete
+catalogue or a durable SQLite connection. Current object reads and exact seal
+readback anchor completion. Bounded internal API transport reuses normal retained
+content/upload/Files handlers and releases trusted Request bindings on deadline
+or cancellation. Cancellation does not undo effects already accepted; retries
+retain operation identities and receipts.
+
+SHA-256 save/load is pinned to `hash-wasm` 4.12.0 and its SHA-256 implementation.
+Saved state can contain plaintext tails. AES-256-GCM state therefore stays only in
+private independent backup objects under the same encryption/access/retention
+boundary as backed-up content. The protected coordinator retains opaque hashes,
+offsets and fixed references. Each hash stream has its own operation UUID; a job
+UUID is never reused across all streams. Per-job keys derive transiently through
+the canonical user vault key, with exact origin/account/job/destination binding;
+unknown rotation fails closed. No key or hasher tail is an ordinary Thing field.
+
+The public workspace composes the selected-graph review/restore engine and
+editable UI over these mechanisms. Real isolated HTTP/replica/Chrome acceptance
+covers creation, review, current/historical bytes, ordinary content and Builder
+save/reload; it uses an independent private local store and a fixture-owned
+bounded runner. Deployed Vercel Workflow/cron scheduling and actual independent
+provider recovery remain separate required gates. Destination discovery retains
+`executionAvailable:false`: configured storage is not a provider durability
+claim. Retained file history and ordinary current graph support do not imply
+whole-account/provider completeness; original ordinary Timeline history remains
+archived rather than imported.
+
+A worker-only catalog stage prepares full source paths from retained exact-T
+parent/name descriptors, with 32-edge continuation and immutable path caching.
+Browsing reads prepared pages and origin/account/seal-bound continuations, never
+live source folders. Very large names or paths have explicitly labelled bounded
+display previews; their full original metadata stays chunked and lossless for
+review/restore. The display preview is not a source-name or data-size limit.

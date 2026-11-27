@@ -1,3 +1,5 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { json, readJsonBody } from '~/api/http';
 
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -11,7 +13,7 @@ import { sendWeeklySummaryEmails } from '~/api/utils/notifications/weeklySummary
 // a retried cron or an admin run after the cron never double-sends.
 
 const hasCronSecret = (request: Request) => {
-  const secret = process.env.CRON_SECRET?.trim();
+  const secret = scheduledJobSecret()?.trim();
   if (!secret) return false;
   const header = request.headers.get('authorization') || '';
   return header === `Bearer ${secret}`;
@@ -29,7 +31,7 @@ export const loader = async ({ request }: { request: Request }) => {
   if (!auth.ok) return json({ ok: false, error: auth.error }, { status: auth.status });
   const url = new URL(request.url);
   const dryRun = url.searchParams.get('dryRun') === '1' || url.searchParams.get('dryRun') === 'true';
-  return json(await sendWeeklySummaryEmails({ dryRun }));
+  const result=await sendWeeklySummaryEmails({dryRun});recordScheduledPassResult('/api/v1/notifications/email/weekly-summary',result);return json(result);
 };
 
 export const action = async ({ request }: { request: Request }) => {

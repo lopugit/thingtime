@@ -28,7 +28,7 @@ The five-stop rainbow used everywhere (gradients, voxel logo, depth guides):
   (v2 uses `moving-rainbow 5s` with `background-size: calc(100px + 200%)` — same effect).
 - Border gradient (toasts, campaign card, commander):
   `linear-gradient(120deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)`.
-- Extended accent dots (v2 demo/confetti): `#59ff9c #59bdff #00b7ef #ed1c24 #ffa3b1 #6f3198 #a8e61d #ffc20e #ff7e00 hotpink`.
+- Extended accent dots (v2 demo/confetti): `#59ff9c #59bdff #00b7ef #ed1c24 #ffa9dd #6f3198 #a8e61d #ffc20e #ff7e00 hotpink`.
 
 ## Voxel logo
 

@@ -18,6 +18,7 @@ export function useAccountDraft({
 	resumeRemote?: boolean;
 }) {
 	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
+	const [resumeComplete, setResumeComplete] = React.useState(false);
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
 	const [deviceError, setDeviceError] = React.useState('');
@@ -77,6 +78,7 @@ export function useAccountDraft({
 	);
 	React.useEffect(() => {
 		scope.active = true;
+		setResumeComplete(false);
 		let cancelled = false;
 		const retryRetired = async () => {
 			const prefix = `${key}:retired:`;
@@ -118,6 +120,7 @@ export function useAccountDraft({
 			restore.current({ ...local.content, id: local.id, revision: local.revision, mode: 'draft', createdAt: '', updatedAt: '' });
 			if (local.dirty !== false || local.pending || local.pendingCopy) void session.retry().catch(() => {});
 			else setStatus('saved');
+			setResumeComplete(true);
 		} else if (actor && resumeRemote && localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) !== 'false') {
 			void listAccountDrafts(actor, { context, surface })
 				.then(async (result) => {
@@ -128,8 +131,8 @@ export function useAccountDraft({
 				})
 				.catch((failure) => {
 					if (!cancelled) setError(failure.message || 'Could not check account drafts');
-				});
-		}
+				}).finally(() => { if (!cancelled) setResumeComplete(true); });
+		} else setResumeComplete(true);
 		const flush = () => {
 			void session.flush().catch(() => {});
 		};
@@ -200,6 +203,7 @@ export function useAccountDraft({
 		});
 	}, [actor, key, session, scope]);
 	return {
+		resumeComplete,
 		retire,
 		forget: async (id: string) => {
 			if (session.current()?.id === id) {

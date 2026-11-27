@@ -50,7 +50,7 @@ test('merged recording and subspace families retain their independent preference
 
 test('action-run is the system family: all delivery channels opt-in', () => {
   assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
-  assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message']);
+  assert.deepEqual(notificationTypesInCategory('system'), ['device-alert', 'action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message']);
   assert.equal(normalizeNotificationPrefs(null).push['lopu-message'], true);
   assert.equal(normalizeNotificationPrefs(null).email['lopu-message'], false);
   assert.equal(normalizeNotificationPrefs(null).push['recording-reminder'], true);
@@ -62,4 +62,14 @@ test('action-run is the system family: all delivery channels opt-in', () => {
   assert.equal(normalizeNotificationPrefs({ push: { 'action-run': true } }).push['action-run'], true);
   assert.equal(prefs.email['action-run'], false);
   assert.equal(normalizeNotificationPrefs({ email: { 'action-run': true } }).email['action-run'], true);
+});
+
+
+test('private message types enable bell delivery with email opt-in and preserve explicit choices', () => {
+  for (const type of ['chat-message', 'chat-request'] as const) {
+    assert.equal(normalizeNotificationPrefs(null).push[type], true);
+    assert.equal(normalizeNotificationPrefs(null).email[type], false);
+    const saved = normalizeNotificationPrefs({ [type]: false, email: { [type]: true } });
+    assert.equal(saved.push[type], false); assert.equal(saved.email[type], true);
+  }
 });

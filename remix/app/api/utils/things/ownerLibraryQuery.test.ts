@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isDeepStrictEqual } from 'node:util';
 import { PROTECTED_THINGTIME, isProtectedThingtime } from '../../../schemas/registry';
-import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 
 // Evaluate the small Mongo query vocabulary against fixtures, so these tests
 // assert which rows are returned rather than duplicating the query structure.
@@ -25,6 +25,30 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
 });
 
 const recording = { ownerId: 'alice', thingtime: ['attachment'], attachmentPurpose: 'recording', attachmentState: 'ready' };
+
+test('required-kind pruning preserves library membership, including mixed protected kinds and managed exceptions', () => {
+  const excluded = [...PROTECTED_THINGTIME, 'chat', 'chat-message', 'custom-emoji'];
+  const kinds = ['data', 'builder-thing', 'user', 'theme', 'file', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment'];
+  const stamps = [...kinds.map(kind => [kind]), ...kinds.flatMap(kind => kinds.filter(other => other !== kind).map(other => [kind, other]))];
+  const fixtures = stamps.flatMap(thingtime => ['alice', 'bob'].flatMap(ownerId => [
+    { ownerId, thingtime, shareId: 'archive', archiveRootId: 'archive', archiveVersion: 1, crystal: { trashed: false },
+      attachmentPurpose: 'file', attachmentState: 'ready', targetId: null },
+    { ownerId, thingtime, crystal: { trashed: true }, attachmentPurpose: 'post', attachmentState: 'pending', targetId: 'parent' },
+    { ownerId, thingtime, attachmentPurpose: 'recording', attachmentState: 'ready' }
+  ]));
+  for (const includeArchives of [false, true]) for (const required of [[], ['data'], ['data', 'builder-thing'], ['data', 'theme'], ...kinds.map(kind => [kind])]) {
+    const original = ownerLibraryMatch('alice', excluded, includeArchives);
+    const pruned = ownerLibraryMatch('alice', excluded, includeArchives, required);
+    const filter = required.length ? { thingtime: { $in: required } } : {};
+    assert.deepEqual(fixtures.filter(doc => matches(doc, { $and: [pruned, filter] })),
+      fixtures.filter(doc => matches(doc, { $and: [original, filter] })), JSON.stringify({ required, includeArchives }));
+  }
+  const data = ownerLibraryMatch('alice', excluded, false, ['data']);
+  assert.equal('$or' in data, false, 'data does not explore incompatible managed-kind alternatives');
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'user'] }, data), false);
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'theme'] }, data), false);
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'builder-thing'] }, data), true);
+});
 
 test('archive listing is opt-in, root-only and namespace/version/deletion fenced before pagination', () => {
   const archive = { shareId: 'root', ownerId: 'alice', thingtime: ['chat-archive'], archiveVersion: 1, archiveRootId: 'root' };
@@ -97,4 +121,52 @@ test('stable files appear once in the owner library; Trash and retained attachme
  assert.equal(matches({ ...file, crystal: { trashed: true } }, query), false);
  assert.equal(matches({ ...file, ownerId: 'bob' }, query), false);
  assert.equal(matches({ ...recording, attachmentPurpose: 'file', targetId: 'stable-file' }, query), false);
+});
+
+
+test('root excludes children, sync settings and storage blobs while recovery/search preserve durable files', () => {
+  const library = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+  const root = { $and: [library, ownerLibraryRootMatch()] };
+  const data = { ownerId: 'alice', thingtime: ['data'], crystal: {} };
+  for (const row of [data]) assert.equal(matches(row, root), true);
+  for (const row of [recording, { ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', contentType: 'application/octet-stream', mediaKind: 'file', size: 494 }, folderId: null }, { ...data, parentId: 'parent' }, { ...data, crystal: { parentId: 'parent', body: 'Progress report' } }, { ...data, targetId: 'parent' },
+    { ...data, folderId: 'nested' }, { ...data, thingtime: ['file-sync'] },
+    { ...recording, attachmentPurpose: 'file', attachmentExpiresAt: new Date() }]) assert.equal(matches(row, root), false);
+  const file = { ownerId: 'alice', thingtime: ['file'], folderId: 'nested', crystal: { trashed: false } };
+  assert.equal(matches(file, root), false);
+  assert.equal(matches(file, { $and: [library, { folderId: 'nested' }] }), true);
+  assert.equal(matches(file, library), true);
+  assert.equal(matches({ ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', size: 494 } }, library), true);
+  assert.equal(matches({ ...data, parentId: 'parent' }, library), true);
+});
+
+test('archive eligibility and database predicates agree for user content and protected plumbing', async () => {
+  const { eligibleLibraryArchive, libraryArchiveMatch } = await import('./libraryArchiveEligibility');
+  const kinds = ['data', 'post', 'comment', 'folder', 'webpage', 'component', 'schema', 'action', 'chat', 'chat-message',
+    'community', 'subspace', 'mail-message', 'notification', 'user', 'app', 'passkey', 'password-manager-entry',
+    'chat-member', 'community-member', 'subspace-member', 'agent-reporting-binding', 'action-run', 'timeline-event',
+    'theme', 'file', 'attachment'];
+  for (const kind of kinds) for (const patch of [{}, { appId: 'app' }, { sandboxSpace: 'test' }, { sandbox: true },
+    { creationCheckpoint: { phase: 'restoring' } }, { moderation: { status: 'blocked' } }]) {
+    const doc = { shareId: 'row', ownerId: 'owner', thingtime: [kind], crystal: { trashed: false }, attachmentState: 'ready', ...patch };
+    assert.equal(matches(doc, libraryArchiveMatch('owner')), eligibleLibraryArchive(doc), JSON.stringify({ kind, patch }));
+    assert.equal(matches(doc, libraryArchiveMatch('other')), false);
+  }
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['data', 'user'] }), false);
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['attachment'], attachmentState: 'uploading' }), false);
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['file'], crystal: { trashed: true } }), false);
+});
+
+test('protected archived cards allowlist only static presentation and identifiers', async () => {
+  const { minimalLibraryArchivePresentation } = await import('./libraryArchiveEligibility');
+  const input = { id: 'message-id', thingtime: ['chat-message'], author: null, createdAt: 'date', updatedAt: 'date',
+    crystal: { text: 'PRIVATE MESSAGE', name: 'PRIVATE CHAT', participantIds: ['private-person'] },
+    extended: { token: 'SECRET' }, acl: ['tt:hidden'], linkKey: 'SECRET', attachmentIds: ['private-file'], targetId: 'private-chat', geo: { lat: 12 }, tokenAcl: ['SECRET'] };
+  const card = minimalLibraryArchivePresentation(input);
+  assert.deepEqual(card.crystal, { name: 'Archived message' });
+  assert.equal(JSON.stringify(card).includes('PRIVATE'), false);
+  assert.equal(JSON.stringify(card).includes('SECRET'), false);
+  assert.equal(JSON.stringify(card).includes('private-chat'), false);
+  assert.equal(card.targetId, null); assert.equal(card.extended, null);
+  assert.deepEqual(Object.keys(card).sort(), ['acl','author','createdAt','crystal','extended','folderId','geo','id','libraryArchiveEligible','libraryArchivePresentation','libraryArchived','tags','targetId','thingtime','updatedAt','visibility'].sort());
 });

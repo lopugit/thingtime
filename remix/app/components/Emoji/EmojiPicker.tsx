@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Flex, Input, Spinner, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react';
 
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { GROUP_TAB_EMOJI, loadEmojiData, searchEmojis, type EmojiData } from './emojiData';
@@ -16,6 +16,8 @@ type EmojiPickerProps = {
   recent: string[];
   activeTokens?: string[];
   autoFocus?: boolean;
+  query?: string;
+  onQueryChange?: (value: string) => void;
 };
 
 const cellSx = {
@@ -23,11 +25,14 @@ const cellSx = {
   alignItems: 'center',
   justifyContent: 'center',
   minWidth: '34px',
-  height: '34px',
+  minHeight: '44px',
+  maxWidth: '100%',
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
   padding: '0 6px',
   borderRadius: 'var(--tt-radius-sm, 9px)',
   fontSize: '20px',
-  lineHeight: '1',
+  lineHeight: '1.4',
   cursor: 'pointer',
   transition: 'background 120ms ease',
   fontFamily:
@@ -68,7 +73,9 @@ const SectionLabel = (props: { children: React.ReactNode }) => (
 export const EmojiPicker = (props: EmojiPickerProps) => {
   const { onPick, recent, activeTokens, autoFocus } = props;
 
-  const [query, setQuery] = React.useState('');
+  const [localQuery, setLocalQuery] = React.useState('');
+  const query = props.query ?? localQuery;
+  const setQuery = props.onQueryChange ?? setLocalQuery;
   const [data, setData] = React.useState<EmojiData | null>(null);
   const [dataError, setDataError] = React.useState(false);
   const [activeGroup, setActiveGroup] = React.useState<string | null>(null);
@@ -127,16 +134,19 @@ export const EmojiPicker = (props: EmojiPickerProps) => {
   const remainingRecent = recent.length - visibleRecent.length;
 
   return (
-    <Flex flexDirection="column" width="316px" maxWidth="100%" rowGap={1}>
+    <Flex flexDirection="column" width="340px" maxWidth="min(100%, calc(100vw - 24px))" maxHeight="min(520px, 70dvh)" minHeight={0} rowGap={1}>
       {/* type / paste / search */}
-      <Flex columnGap={2} alignItems="center" padding={1}>
+      <Flex columnGap={2} alignItems="center" padding={1} flexShrink={0}>
         <Input
           size="sm"
+          minWidth={0}
+          minHeight="44px"
+          aria-label="Search or type emoji"
           autoFocus={autoFocus}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
               event.preventDefault();
               commitTyped();
             }
@@ -149,10 +159,10 @@ export const EmojiPicker = (props: EmojiPickerProps) => {
           }}
         />
         {typedToken && (
-          <Box
-            as="button"
+          <Button
             type="button"
             flexShrink={0}
+            minHeight="44px"
             paddingX={3}
             paddingY={1}
             borderRadius="var(--tt-radius-sm, 9px)"
@@ -163,16 +173,17 @@ export const EmojiPicker = (props: EmojiPickerProps) => {
             _hover={{ opacity: 0.9 }}
             cursor="pointer"
             onClick={commitTyped}
+            aria-label="Add emoji reaction"
             title={`Add ${typedToken} as one reaction`}
           >
             Add
-          </Box>
+          </Button>
         )}
       </Flex>
 
       {/* a typed multi-emoji group previews as a single reaction token */}
       {typedToken && (
-        <Box paddingX={1}>
+        <Box paddingX={1} maxHeight="120px" overflowY="auto" flexShrink={0}>
           <Box
             as="button"
             type="button"
@@ -184,8 +195,9 @@ export const EmojiPicker = (props: EmojiPickerProps) => {
             _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
             cursor="pointer"
             onClick={commitTyped}
+            aria-label="Add emoji combination"
           >
-            <Text fontSize="lg" lineHeight="1.4">
+            <Text fontSize="lg" lineHeight="1.4" overflowWrap="anywhere">
               {typedToken}
             </Text>
             <Text fontSize="xs" opacity={0.55}>
@@ -195,7 +207,7 @@ export const EmojiPicker = (props: EmojiPickerProps) => {
         </Box>
       )}
 
-      <Box maxHeight="260px" overflowY="auto" paddingX={1} paddingBottom={1}>
+      <Box maxHeight="260px" minHeight={0} overflowY="auto" paddingX={1} paddingBottom={1}>
         {searching ? (
           searchResults.length ? (
             <>

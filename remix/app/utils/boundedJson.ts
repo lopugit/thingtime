@@ -4,7 +4,7 @@ export type JsonBudget = { maxBytes: number; maxDepth: number; maxNodes: number;
 /** Copy inert JSON without invoking getters/toJSON or losing non-JSON values.
  * Object.fromEntries defines own properties, including a literal __proto__ key.
  * Budgets apply before serialization as well as to the final UTF-8 bytes. */
-export function copyBoundedJson(value: unknown, budget: JsonBudget, label = 'JSON'): JsonValue {
+export function copyBoundedJson(value: unknown, budget: JsonBudget, label = 'JSON', options?: { omitUndefinedObjectProperties?: boolean }): JsonValue {
 	let nodes = 0;
 	let characters = 0;
 	const ancestors = new WeakSet<object>();
@@ -32,6 +32,9 @@ export function copyBoundedJson(value: unknown, budget: JsonBudget, label = 'JSO
 			if (entry.length !== entries.length || entries.some(([key], index) => key !== String(index))) throw new Error(`${label} arrays must be dense`);
 			copy = entries.map(([, descriptor]) => visit(descriptor.value, depth + 1));
 		} else {
+			// Local editors use undefined to clear optional properties. Opt in only
+			// at that producer boundary; wire/storage validation remains strict.
+			if (options?.omitUndefinedObjectProperties) entries = entries.filter(([, descriptor]) => descriptor.value !== undefined);
 			if (budget.sortKeys) entries = entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
 			copy = Object.fromEntries(entries.map(([key, descriptor]) => { countText(key); return [key, visit(descriptor.value, depth + 1)]; }));
 		}

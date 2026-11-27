@@ -24,7 +24,7 @@ export const fail = (status: number, error: string): Fail => ({ ok: false, statu
 // client mirror, and oauthErrorCopy.test.ts pins the two sets equal so adding
 // one here without copy there fails the suite rather than silently degrading
 // to the generic line.
-export const OAUTH_ERROR_CODES = ['declined', 'state', 'session', 'provider', 'exchange', 'rateLimited', 'failed'] as const;
+export const OAUTH_ERROR_CODES = ['declined', 'state', 'session', 'provider', 'exchange', 'permissions', 'rateLimited', 'failed'] as const;
 export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
 
 export const sha48 = (parts: string[]): string => {
@@ -44,7 +44,9 @@ const pkceSecret = () =>
   process.env.CONNECTIONS_PKCE_SECRET?.trim() ||
   process.env.JWT_SECRET?.trim() ||
   process.env.JWT_PRIVATE_KEY?.trim() ||
-  'dev-insecure-secret-change-me';
+  process.env.THINGTIME_USER_VAULT_KEY?.trim() ||
+  process.env.THINGTIME_ADMIN_VAULT_KEY?.trim() ||
+  (() => { throw new Error('OAuth PKCE requires a configured server secret.'); })();
 
 // The PKCE verifier for an outbound OAuth round trip, DERIVED from a server
 // secret and the state's public nonce rather than carried inside the state.

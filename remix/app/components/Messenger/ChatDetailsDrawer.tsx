@@ -1,3 +1,4 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
 import {
   Box,
@@ -9,7 +10,6 @@ import {
   DrawerHeader,
   DrawerOverlay,
   Flex,
-  Image,
   Input,
   Menu,
   MenuButton,
@@ -207,7 +207,7 @@ export const ChatDetailsDrawer = ({
               <Flex key={member.userId} align="center" gap={2} paddingY="6px">
                 <Flex width="30px" height="30px" borderRadius="full" overflow="hidden" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" fontSize="13px" fontWeight={700} flexShrink={0}>
                   {member.profile?.avatarUrl ? (
-                    <Image src={member.profile.avatarUrl} width="30px" height="30px" objectFit="cover" />
+                    <PresentedImage src={member.profile.avatarUrl} presentation={member.profile.avatarPresentation} alt={displayName} />
                   ) : (
                     displayName.slice(0, 1).toUpperCase()
                   )}

@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { selectedPlanChatEligible } from './lopuProviderCore';
 import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { syncNativeLopuChatActivity } from '~/utils/lopuChatActivity';
@@ -52,6 +53,8 @@ import {
 	selectLopuTurnsForChat,
 	sendLopuMessage,
 	setLopuSettings,
+  setLopuAiDefaults,
+  setLopuManagementDefault,
 	subscribeLopuStore,
 	takeLopuNavigation,
 	takeLopuNotices,
@@ -164,8 +167,8 @@ export type UseLopuChat = {
 	// id → label / name lookups for status lines
 	modelLabels: Record<string, string>;
 	providerNames: Record<string, string>;
-	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean };
-	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => void;
+	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean };
+	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean }>) => void;
 	contextLabel: string | null;
 	undoPatch: (toolId: string) => boolean;
 	canUndoPatch: (toolId: string) => boolean;
@@ -189,7 +192,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes, setManagement, setHearMeOut } = useLopuSettings();
+	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut, setLauncher } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -222,8 +225,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
    for (const chatId of snapshot.recoveryChatIds) if (!active.has(chatId)) active.set(chatId, { chatId, status: 'retrying', management: 'client' });
    syncNativeLopuChatActivity({ ownerId: userId, contextKey: getAiTaskContextKey(), chats: [...active.values()] });
   };
-  sync(); window.addEventListener('thingtime:native-bridge-ready', sync); document.addEventListener('visibilitychange', sync);
-  return () => { window.removeEventListener('thingtime:native-bridge-ready', sync); document.removeEventListener('visibilitychange', sync); };
+  sync(); activityEvents(window, 'events:components/Lopu/useLopuChat', 'useLopuChat').addEventListener('thingtime:native-bridge-ready', sync); activityEvents(document, 'events:components/Lopu/useLopuChat', 'useLopuChat').addEventListener('visibilitychange', sync);
+  return () => { activityEvents(window, 'events:components/Lopu/useLopuChat', 'useLopuChat').removeEventListener('thingtime:native-bridge-ready', sync); activityEvents(document, 'events:components/Lopu/useLopuChat', 'useLopuChat').removeEventListener('visibilitychange', sync); };
  }, [tasks, userId, snapshot.recoveryChatIds]);
 
 	// the viewer's account / access rules ride along with every surface; a
@@ -248,17 +251,22 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		void loadLopuMessages(activeChatId);
 	}, [userId, activeChatId, loadedForChat]);
 
-	// the viewer's preference (settings.lopu.*) feeds the store; a chat's own
-	// settings can still override it while that chat is selected
-	React.useEffect(() => {
-		const patch: Partial<LopuChatSettings> = { management: prefs.management };
-		if (prefs.model) patch.model = prefs.model;
-		if (prefs.effort) patch.effort = prefs.effort;
-		if (prefs.speed) patch.speed = prefs.speed;
-		if (Object.keys(patch).length) setLopuSettings(patch);
-	}, [prefs.model, prefs.effort, prefs.speed, prefs.management]);
+	// Migrate legacy device preferences once per account. New defaults never
+  // overwrite a selected conversation or follow that conversation's edits.
+  React.useEffect(() => {
+    setLopuAiDefaults({ model: prefs.model, effort: prefs.effort, speed: prefs.speed, providerId: null }, { initialize: true });
+  }, [userId, prefs.model, prefs.effort, prefs.speed]);
 
-	// notices → the Lopu toast (the first mounted hook drains them)
+  // Keep the existing execution default for new chats without rewriting an
+  // existing conversation. A personal plan is still forced to local execution.
+  // The store keeps the preference so a chat that never stored a placement of
+  // its own still runs where the viewer asked, instead of defaulting to local.
+  React.useEffect(() => {
+    setLopuManagementDefault(prefs.management);
+    if (!snapshot.activeChatId) setLopuSettings({ management: prefs.management });
+  }, [userId, prefs.management, snapshot.activeChatId, snapshot.settings.providerId]);
+
+  // notices → the Lopu toast (the first mounted hook drains them)
 	const noticeCount = snapshot.notices.length;
 	React.useEffect(() => {
 		if (!noticeCount) return;
@@ -321,8 +329,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
     }
    } catch { /* Preserve queue while task status is unavailable. */ }
   };
-  void tick(); const timer = setInterval(() => void tick(), 2000);
-  return () => { cancelled = true; clearInterval(timer); };
+  void tick(); const timer = activityInterval('timer:components/Lopu/useLopuChat:1', 'use Lopu Chat', () => tick(), 2000);
+  return () => { cancelled = true; clearActivityInterval(timer); };
  }, [queue, snapshot.sending]);
 
 	const confirmTool = React.useCallback(
@@ -330,27 +338,17 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		[contextProvider, applyPatches]
 	);
 
-	const setSettings = React.useCallback(
-		(patch: Partial<LopuChatSettings>) => {
-			setLopuSettings(patch);
-   if (patch.management) setManagement(patch.management);
-			// the catalog choice is also the viewer's preference (settings.lopu.*);
-			// a provider-only change is per chat and leaves the preference alone
-			if (!('model' in patch || 'effort' in patch || 'speed' in patch)) return;
-			const next = getLopuStoreSnapshot().settings;
-			setModelChoice({ model: next.model, effort: next.effort, speed: next.speed === 'fast' || next.speed === 'normal' ? next.speed : null });
-		},
-		[setModelChoice, setManagement]
-	);
+	const setSettings = React.useCallback((patch: Partial<LopuChatSettings>) => setLopuSettings(patch), []);
 
 	const setPreferences = React.useCallback(
-		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => {
+		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; launcher: boolean; hearMeOut: boolean }>) => {
+			if (typeof patch.launcher === 'boolean') setLauncher(patch.launcher);
 			if (typeof patch.hearMeOut === 'boolean') setHearMeOut(patch.hearMeOut);
 			if (typeof patch.enterSends === 'boolean') setEnterSends(patch.enterSends);
 			if (typeof patch.applyPatches === 'boolean') setApplyPatches(patch.applyPatches);
 			if (typeof patch.confirmDeletes === 'boolean') setConfirmDeletes(patch.confirmDeletes);
 		},
-		[setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut]
+		[setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut, setLauncher]
 	);
 
 	const selectChat = React.useCallback((chatId: string | null) => selectLopuChat(chatId), []);
@@ -392,7 +390,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		setSettings,
 		modelLabels,
 		providerNames,
-		preferences: { applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes, hearMeOut: prefs.hearMeOut },
+		preferences: { launcher: prefs.launcher, applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes, hearMeOut: prefs.hearMeOut },
 		setPreferences,
 		contextLabel,
 		undoPatch: undoLopuPatch,

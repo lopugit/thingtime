@@ -1,5 +1,6 @@
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { uploadFileTypes } from './attachmentFileTypes';
+import { VideoPreview } from './VideoPreview';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import {
@@ -36,6 +37,8 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 
 export type AttachmentComposerProps = {
 	ownerId: string;
+	/** A stable external share is consumed once per mounted composer. */
+	initialFiles?: readonly File[];
   preserveDrafts?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
@@ -95,9 +98,9 @@ const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' 
 	return undefined;
 };
 
-const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
+export const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
 	const kind = uploadMediaKind(upload);
-	if (kind === 'image' && upload.previewUrl) {
+	if ((kind === 'image' || upload.previewContentType?.startsWith('image/')) && upload.previewUrl) {
 		return (
 			<Image
 				src={upload.previewUrl}
@@ -112,17 +115,13 @@ const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) =
 	}
 	if (kind === 'video' && upload.previewUrl) {
 		return (
-			<Box
-				as="video"
+			<VideoPreview
 				src={upload.previewUrl}
-				aria-label={`Preview of ${upload.file.name}`}
+				label={`Preview of ${upload.file.name}`}
 				width="100%"
 				height="100%"
 				objectFit="cover"
 				background="var(--tt-ink, #16161a)"
-				muted
-				playsInline
-				preload="metadata"
 			/>
 		);
 	}
@@ -479,6 +478,17 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onCleanupDeferred,
 		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus, initialLinkedSeeds }
 	);
+	const initialFilesConsumed = React.useRef(false);
+	React.useEffect(() => {
+		if (initialFilesConsumed.current || !props.initialFiles?.length || uploadsNotGranted || disabled) return;
+		let active = true;
+		queueMicrotask(() => {
+			if (!active || initialFilesConsumed.current || !props.initialFiles?.length) return;
+			initialFilesConsumed.current = true;
+			enqueueFiles([...props.initialFiles]);
+		});
+		return () => { active = false; };
+	}, [props.initialFiles, enqueueFiles, uploadsNotGranted, disabled]);
 	// the add-by-URL field below the grid — clears after each accepted Add so
 	// the next link goes straight in
 	const [linkUrl, setLinkUrl] = React.useState('');

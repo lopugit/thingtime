@@ -1,8 +1,9 @@
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useCallback, useMemo } from 'react';
 import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
-import type { DeviceBattery } from './deviceTypes';
+import type { DeviceBattery, DeviceResources } from './deviceTypes';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'filesystem',
@@ -109,6 +110,7 @@ export type PublicDeviceState = {
 	appleMusic?: { isInstalled: boolean; isRunning: boolean };
 	spotify?: { isInstalled: boolean; isRunning: boolean };
 	chromeYouTube?: { isInstalled: boolean; isRunning: boolean };
+	resources?: DeviceResources;
 	observedAt: string;
 	updatedAt: string;
 };
@@ -132,6 +134,7 @@ export type PublicDeviceConnector = {
 
 export type PublicDevice = {
 	id: string;
+	rootFolderId?: string | null;
 	name: string;
 	platform: DevicePlatform;
 	model: string | null;
@@ -341,11 +344,14 @@ const requestEvents = async (
 
 export const useDeviceApi = () => {
 	const listDevices = useCallback(
-		(deviceId?: string | null, signal?: AbortSignal) =>
-			request<{ ok: true; devices: PublicDevice[]; device?: PublicDevice }>(`/api/v1/devices${toQuery({ id: deviceId })}`, {
+		async (deviceId?: string | null, signal?: AbortSignal) => {
+			await requireThingtimeCapability('api.devices', '1.16.0');
+			signal?.throwIfAborted();
+			return request<{ ok: true; devices: PublicDevice[]; device?: PublicDevice }>(`/api/v1/devices${toQuery({ id: deviceId })}`, {
 				action: deviceId ? 'load that device' : 'load your devices',
 				signal
-			}),
+			});
+		},
 		[]
 	);
 	const listCommands = useCallback(

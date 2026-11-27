@@ -132,6 +132,8 @@ test('foreign, public, namespaced or invalid ancestor roots do not authorize cre
 	for (const patch of [
 		{ ownerId: 'other' },
 		{ acl: ['tt:all'] },
+    { aclGeneration: 'generation', aclEntryCount: 1 },
+    { aclGeneration: 'generation' },
 		{ appId: 'app' },
 		{ targetId: 'post' },
 		{ sandboxSpace: 'space' },

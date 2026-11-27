@@ -55,11 +55,13 @@ export const placeEditorSelectionToolbar = (
 };
 
 export const editorOverlayBounds = (holder: HTMLElement): OverlayRect => {
+	const document = holder.ownerDocument,
+		window = document.defaultView!;
 	const vv = window.visualViewport;
 	let left = (vv?.offsetLeft || 0) + 8,
 		top = (vv?.offsetTop || 0) + 8;
-	let right = left + (vv?.width || innerWidth) - 16,
-		bottom = top + (vv?.height || innerHeight) - 16;
+	let right = left + (vv?.width || window.innerWidth) - 16,
+		bottom = top + (vv?.height || window.innerHeight) - 16;
 	for (let parent = holder.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
 		const css = getComputedStyle(parent),
 			rect = parent.getBoundingClientRect();
@@ -105,7 +107,7 @@ export const editorTextObstacles = (holder: HTMLElement, includeHistory = true):
 	holder.querySelectorAll<HTMLElement>('[contenteditable="true"],textarea').forEach((field) => {
 		if (field.tagName === 'TEXTAREA' || !field.textContent?.trim()) rects.push(field.getBoundingClientRect());
 		else {
-			const range = document.createRange();
+			const range = holder.ownerDocument.createRange();
 			range.selectNodeContents(field);
 			rects.push(...Array.from(range.getClientRects()));
 		}
@@ -137,7 +139,7 @@ export const editorTextObstacles = (holder: HTMLElement, includeHistory = true):
 		)
 			return;
 		if (/^(H[1-6]|P)$/.test(element.tagName)) {
-			const range = document.createRange();
+			const range = holder.ownerDocument.createRange();
 			range.selectNodeContents(element);
 			rects.push(...Array.from(range.getClientRects()));
 		} else rects.push(element.getBoundingClientRect());

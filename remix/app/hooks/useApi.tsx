@@ -1,5 +1,26 @@
+import { DEVICE_DIAGNOSTIC_REQUIREMENTS } from '~/devices/deviceDiagnostics';
+import { DeviceDebugScopeError } from '~/utils/deviceDebugScope';
+import { usesPdfBlocks, PDF_BUILDER_REQUIREMENTS } from '../components/Attachments/pdfControlContract';
+import { requireAuthoredCollectionCapability, usesExpandedAuthoredCollections } from '~/utils/authoredCollectionCapabilities';
+import { requireAccountCollectionCapability, requireSubspaceCollectionCapability } from '~/utils/relationalCollectionsCapabilities';
+
+import { THING_BROWSER_PIN_REQUIREMENTS, type ThingBrowserPinChange, type ThingBrowserPins } from '~/utils/thingBrowserPins';
+
+import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
+import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
+import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
+import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
+import type { BackupJobView } from '~/backups/workflow';
+import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
+import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
+import { isBuilderThing } from '~/schemas/builderThing';
+import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { THING_STORAGE_CLOUD_WRITE_REQUIREMENTS } from '~/utils/thingStoragePolicy';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
 import type { TimelineScope } from '~/timeline/contract';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
@@ -26,7 +47,10 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
+import { requireActiveThingtimeCapability, requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
+import { requireSubspaceImagePresentation } from '~/utils/subspaceMediaCapabilities';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -36,8 +60,9 @@ import { ATTACHMENT_ARCHIVE_REQUIREMENTS, attachmentArchiveUrl } from '~/compone
 import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { applyGroupMemberBatches } from './groupMemberBatches';
 import { clearLocalCachePrefix } from './localCache';
-import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { createApiFailure, readApiResponsePayload, ThingtimeApiError } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
@@ -48,7 +73,7 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string; storageMode?: 'cloud' };
 const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
@@ -138,13 +163,50 @@ export function useApi() {
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
+  const groupMemberBatches = useCallback(async (
+    args: { id: string; addMemberIds?: string[]; removeMemberIds?: string[] },
+    scope?: { actor: string; plane: string | null; origin: string; guard: () => void }
+  ) => {
+    const actor = scope?.actor ?? actionActor.current, plane = scope?.plane ?? planeRef.current;
+    const origin = scope?.origin ?? window.location.origin;
+    const generation = rootIdentity.read().generation;
+    const guard = scope?.guard ?? (() => {
+      const identity = rootIdentity.read();
+      if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane || window.location.origin !== origin)
+        throw new DOMException('Account or API origin changed', 'AbortError');
+    });
+    if (!actor) throw new DOMException('Sign in before editing a group', 'AbortError');
+    guard();
+    await requireThingtimeCapability('api.groups', '1.2.0', origin);
+    guard();
+    const options = { action: '/api/v1/groups', method: 'PATCH', expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin };
+    return applyGroupMemberBatches(args, {
+      guard,
+      submit: (body) => asyncFetcher.submit(body, options),
+      read: async () => {
+        const groups = await getJson('/api/v1/groups', { expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin });
+        return groups?.groups?.find((entry: any) => entry.id === args.id);
+      }
+    });
+  }, [asyncFetcher, getJson]);
+
   const v1 = {
+    backups: {
+      destinations: useCallback(async (scope: TimelineScope, options?: { signal?: AbortSignal }): Promise<BackupDestinationsResult> => {
+        if (scope.dataPlane !== 'home') throw Error('Backups require home storage.');
+        for (const [feature, minimum] of Object.entries(BACKUP_DESTINATIONS_REQUIREMENTS))
+          await requireThingtimeCapability(feature, minimum, scope.apiOrigin);
+        options?.signal?.throwIfAborted();
+        return getJson(BACKUP_DESTINATIONS_PATH, { ...options, expectedActor: scope.ownerId,
+          expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [getJson])
+    },
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
-        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
         const file = parseCloudFile(result?.file);
         if (file.id !== id) throw Error('File identity changed.');
@@ -153,15 +215,17 @@ export function useApi() {
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
     },
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', '1.5.0');
+        await requireThingtimeCapability('api.webpages-resolve', usesComponentArgumentBindings(blocks)
+          ? COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve'] : usesExpandedWebpageAuthoring(blocks)
+            ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -181,11 +245,11 @@ export function useApi() {
         return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
       }, []),
       checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.8.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', request.componentChoices === undefined ? '1.7.0' : '1.11.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
@@ -211,7 +275,7 @@ export function useApi() {
       }, [asyncFetcher]),
       // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
       exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.18.0');
+        await requireSharedContentCapability('api.timeline');
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
         return parseTimelineVersionExport(result, scope.ownerId, eventId);
       }, []),
@@ -230,8 +294,8 @@ export function useApi() {
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
-        // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
-        await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        // Full content operations require the corrected broad-snapshot reader.
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
@@ -384,7 +448,7 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
@@ -430,6 +494,19 @@ export function useApi() {
       }
     },
     settings: {
+      connectorProtections: useCallback(async (expectedActor: string, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return getJson(CONNECTOR_PROTECTIONS_PATH, { expectedActor, signal, expectedApiOrigin: window.location.origin });
+      }, [getJson]),
+      setConnectorProtections: useCallback(async (expectedActor: string, confirmations: ConnectorConfirmationPatch, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return asyncFetcher.submit({ confirmations }, {
+          action: CONNECTOR_PROTECTIONS_PATH, expectedActor, signal, expectedApiOrigin: window.location.origin,
+          characterId: character?.id, errorContext: 'save Thingtime connector confirmations'
+        });
+      }, [asyncFetcher, character?.id]),
       lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
       setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
         await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
@@ -437,7 +514,10 @@ export function useApi() {
       }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			prConflictResolverModelWaterfall: useCallback(async () => {
+        await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.2.0');
+        return getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall');
+      }, []),
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
 			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
 			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
@@ -449,13 +529,34 @@ export function useApi() {
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
       models: useCallback(async () => {
+        const owner = actionActor.current;
         const result = await getJson('/api/v1/ai/models');
+        // The signed desktop's loopback route contributes the redacted plan
+        // catalogue. A website or another desktop cannot expose these records.
+        if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && owner && !character && planeRef.current === 'home') {
+          try {
+            await requireThingtimeCapability('api.ai-chatgpt-plan', '1.2.0');
+            const plan = await fetch('/api/v1/ai/chatgpt-plan', { credentials: 'same-origin', cache: 'no-store', headers: {
+              'X-Thingtime-Expected-Actor': owner, 'X-Thingtime-Expected-User': owner, [EXPECTED_DATA_PLANE_HEADER]: 'home'
+            } });
+            if (plan.ok) {
+              const status = await plan.json();
+              if (status.storageMode === 'device' && status.deviceChatAvailable === true && actionActor.current === owner && planeRef.current === 'home' && Array.isArray(status.accounts)) {
+                return { ...result, vaultProviders: [...(result.vaultProviders ?? []), ...status.accounts.filter((account: any) => typeof account?.id === 'string').map((account: any) => ({
+                  id: account.id, name: `ChatGPT plan · this device · ${account.id.slice(-8)} · ${account.label}`, kind: 'openai', model: account.model, endpointHost: 'api.openai.com',
+                  available: account.connected === true && !!account.model, planChatEligible: account.connected === true && !!account.model,
+                  realtimeModels: []
+                }))] };
+              }
+            }
+          } catch { /* Keep the ordinary model catalogue usable during device loss. */ }
+        }
         if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
-          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          try { await requireThingtimeCapability('api.ai-models', '1.9.0'); }
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;
-      }, []),
+      }, [getJson, character]),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
@@ -524,6 +625,20 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
+      }, [getJson]),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return getJson('/api/v1/admin/ci/preview-retention', requestScope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return asyncFetcher.submit(args, { ...requestScope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
       ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
@@ -559,7 +674,7 @@ export function useApi() {
       ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => {
-          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
+          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.2.0');
           return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
         },
         [asyncFetcher]
@@ -605,7 +720,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       migrations: useCallback(async () => {
-        await requireThingtimeCapability('api.admin-migrations', '1.4.1');
+        await requireThingtimeCapability('api.admin-migrations', '1.5.0');
         return getJson('/api/v1/admin/migrations');
       }, []),
 			migrationDiagnostic: useCallback(
@@ -614,7 +729,7 @@ export function useApi() {
 			),
       migrationsRun: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.admin-migrations-run', '1.4.1');
+          await requireThingtimeCapability('api.admin-migrations-run', args?.migration === 'provision-relational-acl-validator' && args?.dryRun ? '1.7.0' : '1.6.0');
           return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
@@ -715,7 +830,9 @@ export function useApi() {
       },
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
-      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, {
+        ...options, ownerId: actionActor.current, dataPlane: planeRef.current
+      }), []),
       // direct voice (design note §6.1): the provider-minted five-minute
       // realtime credential for one of the viewer's own Secure Vault
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
@@ -755,9 +872,13 @@ export function useApi() {
       // session data-endpoint override (thin-frontend mode): which MongoDB the
       // data plane uses for this browser session
       endpoint: {
-        get: useCallback(async () => getJson('/api/v1/mongodb/endpoint'), []),
+        get: useCallback(async () => {
+          await requireAccountCollectionCapability('api.mongodb-endpoint');
+          return getJson('/api/v1/mongodb/endpoint');
+        }, []),
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoint');
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
             // Reset/selection is the recovery path for a stale data source.
             const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint', expectedDataPlane: null });
@@ -772,14 +893,20 @@ export function useApi() {
       },
       // the signed-in user's saved endpoints (persisted server-side)
       endpoints: {
-        list: useCallback(async () => getJson('/api/v1/mongodb/endpoints'), []),
+        list: useCallback(async () => {
+          await requireAccountCollectionCapability('api.mongodb-endpoints');
+          return getJson('/api/v1/mongodb/endpoints');
+        }, []),
         add: useCallback(
-          async (args?: { name?: string; url?: string }) =>
-            asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' }),
+          async (args?: { name?: string; url?: string }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoints');
+            return asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' });
+          },
           [asyncFetcher]
         ),
         remove: useCallback(
           async (args?: { id?: string }) => {
+            await requireAccountCollectionCapability('api.mongodb-endpoints');
             const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE', expectedDataPlane: null });
             ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
@@ -792,7 +919,10 @@ export function useApi() {
     },
     // cross-deployment account links (Settings → Linked deployments)
     deploymentLinks: {
-      list: useCallback(async () => getJson('/api/v1/deployment-links'), []),
+      list: useCallback(async () => {
+        await requireAccountCollectionCapability('api.deployment-links');
+        return getJson('/api/v1/deployment-links');
+      }, []),
       link: useCallback(
         async (args?: {
           baseUrl?: string;
@@ -802,21 +932,29 @@ export function useApi() {
           password?: string;
           challenge?: string;
           code?: string;
-        }) => asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' }),
+        }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' });
+        },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) =>
-          asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' }),
+        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' });
+        },
         [asyncFetcher]
       ),
       remove: useCallback(
-        async (args?: { id?: string }) =>
-          asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' }),
+        async (args?: { id?: string }) => {
+          await requireAccountCollectionCapability('api.deployment-links');
+          return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' });
+        },
         [asyncFetcher]
       ),
       sync: useCallback(
         async (args?: { id?: string; dryRun?: boolean }) => {
+          await requireAccountCollectionCapability('api.deployment-links-sync');
           const ret = asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links/sync' });
           // a pull may have rewritten local things — refresh like login does
           ret.then((result: any) => {
@@ -850,25 +988,28 @@ export function useApi() {
 							contentType: string;
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
+							livePhoto?: { pairId: string; role: 'photo' | 'motion' };
 						},
-						options?: { signal?: AbortSignal }
+						options?: ThingRequestOptions
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
-						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
-						if (args.purpose === 'recording-import') {
-							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
+						await requireSharedContentCapability('api.attachment-uploads', options);
+						if (args?.livePhoto) {
+							await requireThingtimeCapability('api.attachment-uploads', '1.12.0', options?.expectedApiOrigin ?? window.location.origin);
+							await requireThingtimeCapability('api.attachment-upload-complete', '1.9.0', options?.expectedApiOrigin ?? window.location.origin);
 						}
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
 								filename: args?.filename,
 								contentType: args?.contentType,
 								sizeBytes: args?.sizeBytes,
-								...(args?.purpose ? { purpose: args.purpose } : {})
+								...(args?.purpose ? { purpose: args.purpose } : {}),
+								...(args?.livePhoto ? { livePhoto: args.livePhoto } : {})
 							},
 							{
 								action: '/api/v1/attachments/uploads',
-								signal: options?.signal,
+								...options,
 								errorContext: 'prepare a file upload'
 							}
 						);
@@ -890,12 +1031,13 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				complete: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/complete',
-								signal: options?.signal,
+								...options,
 								errorContext: 'verify a file upload'
 							}
 						);
@@ -905,12 +1047,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				abort: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/abort',
-								signal: options?.signal,
+								...options,
 								errorContext: 'cancel a file upload'
 							}
 						);
@@ -935,14 +1077,15 @@ export function useApi() {
 			// binds/orders/deletes like an upload but its bytes stay on the original
 			// site (duplicates allowed; unbound mints expire in 24h)
 			link: useCallback(
-				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-link', options);
 					const ret = asyncFetcher.submit(
 						{
 							url: args?.url,
 							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
 							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
 						},
-						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', ...options }
 					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
@@ -952,16 +1095,18 @@ export function useApi() {
 			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
-					asyncFetcher.submit(
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-annotate', options);
+					return asyncFetcher.submit(
 						{
 							id: args?.id,
 							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
-						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
-					),
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details', ...options }
+					);
+        },
 				[asyncFetcher]
 			)
 		},
@@ -987,10 +1132,12 @@ export function useApi() {
         []
       ),
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
-      create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
+      create: useCallback(async (body: Record<string, unknown>) => { await requireSubspaceCollectionCapability('create'); return asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }); }, [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
-          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
+          if (['rules','flairs','userFlairs','removalReasons'].some(field => body[field] !== undefined)) await requireSubspaceCollectionCapability('update');
+          if (body.mediaPresentation !== undefined) await requireSubspaceImagePresentation();
+          else if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
           return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
         },
         [asyncFetcher]
@@ -1018,7 +1165,10 @@ export function useApi() {
       // accept | deny (the Requests queue) | request-approval (self — an
       // active member of a restricted subspace asks for posting rights)
       mutateMember: useCallback(
-        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        async (body: Record<string, unknown>) => {
+          if (body.action === 'userFlair') await requireSubspaceCollectionCapability('members');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' });
+        },
         [asyncFetcher]
       ),
       requestApproval: useCallback(
@@ -1030,8 +1180,10 @@ export function useApi() {
       // id, or custom text + optional emoji/color; neither clears); mods may
       // name anyone
       setUserFlair: useCallback(
-        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) =>
-          asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
+        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) => {
+          await requireSubspaceCollectionCapability('members');
+          return asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' });
+        },
         [asyncFetcher]
       ),
       // remove: reason (free text) and/or reasonId (one of the subspace's
@@ -1067,15 +1219,19 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
-          getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
+        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) => {
+          await requireSubspaceCollectionCapability('feed');
+          return getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`);
+        },
         []
       ),
       // owner-only lifecycle: hand the subspace to an active member / delete
       // it (posts survive as plain posts) after retyping the slug
       transfer: useCallback(
-        async (body: { slug?: string; id?: string; userId?: string; username?: string }) =>
-          asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' }),
+        async (body: { slug?: string; id?: string; userId?: string; username?: string }) => {
+          await requireSubspaceCollectionCapability('transfer');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' });
+        },
         [asyncFetcher]
       ),
       delete: useCallback(
@@ -1084,23 +1240,84 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    deviceFolders: {
+      inspect: useCallback(async (deviceId?: string, options?: ThingRequestOptions, cursor?: string) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/devices/folders${toQuery({ deviceId, cursor })}`, options);
+      }, [getJson]),
+      resolve: useCallback(async (body: { deviceId: string; connectionId?: string; name?: string }, options?: ThingRequestOptions) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(body, { action: '/api/v1/devices/folders', ...options, errorContext: 'open the device folder' });
+      }, [asyncFetcher])
+    },
     things: {
+      acl: {
+        list: useCallback(async (args: { id: string; cursor?: string; limit?: number }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return getJson(`/api/v1/things/acl${toQuery(args)}`, options);
+        }, [getJson]),
+        add: useCallback(async (args: { id: string; entries: string[]; expectedAclRevision?: string | null }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return asyncFetcher.submit({ ...args, operation: 'add' }, { ...options, action: '/api/v1/things/acl', errorContext: 'add Thing access' });
+        }, [asyncFetcher]),
+        remove: useCallback(async (args: { id: string; entries: string[]; expectedAclRevision?: string | null }, options?: ThingRequestOptions) => {
+          await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          return asyncFetcher.submit({ ...args, operation: 'remove' }, { ...options, action: '/api/v1/things/acl', errorContext: 'remove Thing access' });
+        }, [asyncFetcher])
+      },
+      pins: {
+        get: useCallback(async (args: { path: string[]; cursor?: string; revision?: string }, options?: ThingRequestOptions): Promise<ThingBrowserPins> => {
+          const actor = options?.expectedActor ?? actionActor.current, plane = options?.expectedDataPlane ?? planeRef.current;
+          const origin = options?.expectedApiOrigin ?? window.location.origin;
+          const generation = rootIdentity.read().generation;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const identity = rootIdentity.read();
+            if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane) throw new DOMException('Account changed', 'AbortError');
+          };
+          guard();
+          await requireThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          await requireActiveThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          guard();
+          const result = await getJson(`/api/v1/things/pins${toQuery({ ...args, path: JSON.stringify(args.path) })}`, { ...options, expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin });
+          guard();
+          return result;
+        }, [getJson]),
+        update: useCallback(async (args: ThingBrowserPinChange, options?: ThingRequestOptions): Promise<ThingBrowserPins> => {
+          const actor = options?.expectedActor ?? actionActor.current, plane = options?.expectedDataPlane ?? planeRef.current;
+          const origin = options?.expectedApiOrigin ?? window.location.origin;
+          const generation = rootIdentity.read().generation;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const identity = rootIdentity.read();
+            if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane) throw new DOMException('Account changed', 'AbortError');
+          };
+          guard();
+          await requireThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          await requireActiveThingtimeCapability('api.things-pins', THING_BROWSER_PIN_REQUIREMENTS['api.things-pins'], origin);
+          guard();
+          const result = await asyncFetcher.submit(args, { action: '/api/v1/things/pins', ...options, expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin, errorContext: 'save pins' });
+          guard();
+          return result;
+
+        }, [asyncFetcher])
+      },
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.15.0');
+          await requireSharedContentCapability('api.things-export');
           if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+        await requireSharedContentCapability('api.things-import');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-feed', '1.8.0');
+        await requireSharedContentCapability('api.things-feed');
         return getJson(`/api/v1/things/feed${toQuery(args)}`);
       }, []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
@@ -1121,18 +1338,22 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
-          if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
+          await requireSharedContentCapability('api.things-search', options);
+          if (args?.libraryArchive !== undefined) await requireLibraryArchiveCapability('api.things-search', '1.7.0', options?.expectedApiOrigin);
           if (rest.anon && !conditions && rest.near === undefined) {
-            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+            return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search', ...options, expectedDataPlane });
         },
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-user', '1.7.0');
+        await requireSharedContentCapability('api.things-user');
         await requireThingtimeCapability('api.attachment-content', '1.8.0');
         return getJson(`/api/v1/things/user${toQuery(args)}`);
       }, []),
@@ -1144,20 +1365,54 @@ export function useApi() {
 			get: useCallback(
 				async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
-          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
-          await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+          const ownerId = options?.expectedActor ?? actionActor.current;
+          const generation = rootIdentity.read().generation, origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== ownerId ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Account changed', 'AbortError');
+          };
+          const storageScope = origin && !character && !options?.characterId && ownerId && expectedDataPlane === 'home' &&
+            options?.storageMode !== 'cloud' && !args?.key && !args?.sharedRoot && !args?.commentProjection && !args?.commentSort &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)
+            ? { apiOrigin: origin, ownerId, dataPlane: expectedDataPlane } : null;
+          let replica: Awaited<ReturnType<typeof import('../storage/thingReplicas.client').readStoredThing>> = null;
+          if (storageScope && typeof args?.id === 'string') {
+            try { replica = await (await import('../storage/thingReplicas.client')).readStoredThing(storageScope, args.id, guard); }
+            catch { guard(); /* Browser storage may be unavailable; normal cloud reads still work. */ }
+          }
+          if (replica && navigator.onLine === false) {
+            guard(); return structuredClone(replica.response);
+          }
+          try {
+            if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+            if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+            await requireSharedContentCapability('api.things', options);
+            await requireSharedContentCapability('api.attachment-content', options);
+            const cloud = await getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+            if (replica && cloud?.ok === true && cloud.thing?.id === args?.id &&
+                (!replica.policy.policy.cloudSync || replica.pendingMutation)) {
+              guard(); return structuredClone(replica.response);
+            }
+            return cloud;
+          } catch (error) {
+            if (replica && error instanceof ThingtimeApiError && (error.status === null || error.status >= 500)) {
+              guard(); return structuredClone(replica.response);
+            }
+            throw error;
+          }
         },
-				[]
+				[getJson, character]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : '1.14.0');
+          await requireSharedContentCapability('api.things', options);
+          if (args?.libraryArchive !== undefined) await requireLibraryArchiveRead(options?.expectedApiOrigin);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1168,7 +1423,9 @@ export function useApi() {
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
-              appId: args?.appId
+              appId: args?.appId,
+              builderApp: args?.builderApp,
+              libraryArchive: args?.libraryArchive
             })}`, { ...options, expectedDataPlane }
           );
         },
@@ -1182,6 +1439,54 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          const storageOwner = expectedActor ?? actionActor.current, generation = rootIdentity.read().generation;
+          const origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== storageOwner ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Storage scope changed', 'AbortError');
+          };
+          if (usesExpandedAuthoredCollections(args?.thingtime,args?.crystal)) await requireAuthoredCollectionCapability(options?.expectedApiOrigin);
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks)) {
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+            await requireThingtimeCapability('api.things-update', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          }
+          let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
+          if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
+            expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)) {
+            const replicas = await import('../storage/thingReplicas.client');
+            const storageScope = { apiOrigin: origin, ownerId: storageOwner, dataPlane: expectedDataPlane };
+            if (typeof window.indexedDB !== 'undefined') {
+              try {
+                const local = await replicas.queueStoredThingUpdate(storageScope, args, guard);
+                if (local) return local;
+              } catch (error) {
+                if (!(error instanceof replicas.ReplicaLookupUnavailable)) throw error;
+              }
+            }
+            confirmStorageCloudWrite = () => replicas.checkGenericCloudThingUpdate(storageScope, args.id, guard, () => {
+              rootIdentity.changed(); refreshRootData();
+            }, options?.signal);
+          }
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things-update', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things-update', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
+          if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things-update', PAGE_COLLECTION_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+
+          if (args?.expectedAclRevision !== undefined) await requireThingtimeCapability('api.things-acl', '1.0.0', options?.expectedApiOrigin);
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1190,16 +1495,33 @@ export function useApi() {
           if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
           else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things-update', '1.18.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          const expectedStoragePolicyRevision = options?.storageMode === 'cloud'
+            ? args?.expectedStoragePolicyRevision : await confirmStorageCloudWrite?.();
+          let writeOrigin = options?.expectedApiOrigin, writeActor = expectedActor;
+          if (expectedStoragePolicyRevision !== undefined) {
+            if (!origin || !storageOwner || character || options?.characterId || expectedDataPlane !== 'home' ||
+                (writeOrigin && writeOrigin !== origin))
+              throw new DOMException('Storage scope changed', 'AbortError');
+            for (const [feature, minimum] of Object.entries(THING_STORAGE_CLOUD_WRITE_REQUIREMENTS))
+              await requireThingtimeCapability(feature, minimum, origin);
+            guard();
+            writeOrigin = origin;
+            writeActor = storageOwner;
+          }
           options?.signal?.throwIfAborted();
           return asyncFetcher.submit(
             {
               id: args?.id,
+              ...(args?.thingtime !== undefined ? { thingtime: args.thingtime } : {}),
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(args?.expectedAclRevision !== undefined ? { expectedAclRevision: args.expectedAclRevision } : {}),
+              ...(expectedStoragePolicyRevision !== undefined ? { expectedStoragePolicyRevision } : {}),
               ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
@@ -1213,19 +1535,30 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor: writeActor, expectedDataPlane,
+              expectedApiOrigin: writeOrigin, signal: options?.signal }
           );
         },
-        [asyncFetcher]
+        [asyncFetcher, character]
       ),
       renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
         await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
-      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      describeActions: useCallback(async (args: { id: string }, options?: ThingRequestOptions) => {
+        await requireLibraryArchiveCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/things/actions${toQuery(args)}`, options);
+      }, [getJson]),
+      runAction: useCallback(async (args: { id: string; action: 'archive' | 'restore' }, options?: ThingRequestOptions) => {
+        await requireLibraryArchiveCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(args, { ...options, action: '/api/v1/things/actions' });
+      }, [asyncFetcher]),
+      // Multi-select library operations — see /docs/api things-bulk.
       bulk: useCallback(
-        async (args) => {
-          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
+        async (args, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.things-bulk', options);
+          if (args?.op === 'archive' || args?.op === 'restore')
+            await requireLibraryArchiveCapability('api.things-bulk', '1.9.0', options?.expectedApiOrigin);
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1235,14 +1568,28 @@ export function useApi() {
               ...(args && 'acl' in args ? { acl: args.acl } : {}),
               ...(args?.recursive ? { recursive: true } : {})
             },
-            { action: '/api/v1/things/bulk' }
+            { ...options, action: '/api/v1/things/bulk' }
           );
         },
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things']);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things']);
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1254,7 +1601,8 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
@@ -1262,6 +1610,23 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (usesExpandedAuthoredCollections(args?.thingtime,args?.crystal)) await requireAuthoredCollectionCapability(options?.expectedApiOrigin);
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (usesPdfBlocks(args?.crystal)) { await requireThingtimeCapability('api.things', PDF_BUILDER_REQUIREMENTS['api.things']); await requireThingtimeCapability('api.things-update', PDF_BUILDER_REQUIREMENTS['api.things-update']); }
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1270,7 +1635,8 @@ export function useApi() {
           if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
           else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things', '1.49.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
@@ -1285,7 +1651,7 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-react', '1.2.0');
+          await requireThingtimeCapability('api.things-react', '1.2.1');
           return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
         },
         [asyncFetcher]
@@ -1318,7 +1684,7 @@ export function useApi() {
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-          await requireThingtimeCapability('api.things-comment', '1.8.0');
+          await requireSharedContentCapability('api.things-comment');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
@@ -1333,7 +1699,7 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-share', '1.3.0');
+          await requireSharedContentCapability('api.things-share');
           return asyncFetcher.submit(
             // tags: the quote caption's harvested inline #hashtags — merged
             // server-side with the tags carried from the original post
@@ -1364,17 +1730,42 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
-      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.3.0' : '2.0.0', options?.expectedApiOrigin);
+        if (includeNamed) await requireActiveThingtimeCapability('api.connections', '2.3.0', options?.expectedApiOrigin);
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1&includeServiceOperations=1' : ''), options);
+      }, [getJson]),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
+          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
+        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
         [asyncFetcher]
       ),
-      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      unlink: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-unlink', args?.named ? '2.1.0' : '2.0.0');
+        return asyncFetcher.submit({ id: args?.id, expectedOwnerId: args?.expectedOwnerId },
+          { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
+      }, [asyncFetcher]),
+      useNamed: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-named', '1.1.0', args.expectedApiOrigin);
+        await requireActiveThingtimeCapability('api.connections-named', '1.1.0', args.expectedApiOrigin);
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, resourceId: args.resourceId, pageToken: args.pageToken, expectedOwnerId: args.expectedOwnerId },
+          { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
+      }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.2.0' : '2.0.0', args?.expectedApiOrigin);
+          if (args?.named) {
+            await requireThingtimeCapability('api.connections-oauth-callback', '2.2.0', args?.expectedApiOrigin);
+            await requireActiveThingtimeCapability('api.connections-oauth-begin', '2.2.0', args.expectedApiOrigin);
+            await requireActiveThingtimeCapability('api.connections-oauth-callback', '2.2.0', args.expectedApiOrigin);
+          }
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
+            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+        },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1388,8 +1779,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
             `/api/v1/connections/feed${toQuery({
               connection: args?.connection,
               cursor: args?.cursor,
@@ -1397,20 +1789,21 @@ export function useApi() {
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ),
+          ); },
         []
       ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
       saveFilter: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-filters', '2.0.0');
+          return asyncFetcher.submit(
             { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
             { action: '/api/v1/connections/filters' }
-          ),
+          ); },
         [asyncFetcher]
       ),
       removeFilter: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
+        async (args) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }); },
         [asyncFetcher]
       )
     },
@@ -1466,6 +1859,33 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
+      updateMembers: groupMemberBatches,
+      createWithMembers: useCallback(async (args: { name: string; memberIds: string[] }) => {
+        const actor = actionActor.current, plane = planeRef.current, origin = window.location.origin;
+        const generation = rootIdentity.read().generation;
+        const guard = () => {
+          const identity = rootIdentity.read();
+          if (identity.pending || identity.generation !== generation || actionActor.current !== actor || planeRef.current !== plane || window.location.origin !== origin)
+            throw new DOMException('Account or API origin changed', 'AbortError');
+        };
+        if (!actor) throw new DOMException('Sign in before editing a group', 'AbortError');
+        guard();
+        await requireThingtimeCapability('api.groups', '1.2.0', origin);
+        guard();
+        const options = { action: '/api/v1/groups', expectedActor: actor, expectedDataPlane: plane, expectedApiOrigin: origin };
+        const created = await asyncFetcher.submit({ name: args.name }, options);
+        const groupId = created?.group?.id;
+        if (!groupId) throw new Error('Group creation outcome is uncertain. Check the original account before retrying.');
+        try {
+          guard();
+          const result = args.memberIds.length ? await groupMemberBatches({ id: groupId, addMemberIds: args.memberIds }, { actor, plane, origin, guard }) : null;
+          guard();
+          return { group: { ...created.group, memberCount: result?.membership?.memberCount ?? 0 } };
+        } catch (error) {
+          if (error instanceof Error && error.name !== 'AbortError') (error as any).groupId = groupId;
+          throw error;
+        }
+      }, [asyncFetcher, groupMemberBatches]),
       remove: useCallback(
         async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
         [asyncFetcher]
@@ -1499,7 +1919,10 @@ export function useApi() {
         await requireThingtimeCapability('api.algorithms-search', '1.0.0');
         return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
       }, []),
-      list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      list: useCallback(async () => {
+        await requireAccountCollectionCapability('api.algorithms');
+        return getJson('/api/v1/algorithms');
+      }, []),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
         async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
@@ -1508,20 +1931,21 @@ export function useApi() {
       create: useCallback(
         async (args) => {
           const { name, emoji, branchFrom, events, description } = args;
-          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
+          await requireAccountCollectionCapability('api.algorithms');
           return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
         },
         [asyncFetcher]
       ),
       update: useCallback(
         async (args) => {
-          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
+          await requireAccountCollectionCapability('api.algorithms-update');
           return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
         },
         [asyncFetcher]
       ),
       remove: useCallback(
         async (args) => {
+          await requireAccountCollectionCapability('api.algorithms-delete');
           const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/algorithms/delete' });
           // deleting the active algorithm clears the server-side pointer —
           // refresh so the feed doesn't keep requesting a dead algorithm
@@ -1540,7 +1964,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       track: useCallback(
-        async (args) => asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' }),
+        async (args) => {
+          await requireAccountCollectionCapability('api.algorithms-track');
+          return asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' });
+        },
         [asyncFetcher]
       )
     },
@@ -1592,11 +2019,16 @@ export function useApi() {
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
+						'avatarPresentation',
+						'bannerPresentation',
+						'avatarPresentationSource',
+						'bannerPresentationSource',
 						'birthday',
 						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
+					if ('avatarPresentation' in body || 'bannerPresentation' in body) await requireThingtimeCapability('api.users-profile', '1.2.0');
 					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -1618,6 +2050,7 @@ export function useApi() {
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]
@@ -1640,7 +2073,7 @@ export function useApi() {
     },
     components: {
       // paginated component browsing — { q, sort, cursor, limit, lib, category, library, mine }
-      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [])
+      browse: useCallback(async (args) => { await requireThingtimeCapability('api.components-browse', CONTENT_EXECUTION_READ_REQUIREMENTS['api.components-browse']); return getJson(`/api/v1/components/browse${toQuery(args)}`); }, [getJson])
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {
@@ -1650,17 +2083,20 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => {
+      run: useCallback(async (args, options?: { signal?: AbortSignal }) => {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', '1.37.0');
+        await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane, signal: options?.signal });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
-        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+        options?.signal?.throwIfAborted();
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current, undefined, undefined, args?.source === 'activation' ? {
+          signal: options?.signal, expectedDataPlane: expectedPlane, currentDataPlane: () => planeRef.current
+        } : undefined));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
@@ -1671,9 +2107,54 @@ export function useApi() {
     }
   };
 
-  const ret = {
-    v1
-  };
+  const backupWorkspaceRequest = useCallback(async (query: Record<string, unknown> | null, command: BackupWorkspaceCommand | null, options: ThingRequestOptions) => {
+    const identity = rootIdentity.read();
+    const actor = actionActor.current;
+    const origin = options?.expectedApiOrigin;
+    const check = () => {
+      options?.signal?.throwIfAborted();
+      if (!actor || options?.expectedActor !== actor || options?.expectedDataPlane !== 'home' || planeRef.current !== 'home' ||
+          !origin || new URL(origin).origin !== origin || identity.pending || rootIdentity.read().generation !== identity.generation ||
+          actionActor.current !== actor || character) throw Error('The backup account, origin or authorization changed.');
+    };
+    check();
+    for (const [feature, minimum] of Object.entries(BACKUP_WORKSPACE_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum, origin);
+    check();
+    const payload = command?.action === 'review' ? { ...command, selection: { snapshotId: command.selection.snapshotId, sourceRootId: command.selection.sourceRootId, destination: { id: command.selection.destination.id, revision: command.selection.destination.revision } } } : command;
+    const result = payload ? await asyncFetcher.submit(payload, { ...options, action: BACKUP_WORKSPACE_PATH, errorContext: 'manage this backup operation' }) :
+      await getJson(BACKUP_WORKSPACE_PATH + toQuery(query!), options);
+    check();
+    if (result?.ok !== true) throw Error('The backup response is unavailable or changed.');
+    return result;
+  }, [asyncFetcher, getJson, character]);
+  const getBackupWorkspaceCatalog = useCallback((query: { snapshotCursor?: string; jobCursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspaceCatalog & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'catalog' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceEntries = useCallback((query: { id: string; cursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspacePage<BackupWorkspaceEntry> & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'snapshot' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceJob = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest({ ...query, view: 'job' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceReview = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; review: BackupWorkspaceReview }> =>
+    backupWorkspaceRequest({ ...query, view: 'review' }, null, options), [backupWorkspaceRequest]);
+  const sendBackupWorkspaceCommand = useCallback((command: BackupWorkspaceCommand, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest(null, command, options), [backupWorkspaceRequest]);
+  // Diagnostics remain owner-private and home-pinned, including a desktop
+  // renderer whose selected authenticated API is a different origin.
+  const deviceDiagnosticsRequest = useCallback(async (query: Record<string, string> | null, command: Record<string, unknown> | null, options: ThingRequestOptions) => {
+    const identity = rootIdentity.read(), actor = actionActor.current, origin = options.expectedApiOrigin;
+    const check = () => {
+      options.signal?.throwIfAborted();
+      if (!actor || options.expectedActor !== actor || actionActor.current !== actor || character || options.expectedDataPlane !== 'home' || planeRef.current !== 'home' ||
+        !origin || new URL(origin).origin !== origin || identity.pending || rootIdentity.read().generation !== identity.generation) throw new DeviceDebugScopeError();
+    };
+    check();
+    try {
+      await requireActiveThingtimeCapability('api.devices-diagnostics', DEVICE_DIAGNOSTIC_REQUIREMENTS['api.devices-diagnostics'], origin);
+      check();
+      return command ? await asyncFetcher.submit(command, { ...options, action: '/api/v1/devices/diagnostics', errorContext: 'manage private device activity' }) :
+        await getJson('/api/v1/devices/diagnostics' + toQuery(query || {}), options);
+    } finally { check(); }
+  }, [asyncFetcher, getJson, character]);
+  const ret = { v1, getBackupWorkspaceCatalog, getBackupWorkspaceEntries, getBackupWorkspaceJob, getBackupWorkspaceReview, sendBackupWorkspaceCommand, deviceDiagnosticsRequest };
 
   return ret;
 }

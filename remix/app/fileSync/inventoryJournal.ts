@@ -1,4 +1,5 @@
-import { assertBackupCapturePolicy, parseNativeBackupCapture, parseNativeSkippedPage, type NativeBackupCapture, type NativeSkippedPage } from './nativeInventory';
+import { parseSymbolicLink } from './symbolicLink';
+import { assertBackupCapturePolicy, nativePhotoAssetKey, parseNativeBackupCapture, parseNativeSkippedPage, type NativeBackupCapture, type NativeSkippedPage } from './nativeInventory';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { inventorySyncEntry, parseCloudInventoryNode, parseCloudInventoryRoot, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
 import { sameSyncStamp, validSyncPath, sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope, type SyncPolicy } from './reconcile';
@@ -66,7 +67,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		if (!validSyncEntry(value)) throw Error('Invalid inventory entry.');
 		return { path: value.path, id: value.id, version: value.version, kind: value.kind, size: value.size, sha256: value.sha256,
 			...(value.fingerprint ? { fingerprint: { algorithm: value.fingerprint.algorithm, partSizeBytes: value.fingerprint.partSizeBytes,
-				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}) };
+				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}), ...(value.symbolicLink ? { symbolicLink: parseSymbolicLink(value.symbolicLink) } : {}) };
 	};
 	const validateRow = (row: Row, header: InventoryHeader, primaryKey?: IDBValidKey): SyncEntry => {
 		if (!row) throw Error('Inventory entry is unavailable.');
@@ -216,7 +217,46 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			});
 		});
 	};
+	/** Apply a sealed, flat Photos checkpoint delta within its publication
+	 * transaction. The next generation invalidates prior whole-baseline cursors.
+	 * Per-batch plan inputs are separate immutable slices of this baseline. */
+	const advancePhotoBaseline = (tx: IDBTransaction, current: InventoryIdentity, delta: InventoryIdentity,
+		done: (next: InventoryIdentity) => void, fail: (error: unknown) => void) => {
+		if (current.id === delta.id || current.source !== delta.source) throw Error('Invalid Photos baseline delta.');
+		const headers = tx.objectStore(INVENTORY_STORES[0]), entries = tx.objectStore(INVENTORY_STORES[2]);
+		const previous = headers.get([key, current.id]), staged = headers.get([key, delta.id]);
+		staged.onsuccess = () => { try {
+			check();
+			const base: InventoryHeader = previous.result, patch: InventoryHeader = staged.result;
+			validate(base, current); validate(patch, delta);
+			if (base.phase !== 'complete' || patch.phase !== 'complete' || base.cloud || patch.cloud)
+				throw Error('Photos baseline inputs must be sealed replica stamps.');
+			let count = base.entries, through = base.validatedThrough, read = 0;
+			const scan = entries.openCursor(range(delta.id));
+			scan.onsuccess = () => { try {
+				check(); const row = scan.result;
+				if (!row) {
+					if (read !== patch.entries) throw Error('Photos baseline delta ended early.');
+					const next = { ...base, generation: crypto.randomUUID(), entries: count, validatedEntries: count, validatedThrough: through };
+					validate(next, next); headers.put(next, [key, base.id]); done(inventoryIdentity(next)); return;
+				}
+				const item = validateRow(row.value, patch, row.primaryKey), path = syncPathKey(item.path);
+				if (item.kind !== 'file' || item.path.includes('/') || !nativePhotoAssetKey(item.path) || item.symbolicLink)
+					throw Error('Photos baseline delta contains a non-original path.');
+				const primary = [key, base.id, path], old = entries.get(primary);
+				old.onsuccess = () => { try {
+					check(); if (old.result) {
+						if (validateRow(old.result, base, primary).path !== item.path) throw Error('Photos baseline path collision.');
+					} else if (!Number.isSafeInteger(++count)) throw Error('Photos baseline count overflow.');
+					entries.put({ scope: key, capture: base.id, path, identity: item.id, entry: item }, primary);
+					if (through === null || path > through) through = path;
+					read++; row.continue();
+				} catch (error) { fail(error); } };
+			} catch (error) { fail(error); } };
+		} catch (error) { fail(error); } };
+	};
 	return {
+		advancePhotoBaseline,
 		/** Exact bounded observations from a sealed baseline; no missing whole
 		 * inventory or failed access is ever interpreted as path absence. */
 		async entriesForPaths(value: InventoryIdentity, paths: readonly string[]): Promise<(SyncEntry | null)[]> {
@@ -272,12 +312,15 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		async unobserved(value: InventoryIdentity, paths: string[]): Promise<boolean[]> {
 			if (!Array.isArray(paths) || paths.length > INVENTORY_PAGE_ENTRIES || paths.some(path => !validSyncPath(path))) throw Error('Invalid coverage path page.');
 			return withHeader(value, 'readonly', (header, tx, done, fail) => {
-				if (!header.backupCapture || header.backupCapture.coverage === 'full' || !paths.length) { done(paths.map(() => false)); return; }
+				if (!header.backupCapture || !paths.length) { done(paths.map(() => false)); return; }
+				const selected = header.backupCapture.photoQueue?.assetKeys;
+				const outsideBatch = (path: string) => selected !== undefined && !selected.some(key => path.startsWith(key + '-'));
+				if (header.backupCapture.coverage === 'full') { done(paths.map(outsideBatch)); return; }
 				if (header.skippedEntries !== header.backupCapture.totalSkipped) throw Error('Skipped inventory is incomplete.');
 				const store = tx.objectStore(INVENTORY_STORES[1]), root = store.get([key, header.id, 'skip-root']);
 				root.onsuccess = () => { try {
 					check(); if (root.result === true) { done(paths.map(() => true)); return; }
-					const results = paths.map(() => false); let remaining = paths.reduce((n, path) => n + path.split('/').length, 0);
+					const results = paths.map(outsideBatch); let remaining = paths.reduce((n, path) => n + path.split('/').length, 0);
 					paths.forEach((path, i) => {
 						const parts = path.split('/');
 						for (let n = 1; n <= parts.length; n++) {

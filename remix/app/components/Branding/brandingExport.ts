@@ -18,6 +18,10 @@ export type BrandExportOptions = {
   padding: PaddingPx;
   /** CSS colour baked behind the artwork; undefined = transparent. */
   background?: string;
+  /** false keeps the matrix's own transparent frame (the square lock-ups). Default true. */
+  trim?: boolean;
+  /** Join same-colour neighbours into one rect — for the fine-grained cuts. */
+  mergeRuns?: boolean;
 };
 
 const clampPad = (value: number) => (Number.isFinite(value) && value > 0 ? Math.min(value, 4000) : 0);
@@ -27,9 +31,12 @@ export const buildExportSvg = ({
   colourMap,
   width,
   padding,
-  background
+  background,
+  trim = true,
+  mergeRuns = false
 }: Omit<BrandExportOptions, 'format' | 'slug'>): { svg: string; width: number; height: number } => {
-  const cells = trimLogoCells(logoMatrixToCells(matrix), colourMap);
+  const allCells = logoMatrixToCells(matrix);
+  const cells = trim ? trimLogoCells(allCells, colourMap) : allCells;
   const columns = Math.max(1, ...cells.map((row) => row.length));
   const artworkWidth = Math.max(1, Math.round(width));
   const pxPerCell = artworkWidth / columns;
@@ -44,6 +51,8 @@ export const buildExportSvg = ({
     matrix,
     colourMap,
     background,
+    trim,
+    mergeRuns,
     padding: {
       top: pad.top / pxPerCell,
       right: pad.right / pxPerCell,
@@ -62,6 +71,13 @@ const triggerDownload = (url: string, filename: string) => {
   document.body.appendChild(link);
   link.click();
   link.remove();
+};
+
+/** Hand a finished file to the browser's download flow. */
+export const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, filename);
+  URL.revokeObjectURL(url);
 };
 
 /** Renders + downloads the export. Resolves once the file has been handed to the browser. */

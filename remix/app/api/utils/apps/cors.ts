@@ -1,4 +1,4 @@
-import { readJsonBody } from '~/api/http';
+import { readJsonBody, type JsonBodyBudget } from '~/api/http';
 
 // CORS for the embed APIs: the SDK calls /api/v1/app-data* from third-party
 // origins with a Bearer app token. The preflight is auth-free and echoes any
@@ -39,7 +39,7 @@ export const appDataPreflight = (request: Request, methods = 'GET, POST, OPTIONS
 // with the route's CORS headers so the 413 contract survives cross-origin.
 export const readJsonBodyWithCors = async (
   request: Request,
-  maxBytes: number,
+  maxBytes: JsonBodyBudget,
   cors: Record<string, string>
 ): Promise<any> => {
   try {

@@ -19,8 +19,25 @@ public enum FileVersionExport {
             guard try MobileFolderReader.components(name).count == 1, !name.trimmingCharacters(in: .whitespaces).isEmpty,
                   content.attachmentId.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil,
                   content.version.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { throw Failure.invalid }
+            if content.size == 0 {
+                guard content.fingerprint == .init(partSizeBytes: 8 * 1024 * 1024, partCount: 0,
+                    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                else { throw Failure.invalid }
+                return
+            }
             try MobileSyncStaging.Request.validateEntry(.init(path: name, id: content.attachmentId, version: content.version,
                 kind: "file", size: content.size, sha256: nil, fingerprint: content.fingerprint))
+        }
+        func verifyBytes(_ descriptor: Int32) throws -> String {
+            try Task.checkCancellation()
+            let before = try MobileFolderReader.info(descriptor)
+            let stamp = MobileFolderReader.stamp(before)
+            guard before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1, before.st_size == content.size else { throw Failure.changed }
+            if content.size != 0 {
+                guard try MobileFolderReader.fingerprint(descriptor, size: before.st_size) == content.fingerprint else { throw Failure.changed }
+            }
+            guard try MobileFolderReader.stamp(MobileFolderReader.info(descriptor)) == stamp else { throw Failure.changed }
+            return stamp
         }
         public func matchFingerprint(_ data: Data) throws {
             struct Receipt: Decodable { let ok: Bool; let id: String; let version: String; let size: Int64; let fingerprint: MobileFolderReader.Fingerprint }
@@ -48,6 +65,7 @@ public enum FileVersionExport {
         public let request: Request
         private let directory: URL
         private let file: Int32
+        private var verifiedStamp: String?
         private init(request: Request, directory: URL, file: Int32) { self.request = request; self.directory = directory; self.file = file }
         deinit { close(file); try? FileManager.default.removeItem(at: directory) }
 
@@ -73,15 +91,28 @@ public enum FileVersionExport {
                 try writeAll(data, to: file); offset += Int64(length)
             }
             guard fsync(file) == 0 else { throw Failure.storage }
-            try prepared.verify(file)
+            prepared.verifiedStamp = try request.verifyBytes(file)
             return prepared
         }
         private func verify(_ descriptor: Int32) throws {
-            try Task.checkCancellation()
-            let before = try MobileFolderReader.info(descriptor)
-            guard before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1, before.st_size == request.content.size,
-                  try MobileFolderReader.fingerprint(descriptor, size: before.st_size) == request.content.fingerprint,
-                  try MobileFolderReader.stamp(MobileFolderReader.info(descriptor)) == MobileFolderReader.stamp(before) else { throw Failure.changed }
+            _ = try request.verifyBytes(descriptor)
+        }
+
+        /// The managed replica store owns both directories on the same
+        /// volume. Publish verified bytes without a second full-size copy.
+        func publishManaged(into destination: URL, check: () throws -> Void) throws {
+            guard let verifiedStamp else { throw Failure.changed }
+            let source = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard source >= 0 else { throw Failure.storage }; defer { close(source) }
+            let target = open(destination.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard target >= 0 else { throw Failure.storage }; defer { close(target) }
+            var entry = stat()
+            guard fstatat(source, "bytes", &entry, AT_SYMLINK_NOFOLLOW) == 0,
+                  entry.st_nlink == 1, MobileFolderReader.stamp(entry) == verifiedStamp,
+                  try MobileFolderReader.stamp(MobileFolderReader.info(file)) == verifiedStamp else { throw Failure.changed }
+            try check(); try Task.checkCancellation()
+            guard renameatx_np(source, "bytes", target, "bytes", UInt32(RENAME_EXCL)) == 0 else { throw Failure.changed }
+            guard fsync(target) == 0 else { throw Failure.storage }
         }
         /// Called only after the host reauthorizes the account and selected destination.
         /// Existing names (including symlinks) are never replaced. Errors after rename

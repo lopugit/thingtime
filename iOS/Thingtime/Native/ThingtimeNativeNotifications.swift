@@ -19,7 +19,9 @@ final class ThingtimeNativeNotifications: NSObject {
     private var registrationStatus = "pending"
     private var phoneDeviceToken: String?
     private var watchDeviceToken: String?
-    private var refreshTimer: Timer?
+    // Refreshes happen when the web view loads, when a push arrives and when
+    // the user brings Thingtime forward; there is no repeating timer.
+    private var foregroundObserver: NSObjectProtocol?
     private var isRefreshing = false
     private var requestedAuthorization = false
     private var forwardedWatchApprovals: [String: String] = [:]
@@ -45,15 +47,28 @@ final class ThingtimeNativeNotifications: NSObject {
         trustedOrigin = rootURL.origin
         self.webView = webView
         attachmentUploader.attach(webView: webView)
-        refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+        // Polling every 30 seconds kept the server busy while the app sat open
+        // and untouched. APNs already triggers a refresh for each push, so only
+        // check again when the user returns to the app.
+        if foregroundObserver == nil {
+            foregroundObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    // The administrator's Automation switch can turn the
+                    // return-to-app refresh off; launch and push refreshes stay.
+                    guard let self, let origin = self.trustedOrigin.flatMap(URL.init(string:)),
+                          await ThingtimeAutomationSwitches.shared.isEnabled("iphone.notifications", origin: origin) else { return }
+                    _ = await self.refresh()
+                }
+            }
         }
         Task { await refresh() }
     }
 
     func setPhoneDeviceToken(_ token: String) {
         phoneDeviceToken = token
+        MobileDeviceAlerts.shared.setToken(token)
         registrationStatus = "pending"
         Task {
             await registerPendingDevices()
@@ -97,7 +112,8 @@ final class ThingtimeNativeNotifications: NSObject {
             requestedAuthorization = false
             settings = await center.notificationSettings()
         }
-        if [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
+        if MobileDeviceAlerts.remoteRegistrationPermitted,
+           [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
            phoneDeviceToken == nil || !UIApplication.shared.isRegisteredForRemoteNotifications {
             UIApplication.shared.registerForRemoteNotifications()
         }

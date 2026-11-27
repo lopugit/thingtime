@@ -101,15 +101,15 @@ test('the store validates changes, writes a plan, and serves last-known-good the
 	assert.equal(applied.ok, true);
 	if (applied.ok) {
 		assert.equal(applied.applied, 3);
-		assert.deepEqual(applied.publications.published, [HUB_KEY, pageKey('landing/feed')]);
-		assert.deepEqual(applied.publications.hidden, [sectionKey('landing/feed', 'social')]);
-		assert.equal(applied.publications.audit?.[HUB_KEY]?.by, 'nik');
-		assert.ok(applied.publications.updatedAt);
+		assert.deepEqual(applied.publications!.published, [HUB_KEY, pageKey('landing/feed')]);
+		assert.deepEqual(applied.publications!.hidden, [sectionKey('landing/feed', 'social')]);
+		assert.equal(applied.publications!.audit?.[HUB_KEY]?.by, 'nik');
+		assert.ok(applied.publications!.updatedAt);
 	}
 
 	const cleared = await store.applyChanges([{ key: pageKey('landing/feed'), state: null }], 'nik');
 	assert.equal(cleared.ok, true);
-	if (cleared.ok) assert.deepEqual(cleared.publications.published, [HUB_KEY]);
+	if (cleared.ok) assert.deepEqual(cleared.publications!.published, [HUB_KEY]);
 
 	failReads = true;
 	const fallback = await store.getPublications({ audit: false });
@@ -123,4 +123,45 @@ test('the store validates changes, writes a plan, and serves last-known-good the
 		writeItems: async () => {}
 	});
 	assert.deepEqual(await coldStore.getPublications({ audit: true }), { published: [], hidden: [], updatedAt: null, audit: {} }, 'with nothing known, an outage publishes nothing');
+});
+
+test('an outage has an explicit unavailable result; a warm outage retains public data without audit', async () => {
+	let unavailable = true;
+	const store = createMarketingPublicationsStore({
+		readStored: async options => {
+			assert.equal(options.timeoutMS, 3000, 'the actual driver read receives a bounded deadline');
+			if (unavailable) throw new Error('internal private failure');
+			return { items: [{ key: HUB_KEY, state: 'published', at, by: 'nik' }], updatedAt: at };
+		},
+		writeItems: async () => {}
+	});
+	const cold = await store.getReadResult({ audit: false });
+	assert.equal(cold.ok, false);
+	assert.equal(cold.freshness, 'unavailable');
+	assert.equal(cold.publications, undefined);
+	assert.ok(!JSON.stringify(cold).includes('internal private failure'));
+	unavailable = false;
+	assert.equal((await store.getReadResult({ audit: true })).ok, true);
+	unavailable = true;
+	const stale = await store.getReadResult({ audit: false });
+	assert.equal(stale.ok, false);
+	assert.equal(stale.freshness, 'stale');
+	assert.deepEqual(stale.publications?.published, [HUB_KEY]);
+	assert.equal(stale.publications?.audit, undefined);
+});
+
+test('a committed change with a failed verification read is acknowledged without fabricating empty publications', async () => {
+	let committed = false;
+	const store = createMarketingPublicationsStore({
+		readStored: async () => { throw new Error('read unavailable'); },
+		writeItems: async () => { committed = true; }
+	});
+	const result = await store.applyChanges([{ key: HUB_KEY, state: 'published' }], 'nik');
+	assert.equal(committed, true);
+	assert.equal(result.ok, true);
+	if (result.ok) {
+		assert.equal(result.freshness, 'unavailable');
+		assert.equal(result.publications, undefined);
+		assert.equal(result.applied, 1);
+	}
 });

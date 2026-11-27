@@ -47,3 +47,11 @@ per-call timeout as the second argument to `index(configuration, timeoutMs)`.
 An optional third argument receives correlated, per-source progress events while
 the long-running index request remains pending. Clients that do not supply it
 remain wire-compatible with the final report-only behavior.
+
+
+For notification-driven updates, set `configuration.changedPaths` to absolute changed subtrees and include every
+currently active source plus `pruneSourcePrefixes`. Other committed subtrees remain searchable, removed sources are
+pruned, and full-refresh timestamps stay unchanged. `settingsFingerprint` can bind a successful full namespace
+snapshot to the host's settings/effective roots. A reader client may set `reader: true` to continue reading the
+committed snapshot during the writer's schema migration. `catalogue(['application'], 'applications:', sourceIds)`
+excludes inactive/other source namespaces before enumeration.

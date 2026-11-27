@@ -7,7 +7,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 /** A real byte path through multipart upload and guarded publication, with an
  * independent object-store byte map for streaming orchestration regressions. */
 const json = (value: object, init?: ResponseInit) => Response.json({ ok: true, ...value }, init);
-export async function streamingFileFixture() {
+export async function streamingFileFixture(path = 'first.bin') {
 	const base = await foregroundFixture(),
 		files = new Map<string, CloudFile>(),
 		receipts = new Map<string, CloudFile>(),
@@ -25,7 +25,7 @@ export async function streamingFileFixture() {
 			}
 		});
 	let entry = {
-		path: 'first.bin',
+		path,
 		id: 'native-file',
 		version: String(version),
 		kind: 'file' as const,
@@ -57,7 +57,7 @@ export async function streamingFileFixture() {
 				body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 			if (url.origin === 'https://objects.test') {
 				puts++;
-				objects.set(url.pathname.slice(1), new Uint8Array(init!.body as Uint8Array));
+				objects.set(url.pathname.slice(1), new Uint8Array(await new Response(init!.body).arrayBuffer()));
 				return new Response(null);
 			}
 			if (url.pathname === '/api/v1/files') {
@@ -136,6 +136,7 @@ export async function streamingFileFixture() {
 		input,
 		scope,
 		journal: base.journal,
+		factory: base.factory,
 		entry: () => structuredClone(entry),
 		files,
 		objects,

@@ -31,6 +31,7 @@ let package = Package(
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreImage"),
                 .linkedFramework("CoreMedia"),
+                .linkedFramework("CoreLocation"),
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("CryptoKit"),
                 .linkedFramework("ImageIO"),
@@ -38,6 +39,7 @@ let package = Package(
                 .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("Security"),
+                .linkedFramework("UserNotifications"),
                 .linkedFramework("SystemConfiguration")
             ]
         ),
@@ -66,7 +68,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",
-            dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
+            dependencies: ["ThingtimeNode", "ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
         )
     ],
     swiftLanguageModes: [.v5]

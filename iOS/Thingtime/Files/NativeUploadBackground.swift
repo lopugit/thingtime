@@ -4,16 +4,24 @@ import OSLog
 
 @MainActor
 protocol NativeUploadBackgroundTask: AnyObject {
+    var identity: AnyObject { get }
     var expiration: (() -> Void)? { get set }
     var progress: Progress { get }
     func update(subtitle: String)
     func complete(success: Bool)
 }
+extension NativeUploadBackgroundTask { var identity: AnyObject { self } }
+
 @MainActor
 protocol NativeUploadBackgroundScheduling: AnyObject {
     func register(_ handler: @escaping (NativeUploadBackgroundTask) -> Void) -> Bool
     func submit() throws
+    func submit(title: String, subtitle: String) throws
     func cancel()
+}
+
+extension NativeUploadBackgroundScheduling {
+    func submit(title: String, subtitle: String) throws { try submit() }
 }
 
 /// One registered system identifier and one in-flight lease. A cancelled request
@@ -21,6 +29,7 @@ protocol NativeUploadBackgroundScheduling: AnyObject {
 /// must never borrow the next upload's account, grant or completion callback.
 @MainActor
 final class NativeUploadBackgroundCoordinator {
+    typealias Diagnostic = @MainActor (MobileDeviceDiagnosticEvent.Background.Outcome, MobileDeviceDiagnosticEvent.SystemError?) -> Void
     static let shared = NativeUploadBackgroundCoordinator(scheduler: {
         if #available(iOS 26.0, *) { return SystemNativeUploadBackgroundScheduler() }
         return nil
@@ -29,50 +38,79 @@ final class NativeUploadBackgroundCoordinator {
     private var registered = false
     private var activated = false
     private var pending: NativeUploadBackgroundLease?
+    // Weak identity remembers delivery, never authority. A repeated callback
+    // after release must not complete the same OS task a second time.
+    private let delivered = NSHashTable<AnyObject>.weakObjects()
     init(scheduler: NativeUploadBackgroundScheduling?) { self.scheduler = scheduler }
     func activate() {
         guard !activated else { return }; activated = true
         registered = scheduler?.register { [weak self] task in
-            guard let lease = self?.pending else { task.complete(success: false); return }
+            guard let self else { task.complete(success: false); return }
+            guard !self.delivered.contains(task.identity) else { return }
+            self.delivered.add(task.identity)
+            guard let lease = self.pending else { task.complete(success: false); return }
             lease.accept(task)
         } ?? false
     }
     func begin(size: Int64, timeoutNanoseconds: UInt64 = 2_000_000_000,
+               diagnostic: Diagnostic? = nil,
                expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
-        guard registered, let scheduler, pending == nil, !Task.isCancelled, size > 0, size < Int64.max else { return nil }
-        let lease = NativeUploadBackgroundLease(size: size, cancel: { scheduler.cancel() }, expired: expired,
+        guard size > 0, size < Int64.max else { return nil }
+        return await begin(presentation: .init(title: "Uploading to Thingtime", subtitle: "Preparing your file…",
+            completedSubtitle: "File uploaded", bytes: size), timeoutNanoseconds: timeoutNanoseconds, diagnostic: diagnostic, expired: expired)
+    }
+    func begin(presentation: NativeUploadBackgroundLease.Presentation, timeoutNanoseconds: UInt64 = 2_000_000_000,
+               diagnostic: Diagnostic? = nil,
+               expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
+        guard registered, let scheduler else { diagnostic?(.unregistered, nil); return nil }
+        guard !Task.isCancelled else { diagnostic?(.cancelled, nil); return nil }
+        guard pending == nil else { diagnostic?(.busy, nil); return nil }
+        let lease = NativeUploadBackgroundLease(presentation: presentation, cancel: { scheduler.cancel() }, expired: expired,
+            diagnostic: diagnostic,
             released: { [weak self] value in if self?.pending === value { self?.pending = nil } })
         pending = lease
         return await withTaskCancellationHandler(operation: {
             await withCheckedContinuation { continuation in
                 lease.wait(continuation, timeoutNanoseconds: timeoutNanoseconds)
-                do { try scheduler.submit() } catch { lease.submissionFailed() }
+                diagnostic?(.submitted, nil)
+                do { try scheduler.submit(title: presentation.title, subtitle: presentation.subtitle) } catch { lease.submissionFailed(error) }
             }
-        }, onCancel: { Task { @MainActor in lease.finish(success: false) } })
+        }, onCancel: { Task { @MainActor in lease.finish(success: false, outcome: .cancelled) } })
     }
 }
 
 @MainActor
 final class NativeUploadBackgroundLease {
+    struct Presentation {
+        let title: String
+        let subtitle: String
+        let completedSubtitle: String
+        var bytes: Int64?
+    }
     private enum State { case waiting, active, cancelledBeforeLaunch, finished }
     private var state: State = .waiting
     private var systemTask: NativeUploadBackgroundTask?
     private var continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>?
     private var deadline: Task<Void, Never>?
-    private let size: Int64
+    private let presentation: Presentation
     private let cancel: () -> Void
     private let expired: () -> Void
+    private let diagnostic: NativeUploadBackgroundCoordinator.Diagnostic?
     private let released: (NativeUploadBackgroundLease) -> Void
+    private(set) var measuredUnits: Int64 = 0
+    private(set) var lastProgressAt: Date?
     var canContinue: Bool { state == .active }
-    init(size: Int64, cancel: @escaping () -> Void, expired: @escaping () -> Void,
+    init(presentation: Presentation, cancel: @escaping () -> Void, expired: @escaping () -> Void,
+         diagnostic: NativeUploadBackgroundCoordinator.Diagnostic? = nil,
          released: @escaping (NativeUploadBackgroundLease) -> Void) {
-        self.size = size; self.cancel = cancel; self.expired = expired; self.released = released
+        self.presentation = presentation; self.cancel = cancel; self.expired = expired; self.released = released
+        self.diagnostic = diagnostic
     }
     func wait(_ continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>, timeoutNanoseconds: UInt64) {
         self.continuation = continuation
         deadline = Task { [weak self] in
             do { try await Task.sleep(nanoseconds: timeoutNanoseconds) } catch { return }
-            self?.finish(success: false)
+            self?.finish(success: false, outcome: .launchTimeout)
         }
     }
     private func settle(_ lease: NativeUploadBackgroundLease?) {
@@ -80,38 +118,64 @@ final class NativeUploadBackgroundLease {
         let waiting = continuation; continuation = nil; waiting?.resume(returning: lease)
     }
     func accept(_ task: NativeUploadBackgroundTask) {
+        if state == .active, systemTask?.identity === task.identity { return }
         guard state == .waiting else {
             task.complete(success: false)
             if state == .cancelledBeforeLaunch { state = .finished; released(self) }
             return
         }
         state = .active; systemTask = task
-        task.progress.totalUnitCount = size + 1; task.progress.completedUnitCount = 0
+        diagnostic?(.active, nil)
+        // A continued task needs finite Progress. With no known payload yet,
+        // its sole known unit is final verification; real discovery replaces
+        // this denominator before reporting its first measured completed work.
+        task.progress.totalUnitCount = presentation.bytes.map { $0 + 1 } ?? 1
+        task.progress.completedUnitCount = 0
         task.expiration = { [weak self] in
             guard let self, self.canContinue else { return }
-            self.finish(success: false); self.expired()
+            self.finish(success: false, outcome: .expired); self.expired()
         }
         settle(self)
     }
-    func submissionFailed() {
-        if state == .active { finish(success: false); return }
+    func submissionFailed(_ error: Error? = nil) {
+        guard state == .waiting || state == .active else { return }
+        diagnostic?(.declined, error.flatMap { MobileDeviceDiagnosticEvent.SystemError(error: $0) })
+        if state == .active { finish(success: false, outcome: .declined, report: false); return }
         guard state != .finished else { return }
         state = .finished; settle(nil); released(self)
     }
     func progress(_ bytes: Int64) {
-        guard canContinue, let task = systemTask, bytes >= task.progress.completedUnitCount, bytes <= size else { return }
+        guard let size = presentation.bytes, canContinue, let task = systemTask,
+              bytes >= task.progress.completedUnitCount, bytes <= size else { return }
         task.progress.completedUnitCount = bytes
+        if bytes > measuredUnits { measuredUnits = bytes; lastProgressAt = Date() }
         task.update(subtitle: bytes == size ? "Verifying upload…" : "\(Int(Double(bytes) / Double(size) * 100))% uploaded")
     }
-    func finish(success: Bool) {
+    func work(completed: Int64, total: Int64?, subtitle: String) {
+        guard presentation.bytes == nil, canContinue, let task = systemTask,
+              let total, completed >= task.progress.completedUnitCount, total > completed else { return }
+        task.progress.totalUnitCount = total
+        task.progress.completedUnitCount = completed
+        if completed > measuredUnits { measuredUnits = completed; lastProgressAt = Date() }
+        task.update(subtitle: subtitle)
+    }
+    func finish(success: Bool, settledSubtitle: String? = nil,
+                outcome: MobileDeviceDiagnosticEvent.Background.Outcome? = nil, report: Bool = true) {
         switch state {
         case .waiting:
+            if report { diagnostic?(outcome ?? .cancelled, nil) }
             state = .cancelledBeforeLaunch; settle(nil); cancel()
         case .active:
+            if report { diagnostic?(outcome ?? (success ? .completed : .failed), nil) }
             state = .finished
             if let task = systemTask {
                 task.expiration = nil
-                if success { task.progress.completedUnitCount = size + 1; task.update(subtitle: "File uploaded") }
+                if success {
+                    // A finite available-originals pass can settle with durable
+                    // gaps. Do not turn its measured backlog into a false 100%.
+                    if settledSubtitle == nil, task.progress.totalUnitCount > 0 { task.progress.completedUnitCount = task.progress.totalUnitCount }
+                    task.update(subtitle: settledSubtitle ?? presentation.completedSubtitle)
+                }
                 task.complete(success: success)
             }
             systemTask = nil; settle(nil); released(self)
@@ -138,7 +202,10 @@ private final class SystemNativeUploadBackgroundScheduler: NativeUploadBackgroun
         return registered
     }
     func submit() throws {
-        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+        try submit(title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+    }
+    func submit(title: String, subtitle: String) throws {
+        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
         request.strategy = .fail
         do { try BGTaskScheduler.shared.submit(request) }
         catch {
@@ -161,7 +228,8 @@ private final class SystemNativeUploadBackgroundTask: NativeUploadBackgroundTask
             task.expirationHandler = { Task { @MainActor in callback() } }
         }
     }
+    var identity: AnyObject { task }
     var progress: Progress { task.progress }
-    func update(subtitle: String) { task.updateTitle("Uploading to Thingtime", subtitle: subtitle) }
+    func update(subtitle: String) { task.updateTitle(task.title, subtitle: subtitle) }
     func complete(success: Bool) { task.setTaskCompleted(success: success) }
 }

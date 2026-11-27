@@ -59,8 +59,8 @@ describe('normalizeLopuSettings', () => {
 		assert.deepEqual(normalizeLopuSettings({ launcher: 'yes', dock: 'up', speed: 'warp', model: 42 }), LOPU_SETTINGS_DEFAULTS);
 	});
 
-	test('defaults are the safe product choices: launcher on, free dock, live patches, confirm deletes, enter sends, quiet voice', () => {
-		assert.equal(LOPU_SETTINGS_DEFAULTS.launcher, true);
+	test('defaults are the safe product choices: launcher off, free dock, live patches, confirm deletes, enter sends, quiet voice', () => {
+		assert.equal(LOPU_SETTINGS_DEFAULTS.launcher, false);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.dock, 'free');
 		assert.equal(LOPU_SETTINGS_DEFAULTS.applyPatches, true);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.confirmDeletes, true);
@@ -74,6 +74,11 @@ describe('normalizeLopuSettings', () => {
 		assert.equal(LOPU_SETTINGS_DEFAULTS.directVoice, false);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.directVoiceModel, null);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.open, false);
+	});
+
+	test('floating icon defaults off and preserves either explicit choice', () => {
+		for (const raw of [undefined, {}, { launcher: null }, { launcher: 'true' }]) assert.equal(normalizeLopuSettings(raw).launcher, false);
+		for (const launcher of [true, false]) assert.equal(normalizeLopuSettings({ launcher }).launcher, launcher);
 	});
 
 	test('explicit values survive, ids are trimmed and bounded', () => {

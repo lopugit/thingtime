@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
+import { syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { findBlock } from '../Builder/webpageBlocks';
 import { resolveBlockProps } from '../Builder/templateBlocks';
@@ -25,6 +25,21 @@ test('indexing with unknown totals remains indeterminate and stopped state is ex
 	assert.doesNotMatch(display.indexDescription, /%/);
 	const stopped = syncProgressDisplay({}, { stage: 'transferring', confirmed: 3, total: 9 }, 'cancelled', true).sync;
 	assert.match(stopped.uploadDescription, /Cancelled.*3 \/ 9/);
+});
+
+test('a current backup scan count takes precedence over the retained hierarchy summary', () => {
+	const saved = { path: '', kind: 'folder' as const, files: 5751, folders: 234, indexedBytes: 1700, excluded: 0, unchanged: 0,
+		operations: 465, confirmed: 465, transferFiles: 397, confirmedFiles: 397, bytesTotal: 1700, bytesConfirmed: 380 };
+	const branches = { '': { history: [], busy: false, page: { parent: saved, rows: [], after: null, next: null } } };
+	const current = { stage: 'scanning' as const, confirmed: 0, total: 0, indexed: 5985, coverage: 'partial' as const, skipped: 0 };
+	const live = syncProgressDisplay(branches, current, 'running', true).sync;
+	assert.match(live.indexDescription, /Current scan: 5,985 entries indexed.*Total still being discovered/);
+	assert.match(live.indexDescription, /Saved hierarchy remains visible below/);
+	assert.doesNotMatch(live.indexDescription, /5,751 files and 234 folders indexed/);
+	assert.match(live.folderSummary, /5,751 files.*234 folders/, 'the saved tree remains available separately');
+	assert.match(syncProgressDisplay({}, current, 'running', false).sync.indexDescription, /5,985 entries indexed.*still being discovered/);
+	assert.match(syncProgressDisplay(branches, { stage: 'complete', confirmed: 0, total: 0 }, 'complete', true).sync.indexDescription,
+		/5,751 files and 234 folders indexed/);
 });
 
 test('preparation identifies its actual phase and counts separately from uploaded receipts', () => {
@@ -131,4 +146,30 @@ test('existing readiness text distinguishes negotiated gates, exact recovery cou
  assert.match(text,/^Saved observation/); assert.match(text,/negotiated and enabled.*original file-batch recovery.*89 original operations remaining/);
  assert.match(text,/New batches wait for original-operation recovery/); assert.match(text,/not uploaded counts/);
  for(const gate of ['not-negotiated','custom-policy'] as const) assert.match(priorityReadinessDisplay({...known,priorityReadiness:{...known.priorityReadiness,folderBatchGate:gate}},'running').priorityStatus,gate==='not-negotiated'?/not negotiated/:/custom mutation policy/);
+});
+
+test('resource status keeps effective fields individually editable and distinguishes saved or unavailable CPU from live measurement', () => {
+ const blocks = settingsDocumentBlocks(syncResourceStatusBlocks);
+ for (const field of ['cpu', 'transfers', 'indexing', 'upload', 'download', 'help']) assert.ok(findBlock(blocks, 'sync-resource-status-' + field));
+ const progress = { stage: 'transferring' as const, confirmed: 0, total: 1, resources: { version: 1 as const, cpuPercent: 12, cpuStatus: 'measured' as const, effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 3, uploadBytesPerSecond: 125000 } };
+ const current = syncResourceStatusDisplay(progress, 'running').syncResources;
+ assert.match(current.cpu, /12% of total CPU/); assert.match(current.transfers, /transfers: 2/); assert.match(current.indexing, /workers: 3/);
+ assert.match(current.upload, /125,000 bytes\/s cap/); assert.match(current.download, /No reported rate cap/); assert.match(current.help, /not measured throughput/);
+ const saved = syncResourceStatusDisplay(progress, 'paused').syncResources; assert.match(saved.cpu, /Last reported/); assert.match(saved.help, /not a current CPU measurement/);
+ const unknown = syncResourceStatusDisplay({ ...progress, resources: { ...progress.resources, cpuPercent: null, cpuStatus: 'unavailable' } }, 'running').syncResources;
+ assert.match(unknown.cpu, /unavailable/); assert.doesNotMatch(unknown.cpu, /0%/);
+ assert.match(syncResourceStatusDisplay(undefined, 'running').syncResources.transfers, /unavailable/);
+});
+
+test('a completed download keeps its durable direction after active samples end', () => {
+	const directions = {
+		upload: { operations: 0, confirmed: 0, bytesTotal: '0', bytesConfirmed: '0' },
+		download: { operations: 2, confirmed: 2, bytesTotal: '12', bytesConfirmed: '12' },
+	};
+	const result = syncProgressDisplay({}, { stage: 'complete', total: 2, confirmed: 2, directions }, 'complete', true).sync;
+	assert.equal(result.transferTitle, '2. Download files and folders');
+	assert.match(result.uploadDescription, /Complete.*2 \/ 2 operations confirmed/);
+	const provisional = syncProgressDisplay({}, { stage: 'checking', total: 0, confirmed: 0, totalFinal: false }, 'running', false, '', '', false, false, 'two-way').sync;
+	assert.equal(provisional.transferTitle, '2. Transfer files and folders');
+	assert.match(provisional.uploadDescription, /Total may grow/);
 });

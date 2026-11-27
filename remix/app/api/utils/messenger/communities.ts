@@ -357,7 +357,6 @@ const toPublicInvite = (doc: any): PublicInvite => ({
 });
 
 const MAX_INVITE_DAYS = 90;
-const MAX_LIVE_INVITES_PER_COMMUNITY = 50;
 
 export type CreateInviteResult = Fail | { ok: true; invite: PublicInvite };
 
@@ -379,12 +378,6 @@ export const createInvite = async (
     if (!res.matchedCount) return fail(404, 'Invite not found');
     return { ok: true };
   }
-  const live = await things.countDocuments({
-    thingtime: 'community-invite',
-    targetId: community.shareId,
-    'crystal.revoked': { $ne: true }
-  } as any);
-  if (live >= MAX_LIVE_INVITES_PER_COMMUNITY) return fail(400, 'Too many live invites — revoke some first');
   const days = Number(input.expiresInDays);
   const expiresAt =
 		Number.isFinite(days) && days > 0 ? new Date(Date.now() + Math.min(days, MAX_INVITE_DAYS) * 24 * 60 * 60 * 1000).toISOString() : null;
@@ -417,7 +410,7 @@ export const listInvites = async (viewerId: string, communityId: unknown): Promi
   const docs = await things
     .find({ thingtime: 'community-invite', targetId: community.shareId } as any)
     .sort({ createdAt: -1, shareId: 1 })
-    .limit(100)
+    .batchSize(100)
     .toArray();
   return { ok: true, invites: docs.map(toPublicInvite) };
 };

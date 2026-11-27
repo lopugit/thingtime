@@ -4,6 +4,18 @@ import { test } from 'node:test';
 import { loadWebpageClient, mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '~/api/utils/capabilities/capabilityContract';
+import { capabilitySatisfies } from '~/api/utils/capabilities/capabilityContract';
+import { BUILDER_SAVE_REQUIREMENTS } from './webpageBlocks';
+
+test('Builder save negotiates the corrected empty-value write contracts', () => {
+	for (const [feature, required] of Object.entries(BUILDER_SAVE_REQUIREMENTS)) {
+		assert.equal(capabilitySatisfies(required, required), true, feature);
+		assert.equal(capabilitySatisfies(required.replace(/1$/, '2'), required), true, feature);
+		assert.equal(capabilitySatisfies(required.replace(/1$/, '0'), required), false, feature);
+		assert.equal(capabilitySatisfies('2.0.0', required), false, feature);
+		assert.equal(capabilitySatisfies(undefined, required), false, feature);
+	}
+});
 
 // SiteBlocksHost resolves the site doc for EVERY route a signed-in viewer
 // lands on, so resolveWebpageClient screens the path against the same bounds
@@ -21,7 +33,7 @@ const withFetch = async <T,>(
 	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
 		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
-			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.3.0' } } }) } as Response);
+			return Promise.resolve(Response.json({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.13.0' } } }));
 		}
 		calls.push(String(url));
 		return impl(String(url));
@@ -35,11 +47,7 @@ const withFetch = async <T,>(
 	}
 };
 
-const okResponse = () =>
-	Promise.resolve({
-		ok: true,
-		json: async () => ({ ok: true, page: null, source: null, components: [], refs: {} })
-	} as unknown as Response);
+const okResponse = () => Promise.resolve(Response.json({ ok: true, page: null, source: null, components: [], refs: {} }));
 
 test('temporary resolve failures are retryable, not missing pages', async () => {
 	for (const status of [408, 429, 500, 502, 503]) {
@@ -133,4 +141,11 @@ test('saved webpages adopt and clear owner-only hidden-link keys with their ACL'
 		acl: ['tt:user', 'tt:all']
 	});
 	assert.equal(publicPage?.page?.linkKey, undefined);
+});
+
+
+test('saved projection carries the server execution hold and releases it only on an explicit false', () => {
+ const before = { page: { id: 'restored-page', crystal: { blocks: [] }, executionHeld: true }, source: 'user', componentsByRef: {} } as ResolvedWebpage;
+ assert.equal(mergeSavedWebpage(before, { id: 'restored-page', crystal: { blocks: [] } })?.page?.executionHeld, true);
+ assert.equal(mergeSavedWebpage(before, { id: 'restored-page', crystal: { blocks: [] }, executionHeld: false })?.page?.executionHeld, false);
 });

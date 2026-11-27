@@ -1,3 +1,5 @@
+import { Cron } from 'croner';
+
 export const LOPU_REMINDER_KIND = 'lopu-reminder';
 export const REMINDER_MIN_INTERVAL_MINUTES = 5;
 export const NOTIFICATION_DELIVERIES = ['quiet', 'normal', 'urgent'] as const;
@@ -49,4 +51,3 @@ export function nextReminderTime(due: Date, everyMinutes: number | null, now: Da
 	const interval = everyMinutes * 60_000;
 	return new Date(due.getTime() + Math.max(1, Math.floor((now.getTime() - due.getTime()) / interval) + 1) * interval);
 }
-import { Cron } from 'croner';

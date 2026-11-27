@@ -14,7 +14,9 @@ import type {
 import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
 import { thingBrowseHref } from './thingsLocation';
+import { thingStorageHref } from './thingStorageNavigation';
 
 import {
   THINGS_GROUP_OPTIONS,
@@ -40,10 +42,19 @@ export type ThingsItemMenuArgs = {
   clipboardCount: number;
   ownerId?: string;
   locationSearch?: string;
+  builderMode?: boolean;
+  dataPlane?: string | null;
+  libraryAction?: 'archive' | 'restore';
+  allowCreation?: boolean;
+  pinState?: { pinned: boolean; disabled?: boolean };
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch }: ThingsItemMenuArgs): ThingContextMenuModel => {
-  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch) }, 'copy-link': true });
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, libraryAction, allowCreation = true, pinState }: ThingsItemMenuArgs): ThingContextMenuModel => {
+  const pinActions = pinState ? { [pinState.pinned ? 'unpin' : 'pin']: { disabled: pinState.disabled }, 'reorder-pins': { disabled: pinState.disabled } } : {};
+  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ ...pinActions, open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
+  if (thing.libraryArchivePresentation === 'metadata') return buildThingEntityMenu(
+    { ...pinActions, ...(libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: 'Private library placement; content stays in its original conversation or audience' } } : {}) },
+    [], actCount === 1 ? thing.id : undefined);
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
   const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
@@ -52,34 +63,44 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
+    ...pinActions,
+    'storage-placement': actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
-    open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },
+    ...(libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: bulkHint } } : {}),
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
+    ...builderThingMenuSections(thing, ownerId, actCount),
+    ...(builderMode && thing.thingtime.includes('component') && actCount === 1 && thing.author?.id === ownerId
+      ? [{ id: 'builder-definition', actions: [{ id: 'edit-definition', command: 'edit-definition', label: 'Edit definition…', icon: '✏️', lucide: 'pencil' }] }]
+      : []),
     ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
     ...(files ? [files] : []),
     { id: 'organise', label: 'Organise', actions: [
-      { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' }
+      { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' },
     ] },
     { id: 'clipboard', label: 'Clipboard', actions: [
       { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
         hint: folder ? 'Folders copy everything inside' : undefined },
-      ...(!archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
+      ...(allowCreation && !archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
         hint: folder ? 'Duplicates the folder and everything inside' : undefined }] : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
       { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
       // portable paste: the OS clipboard may hold a Thingtime transfer even when
       // this tab's clipboard is empty, so the entry stays enabled
-      ...(folder ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
+      ...(folder && allowCreation ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
         icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
     ] }
-  ]);
+  ], actCount === 1 ? thing.id : undefined);
 };
 
 export type ThingsBackgroundMenuArgs = {
+  reorderPins?: boolean;
+  libraryNavigation?: boolean;
+  allowCreation?: boolean;
   clipboardCount: number;
   itemCount: number;
   sort: ThingsSort;
@@ -126,7 +147,7 @@ const groupSubmenu = (groupBy: ThingsGroupBy): ThingContextSubmenu => ({
   ]
 });
 
-const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingContextSubmenu => ({
+const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode, allowColumns: boolean): ThingContextSubmenu => ({
   title: 'View',
   sections: [
     {
@@ -135,7 +156,7 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingCon
       actions: [
         { id: 'view-grid', command: 'set-view', payload: { view: 'grid' }, label: 'Grid', icon: '🔲', lucide: 'layout-grid', selected: view === 'grid' },
         { id: 'view-list', command: 'set-view', payload: { view: 'list' }, label: 'List', icon: '📃', lucide: 'rows-3', selected: view === 'list' },
-        { id: 'view-columns', command: 'set-view', payload: { view: 'columns' }, label: 'Columns', icon: '🪜', lucide: 'columns-3', selected: view === 'columns' }
+        ...(allowColumns ? [{ id: 'view-columns', command: 'set-view', payload: { view: 'columns' }, label: 'Columns', icon: '🪜', lucide: 'columns-3', selected: view === 'columns' }] : [])
       ]
     },
     {
@@ -150,6 +171,9 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingCon
 });
 
 export const buildThingsBackgroundMenu = ({
+  allowCreation = true,
+  reorderPins = false,
+  libraryNavigation = false,
   clipboardCount,
   itemCount,
   sort,
@@ -158,7 +182,7 @@ export const buildThingsBackgroundMenu = ({
   displayMode
 }: ThingsBackgroundMenuArgs): ThingContextMenuModel => ({
   sections: [
-    {
+    ...(allowCreation ? [{
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
@@ -173,14 +197,19 @@ export const buildThingsBackgroundMenu = ({
           hint: 'Paste a Thingtime transfer from your clipboard'
         }
       ]
-    },
+    }] : []),
+    ...(libraryNavigation ? [{ id: 'library', label: 'Library', actions: [
+      { id: 'lidar-scans', label: 'LiDAR scans', icon: '📐', lucide: 'scan', href: '/things?lidar=1' },
+      { id: 'unfiled-files', label: 'Unfiled files', icon: '📁', lucide: 'folder', href: '/things?unfiled=attachments' }
+    ] }] : []),
     {
       id: 'arrange',
       label: 'Arrange',
       actions: [
+        ...(reorderPins ? [{ id: 'reorder-pins', command: 'reorder-pins', label: 'Reorder pins', icon: '📌', lucide: 'pin' }] : []),
         { id: 'sort-by', label: 'Sort by…', icon: '🔃', lucide: 'arrow-up-down', submenu: sortSubmenu(sort) },
         { id: 'group-by', label: 'Group by…', icon: '🗂️', lucide: 'layers', submenu: groupSubmenu(groupBy) },
-        { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode) }
+        { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode, allowCreation) }
       ]
     },
     {

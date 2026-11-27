@@ -437,7 +437,7 @@ const USE_CASES = [
 		copy: 'List it, lend it, track who has it and when it’s due back — and get paid for the weekend. Fewer drills in the world, more holes in walls.'
 	},
 	{
-		dot: '#ffa3b1',
+		dot: '#ffa9dd',
 		title: 'Your ideas 📝',
 		copy: 'Notes, recipes, projects, whole app datasets — any shape you can imagine, in one place, readable by people and machines equally.'
 	}

@@ -11,7 +11,10 @@
 // assigned next to password-manager names and flag every commit touching the
 // file. The tuple shape carries the same data without the assignment shape
 // that trips the false positive.
+import { PASSWORD_PROVIDER_AAGUID, PASSWORD_PROVIDER_NAME } from '../../../passwords/passwordProviderIdentity';
+
 const PASSKEY_PROVIDERS: Array<[aaguid: string, providerName: string]> = [
+	[PASSWORD_PROVIDER_AAGUID, PASSWORD_PROVIDER_NAME],
 	['fbfc3007-154e-4ecc-8c0b-6e020557d7bd', 'iCloud Keychain'],
 	['dd4ec289-e01d-41c9-bb89-70fa845d4bf2', 'iCloud Keychain (Managed)'],
 	['bada5566-a7aa-401f-bd96-45619a55120d', '1Password'],

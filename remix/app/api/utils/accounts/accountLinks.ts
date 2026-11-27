@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { getThingsCollection, getHomeThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Account-ownership links (FUNDAMENTALS.md §3: appended/child data is
@@ -75,7 +75,7 @@ export const createAccountLink = async (input: {
   }
 
   const now = new Date();
-  const things = await (input.linkKind === 'character' ? getHomeThingsCollection() : getThingsCollection());
+  const things = await getHomeThingsCollection();
   const options = input.session ? { session: input.session } : {};
   try {
     await things.updateOne(
@@ -109,8 +109,36 @@ export const createAccountLink = async (input: {
   return { ok: true, link: toLink(doc) };
 };
 
+// Creation receipts reuse the protected roster row and existing unique shareId.
+// Keying this row by owner + request, rather than the chosen username/target,
+// makes concurrent retries atomic with registration even if their handles differ.
+export type CharacterCreation = { username: string; displayName: string; loginMode: string };
+const characterCreationMatch = (ownerId: string, requestId: string) => ({
+  shareId: linkShareId('character', ownerId, `creation:${requestId}`),
+  thingtime: LINK_KIND, ownerId, 'crystal.linkKind': 'character'
+});
+export async function getCharacterCreation(ownerId: string, requestId: string) {
+  const doc = await (await getHomeThingsCollection()).findOne(characterCreationMatch(ownerId, requestId));
+  return doc ? { targetId: String(doc.crystal.targetId), request: doc.crystal.creation as CharacterCreation } : null;
+}
+export async function saveCharacterCreation(input: {
+  ownerId: string; requestId: string; targetId: string; request: CharacterCreation; session: any;
+}) {
+  const now = new Date();
+  // An immutable insert is intentional: never swallow a duplicate inside a
+  // transaction or overwrite the winning creation's target/request.
+  await (await getHomeThingsCollection()).insertOne({
+    shareId: characterCreationMatch(input.ownerId, input.requestId).shareId,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+    thingtime: [LINK_KIND], ownerId: input.ownerId, acl: [ACL_OWNER],
+    crystal: { linkKind: 'character', userId: input.ownerId, targetId: input.targetId,
+      role: 'owner', createdBy: input.ownerId, creation: input.request },
+    targetId: null, tags: [], createdAt: now, updatedAt: now
+  }, { session: input.session });
+}
+
 export const removeAccountLink = async (linkKind: AccountLinkKind, userId: string, targetId: string): Promise<{ ok: true; removed: boolean }> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const res = await things.deleteOne(linkMatch(linkKind, userId, targetId));
   return { ok: true, removed: res.deletedCount > 0 };
 };
@@ -118,7 +146,7 @@ export const removeAccountLink = async (linkKind: AccountLinkKind, userId: strin
 // All links a user holds (ownerId = the managing user, so this rides the
 // (thingtime, ownerId, createdAt) index).
 export const listAccountLinksForUser = async (userId: string, linkKind?: AccountLinkKind): Promise<AccountLink[]> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const docs = await things
     .find({ thingtime: LINK_KIND, ownerId: userId, ...(linkKind ? { 'crystal.linkKind': linkKind } : {}) })
     .sort({ createdAt: 1 })
@@ -129,7 +157,7 @@ export const listAccountLinksForUser = async (userId: string, linkKind?: Account
 // Everyone linked to a target (admin "who owns this?" view + co-manager
 // resolution) — served by the (thingtime, crystal.targetId) index.
 export const listAccountLinksForTarget = async (targetId: string, linkKind?: AccountLinkKind): Promise<AccountLink[]> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const docs = await things
     .find({ thingtime: LINK_KIND, 'crystal.targetId': targetId, ...(linkKind ? { 'crystal.linkKind': linkKind } : {}) })
     .sort({ createdAt: 1 })
@@ -140,10 +168,24 @@ export const listAccountLinksForTarget = async (targetId: string, linkKind?: Acc
 // Does this user hold an 'account' link to that account? (The assume
 // endpoint's authorization check.)
 export const userOwnsLinkedAccount = async (userId: string, accountId: string): Promise<boolean> => {
-  const things = await getThingsCollection();
+  const things = await getHomeThingsCollection();
   const doc = await things.findOne(linkMatch('account', userId, accountId), { projection: { _id: 1 } });
   return !!doc;
 };
+
+/** Internal composed writes must hold the current protected ownership row in
+ * the same transaction; unlinking it then conflicts with the dependent write. */
+export async function fenceOwnedAccountLink(actorId: string, ownerId: string, session: any, token: string): Promise<boolean> {
+  if (typeof session?.inTransaction !== 'function' || !session.inTransaction() || typeof token !== 'string' || !token) throw new Error('Account ownership requires an active transaction and fence token');
+  const things = await getHomeThingsCollection();
+  const filter = { ...linkMatch('account', actorId, ownerId), ownerId: actorId,
+    'crystal.linkKind': 'account', 'crystal.userId': actorId, 'crystal.targetId': ownerId };
+  const options = { session };
+  const row = await things.findOne(filter, options);
+  if (!row) return false;
+  const result = await things.updateOne({ ...filter, _id: row._id }, { $set: { authorizationFence: `${token}:${randomUUID()}` } }, options);
+  return result.matchedCount === 1;
+}
 
 // The clientIds of apps this user co-manages via links (their own apps are
 // matched by ownerId and never need a link).
@@ -159,10 +201,16 @@ export const userCanManageApp = async (userId: string, appDoc: any, session?: an
   if (String(appDoc.ownerId) === userId) return true;
   const clientId = appDoc?.crystal?.clientId;
   if (typeof clientId !== 'string' || !clientId) return false;
-  const things = await getThingsCollection();
-	const doc = await things.findOne(linkMatch('app', userId, clientId), {
-		projection: { _id: 1 },
-		...(session ? { session } : {})
-	});
-  return !!doc;
+  const things = await getHomeThingsCollection();
+	const match = linkMatch('app', userId, clientId);
+  const doc = await things.findOne(match, { projection: { _id: 1 }, ...(session ? { session } : {}) });
+  if (!doc) return false;
+  if (session) {
+    // A transaction snapshot alone does not conflict with concurrent unlink.
+    // Touch the exact authority row so removal either wins or forces a fresh
+    // authorization on transaction retry, before any app change can commit.
+    const held = await things.updateOne({ ...match, _id: doc._id }, { $set: { authorizationFence: randomUUID() } }, { session });
+    if (!held.matchedCount) return false;
+  }
+  return true;
 };

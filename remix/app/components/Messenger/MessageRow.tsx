@@ -1,3 +1,4 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
 import { Box, Button, Flex, Image } from '@chakra-ui/react';
 import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
@@ -10,6 +11,7 @@ import { REACTION_EMOJIS } from '~/schemas/registry';
 import { getUserDisplayName } from '~/utils/userIdentity';
 import { CustomEmojiImage, renderTextWithEmojis } from './CustomEmojiImage';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
+import { useEmojiPickerDraft } from '../Emoji/useEmojiPickerDraft';
 import {
   customTokenId,
   externalSourceAvatar,
@@ -60,7 +62,7 @@ const Avatar = ({
   const letter = (profile ? getUserDisplayName(profile) : '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
 		return (
-			<Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />
+			<Box width={`${size}px`} height={`${size}px`} borderRadius="full" overflow="hidden" flexShrink={0}><PresentedImage src={profile.avatarUrl} presentation={profile.avatarPresentation} alt={letter} /></Box>
 		);
   }
   return (
@@ -105,6 +107,7 @@ export type MessageRowProps = {
 export const MessageRow = (props: MessageRowProps) => {
   const { message, mode, isMine, grouped, members, customEmojis, seenBy } = props;
   const [hovered, setHovered] = React.useState(false);
+  const pickerDraft = useEmojiPickerDraft(message.id);
 
   const emojiByName = React.useMemo(() => {
     const map = new Map<string, { id: string; image: string }>();
@@ -143,8 +146,13 @@ export const MessageRow = (props: MessageRowProps) => {
       <Button
         key={token}
         size="xs"
-        height="22px"
+        minHeight="22px"
+        height="auto"
         minWidth="0"
+        maxWidth="100%"
+        whiteSpace="normal"
+        aria-label={`React ${token}`}
+        aria-pressed={mine}
         paddingX="7px"
         variant="ghost"
         onClick={() => props.onReact(message, token)}
@@ -159,9 +167,9 @@ export const MessageRow = (props: MessageRowProps) => {
         {isCustomToken(token) ? (
           <CustomEmojiImage image={customEmojis[customTokenId(token)]?.image} name={customEmojis[customTokenId(token)]?.name} size={15} />
         ) : (
-          <span>{token}</span>
+          <Box as="span" minWidth={0} overflowWrap="anywhere" lineHeight={1.4}>{token}</Box>
         )}
-        <Box as="span" color="var(--tt-muted, #9a9aa6)" fontWeight={600}>
+        <Box as="span" color="var(--tt-muted, #9a9aa6)" fontWeight={600} flexShrink={0}>
           {count}
         </Box>
       </Button>
@@ -191,6 +199,8 @@ export const MessageRow = (props: MessageRowProps) => {
       <MessengerEmojiPicker
         emojis={props.pickerEmojis}
         activeTokens={message.viewerReactions}
+        query={pickerDraft.query}
+        onQueryChange={pickerDraft.setQuery}
         onPick={(token) => {
           props.onReact(message, token);
           close();
@@ -216,7 +226,7 @@ export const MessageRow = (props: MessageRowProps) => {
 		<Flex gap={0} opacity={{ base: 1, md: hovered ? 1 : 0 }} transition="opacity 0.12s ease" align="center" flexShrink={0}>
       <ReactionControl
         trigger={
-          <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" title="React">
+          <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" title="React" aria-label="React to message">
             😀
           </Button>
         }
@@ -236,7 +246,7 @@ export const MessageRow = (props: MessageRowProps) => {
       ) : null}
       {!sourceLocked && (canEdit || props.onDelete) ? (
         <ThingActionMenuButton identity={message.id} label="Message actions"
-          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete })}
+          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete }, [], message.id)}
           onAction={({ action }) => {
             if (action.command === 'edit' && canEdit) props.onEdit?.(message);
             else if (action.command === 'delete') props.onDelete?.(message);
@@ -290,7 +300,7 @@ export const MessageRow = (props: MessageRowProps) => {
               {!grouped ? <Avatar profile={member?.profile || message.author} externalSource={message.externalSource} /> : null}
             </Box>
           ) : null}
-          <Box maxWidth="min(72%, 480px)">
+          <Box maxWidth="min(72%, 480px)" minWidth={0}>
             {!isMine && !grouped ? (
               <Box fontSize="11px" color="var(--tt-muted, #9a9aa6)" marginBottom="2px" marginLeft={2}>
                 {displayName}
@@ -323,12 +333,11 @@ export const MessageRow = (props: MessageRowProps) => {
                 ) : null}
               </Box>
               {reactionEntries.length ? (
-								<Flex position="absolute" bottom="-11px" right={isMine ? 'auto' : '6px'} left={isMine ? '6px' : 'auto'} gap="2px">
+								<Flex position="relative" marginTop="-11px" marginX="6px" marginBottom="1px" justify={isMine ? 'flex-start' : 'flex-end'} gap="2px" wrap="wrap">
                   {reactionEntries.map(reactionChip)}
                 </Flex>
               ) : null}
             </Box>
-            {reactionEntries.length ? <Box height="12px" /> : null}
           </Box>
           {toolbar}
         </Flex>

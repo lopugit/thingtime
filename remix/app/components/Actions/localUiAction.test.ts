@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { reduceLocalUi } from './localUiAction';
+import { modifierSelectionInput, reducePageSelection, type PageSelection, reduceLocalUi } from './localUiAction';
 
 test('local choices and counters change only this instance and respect bounds', () => {
 	const defaults = { active: '1', on: true, count: 3 };
@@ -44,10 +44,32 @@ test('selection patches are atomic and typing can clear related draft fields', (
 test('query navigation encodes values and stays on the current page', async () => {
 	const { localQueryHref } = await import('./localUiAction');
 	assert.equal(localQueryHref('page-1', { q: 'A&B #?', page: 2 }), '/p/page-1?q=A%26B+%23%3F&page=2');
-	for (const params of [{ mode: 'edit' }, { key: 'secret' }, { x: {} }, { x: 'a'.repeat(201) }, JSON.parse('{"__proto__":"x"}')])
+	for (const params of [{ mode: 'edit' }, { key: 'secret' }, { x: {} }, { x: [false] }, JSON.parse('{"__proto__":"x"}')])
 		assert.equal(localQueryHref('page-1', params), null);
 	assert.equal(localQueryHref('https://evil.example', {}), null);
 	assert.equal(localQueryHref(null, {}), null);
+});
+
+test('query forms carry exact selections and explicit clears', async () => {
+	const { localQueryFormInput, localQueryParams } = await import('./localUiAction');
+	const projectIds = Array.from({ length: 8 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+	const { params } = localQueryFormInput({ op: 'query', form: true, params: { projectIds: '', statuses: 'active' } }, { projectIds, statuses: [] });
+	const query = localQueryParams(params);
+	assert.equal(query?.get('projectIds'), JSON.stringify(projectIds));
+	assert.equal(query?.get('statuses'), '[]');
+	assert.equal(localQueryParams({ statuses: [' In review, external ', 'active'] })?.get('statuses'), '[" In review, external ","active"]');
+});
+
+
+test('in-page query selection preserves literal values and rejects route authority atomically', async () => {
+	const { localQueryParams } = await import('./localUiAction');
+	const selected = localQueryParams({ view: 'favourite', id: 'A&B #?', show: false, count: 0 });
+	assert.ok(selected);
+	assert.deepEqual(Object.fromEntries(selected), { view: 'favourite', id: 'A&B #?', show: 'false', count: '0' });
+	assert.deepEqual(Object.fromEntries(localQueryParams({})!), {});
+	for (const invalid of [{ view: 'favourite', mode: 'edit' }, { view: 'favourite', key: 'bearer' }, { view: 'favourite', nested: {} }, JSON.parse('{"view":"favourite","__proto__":"bad"}')]) {
+		assert.equal(localQueryParams(invalid), null);
+	}
 });
 
 
@@ -62,4 +84,36 @@ test('query forms collect only declared names, preserve exclusions and require o
 	assert.equal(localQueryFormInput(plain, { q: 'new' }), plain);
 	const reserved = localQueryFormInput({ op: 'query', form: true, params: { mode: '' } }, { mode: 'edit' });
 	assert.equal(localQueryHref('page', reserved.params), null);
+});
+
+test('page selection keeps unique scalar items in gesture order and fences groups', () => {
+	const update = (state: PageSelection, value: unknown, context = 'group-a') =>
+		reducePageSelection(state, { op: 'toggle-member', key: 'pick', value, context });
+	let selection = update({}, 'a');
+	selection = update(selection, 'b');
+	assert.deepEqual(selection.pick, { items: ['a', 'b'], count: 2, context: 'group-a' });
+	selection = update(selection, 'a');
+	assert.deepEqual(selection.pick, { items: ['b'], count: 1, context: 'group-a' });
+	assert.equal(update(selection, {}), selection);
+	assert.equal(reducePageSelection(selection, { op: 'toggle-member', key: 'constructor', value: 'a' }), selection);
+	assert.equal(reducePageSelection(selection, { op: 'clear-selection', key: 'pick', context: 'group-b' }), selection);
+	const other = update(selection, 'c', 'group-b');
+	assert.deepEqual(other.pick, { items: ['c'], count: 1, context: 'group-b' });
+	assert.deepEqual(reducePageSelection(other, { op: 'clear-selection', key: 'pick' }), {});
+	assert.deepEqual(reduceLocalUi({}, {}, { op: 'set', key: 'selection', value: 'legacy' }), { selection: 'legacy' });
+	assert.deepEqual(reduceLocalUi({}, {}, { op: 'set', key: 'collections', value: 'legacy' }), { collections: 'legacy' });
+});
+
+test('only an opted-in primary modifier gesture yields a page selection operation', () => {
+	const click = { type: 'click', button: 0, detail: 1, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
+	const input = { op: 'toggle-member', scope: 'page', key: 'pick', value: 'first', context: 'group-a' };
+	const serialized = JSON.stringify({ ...input, extra: 'ignored' });
+	assert.deepEqual(modifierSelectionInput({ ...click, metaKey: true }, serialized), input);
+	assert.deepEqual(modifierSelectionInput({ ...click, ctrlKey: true }, serialized), input);
+	assert.deepEqual(modifierSelectionInput({ ...click, type: 'contextmenu', detail: 0, ctrlKey: true }, serialized), input);
+	for (const event of [click, { ...click, ctrlKey: true, detail: 0 }, { ...click, metaKey: true, button: 1 },
+		{ ...click, type: 'contextmenu', ctrlKey: true, button: 2 }, { ...click, ctrlKey: true, altKey: true }]) {
+		assert.equal(modifierSelectionInput(event, serialized), null);
+	}
+	assert.equal(modifierSelectionInput({ ...click, metaKey: true }, JSON.stringify({ ...input, op: 'native' })), null);
 });

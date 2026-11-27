@@ -17,6 +17,7 @@ import type {
 	DeviceSnapshot,
 	DeviceSummary
 } from './deviceTypes';
+import { readDeviceResources } from './deviceResourceMetrics';
 
 export const DEVICE_STALE_AFTER_MS = 30_000;
 export const DEVICE_OFFLINE_AFTER_MS = 120_000;
@@ -479,6 +480,7 @@ const cacheSummary = (summary: DeviceSummary | null): DeviceSummary | null => {
 	if (!summary) return null;
 	return {
 		id: text(summary.id, 160),
+		rootFolderId: text(summary.rootFolderId, 160) || null,
 		name: text(summary.name, 160) || 'Device',
 		platform: text(summary.platform, 80),
 		serviceStatus: summary.serviceStatus,
@@ -533,6 +535,7 @@ const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null =
 			sleeping: typeof snapshot.observed.sleeping === 'boolean' ? snapshot.observed.sleeping : null,
 			activeAppBundleId: text(snapshot.observed.activeAppBundleId, 180) || null,
 			observedAt: text(snapshot.observed.observedAt, 40),
+			resources: readDeviceResources(snapshot.observed.resources),
 			runningApps: snapshot.observed.runningApps.slice(0, MAX_CACHED_RUNNING_APPS).map((app) => ({
 				bundleId: text(app.bundleId, 180),
 				name: text(app.name, 120),

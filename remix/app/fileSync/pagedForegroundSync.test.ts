@@ -94,7 +94,7 @@ test('paged foreground resumes original operation IDs across page boundaries and
 	assert.equal(original.progress.confirmed, 128); assert.equal(f.creates(), 129);
 	const pending = await runs.read(original.spec); const originalIds = pending.operations.map(o => o.id);
 	await f.reload(); f.condition('cellular');
-	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /selected network/);
+	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /Waiting for Wi-Fi/);
 	assert.equal(f.creates(), 129); f.condition('wifi');
 	const done = await runPagedForegroundCloudSync(saved, scope, f.input(), signal());
 	assert.ok('spec' in done); assert.equal(done.spec.id, original.spec.id); assert.equal(done.progress.confirmed, 135); assert.equal(f.creates(), 135);
@@ -364,5 +364,106 @@ test('fully paged foreground crosses 10,000 paths and checkpoints the entire gen
 		await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, signal()), /Large folders require/);
 		assert.equal(f.creates(), 1);
 		assert.deepEqual(await f.journal().pagedCheckpoints(access(input)).current(), head);
+	} finally { f.journal().close(); }
+});
+
+test('repeated Photos coverage passes publish each original once across local and cloud batches', async () => {
+	const { runPhotoBackupPasses } = await import('./photoBackupPasses');
+	const f = await foregroundFixture(7), input: ForegroundSyncInput = f.input();
+	const photos = { ...saved, configuration: { ...saved.configuration, sourceKind: 'photos' as const, network: 'any' as const } };
+	const configuration = input.readConfiguration;
+	input.readConfiguration = async () => ({ ...(await configuration() as object), crystal: photos.configuration });
+	let available = 1, progress: ForegroundSyncProgress | undefined;
+	input.progress = value => { progress = value; };
+	input.inspectLocal = async path => structuredClone(f.local.slice(0, available).find(entry => entry.path === path) ?? null);
+	input.scanLocalPages = async function* () {
+		const generation = crypto.randomUUID(), totalSkipped = f.local.length - available;
+		const capture = { id: generation, generation, totalEntries: available, totalSkipped,
+			coverage: totalSkipped ? 'partial' as const : 'full' as const, consistency: 'per-entry' as const };
+		yield { generation, ordinal: 0, entries: [], backupCapture: capture,
+			skippedPage: { capture, offset: 0, totalSkipped, nextOffset: null, skipped: f.local.slice(available).map((entry, ordinal) =>
+				({ ordinal, path: entry.path, reason: 'cloud-original' as const, scope: 'entry' as const })) } };
+		yield { generation, ordinal: 0, entries: structuredClone(f.local.slice(0, available)), totalEntries: available, backupCapture: capture };
+	};
+	const seen: number[] = [];
+	const result = await runPhotoBackupPasses(async download => {
+		if (download) available = Math.min(f.local.length, available + 4);
+		await runPagedForegroundCloudSync(photos, scope, input, signal());
+		seen.push(f.creates());
+		return progress;
+	}, () => {}, () => true);
+	assert.deepEqual(seen, [1, 5, 7]);
+	assert.equal(result?.coverage, 'full');
+	assert.equal(f.rows.size, 7);
+	f.journal().close();
+});
+
+test('ordered Photos batches read only exact destinations after the initial cloud reconciliation and keep untouched pairs', async () => {
+	const { cloudFileSyncEntry } = await import('./cloudFile');
+	const f = await foregroundFixture(), input: ForegroundSyncInput = f.input();
+	const photos = { ...saved, configuration: { ...saved.configuration, sourceKind: 'photos' as const } };
+	const configuration = input.readConfiguration;
+	input.readConfiguration = async () => ({ ...(await configuration() as object), crystal: photos.configuration });
+	const originals = ['a', 'b', 'c'].map((letter, index) => {
+		const key = letter.repeat(64), path = key + '-1.HEIC';
+		const file = { id: 'cloud-' + letter, revision: 'remote-v1', name: path, folderId: 'cloud-root', trashed: false,
+			content: { attachmentId: 'attachment-' + letter, version: letter.repeat(64), size: 1,
+				fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: letter.repeat(64) } } };
+		const entry = { ...cloudFileSyncEntry(file, path), id: 'native-' + letter, version: 'source-v1' };
+		return { key, path, entry, file, index };
+	});
+	let fullScans = 0, selected = 0, progress: ForegroundSyncProgress | undefined;
+	input.progress = value => { progress = value; };
+	const exactReads: string[] = [], fileReads: string[] = [], rootReads: string[] = [], epoch = crypto.randomUUID();
+	input.inventoryPages = async function* () {
+		fullScans++;
+		if (selected !== 0) throw Error('Later Photos batches must not scan the complete cloud folder.');
+		yield { version: 1, rootId: 'cloud-root', rootRevision: 'root-revision', generation: crypto.randomUUID(), ordinal: 0,
+			nodes: originals.map(({ path, file }) => ({ kind: 'file' as const, path, file })), totalEntries: originals.length };
+	};
+	input.runtime = { ...input.runtime, fetch: async (value, init) => {
+		assert.equal(init?.method ?? 'GET', 'GET', 'already observed matching originals need no remote write');
+		const url = new URL(String(value));
+		assert.equal(url.pathname, '/api/v1/files');
+		if (url.searchParams.has('rootId')) {
+			assert.equal(url.searchParams.get('rootId'), 'cloud-root');
+			const path = url.searchParams.get('path')!;
+			exactReads.push(path);
+			const found = originals.find(item => item.path === path);
+			return Response.json({ ok: true, observation: { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root-revision',
+				path, entry: found ? cloudFileSyncEntry(found.file, path) : null } });
+		}
+		if (url.searchParams.has('folderId')) {
+			const id = url.searchParams.get('folderId')!;
+			rootReads.push(id);
+			return Response.json({ ok: true, folder: { id, revision: 'root-revision', name: 'Photos backup', folderId: null } });
+		}
+		const id = url.searchParams.get('id')!;
+		fileReads.push(id);
+		return Response.json({ ok: true, file: originals.find(item => item.file.id === id)!.file });
+	} };
+	input.inspectLocal = async path => originals.find(item => item.path === path)?.entry ?? null;
+	const batches = Array.from({ length: 4 }, () => crypto.randomUUID());
+	input.scanLocalPages = async function* () {
+		const item = originals[selected], generation = crypto.randomUUID();
+		const capture = { id: generation, generation, totalEntries: item ? 1 : 0, totalSkipped: 0,
+			coverage: 'full' as const, consistency: 'per-entry' as const,
+			photoQueue: { epoch, id: batches[selected], assetKeys: item ? [item.key] : [], pending: Math.max(0, originals.length - selected - 1), unavailable: 0 } };
+		yield { generation, ordinal: 0, entries: [], backupCapture: capture,
+			skippedPage: { capture, offset: 0, totalSkipped: 0, nextOffset: null, skipped: [] } };
+		yield { generation, ordinal: 0, entries: item ? [item.entry] : [], totalEntries: capture.totalEntries, backupCapture: capture };
+	};
+	try {
+		for (; selected <= originals.length; selected++) {
+			await runPagedForegroundCloudSync(photos, scope, input, signal());
+			assert.equal(progress?.stage, selected < originals.length ? 'verifying' : 'complete');
+			const head = await f.journal().pagedCheckpoints(access(input)).current();
+			const observed = await f.journal().inventory(access(input)).entriesForPaths(head!.baseline.local, originals.map(item => item.path));
+			assert.deepEqual(observed, originals.map(({ entry, index }) => index <= selected ? entry : null));
+		}
+		assert.equal(fullScans, 2, 'one full planning inventory and one verified checkpoint inventory before sparse batches');
+		assert.deepEqual(exactReads, [originals[1].path, originals[1].path, originals[2].path, originals[2].path]);
+		assert.deepEqual(fileReads, ['cloud-b', 'cloud-c']);
+		assert.deepEqual(rootReads, ['cloud-root', 'cloud-root'], 'the empty confirmation reads only the private folder identity');
 	} finally { f.journal().close(); }
 });

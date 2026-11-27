@@ -63,14 +63,15 @@ test('compact versions resolve through their saved ancestor and deletions export
 	assert.equal(gone!.event.after, null); assert.deepEqual(h.snapshots.filter(item => item.startsWith('gone')), ['gone/before']);
 });
 
-test('unknown or foreign versions are null; drafts and effects refuse; oversized retained parts refuse before any part is read', async () => {
+test('unknown or foreign versions are null; drafts and effects refuse; valid retained parts reconstruct beyond the old response budget', async () => {
 	const h = harness();
 	assert.equal(await h.service('user-1', 'missing'), null); assert.equal(await h.service('other', 'base'), null);
 	await rejects(h.service('user-1', 'draft'), 422, /Only saved versions can be exported/);
 	await rejects(h.service('user-1', 'effect'), 422, /Only saved versions can be exported/);
-	await rejects(h.service('user-1', 'huge'), 413, /too large to export in one file/);
-	assert.deepEqual(h.snapshots, [], 'no snapshot part is reassembled for a refused export');
+	const large = await h.service('user-1', 'huge');
+	assert.deepEqual(JSON.parse(JSON.stringify(large!.content.value)), content({ title: 'Reassembled' }));
+	assert.deepEqual(h.snapshots, ['huge/after']);
 	const big = await h.service('user-1', 'big');
 	assert.deepEqual(JSON.parse(JSON.stringify(big!.content.value)), content({ title: 'Reassembled' }));
-	assert.deepEqual(h.snapshots, ['big/after']);
+	assert.deepEqual(h.snapshots, ['huge/after', 'big/after']);
 });

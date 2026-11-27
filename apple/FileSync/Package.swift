@@ -6,9 +6,11 @@ let package = Package(
     platforms: [.macOS(.v13), .iOS(.v17)],
     products: [.library(name: "AppleFileSync", targets: ["AppleFileSync"])],
     targets: [
-        .target(name: "AppleFileSync"),
+        .target(name: "CCommanderInventory"),
+        .target(name: "AppleFileSync", dependencies: ["CCommanderInventory"]),
         .target(name: "FileSyncRecoverySupport", dependencies: ["AppleFileSync"], path: "Tests/RecoverySupport"),
         .executableTarget(name: "FileSyncRecoveryFixture", dependencies: ["FileSyncRecoverySupport"], path: "Tests/RecoveryFixture"),
+        .executableTarget(name: "FileSyncEmbeddedFixture", dependencies: ["AppleFileSync"], path: "Tests/EmbeddedFixture"),
         .testTarget(name: "AppleFileSyncTests", dependencies: ["AppleFileSync"])
     ],
     swiftLanguageModes: [.v5]

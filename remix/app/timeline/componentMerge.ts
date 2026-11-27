@@ -4,7 +4,8 @@ import { parseTimelineEntry, type TimelineDependency, type TimelineEntry, type T
 import { COMPONENT_BINDING_PREFIX, MAX_COMPONENT_BINDINGS, readComponentBinding, webpageComponentRefs } from './componentBindings.ts';
 import type { VersionChoices, VersionValue } from './versions.ts';
 
-/** Bounded comparison transport only. Definitions remain separate canonical
+/** Dependency-bounded comparison transport. Content has no aggregate budget;
+ * definitions remain separate canonical
  * events; these maps are never stored on a Thing or Timeline record. */
 export type ComponentVersion = Record<string, TimelineDependency | null>;
 export type ComponentMergeContext = {

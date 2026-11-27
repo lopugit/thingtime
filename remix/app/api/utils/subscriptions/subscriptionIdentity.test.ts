@@ -168,3 +168,15 @@ test('diagnostics cover every canonical envelope predicate and stay bounded on m
 	assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(null, 'user-1'), ['root.object']);
 	assert.ok(userSubscriptionLedgerEnvelopeIssues({}, 'user-1').length < 40);
 });
+
+
+test('pending storage aggregates stay protected and malformed or partial pending state invalidates the ledger', () => {
+	const ledger = canonicalLedger();
+	Object.assign(ledger.crystal, { storagePendingBytes: 104857600, storagePendingCount: 2, storagePendingSince: new Date() });
+	assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(ledger, 'user-1'), true);
+	for (const delta of [{ storagePendingBytes: 104857601 }, { storagePendingCount: 0 }, { storagePendingSince: '2026-10-29' }]) {
+		const invalid = { ...ledger, crystal: { ...ledger.crystal, ...delta } };
+		assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(invalid, 'user-1'), false);
+		assert.ok(userSubscriptionLedgerEnvelopeIssues(invalid, 'user-1').includes('crystal.storagePending'));
+	}
+});

@@ -4,11 +4,36 @@ import Foundation
 
 /// One bounded native multipart job. The shared sync journal owns operation
 /// identity and Timeline publication; this host only completes attachment bytes.
-struct NativeUploadFileRequest: Decodable, Sendable {
+struct NativeUploadFileRequest: Codable, Equatable, Sendable {
+    struct Publication: Codable, Equatable, Sendable {
+        let expectedRevision: String?
+        let fileId: String?
+        private enum CodingKeys: String, CodingKey { case expectedRevision, fileId }
+        init(expectedRevision: String?, fileId: String? = nil) { self.expectedRevision = expectedRevision; self.fileId = fileId }
+        init(from decoder: Decoder) throws {
+            let value = try decoder.container(keyedBy: CodingKeys.self)
+            guard value.contains(.expectedRevision) else { throw MobileFolderStore.Failure.invalid }
+            expectedRevision = try value.decodeIfPresent(String.self, forKey: .expectedRevision)
+            fileId = try value.decodeIfPresent(String.self, forKey: .fileId)
+            guard expectedRevision.map({ !$0.isEmpty && $0.utf8.count <= 512 }) ?? true else { throw MobileFolderStore.Failure.invalid }
+            guard fileId.map(NativePhotoRunRecord.validHandle) ?? true else { throw MobileFolderStore.Failure.invalid }
+        }
+        func encode(to encoder: Encoder) throws {
+            var value = encoder.container(keyedBy: CodingKeys.self)
+            try value.encode(expectedRevision, forKey: .expectedRevision)
+            try value.encodeIfPresent(fileId, forKey: .fileId)
+        }
+    }
     let source: MobileFolderReader.Entry
     let uploadId: String
     let requestId: String
     let authorization: NativeUploadAuthorization
+    let publication: Publication?
+    init(source: MobileFolderReader.Entry, uploadId: String, requestId: String, authorization: NativeUploadAuthorization,
+         publication: Publication? = nil) {
+        self.source = source; self.uploadId = uploadId; self.requestId = requestId
+        self.authorization = authorization; self.publication = publication
+    }
     func part(_ number: Int) throws -> NativeUploadPartRequest {
         let plan = try FileUploadPart.plan(size: source.size)
         guard number >= 1, number <= plan.count else { throw MobileFolderStore.Failure.invalid }

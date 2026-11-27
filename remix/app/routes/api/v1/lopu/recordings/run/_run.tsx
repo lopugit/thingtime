@@ -1,3 +1,5 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 import { timingSafeEqual } from 'node:crypto';
 import { json } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -7,10 +9,11 @@ import { runRecordingAutomation } from '~/api/utils/lopu/recordingsWorker';
 import { sendRecordingReminders } from '~/api/utils/lopu/recordingsReminders';
 import { runLopuReminders } from '~/api/utils/lopu/reminders';
 import { runRecordingHandoffs } from '~/api/utils/lopu/recordingHandoff';
+import { runUserStorageRecovery } from '~/api/utils/storage/userStorageRecovery';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const cronAuthorized = (request: Request) => {
-	const secret = process.env.CRON_SECRET?.trim();
+	const secret = scheduledJobSecret()?.trim();
 	if (!secret) return false;
 	const provided = Buffer.from(request.headers.get('authorization') || '');
 	const expected = Buffer.from(`Bearer ${secret}`);
@@ -19,12 +22,15 @@ const cronAuthorized = (request: Request) => {
 
 const run = async () =>
 	runWithMongoEndpoint(null, async () => {
+		// Storage repair must still run when an unrelated provider worker fails.
+		const storageRecovery = await runUserStorageRecovery().catch(() => ({ unavailable: true }));
 		// Send due reminders first so a provider outage cannot starve existing todos.
 		const reminders = await sendRecordingReminders();
 		const scheduledReminders = await runLopuReminders();
 		const recordings = await runRecordingAutomation();
 		const handoffs = await runRecordingHandoffs();
-		return json({ ok: true, reminders, scheduledReminders, recordings, handoffs }, { headers });
+    recordScheduledPassResult('/api/v1/lopu/recordings/run',{reminders,scheduledReminders,recordings,handoffs,storageRecovery});
+		return json({ ok: true, reminders, scheduledReminders, recordings, handoffs, storageRecovery }, { headers });
 	});
 
 export const loader = async ({ request }: { request: Request }) => {

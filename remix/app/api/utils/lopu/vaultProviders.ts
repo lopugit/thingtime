@@ -11,6 +11,7 @@
 // completion voice uses) lives in ./vaultProviderClient.ts.
 
 import type { LopuProviderKind, LopuRealtimeModelPublic } from './userVaultCore';
+import { AiTransportFailure } from '../ai/providerWaterfall';
 
 // The SDK surface a vault kind speaks: Anthropic's Messages API, or an
 // OpenAI-compatible chat.completions endpoint (OpenAI, OpenRouter, xAI,
@@ -69,12 +70,12 @@ export type LopuVaultProviderAvailability = {
 	realtimeModels?: (kind: LopuProviderKind) => LopuRealtimeModelPublic[];
 };
 
-export const LOPU_VAULT_PROVIDER_KINDS: readonly LopuProviderKind[] = ['anthropic', 'openai', 'google', 'xai', 'openrouter', 'mistral', 'deepseek', 'groq', 'cohere', 'compatible'];
+export const LOPU_VAULT_PROVIDER_KINDS: readonly LopuProviderKind[] = ['anthropic', 'anthropic-api-key', 'openai', 'google', 'xai', 'openrouter', 'mistral', 'deepseek', 'groq', 'cohere', 'compatible'];
 
 export const isLopuVaultProviderKind = (value: unknown): value is LopuProviderKind =>
 	typeof value === 'string' && (LOPU_VAULT_PROVIDER_KINDS as readonly string[]).includes(value);
 
-export const vaultProviderTransport = (kind: LopuProviderKind): LopuVaultProviderTransport => (kind === 'anthropic' ? 'anthropic' : 'openai');
+export const vaultProviderTransport = (kind: LopuProviderKind): LopuVaultProviderTransport => (kind === 'anthropic' || kind === 'anthropic-api-key' ? 'anthropic' : 'openai');
 
 // Function calling is documented on every named vendor's surface (Anthropic
 // natively; OpenAI, OpenRouter, xAI and Gemini's OpenAI-compatible endpoint
@@ -212,6 +213,7 @@ export const isVaultGuardError = (error: unknown): boolean => !!error && typeof 
 export const friendlyVaultProviderError = (providerName: string, model: string | null, error: unknown): string => {
 	const name = providerName.trim() || 'Your provider';
 	if (isVaultGuardError(error)) return String((error as Error).message);
+	if (error instanceof AiTransportFailure && error.reason) return `${name}: ${error.message}`;
 	const status = statusOf(error);
 	if (status === 401 || status === 403) return `${name} rejected the saved key (HTTP ${status}). Check the token in Settings → Secure Vault.`;
 	if (status === 404) return `${name} does not know the model${model ? ` "${model}"` : ''} (HTTP 404). Check the model name in Settings → Secure Vault.`;

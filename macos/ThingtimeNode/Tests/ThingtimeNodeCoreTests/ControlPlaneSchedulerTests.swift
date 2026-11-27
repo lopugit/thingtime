@@ -7,6 +7,7 @@ private actor TestControlPlaneClient: ControlPlaneClient {
 
     var heartbeatCount = 0
     var leaseCount = 0
+    var leaseWaits: [Int] = []
     var leaseHeartbeatCount = 0
     var leaseHeartbeatCounts: [String: Int] = [:]
     var reports: [CommandExecutionReport] = []
@@ -41,6 +42,7 @@ private actor TestControlPlaneClient: ControlPlaneClient {
 
     func leaseCommands(_ request: CommandLeaseRequest) async throws -> CommandLeaseBatch {
         leaseCount += 1
+        leaseWaits.append(request.waitSeconds)
         return batches.isEmpty ? .init(commands: []) : batches.removeFirst()
     }
 
@@ -414,5 +416,46 @@ final class ControlPlaneSchedulerTests: XCTestCase {
         await scheduler.stop()
         let reportsAfterStop = await client.reports
         XCTAssertFalse(reportsAfterStop.contains(where: { $0.commandID == "queue-1" }))
+    }
+
+    func testIdleCadenceStopsLongPollingAndBacksOffToTheCap() {
+        var cadence = ControlPlanePollCadence(activeWaitSeconds: 20, idleAfterEmptyPolls: 3, maximumIdleDelay: .seconds(30))
+        XCTAssertEqual(cadence.waitSeconds, 20)
+        XCTAssertEqual(cadence.delay(base: .seconds(5)), .seconds(5))
+        var delays: [Duration] = []
+        for _ in 0 ..< 6 {
+            cadence.record(leasedCommands: 0, hasRunningWork: false)
+            delays.append(cadence.delay(base: .seconds(5)))
+        }
+        XCTAssertTrue(cadence.isIdle)
+        XCTAssertEqual(cadence.waitSeconds, 0, "an idle node claims without holding a request open")
+        XCTAssertEqual(delays, [.seconds(5), .seconds(5), .seconds(10), .seconds(20), .seconds(30), .seconds(30)])
+        cadence.record(leasedCommands: 1, hasRunningWork: false)
+        XCTAssertEqual(cadence.waitSeconds, 20, "a leased command restores long-polling at once")
+        XCTAssertEqual(cadence.delay(base: .seconds(5)), .seconds(5))
+        for _ in 0 ..< 5 { cadence.record(leasedCommands: 0, hasRunningWork: true) }
+        XCTAssertFalse(cadence.isIdle, "running work keeps the node responsive")
+    }
+
+    func testIdleSchedulerSwitchesToImmediateClaims() async throws {
+        let now = Date()
+        let client = TestControlPlaneClient(batch: .init(commands: []))
+        let scheduler = ControlPlaneScheduler(
+            client: client,
+            hooks: .init(
+                makeHeartbeat: { self.heartbeat(at: now) },
+                dispatchCommand: { leased in .success(id: leased.leaseID, result: .bool(true)) }
+            )
+        )
+        await scheduler.start(delayBetweenPolls: .milliseconds(1), cadence: .init(activeWaitSeconds: 20, idleAfterEmptyPolls: 2, maximumIdleDelay: .milliseconds(4)))
+        for _ in 0 ..< 400 {
+            if await client.leaseWaits.count >= 5 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await scheduler.stop()
+        let waits = await client.leaseWaits
+        XCTAssertGreaterThanOrEqual(waits.count, 5)
+        XCTAssertEqual(Array(waits.prefix(2)), [20, 20])
+        XCTAssertEqual(Array(waits.dropFirst(2).prefix(3)), [0, 0, 0])
     }
 }

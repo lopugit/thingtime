@@ -1,0 +1,163 @@
+--- a/remix/app/api/utils/deployment/environmentGateway.ts
++++ b/remix/app/api/utils/deployment/environmentGateway.ts
+@@ -9,6 +9,13 @@
+ export const GATEWAY_OWNERSHIP_TTL_MS = 5_000;
+ export type GatewaySettings = { environment: string; origin: string; deploymentId: string; secret: string };
+ export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
++export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass';
++/** A server-only platform credential, sent solely to the validated gateway origin. */
++export const gatewayProtectionHeaders = (settings: GatewaySettings): Record<string, string> => {
++  if (gatewayOrigin(settings.origin) !== settings.origin) throw new GatewayUnavailable();
++  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++  return secret ? { [VERCEL_PROTECTION_BYPASS_HEADER]: secret } : {};
++};
+ type GatewayManifest = {
+   schemaVersion: number; origin: string; gateway?: GatewayDescriptor | null;
+   features: Record<string, { version: string }>;
+@@ -98,7 +105,8 @@
+       if (!pending || pending.key !== key) {
+         const promise = (async () => {
+           const response = await (options.fetch || globalThis.fetch)(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, selected.origin), {
+-            redirect: 'error', cache: 'no-store', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5_000)
++            redirect: 'error', cache: 'no-store', credentials: 'omit',
++            headers: { Accept: 'application/json', ...gatewayProtectionHeaders(selected) }, signal: AbortSignal.timeout(5_000)
+           });
+           const manifest = await readManifest(response);
+           if (manifest.schemaVersion !== 1 || manifest.origin !== selected.origin ||
+--- a/remix/server/utils/environmentGateway.ts
++++ b/remix/server/utils/environmentGateway.ts
+@@ -3,7 +3,7 @@
+ import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
+ import { apiEndpointDocs } from '../../app/docs/apiDocs';
+ import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
+-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
++import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, gatewayProtectionHeaders, VERCEL_PROTECTION_BYPASS_HEADER, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+ 
+ export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
+ const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
+@@ -45,7 +45,7 @@
+   const headers = new Headers(source);
+   // RFC 9110 Connection can nominate additional hop-by-hop fields.
+   for (const name of (headers.get('connection') || '').split(',').map(value => value.trim()).filter(Boolean)) headers.delete(name);
+-  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded') headers.delete(name);
++  for (const name of [...headers.keys()]) if (name.startsWith('x-forwarded-') || name.startsWith('x-thingtime-gateway-') || name === 'forwarded' || name === VERCEL_PROTECTION_BYPASS_HEADER || name === 'x-vercel-set-bypass-cookie') headers.delete(name);
+   for (const name of HOP_HEADERS) headers.delete(name);
+   return headers;
+ };
+@@ -112,6 +112,7 @@
+   const headers = cleanHeaders(request.headers);
+   const payload = Buffer.from(JSON.stringify({ version: 1, hop: 1, environment: settings.environment, target: settings.origin,
+     origin: url.origin, path: url.pathname + url.search, method: request.method, at: Date.now(), headers: digestHeaders(headers) })).toString('base64url');
++  for (const [name, value] of Object.entries(gatewayProtectionHeaders(settings))) headers.set(name, value);
+   headers.set(GATEWAY_RELAY_HEADER, payload);
+   headers.set(SIGNATURE_HEADER, sign(payload, settings));
+   const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, redirect: 'manual', signal: request.signal, cache: 'no-store' };
+--- a/remix/app/docs/apiDocs.ts
++++ b/remix/app/docs/apiDocs.ts
+@@ -689,10 +689,10 @@
+     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
+   }),
+   endpoint({
+-    id: 'environment-gateway', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'deployment',
++    id: 'environment-gateway', contractVersion: '1.1.1', featureVersion: '1.1.1', group: 'deployment',
+     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
+     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
+-    detail: 'The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. No secrets or database configuration are published.',
++    detail: 'The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. No secrets or database configuration are published.',
+     auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET'],
+     steps: ['Configure one stable alias and separate relay secret for each intended environment.', 'Negotiate api.environment-gateway 1.0.0 and the semantic operation being forwarded.', 'Compare the alias deploymentId with the local deployment identity before database access.'],
+     requestExamples: [{ name: 'Discover gateway', description: 'Credential-free origin-scoped discovery.', method: 'GET' }],
+--- a/remix/app/api/utils/deployment/environmentGateway.test.ts
++++ b/remix/app/api/utils/deployment/environmentGateway.test.ts
+@@ -1,7 +1,7 @@
+ import assert from 'node:assert/strict';
+ import test from 'node:test';
+ 
+-import { createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
++import { gatewayProtectionHeaders, createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
+ import { mongoConnectionPolicy } from './mongoConnectionPolicy';
+ 
+ const selected = { environment: 'preview', origin: 'https://preview.test', deploymentId: 'deployment-new', secret: 's'.repeat(32) };
+@@ -88,3 +88,29 @@
+   assert.equal(gatewayDescriptor(env), null);
+   assert.throws(() => getGatewaySettings({ ...env, THINGTIME_GATEWAY_SECRET: '' }));
+ });
++
++test('gateway discovery uses the server-only protection credential at the validated origin', async () => {
++  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++  const secret = 'synthetic-platform-bypass';
++  try {
++    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++    assert.deepEqual(gatewayProtectionHeaders(selected), {});
++    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
++    assert.throws(() => gatewayProtectionHeaders({ ...selected, origin: 'https://other.test/path' }));
++    let calls = 0;
++    const authority = createGatewayAuthority({ settings: () => selected, fetch: async (url, init) => {
++      calls++;
++      assert.equal(new URL(String(url)).origin, selected.origin);
++      assert.equal(init?.redirect, 'error');
++      assert.equal(init?.credentials, 'omit');
++      assert.equal(new Headers(init?.headers).get('x-vercel-protection-bypass'), secret);
++      return Response.json(manifest());
++    } });
++    await authority.current();
++    assert.equal(calls, 1);
++    assert.equal(JSON.stringify(manifest()).includes(secret), false);
++  } finally {
++    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
++  }
++});
+--- a/remix/server/utils/environmentGateway.test.ts
++++ b/remix/server/utils/environmentGateway.test.ts
+@@ -140,3 +140,39 @@
+   assert.ok(response instanceof Response); assert.deepEqual(await response.json(), { handler: 'gateway' });
+   await assert.rejects(requireGatewayDatabaseAccess());
+ }));
++
++test('gateway relay replaces spoofed bypass headers and never reflects the secret', async t => fixture(async () => {
++  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++  const secret = 'synthetic-platform-bypass';
++  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
++  try {
++    const settings = getGatewaySettings()!;
++    const authority = await createGatewayAuthority({ settings: () => settings,
++      fetch: async () => Response.json(aliasManifest()) }).current();
++    let calls = 0;
++    t.mock.method(globalThis, 'fetch', async (url, init) => {
++      calls++;
++      assert.equal(new URL(String(url)).origin, settings.origin);
++      const incoming = new Request(url, init);
++      assert.equal(incoming.headers.get('x-vercel-protection-bypass'), secret);
++      assert.equal(incoming.headers.has('x-vercel-set-bypass-cookie'), false);
++      const restored = restoreGatewayRequest(incoming, settings)!;
++      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
++      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
++      return Response.json({ ok: true }, { headers: {
++        'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true'
++      } });
++    });
++    const response = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
++      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
++    } }), authority!);
++    assert.equal(response.status, 200);
++    assert.equal(calls, 1);
++    assert.equal(response.headers.has('x-vercel-protection-bypass'), false);
++    assert.equal(response.headers.has('x-vercel-set-bypass-cookie'), false);
++    assert.equal((await response.text()).includes(secret), false);
++  } finally {
++    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
++    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
++  }
++}));
+--- a/remix/CHANGELOG.md
++++ b/remix/CHANGELOG.md
+@@ -109,6 +109,8 @@
+ ---
+ 
+ ## [Unreleased]
++
++- 2026-11-13: Keep retained PR preview gateway discovery and signed relays reachable when Vercel Standard Protection is enabled; remove platform bypass headers before forwarding or responding. `api.environment-gateway` 1.1.1. **Codex (AI)**
+ 
+ - 2026-11-05: Reconcile latest main into the anonymous/local-first feature while preserving device partitions, independent queues, Builder provenance and Action authorization. Correct selected-origin renderer asset preflight and local CLI renderer configuration/deadlines; retain explicit acceptance gaps. [Integration record](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+ 

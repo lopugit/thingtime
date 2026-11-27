@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
 import { getElectronBridge, type ThingtimeDesktopInfo } from '~/utils/electronBridge';
+import { CurrentPageBuilderProvider, CurrentPageBuilderToggle } from '../Builder/CurrentPageBuilder';
 import { DesktopConnectionSettings } from './DesktopConnectionSettings';
 
 /** No account providers, cached user data or remote API is needed to repair a connection. */
@@ -15,6 +16,6 @@ export function DesktopConnectionRecovery() {
     return () => { active = false; };
   }, []);
   if (!info && !failed) return null;
-  return <ChakraProvider resetCSS={false}>{info ? <DesktopConnectionSettings recovery desktopInfo={info} onInfo={setInfo} /> :
+  return <ChakraProvider resetCSS={false}>{info ? <CurrentPageBuilderProvider><CurrentPageBuilderToggle /><DesktopConnectionSettings recovery desktopInfo={info} onInfo={setInfo} /></CurrentPageBuilderProvider> :
     <p role="alert">Desktop settings could not be read. Close and reopen Thingtime, then try again.</p>}</ChakraProvider>;
 }

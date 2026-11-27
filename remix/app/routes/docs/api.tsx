@@ -39,6 +39,8 @@ import { ApiPlayground } from './ApiPlayground';
 
 const METHOD_COLORS: Record<ApiHttpMethod, string> = {
   GET: 'blue',
+  HEAD: 'blue',
+  OPTIONS: 'gray',
   POST: 'purple',
   PUT: 'orange',
   PATCH: 'teal',

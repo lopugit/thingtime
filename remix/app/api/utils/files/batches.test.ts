@@ -191,12 +191,14 @@ test('prepare signs only raw digests bound to original indexed one-part fingerpr
 	assert.equal(f.starts[0].requestId, f.d.members[0].write.operation.id);
 	assert.equal(f.signed[0].parts[0].checksumSha256, Buffer.from(raw, 'hex').toString('base64'));
 });
-test('ready original upload returns verified content without another PUT or start', async () => {
+test('ready original upload stamps exact provenance without another PUT', async () => {
 	const f = fixture();
 	f.ready();
 	const r: any = await f.run('prepare', [{ ordinal: 0, sha256: raw }]);
 	assert.equal(r.results[0].status, 'verified');
-	assert.equal(f.starts.length, 0);
+	assert.equal(f.starts.length, 1);
+	assert.equal(f.starts[0].fileSyncOrigin.path, f.d.members[0].write.operation.mutation.path);
+	assert.equal(f.starts[0].fileSyncOrigin.localRootId, f.d.scope.rootId);
 	assert.equal(r.results[0].content.uploadId, f.ids()[0].uploadId);
 });
 test('active complete lease keeps partial success independent and retry preserves IDs', async () => {
@@ -251,12 +253,12 @@ test('restarted prepare recovers original finalizing upload through canonical co
 	let r: any = await f.run('prepare', [{ ordinal: 0, sha256: raw }]);
 	assert.equal(r.results[0].status, 'failed');
 	assert.equal(r.results[0].retryable, true);
-	assert.equal(f.starts.length, 0);
+	assert.equal(f.starts.length, 1);
 	f.fail(-1);
 	r = await f.run('prepare', [{ ordinal: 0, sha256: raw }]);
 	assert.equal(r.results[0].status, 'verified');
 	assert.equal(f.completed[0].uploadId, f.completed[1].uploadId);
-	assert.equal(f.starts.length, 0);
+	assert.equal(f.starts.length, 2);
 });
 
 test('batch recovery uses actual attachment lease and exact-version stored fingerprint services', async () => {
@@ -302,7 +304,7 @@ test('batch recovery uses actual attachment lease and exact-version stored finge
 	assert.equal(r.results[0].status, 'verified');
 	assert.equal(r.results[0].content.fingerprint.sha256, fp);
 	assert.equal(heads, 1);
-	assert.equal(f.starts.length, 0);
+	assert.equal(f.starts.length, 2);
 });
 
 test('cancellation between provider calls stops signing and retains original reserved identity', async () => {
@@ -458,4 +460,23 @@ test('server accepts legacy V1 no-ignore configuration consistently for probe an
 	const result: any = await f.run('prepare', []);
 	assert.equal(result.ok, true);
 	assert.equal(result.results[0].status, 'source-required');
+});
+
+test('configuration3 transfer ceiling bounds actual concurrent provider members without changing IDs', async () => {
+ for (const ceiling of [1, 2, 100]) {
+  let active = 0, peak = 0;
+  const f = fixture(12, { admit: async (_owner: string, _signal: AbortSignal, _deadline: number, work: () => Promise<unknown>) => {
+   active++; peak = Math.max(peak, active);
+   try { await new Promise(resolve => setImmediate(resolve)); return await work(); }
+   finally { active--; }
+  } });
+  f.d.configuration.configuration.configurationVersion = 3;
+  f.d.configuration.configuration.resourceLimits = { transferConcurrency: ceiling };
+  const ids = f.d.members.map((m: any) => m.write.operation.id);
+  const result = await f.run('prepare', f.d.members.map((m: any) => ({ ordinal: m.ordinal, sha256: raw })));
+  assert.equal(result.ok, true);
+  assert.equal(peak, Math.min(8, ceiling));
+  assert.equal(active, 0);
+  assert.deepEqual(f.d.members.map((m: any) => m.write.operation.id), ids);
+ }
 });

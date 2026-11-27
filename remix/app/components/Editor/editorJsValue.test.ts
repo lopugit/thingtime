@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import { EDITOR_JS_AUTO_DETECT_LIMITS, EDITOR_JS_HEADING_LEVELS, getEditorJsDoc, getEditorJsHeadingFontSize, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit, normalizeEditorJsHeadingLevel, parseEditorJsDocString } from './editorJsValue.ts';
+import { EDITOR_JS_AUTO_DETECT_LIMITS, EDITOR_JS_HEADING_LEVELS, getEditorJsDoc, getEditorJsHeadingFontSize, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit, isExplicitEditorJsDocSafeToEdit, parseExplicitEditorJsDocString, normalizeEditorJsHeadingLevel, parseEditorJsDocString } from './editorJsValue.ts';
 
 const doc = {
 	time: 123,
@@ -67,7 +67,7 @@ test('auto-detection rejects documents deeper than the edit safety limit', () =>
 	assert.equal(isEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: nested }] }), false);
 });
 
-test('native Editor.js identity is preserved while unsafe values are gated from editing', () => {
+test('native Editor.js identity is preserved independently of recognition budgets', () => {
 	const block = { type: 'paragraph', data: { text: 'x' } };
 	const oversized = { kind: 'rich-text', blocks: Array.from({ length: 501 }, () => block) };
 	assert.equal(getEditorJsDoc(oversized), oversized);
@@ -75,7 +75,7 @@ test('native Editor.js identity is preserved while unsafe values are gated from 
 	assert.equal(isEditorJsDocSafeToEdit(doc), true);
 });
 
-test('native edit safety uses cumulative value and text budgets', () => {
+test('string auto-detection safety uses cumulative value and text budgets', () => {
 	const manyValues = { blocks: [{ type: 'paragraph', data: { rows: Array.from({ length: 10_001 }, (_, index) => index) } }] };
 	const muchText = {
 		blocks: [
@@ -101,4 +101,37 @@ test('normalises heading levels onto a visible semantic hierarchy', () => {
 	assert.equal(normalizeEditorJsHeadingLevel(Symbol('unsafe')), 2);
 	assert.ok(Number.parseFloat(getEditorJsHeadingFontSize(1)) > Number.parseFloat(getEditorJsHeadingFontSize(4)));
 	assert.ok(Number.parseFloat(getEditorJsHeadingFontSize(4)) > Number.parseFloat(getEditorJsHeadingFontSize(6)));
+});
+
+
+test('explicit rich-text editing preserves content beyond auto-detection budgets', () => {
+ const large = { kind: 'rich-text', blocks: Array.from({ length: 1001 }, (_, index) => ({ type: 'paragraph', data: { text: 'x'.repeat(index === 0 ? 120_000 : 1), rows: index === 0 ? Array.from({ length: 12_001 }, (_, i) => i) : [] } })) };
+ assert.equal(isEditorJsDocSafeToEdit(large), false);
+ assert.equal(isExplicitEditorJsDocSafeToEdit(large), true);
+ assert.equal(large.blocks[0].data.text.length, 120_000);
+ assert.equal(large.blocks.length, 1001);
+});
+
+test('explicit rich-text safety retains type, prototype, cycle and storage-depth validation', () => {
+ const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+ assert.equal(isExplicitEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: cyclic }] }), false);
+ assert.equal(isExplicitEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: { invalid: () => {} } }] }), false);
+ assert.equal(isExplicitEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: { invalid: new Date() } }] }), false);
+ let nested: Record<string, unknown> = { text: 'leaf' };
+ for (let i = 0; i < 200; i++) nested = { child: nested };
+ assert.equal(isExplicitEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: nested }] }), false);
+ let invoked = false;
+ const getter = Object.defineProperty({}, 'text', { enumerable: true, get() { invoked = true; return 'secret'; } });
+ assert.equal(isExplicitEditorJsDocSafeToEdit({ blocks: [{ type: 'paragraph', data: getter }] }), false);
+ assert.equal(invoked, false);
+});
+
+
+test('explicit user conversion accepts a full JSON document beyond automatic recognition limits', () => {
+ const large = { kind: 'rich-text', blocks: Array.from({ length: 700 }, () => ({ type: 'paragraph', data: { text: 'x'.repeat(3000) } })) };
+ const source = JSON.stringify(large);
+ assert.equal(parseEditorJsDocString(source), null);
+ assert.deepEqual(parseExplicitEditorJsDocString(source), large);
+ assert.equal(parseExplicitEditorJsDocString('{not json}'), null);
+ assert.equal(isExplicitEditorJsDocSafeToEdit(JSON.parse('{"blocks":[{"type":"paragraph","data":{"__proto__":{"polluted":true}}}]}')), false);
 });

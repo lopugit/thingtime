@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { Badge, Box, Button, Checkbox, Collapse, Flex, Heading, Stack, Text, Textarea } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -56,10 +57,10 @@ export function StackRunChat({ runId }: { runId: string }) {
 		if (!open) return;
 		void load();
 		if (!autoRefresh) return;
-		const timer = window.setInterval(() => {
-			if (document.visibilityState === 'visible') void load();
+		const timer = activityInterval('timer:components/Admin/CIControl/StackRunChat:1', 'Stack Run Chat', () => {
+			if (document.visibilityState === 'visible') return load();
 		}, 10_000);
-		return () => window.clearInterval(timer);
+		return () => clearActivityInterval(timer);
 	}, [open, autoRefresh, load]);
 	const send = async () => {
 		if (sending || (!question.trim() && !retry)) return;

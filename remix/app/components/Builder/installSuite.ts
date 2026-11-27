@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { materializeSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
 
@@ -30,7 +31,7 @@ export const installSuite = async (
 	const actionIds: Record<string, string> = {};
 	for (const action of bundle.actions) actionIds[action.key] = await createId({ thingtime: ['action'], crystal: action.crystal, acl: ['tt:user'] });
 	for (const entry of bundle.data) {
-		await createId({ thingtime: ['data'], crystal: { ...entry.crystal, schemaId: schemaIds[entry.schemaKey] }, acl: ['tt:user'] });
+		await createId({ thingtime: ['data', BUILDER_THING_KIND], crystal: { ...entry.crystal, schemaId: schemaIds[entry.schemaKey] }, acl: ['tt:user'] });
 	}
 	// App suites (bundle.app) install EVERY page and KEEP each pageKey: that is
 	// what makes /p/<pageKey> resolve the viewer's copy ahead of the seeded

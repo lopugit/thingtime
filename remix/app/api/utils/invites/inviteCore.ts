@@ -19,13 +19,16 @@ export const inviteTokenHash = (token: unknown) => {
 	if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new InviteError(404, 'This invite is unavailable.');
 	return createHash('sha256').update(token).digest('hex');
 };
-export const inviteProfile = (input: any) => {
+export const inviteProfile = (input: any, { optional = false } = {}) => {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) throw new InviteError(400, 'Enter the recipient’s profile details.');
+	for (const field of ['username', 'displayName']) {
+		if (input[field] !== undefined && typeof input[field] !== 'string') throw new InviteError(400, 'Profile suggestions must be text.');
+	}
 	const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
 	const displayName = typeof input.displayName === 'string' ? input.displayName.trim() : '';
-	if (!/^[a-z0-9][a-z0-9._-]{1,39}$/.test(username))
+	if ((!optional || username) && !/^[a-z0-9][a-z0-9._-]{1,39}$/.test(username))
 		throw new InviteError(400, 'Use 2–40 letters, numbers, dots, underscores or hyphens for the username.');
-	if (!displayName || displayName.length > 100) throw new InviteError(400, 'Enter a display name of up to 100 characters.');
+	if ((!optional && !displayName) || displayName.length > 100) throw new InviteError(400, 'Enter a display name of up to 100 characters.');
 	return { username, displayName };
 };
 export const inviteAmount = (credits: unknown) => {

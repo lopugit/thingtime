@@ -119,3 +119,9 @@ test('post, comment, media and Thing links retain their authorized share context
   for (const path of ['https://external.test/media/att', '//external.test/post/a', '/profile/user', '/api/v1/things'])
     assert.equal(sharedThingPath(path, 'secret'), path);
 });
+
+test('Character selectors only follow canonical local media endpoints', async () => {
+ const { characterAttachmentUrl } = await import('./sharedMediaCore');
+ assert.equal(characterAttachmentUrl('/api/v1/attachments/content?id=file&key=hidden', 'character'), '/api/v1/attachments/content?id=file&key=hidden&character=character');
+ for (const value of ['https://foreign.invalid/api/v1/attachments/content?id=file', '/api/v1/things?id=file', '//foreign.invalid/content', '']) assert.equal(characterAttachmentUrl(value, 'character'), value);
+});

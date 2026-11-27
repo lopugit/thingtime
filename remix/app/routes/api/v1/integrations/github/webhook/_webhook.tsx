@@ -1,6 +1,8 @@
 import { json } from '~/api/http';
-import { ingestGitHubWebhook, verifyGitHubWebhookSignature } from '~/api/utils/ciControl/webhooks';
+import { automationSwitchEnabled } from '~/api/utils/automation/automationSwitchesStore';
+import { ingestGitHubWebhook, isCiWebhookDetailEvent, verifyGitHubWebhookSignature } from '~/api/utils/ciControl/webhooks';
 import { syncAdminPrPreviewsForPullRequest } from '~/api/utils/ciControl/adminPreviewController';
+import { CI_WEBHOOK_DETAIL_SWITCH } from '~/automation/automationSwitches';
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 
@@ -25,6 +27,11 @@ export const action = async ({ request }: { request: Request }) => {
   const eventType = request.headers.get('x-github-event') ?? '';
   const deliveryId = request.headers.get('x-github-delivery') ?? '';
   if (!eventType || !deliveryId) return json({ ok: false, error: 'Missing GitHub delivery headers' }, { status: 400 });
+  // Answer high-volume CI detail before any write: a 2 GB function is billed
+  // for every second a request is in flight. One settings read decides it.
+  if (isCiWebhookDetailEvent(eventType, payload) && !(await automationSwitchEnabled(CI_WEBHOOK_DETAIL_SWITCH))) {
+    return json({ ok: true, accepted: false, touched: [], ignoredReason: 'CI detail updates are off' }, { status: 200 });
+  }
   const result = await ingestGitHubWebhook({ eventType, deliveryId, payload });
   if (result.accepted && eventType === 'pull_request' && Number.isSafeInteger(Number(payload?.number))) {
     await syncAdminPrPreviewsForPullRequest(Number(payload.number), String(payload?.action ?? '')).catch(() => undefined);

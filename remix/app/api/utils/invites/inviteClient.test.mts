@@ -14,7 +14,7 @@ test('successful invite signup invalidates prior root identity; previews and fai
 	);
 	try {
 		await inviteRequest({ intent: 'preview', token: 'test-only' });
-		assert.deepEqual(requirements.at(-1), ['api.auth-invites', '2.1.0']);
+		assert.deepEqual(requirements.at(-1), ['api.auth-invites', '2.2.0']);
 		assert.equal(rootIdentity.read().generation, before);
 		status = 409;
 		await assert.rejects(() => inviteRequest({ inviteToken: 'test-only' }, true));

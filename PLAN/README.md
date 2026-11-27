@@ -1,5 +1,11 @@
 # Thingtime plans
 
+[Vercel memory and CI webhooks](vercel-memory-and-ci-webhooks.md) — why 2 GB is the floor, skipping CI detail webhooks, batching CI state, and cutting time in flight (active, 2026-11-26).
+
+[Device location history and find-device implementation](device-location-history.md) — private observations, retention, native collection/actions and editable Mapbox composition (active).
+
+[Shared Rust index/sync backend](shared-rust-index-sync.md) — unified store, native adapters and acceptance gates (2026-11-04).
+
 `PLAN/` holds strategies, sequencing, milestones, experiments, success metrics,
 and contingency paths. Plans explain how several TODOs work together; they do
 not replace the actionable backlog in [`../TODO/`](../TODO/TODO.md) or the

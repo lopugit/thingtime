@@ -199,3 +199,9 @@ test('larger browser envelopes are explicit and versioned without increasing ser
 	assert.deepEqual(await executeBrowserAction(prepared(limits), host({ request: async () => response })), response);
 	await assert.rejects(executeBrowserAction(prepared(), host({ request: async () => response })), /byte budget/);
 });
+
+
+test('URI encoding negotiates its feature inside composed expressions', () => {
+ assert.equal(browserActionMinimumVersion({steps: [{op: 'return', value: {ttExpr: ['map', [], {ttExpr: ['encodeURIComponent', '$item']} ]}}]}), '1.40.0');
+ assert.equal(browserActionMinimumVersion({steps: [{op: 'return', value: 'encodeURIComponent'}]}), '1.7.0');
+});

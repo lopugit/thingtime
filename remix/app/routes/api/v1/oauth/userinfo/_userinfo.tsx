@@ -45,7 +45,7 @@ export const loader = async ({ request }: { request: Request }) => {
     {
       ok: true,
       scopes: ctx.scopes,
-      sharedThings: has('things') ? ctx.sharedThings.length : 0,
+      sharedThings: has('things') ? ctx.sharedThingCount : 0,
       user: {
         id: ctx.user.id,
         username: ctx.user.username,

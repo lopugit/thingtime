@@ -1,4 +1,5 @@
 import { SITE_FORM_REFS } from './siteFormsSuite.ts';
+import type { SourceInputValue } from './sourceInputs';
 
 // The builder DEMO LIBRARY — a deterministic catalog of example webpages
 // (sections, full pages, and component-block compositions) generated from
@@ -27,7 +28,7 @@ export type DemoBlock = {
 	// viewer and hands the result to the template as `result`
 	source?: {
 		action: string;
-		inputs?: Record<string, string | number | boolean>;
+		inputs?: Record<string, SourceInputValue>;
 		refresh?: 'load' | 'manual' | 'interval' | 'live';
 		intervalMs?: number;
 		stream?: { path: string; feature: string; minimumVersion: string };

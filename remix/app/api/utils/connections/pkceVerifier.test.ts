@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { pkceVerifierFor } from './shared';
+process.env.CONNECTIONS_PKCE_SECRET = `test-${randomUUID()}`;
 
 // The state that carries the nonce is a SIGNED JWT, not an encrypted one: it is
 // handed to the provider and comes back in the callback URL beside the

@@ -162,6 +162,7 @@ public struct CommandLeaseRequest: Codable, Equatable, Sendable {
 }
 
 public struct LeasedCommand: Codable, Equatable, Sendable {
+    public let deviceID: String?
     public let commandID: String
     public let leaseID: String
     public let method: String
@@ -175,8 +176,10 @@ public struct LeasedCommand: Codable, Equatable, Sendable {
         method: String,
         parameters: JSONValue,
         leaseExpiresAt: Date,
-        approvedForExecution: Bool = false
+        approvedForExecution: Bool = false,
+        deviceID: String? = nil
     ) {
+        self.deviceID = deviceID
         self.commandID = commandID
         self.leaseID = leaseID
         self.method = method
@@ -246,6 +249,43 @@ public struct ControlPlaneSchedulerHooks: Sendable {
         self.makeHeartbeat = makeHeartbeat
         self.dispatchCommand = dispatchCommand
         self.reportError = reportError
+    }
+}
+
+/// Keeps an unused node from holding a command long-poll open around the clock.
+/// Every open poll keeps a server instance alive and billed, so the node
+/// long-polls only while commands are flowing. After `idleAfterEmptyPolls`
+/// consecutive empty polls it switches to immediate claims and doubles the gap
+/// between cycles up to `maximumIdleDelay`. The cap stays inside the server's
+/// 45-second online window, so an idle node still reads as online. Any leased
+/// command, or work still running, returns it to long-polling at once.
+public struct ControlPlanePollCadence: Sendable, Equatable {
+    public let activeWaitSeconds: Int
+    public let idleAfterEmptyPolls: Int
+    public let maximumIdleDelay: Duration
+    public private(set) var emptyPolls = 0
+
+    public init(activeWaitSeconds: Int = 20, idleAfterEmptyPolls: Int = 3, maximumIdleDelay: Duration = .seconds(30)) {
+        self.activeWaitSeconds = min(max(0, activeWaitSeconds), 30)
+        self.idleAfterEmptyPolls = max(1, idleAfterEmptyPolls)
+        self.maximumIdleDelay = max(.zero, maximumIdleDelay)
+    }
+
+    public var isIdle: Bool { emptyPolls >= idleAfterEmptyPolls }
+    public var waitSeconds: Int { isIdle ? 0 : activeWaitSeconds }
+
+    public mutating func record(leasedCommands: Int, hasRunningWork: Bool) {
+        emptyPolls = leasedCommands > 0 || hasRunningWork ? 0 : min(emptyPolls + 1, 1_000)
+    }
+
+    public func delay(base: Duration) -> Duration {
+        guard isIdle else { return base }
+        var delay = max(base, .milliseconds(1))
+        for _ in 0 ... min(emptyPolls - idleAfterEmptyPolls, 16) {
+            delay = delay * 2
+            if delay >= maximumIdleDelay { return max(base, maximumIdleDelay) }
+        }
+        return delay
     }
 }
 
@@ -408,7 +448,8 @@ public actor ControlPlaneScheduler {
             && command.parameters.objectValue?["delivery"]?.stringValue == "queue"
     }
 
-    private func pollAndSchedule() async throws {
+    /// Returns how many commands the poll leased.
+    private func pollAndSchedule(waitSeconds: Int) async throws -> Int {
         let heartbeat = try await hooks.makeHeartbeat()
         do {
             try await client.sendHeartbeat(heartbeat)
@@ -417,10 +458,11 @@ public actor ControlPlaneScheduler {
         }
         try Task.checkCancellation()
         let available = maximumConcurrentCommands - trackedCommands.count
-        guard available > 0 else { return }
+        guard available > 0 else { return 0 }
         let batch = try await client.leaseCommands(CommandLeaseRequest(
             deviceID: heartbeat.deviceID,
-            maximumCommands: available
+            maximumCommands: available,
+            waitSeconds: waitSeconds
         ))
         try Task.checkCancellation()
         let now = Date()
@@ -428,7 +470,10 @@ public actor ControlPlaneScheduler {
             if command.leaseExpiresAt <= now { continue }
             schedule(command)
         }
+        return batch.commands.count
     }
+
+    private var hasRunningWork: Bool { !trackedCommands.isEmpty }
 
     private func schedule(_ command: LeasedCommand) {
         let token = UUID()
@@ -493,19 +538,21 @@ public actor ControlPlaneScheduler {
         if serialTail?.token == token { serialTail = nil }
     }
 
-    public func start(delayBetweenPolls: Duration = .seconds(5)) {
+    public func start(delayBetweenPolls: Duration = .seconds(5), cadence initialCadence: ControlPlanePollCadence = .init()) {
         guard loopTask == nil else { return }
         loopTask = Task { [weak self] in
+            var cadence = initialCadence
             while !Task.isCancelled {
                 guard let self else { return }
                 do {
-                    try await self.pollAndSchedule()
+                    let leased = try await self.pollAndSchedule(waitSeconds: cadence.waitSeconds)
+                    cadence.record(leasedCommands: leased, hasRunningWork: await self.hasRunningWork)
                 } catch {
                     if Task.isCancelled { return }
                     await self.report(error)
                 }
                 do {
-                    try await Task.sleep(for: delayBetweenPolls)
+                    try await Task.sleep(for: cadence.delay(base: delayBetweenPolls))
                 } catch {
                     return
                 }

@@ -7,6 +7,7 @@ import {
 	DeleteObjectCommand,
 	GetObjectCommand,
 	HeadObjectCommand,
+	ListPartsCommand,
 	PutObjectTaggingCommand,
 	S3Client,
 	UploadPartCommand,
@@ -14,6 +15,46 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { createPrivateS3 } from './privateS3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+test('background file grants bind a real regional S3 signature and preserve the legacy shape', async () => {
+	const config = { roleArn: 'arn:aws:iam::123456789012:role/test', bucket: 'private-test',
+		region: 'ap-southeast-2', expectedBucketOwner: '123456789012' };
+	const client = new S3Client({ region: config.region,
+		credentials: { accessKeyId: 'TESTACCESSKEY', secretAccessKey: 'test-secret-key' } });
+	const input = { objectKey: 'objects/original', uploadId: 'multipart/one+', partNumber: 1,
+		checksumSha256: Buffer.alloc(32, 1).toString('base64'), contentLength: 1024, expiresInSeconds: 600 };
+	const service = createPrivateS3(config, client);
+	assert.equal((await service.signUploadPart(input)).transport, undefined);
+	const signed = await service.signUploadPart({ ...input, backgroundFileTransport: true });
+	assert.deepEqual(signed.transport, { kind: 'background-file-v1', origin: 'https://private-test.s3.ap-southeast-2.amazonaws.com',
+		path: '/objects/original', method: 'PUT', redirects: 'provider-managed', expiresAt: signed.expiresAt });
+	assert.ok(Date.parse(signed.expiresAt) > Date.now() + 598_000);
+	assert.ok(Date.parse(signed.expiresAt) <= Date.now() + 600_000);
+	assert.deepEqual(Object.keys(signed.headers), ['x-amz-checksum-sha256']);
+	for (const mutate of [
+		(url: URL) => { url.hostname = 'private-test.s3.ap-southeast-2.amazonaws.com.evil.test'; },
+		(url: URL) => { url.hostname = 'other-bucket.s3.ap-southeast-2.amazonaws.com'; },
+		(url: URL) => { url.protocol = 'http:'; },
+		(url: URL) => { url.pathname = '/objects/different'; },
+		(url: URL) => { url.username = 'credential'; },
+		(url: URL) => { url.hash = 'fragment'; },
+		(url: URL) => { url.searchParams.set('partNumber', '2'); },
+		(url: URL) => { url.searchParams.set('uploadId', 'other'); },
+		(url: URL) => { url.searchParams.set('x-amz-expected-bucket-owner', '000000000000'); },
+		(url: URL) => { url.searchParams.set('X-Amz-Expires', '601'); },
+		(url: URL) => { url.searchParams.set('X-Amz-Date', '20000101T000000Z'); },
+		(url: URL) => { url.searchParams.set('X-Amz-SignedHeaders', 'host'); },
+		(url: URL) => { url.searchParams.append('partNumber', '1'); }
+	]) {
+		const modified = createPrivateS3(config, client, async (client, command, options) => {
+			assert.ok(command instanceof UploadPartCommand);
+			const url = new URL(await getSignedUrl(client, command, options)); mutate(url); return url.href;
+		});
+		await assert.rejects(modified.signUploadPart({ ...input, backgroundFileTransport: true }), /Invalid canonical background upload target/);
+	}
+	client.destroy();
+});
 
 test('stored copies pin same-bucket source version, bucket owners and exact byte range', async () => {
 	const commands: any[] = [];
@@ -215,4 +256,37 @@ test('empty objects use a conditional encrypted single PutObject with exact chec
         Metadata: { 'attachment-id': 'empty' }, Tagging: 'thingtime-state=pending', IfNoneMatch: '*' });
     await assert.rejects(s3.putEmptyObject({ objectKey: 'objects/other', attachmentId: 'empty' }));
     assert.equal(commands.length, 1);
+});
+
+test('signed download range binds exact stored version and Range with sixty-second expiry', async () => {
+ let command: any, options: any;
+ const s3 = createPrivateS3({ roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' }, {} as any,
+ async (_client, cmd, opts) => { command = cmd; options = opts; return 'https://s3.example/range'; });
+ const before = Date.now(); const target = await s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'stored-version', offset: 12, length: 34 });
+ assert.equal(command.input.VersionId, 'stored-version'); assert.equal(command.input.Range, 'bytes=12-45');
+ assert.equal(options.expiresIn, 60); assert.equal(options.signableHeaders.has('range'), true);
+ assert.ok(Date.parse(target.expiresAt) >= before + 59000); assert.ok(Date.parse(target.expiresAt) <= Date.now() + 60000);
+ await assert.rejects(s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'stored-version', offset: 0, length: 2097153 }));
+});
+
+test('real offline S3 presigner cryptographically includes Range and exact object version', async () => {
+ const { S3Client } = await import('@aws-sdk/client-s3');
+ const client = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'SYNTHETIC_FIXTURE_KEY', secretAccessKey: 'synthetic-fixture-secret' } });
+ try {
+  const s3 = createPrivateS3({ roleArn: 'unused-fixture', bucket: 'private-test', region: 'us-east-1', expectedBucketOwner: '123456789012' }, client);
+  const signed = await s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'exact-fixture-version', offset: 4, length: 8 });
+  const query = new URL(signed.url).searchParams;
+  assert.ok(query.get('X-Amz-SignedHeaders')?.split(';').includes('range'));
+  assert.equal(query.get('X-Amz-Expires'), '60'); assert.equal(query.get('versionId'), 'exact-fixture-version');
+ } finally { client.destroy(); }
+});
+
+test('exact multipart reconciliation reads only one provider part instead of relisting earlier pages', async()=>{
+ const calls:any[]=[];const checksum=Buffer.alloc(32,7).toString('base64');
+ const client={send:async(command:any)=>{assert.ok(command instanceof ListPartsCommand);calls.push(command.input);return{Parts:[{PartNumber:3,ETag:'three',Size:8,ChecksumSHA256:checksum}],IsTruncated:true,NextPartNumberMarker:'3'}}};
+ const s3=createPrivateS3({roleArn:'arn:aws:iam::123456789012:role/thingtime',bucket:'example-private-bucket',region:'ap-southeast-2',expectedBucketOwner:'123456789012'},client as any,async()=> 'https://s3.example/signed');
+ assert.deepEqual(await s3.listParts({objectKey:'objects/test',uploadId:'upload',partNumber:3}),[{partNumber:3,etag:'three',sizeBytes:8,checksumSha256:checksum}]);
+ assert.equal(calls.length,1);assert.equal(calls[0].MaxParts,1);assert.equal(calls[0].PartNumberMarker,'2');
+ assert.deepEqual(await s3.listParts({objectKey:'objects/test',uploadId:'upload',partNumber:2}),[]);
+ assert.equal(calls.length,2,'a missing exact part does not traverse later pages');
 });

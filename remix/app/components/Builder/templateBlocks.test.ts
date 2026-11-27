@@ -2,10 +2,35 @@ import { compositionAttachmentIds } from '../../api/utils/actions/compositionMed
 import { rewriteComposition } from '../../api/utils/actions/forkCompositionCore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { templateToBlocks, resolveBlockProps } from './templateBlocks';
+import { expandedComponentBlock, resolveBlockArguments, templateEachRows, templateEachRowScope, templateToBlocks, resolveBlockProps } from './templateBlocks';
+import { copyBoundedJson } from '../../utils/boundedJson';
 import { sanitizeWebpageBlocks } from '../../schemas/registry';
 import { compositionReferences } from '../../api/utils/actions/sharedCompositionCore';
-import { duplicateBlock, moveBlock, findBlock } from './webpageBlocks';
+import { duplicateBlock, moveBlock, findBlock, requiresEditableIntrinsicContract } from './webpageBlocks';
+
+test('explicit argument bindings preserve literal values, expansion and missing-row resets', () => {
+ const block: any = { id: 'instance', type: 'component', component: 'record-view',
+  args: { id: 'fallback', literal: '{item.id}' }, argBindings: { id: '{item.id}', enabled: false, index: 0 } };
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-a' } }),
+  { id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.deepEqual(resolveBlockArguments(block, { item: { id: 'record-b' } }),
+  { id: 'record-b', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, {}).id, '');
+ assert.equal(resolveBlockArguments(block, { item: { id: '{viewer.id}' }, viewer: { id: 'protected' } }).id, '{viewer.id}');
+ assert.deepEqual(resolveBlockArguments({ ...block, args: {}, argBindings: { enabled: '{item.enabled}', index: '{item.index}' } },
+  { item: { enabled: false, index: 0 } }), { enabled: false, index: 0 });
+ assert.equal(resolveBlockArguments(block, { item: { id: { executable: true } } }).id, '');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }).literal, '{item.id}');
+ assert.equal(resolveBlockArguments({ ...block, argBindings: undefined }, { item: { id: 'record-a' } }, true).literal, 'record-a');
+ const expanded = expandedComponentBlock(block, { savedArgs: { saved: '{item.id}' },
+  args: [{ name: 'defaultLiteral', type: 'string', default: '{item.id}' }] }, []);
+ assert.deepEqual(expanded.argBindings, block.argBindings);
+ assert.deepEqual(resolveBlockArguments(expanded, { item: { id: 'record-a' } }),
+  { defaultLiteral: '{item.id}', saved: '{item.id}', id: 'record-a', literal: '{item.id}', enabled: false, index: 0 });
+ assert.equal(sanitizeWebpageBlocks([expanded]).ok, true);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { id: { executable: true } } }]).ok, false);
+ assert.equal(sanitizeWebpageBlocks([{ ...block, argBindings: { constructor: 'unsafe' } }]).ok, false);
+});
 let next = 0;
 const id = (kind: string) => `${kind}-${++next}`;
 
@@ -66,4 +91,94 @@ test('deep editable trees retain inherited stored media and remap nested Action 
  assert.equal(current.props['data-tt-action'],'do-{target}');
  const twice=rewriteComposition(['webpage'],copied,(_kind,ref)=>`second-${ref}`);
  assert.deepEqual(compositionReferences(['webpage'],twice).map(x=>x.ref),['second-copy-do-saved']);
+});
+
+test('saved transient JSON inputs survive intrinsic binding without widening the closed scalar authority', () => {
+ const original = { 'data-tt-action': '$transient', 'data-tt-action-inputs': JSON.stringify({ operation: 'scan', id: '{item.id}' }) };
+ assert.deepEqual(resolveBlockProps(original, { item: { id: 'saved-id' } })['data-tt-action-inputs'], { operation: 'scan', id: 'saved-id' });
+ assert.equal(typeof original['data-tt-action-inputs'], 'string');
+ const invalid = { ...original, 'data-tt-action-inputs': '{"operation":"scan","nested":{"secret":"x"}}' };
+ assert.notDeepEqual(resolveBlockProps(invalid, {})['data-tt-action-inputs'], { operation: 'scan', nested: { secret: 'x' } });
+});
+
+test('media adapters expand into selectable authored headings, inputs, controls and previews', async () => {
+ const { mediaCompressorTemplate } = await import('../../../scripts/media-acceptance/authoredFixture');
+ let id=0;
+ const blocks=templateToBlocks(JSON.parse(JSON.stringify(mediaCompressorTemplate())), kind=>`${kind}-${++id}`);
+ const flatten=(rows:any[]):any[]=>rows.flatMap(row=>[row,...flatten(row.children||[])]);
+ const all=flatten(blocks);
+ assert.equal(blocks[0].tag,'tt-media-pipeline');
+ for(const tag of ['h2','label','input','button','img','video','details','select','a']) assert.ok(all.some(block=>block.tag===tag),tag);
+ assert.equal(new Set(all.map(block=>block.id)).size,all.length);
+ const saved=sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok,true,JSON.stringify(saved));
+});
+
+test('route controls expand into separately editable fields and repeated rows without losing bindings', () => {
+ let nextId = 0;
+ const blocks = templateToBlocks({ tag: 'tt-style', props: { rules: [] }, children: [
+  { tag: 'tt-form', props: { identityName: 'id' }, children: [
+   { tag: 'label', children: ['Address', { tag: 'tt-change', props: { inputPath: 'query', 'data-tt-action': 'suggest', 'data-tt-action-inputs': { vaultId: '{vaultId}' } }, children: [{ tag: 'input', props: { name: 'query', value: '{query.value}' } }] }] },
+   { tag: 'tt-select', props: { name: 'favoriteId', optionsPath: 'result.favorites', labelPath: 'crystal.title' } },
+   { tag: 'tt-upload', props: { name: 'markerAvatar', imageOnly: true, value: { ttArg: 'result.record.crystal.markerAvatar' } } },
+   { tag: 'button', ttAction: 'save-stop', children: ['Save stop'] }
+  ] },
+  { tag: 'tt-collection', props: { itemsPath: 'result.items', itemTemplate: { ttTemplate: { tag: 'article', children: [
+   { tag: 'strong', children: ['{item.crystal.label}'] },
+   { tag: 'button', ttAction: 'remove-stop', ttActionInputs: { id: '{item.id}' }, children: ['Remove'] }
+  ] } } } },
+  { ttEach: { arg: 'last.result.suggestions', max: 20, empty: 'No matches', node: { tag: 'button', ttAction: '$ui', ttActionInputs: { id: '{item.id}' }, children: ['{item.label}'] } } },
+  { tag: 'tt-mapbox', props: { vaultId: { ttArg: 'vaultId' }, points: { ttArg: 'result.points' } } }
+ ] }, kind => `${kind}-${++nextId}`);
+ const flat = (rows: any[]): any[] => rows.flatMap(row => [row, ...flat(row.children || [])]);
+ const all = flat(blocks);
+ for (const tag of ['tt-style', 'tt-form', 'tt-change', 'input', 'tt-select', 'tt-upload', 'button', 'strong', 'tt-mapbox'])
+  assert.ok(all.some(row => row.tag === tag), tag);
+ assert.equal(new Set(all.map(row => row.id)).size, all.length);
+ assert.equal(requiresEditableIntrinsicContract(blocks), true);
+ assert.equal(requiresEditableIntrinsicContract(blocks, ['tt-upload']), true);
+ assert.ok(all.some(row => row.type === 'collection' && row.props?.itemsPath === 'last.result.suggestions' && row.props?.maxItems === 20));
+ assert.ok(all.some(row => row.props?.['data-tt-action'] === 'remove-stop' && row.props?.['data-tt-action-inputs']?.id === '{item.id}'));
+ const saved = sanitizeWebpageBlocks([{ id: 'scope', type: 'container', source: { action: 'read-route', inputs: { routeId: '{query.routeId}' } }, args: { vaultId: 'vault-reference' }, children: blocks }]);
+ assert.equal(saved.ok, true, JSON.stringify(saved));
+ if (saved.ok) assert.deepEqual((saved.blocks[0] as any).source, { action: 'read-route', inputs: { routeId: '{query.routeId}' } });
+});
+
+test('expanded Component wrapper is valid Timeline JSON and preserves source and defaults', () => {
+ const entry: any = { id: 'route-detail', type: 'component', component: 'route-detail' };
+ const child: any = { id: 'title', type: 'element', tag: 'h2', text: '{result.route.crystal.name}' };
+ const expanded = expandedComponentBlock(entry, { source: { action: 'read-route', inputs: { routeId: '{query.routeId}' } }, args: [{ name: 'vaultId', type: 'string', default: '' }, { name: 'optional', type: 'string' }] }, [child]);
+ assert.deepEqual(copyBoundedJson(expanded, { maxBytes: 10000, maxDepth: 20, maxNodes: 100 }, 'Timeline event'), expanded);
+ assert.equal(Object.prototype.hasOwnProperty.call(expanded, 'css'), false);
+ assert.deepEqual(expanded.source, { action: 'read-route', inputs: { routeId: '{query.routeId}' } });
+ assert.deepEqual(expanded.args, { vaultId: '' });
+});
+
+test('converted ttEach preserves primitive rows, object entries, aliases and empty fallback safety', () => {
+ const primitives = templateEachRows(['first', 0, false], 2);
+ assert.deepEqual(primitives, ['first', 0]);
+ assert.deepEqual(templateEachRowScope({ parent: 'kept' }, primitives[1], 1, primitives.length), {
+  parent: 'kept', item: 0, index: 1, n: 2, count: 2, first: false, last: true, collection: { index: 1, count: 2 }
+ });
+ assert.deepEqual(templateEachRows({ alpha: 'A', beta: 2 }, undefined), [{ key: 'alpha', value: 'A' }, { key: 'beta', value: 2 }]);
+ assert.equal(templateEachRows(Array.from({ length: 200 }, (_, i) => i), -1).length, 160);
+ const converted = templateToBlocks({ ttEach: { arg: 'result.items', empty: 'None for {query.name}', node: { tag: 'span', children: ['{n}/{count}: {item}'] } } }, id);
+ assert.equal(converted[0].props?.templateEach, true);
+ assert.equal(converted[0].props?.empty, 'None for {query.name}');
+ assert.throws(() => templateToBlocks({ ttEach: { arg: 'result.items', empty: { tag: 'p', children: ['No rows'] }, node: { tag: 'span' } } }, id), /empty branch/);
+});
+
+test('editable collection paging and map selection properties survive conversion and save', () => {
+ const props = { source: { action: 'read-page', offsetInput: 'offset', limitInput: 'limit', totalPath: 'total' }, selectedKey: '{query.id}', itemKey: 'id', revealSelected: true, totalPath: 'result.total', itemTemplate: { ttTemplate: { tag: 'p', children: ['{item.name}'] } } };
+ const blocks = templateToBlocks({ tag: 'tt-collection', props }, id);
+ const saved = sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok, true);
+ if (!saved.ok) return;
+ const savedProps = saved.blocks[0].props as Record<string, unknown>;
+ assert.deepEqual(savedProps.source, props.source);
+ assert.equal(savedProps.selectedKey, props.selectedKey);
+ assert.equal(savedProps.revealSelected, true);
+ const map = sanitizeWebpageBlocks([{ id: 'map', type: 'element', tag: 'tt-mapbox', props: { onSelectQueryParams: { view: 'places' } } }]);
+ assert.equal(map.ok, true);
+ if (map.ok) assert.deepEqual(map.blocks[0].props, { onSelectQueryParams: { view: 'places' } });
 });

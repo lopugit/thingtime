@@ -4,13 +4,25 @@ import CryptoKit
 
 final class FileVersionExportTests: XCTestCase {
     private func request(_ bytes: Data, name: String = "history.bin") throws -> FileVersionExport.Request {
+        let partSize = 8 * 1024 * 1024
         var parts = Data()
-        for offset in stride(from: 0, to: bytes.count, by: 8 * 1024 * 1024) {
-            parts.append(contentsOf: SHA256.hash(data: bytes.subdata(in: offset..<min(bytes.count, offset + 8 * 1024 * 1024))))
+        for offset in stride(from: 0, to: bytes.count, by: partSize) {
+            parts.append(contentsOf: SHA256.hash(data: bytes.subdata(in: offset..<min(bytes.count, offset + partSize))))
         }
-        let json: [String: Any] = ["name": name, "content": ["attachmentId": "attachment-1", "version": String(repeating: "a", count: 64), "size": bytes.count,
-            "fingerprint": ["algorithm": "sha256-parts-v1", "partSizeBytes": 8 * 1024 * 1024, "partCount": (bytes.count + 8 * 1024 * 1024 - 1) / (8 * 1024 * 1024),
-                            "sha256": SHA256.hash(data: parts).map { String(format: "%02x", $0) }.joined()]]]
+        let digest = SHA256.hash(data: parts).map { String(format: "%02x", $0) }.joined()
+        let fingerprint: [String: Any] = [
+            "algorithm": "sha256-parts-v1",
+            "partSizeBytes": partSize,
+            "partCount": (bytes.count + partSize - 1) / partSize,
+            "sha256": digest,
+        ]
+        let content: [String: Any] = [
+            "attachmentId": "attachment-1",
+            "version": String(repeating: "a", count: 64),
+            "size": bytes.count,
+            "fingerprint": fingerprint,
+        ]
+        let json: [String: Any] = ["name": name, "content": content]
         return try JSONDecoder().decode(FileVersionExport.Request.self, from: JSONSerialization.data(withJSONObject: json))
     }
     private func directory() throws -> URL {
@@ -74,7 +86,10 @@ final class FileVersionExportTests: XCTestCase {
     func testInvalidNamesFingerprintAndRangeFramingRefuse() throws {
         let bytes = Data([1]), valid = try request(bytes)
         for name in ["../escape", "a/b", "a\\b", "\u{0}bad", ".", "..", " "] { XCTAssertThrowsError(try request(bytes, name: name).validate()) }
-        XCTAssertThrowsError(try request(Data()).validate())
+        XCTAssertNoThrow(try request(Data()).validate())
+        let invalidEmpty = FileVersionExport.Content(attachmentId: valid.content.attachmentId, version: valid.content.version,
+            size: 0, fingerprint: valid.content.fingerprint)
+        XCTAssertThrowsError(try FileVersionExport.Request(name: valid.name, content: invalidEmpty).validate())
         let url = URL(string: "https://example.com/api/v1/attachments/content")!
         let headers = ["ETag": "\"" + valid.content.version + "\"", "Content-Range": "bytes 0-0/1", "Content-Length": "1"]
         try valid.validateRange(HTTPURLResponse(url: url, statusCode: 206, httpVersion: nil, headerFields: headers)!, offset: 0, length: 1)

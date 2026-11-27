@@ -38,6 +38,11 @@ const root = (label: string, varName?: string): TtCustomTarget => ({
 
 export const TT_CUSTOM_TARGETS: Record<string, TtCustomTarget> = {
   'color.accent': root('Accent', '--tt-accent'),
+  'color.focusBorder': root('Focus border', '--tt-focus-border'),
+  'color.focusGlowStart': root('Focus glow start', '--tt-focus-glow-start'),
+  'color.focusGlowEnd': root('Focus glow end', '--tt-focus-glow-end'),
+  'general.focusGlowBlur': root('Focus glow softness', '--tt-focus-glow-blur'),
+  'general.focusGlowOpacity': root('Focus glow strength', '--tt-focus-glow-opacity'),
   'color.accentTint': root('Accent tint', '--tt-accent-tint'),
   'color.ink': root('Ink', '--tt-ink'),
   'color.text': root('Body text', '--tt-text'),

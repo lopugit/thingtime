@@ -1,5 +1,7 @@
 /** Pointer and keyboard resizing, bounded to the visual viewport (including the iOS keyboard). */
 export const makeEditorPanelResizable = (panel: HTMLElement, handle: HTMLElement, minimum = { width: 300, height: 240 }) => {
+	const window = panel.ownerDocument.defaultView;
+	if (!window) return () => {};
 	let start: { x: number; y: number; width: number; height: number } | undefined;
 	handle.setAttribute('role', 'button');
 	handle.setAttribute('tabindex', '0');
@@ -9,8 +11,8 @@ export const makeEditorPanelResizable = (panel: HTMLElement, handle: HTMLElement
 	const setSize = (width: number, height: number) => {
 		const rect = panel.getBoundingClientRect(),
 			vv = window.visualViewport;
-		const right = (vv?.offsetLeft || 0) + (vv?.width || innerWidth) - 8;
-		const bottom = (vv?.offsetTop || 0) + (vv?.height || innerHeight) - 8;
+		const right = (vv?.offsetLeft || 0) + (vv?.width || window.innerWidth) - 8;
+		const bottom = (vv?.offsetTop || 0) + (vv?.height || window.innerHeight) - 8;
 		panel.style.width = `${Math.max(Math.min(minimum.width, right - rect.left), Math.min(width, right - rect.left))}px`;
 		panel.style.height = `${Math.max(Math.min(minimum.height, bottom - rect.top), Math.min(height, bottom - rect.top))}px`;
 	};
@@ -45,6 +47,8 @@ export const makeEditorPanelResizable = (panel: HTMLElement, handle: HTMLElement
 };
 
 export const makeEditorPanelMovable = (panel: HTMLElement, handle: HTMLElement) => {
+	const window = panel.ownerDocument.defaultView;
+	if (!window) return () => {};
 	let origin: { x: number; y: number; left: number; top: number } | undefined;
 	let moved = false;
 	handle.tabIndex = 0;
@@ -60,8 +64,8 @@ export const makeEditorPanelMovable = (panel: HTMLElement, handle: HTMLElement) 
 			y = vv?.offsetTop || 0;
 		panel.style.margin = '0';
 		panel.style.position = 'fixed';
-		panel.style.left = `${Math.max(x + 8, Math.min(left, x + (vv?.width || innerWidth) - rect.width - 8))}px`;
-		panel.style.top = `${Math.max(y + 8, Math.min(top, y + (vv?.height || innerHeight) - rect.height - 8))}px`;
+		panel.style.left = `${Math.max(x + 8, Math.min(left, x + (vv?.width || window.innerWidth) - rect.width - 8))}px`;
+		panel.style.top = `${Math.max(y + 8, Math.min(top, y + (vv?.height || window.innerHeight) - rect.height - 8))}px`;
 	};
 	const down = (e: PointerEvent) => {
 		e.preventDefault();

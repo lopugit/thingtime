@@ -1,5 +1,6 @@
 'use strict';
-const { createHash } = require('node:crypto');
+const { governorFor } = require('./folder-resource-governor.cjs');
+const { governedFetch, governedHash } = require('./folder-transfer-process.cjs');
 const invalid = () => new Error('The pinned upload part could not be verified.');
 const uploadRetry = () => new Error('[folder_upload_retry] Folder upload is temporarily unavailable. Retry after reconnecting.');
 const retryableUploadFailure = error => {
@@ -11,7 +12,8 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,
 
 // Reuse the mobile part contract; the host obtains the destination itself.
 // A renderer can select an owned upload, never an arbitrary outgoing URL.
-async function uploadFolderPart({ input, context, signal, authorize, requestNative, signPart, fetchUpload }) {
+async function uploadFolderPart({ input, context, signal, authorize, requestNative, signPart, fetchUpload, assertCurrent = () => {} }) {
+    const governor = governorFor(input, context);
     const upload = input.upload, source = upload?.source, mib = 1024 * 1024;
     if (!source || source.kind !== 'file' || !id(upload.uploadId) || !id(upload.requestId) ||
         !Number.isSafeInteger(source.size) || source.size <= 0 || typeof source.path !== 'string' ||
@@ -38,7 +40,7 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
                 chunk.offset !== upload.offset || chunk.length !== upload.length : chunk.offset !== source.size || chunk.data !== '')) throw invalid();
         return range ? chunk.bytes : value.roots;
     };
-    const bytes = await read(true), digest = createHash('sha256').update(bytes).digest(), checksum = digest.toString('base64');
+    const bytes = await read(true), digest = Buffer.from(await governedHash(governor, bytes, signal), 'hex'), checksum = digest.toString('base64');
     const signed = await signPart({ uploadId: upload.uploadId, parts: [{ partNumber: upload.partNumber, checksumSha256: checksum }] });
     signal.throwIfAborted();
     const part = signed?.parts?.[0];
@@ -50,10 +52,11 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
     if (target.username || target.password || target.hash || (target.protocol !== 'https:' && target.origin !== context.apiOrigin)) throw invalid();
     await read(false); await authorize(); signal.throwIfAborted();
     let response;
-    const uploadSignal = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
-    try { response = await fetchUpload(target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
+    const governed = governor && (governor.policy.uploadBytesPerSecond || governor.policy.cpuPercent);
+    const uploadSignal = governed ? signal : AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
+    try { response = await governedFetch(governor, fetchUpload, target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
         headers: { 'x-amz-checksum-sha256': checksum }, body: bytes,
-        signal: uploadSignal }); }
+        signal: uploadSignal }, () => { signal.throwIfAborted(); assertCurrent(); }); }
     catch (error) { signal.throwIfAborted();
         if ((uploadSignal.aborted && uploadSignal.reason?.name === 'TimeoutError') || retryableUploadFailure(error)) throw uploadRetry();
         throw invalid(); }
@@ -65,7 +68,7 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
     finally { await response.body?.cancel().catch(() => {}); }
     const roots = await read(false); signal.throwIfAborted();
     if (!Array.isArray(roots)) throw invalid();
-    return { ...binding, roots, uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId,
+    return { ...binding, roots, ...(governor ? { resources: governor.snapshot() } : {}), uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId,
         partNumber: upload.partNumber, offset: upload.offset, length: upload.length,
         version: source.version, size: source.size, sha256: digest.toString('hex'), payloadBytes: bytes.length } };
 }

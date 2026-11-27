@@ -5,29 +5,33 @@ import { inventoryJournal, inventoryIdentity, newInventoryHeader, INVENTORY_PAGE
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
 import { PLAN_PIN_STORE, PLAN_STORES, pagedPlanJournal, validatePagedPlanHeader, type PagedPlanHeader } from './pagedPlanJournal';
-import { PAGED_RUN_HEADS, PAGED_RUN_STORES, pagedRunJournal, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader, type PagedRunSpec } from './pagedRunJournal';
+import { REVIEW_STORE, countConfirmedSyncEffects, PAGED_RUN_HEADS, PAGED_RUN_STORES, streamReconciliationKey, pagedRunJournal, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader, type PagedRunSpec } from './pagedRunJournal';
 import { sameSyncContent, syncPathKey, validSyncPathKey, type SyncEntry } from './reconcile';
 
 export const PAGED_CHECKPOINT_DRAFTS = 'sync-paged-checkpoint-drafts';
-export type PagedCheckpointSpec = { run: PagedRunSpec; localRootId: string; remoteFolderId: string };
+export type PagedCheckpointSpec = { run: PagedRunSpec; localRootId: string; remoteFolderId: string; photoBaseline?: PagedCheckpointHead };
 type Pair = { local: InventoryIdentity; remote: InventoryIdentity };
 type Position = { after: string | null; read: number };
 export type PagedCheckpointProgress = { phase: 'collecting' | 'building' | 'sealing' | 'published'; paths: number; entries: number; pages: number };
 export type PagedCheckpointHeader = PagedCheckpointProgress & { spec: PagedCheckpointSpec; scope: string; instance: string; retired?: true; runInstance: string;
-	after: Pair; baseline: Pair; instances: string[]; previous: string | null; positions: Position[]; totals: number[]; revision: number };
+	after: Pair; baseline: Pair; publishedBaseline?: Pair; instances: string[]; earlyInstance?: string; previous: string | null; positions: Position[]; totals: number[]; revision: number };
 type Header = PagedCheckpointHeader;
 export type PagedCheckpointState = PagedCheckpointProgress & { after: Pair; baseline: Pair };
-const stores = [JOURNAL_RETENTION_STORE, PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
+const stores = [REVIEW_STORE, JOURNAL_RETENTION_STORE, PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const nonnegative = (v: number) => Number.isSafeInteger(v) && v >= 0;
 const original = (s: PagedCheckpointSpec) => [s.run.plan.local, s.run.plan.remote, s.run.plan.baseline.local, s.run.plan.baseline.remote];
 const owned = (h: Header) => [h.after.local, h.after.remote, h.baseline.local, h.baseline.remote];
-const state = (h: Header): PagedCheckpointState => structuredClone({ phase: h.phase, paths: h.paths, entries: h.entries, pages: h.pages, after: h.after, baseline: h.baseline });
+const state = (h: Header): PagedCheckpointState => structuredClone({ phase: h.phase, paths: h.paths, entries: h.entries, pages: h.pages, after: h.after, baseline: h.publishedBaseline ?? h.baseline });
 const specification = (s: PagedCheckpointSpec): PagedCheckpointSpec => {
 	if (!s || !identifier(s.localRootId) || !identifier(s.remoteFolderId)) throw Error('Invalid checkpoint roots.');
 	const run = parsePagedRunSpec(s.run);
 	if (run.review?.kind === 'retain') throw Error('Conflict retention cannot advance the sync baseline.');
-	return { run, localRootId: s.localRootId, remoteFolderId: s.remoteFolderId };
+	if (run.plan.photoBaselineInstance !== s.photoBaseline?.instance ||
+		(s.photoBaseline && (!run.photoAssetOrder || run.plan.earlyRunId ||
+			s.photoBaseline.localRootId !== s.localRootId || s.photoBaseline.remoteFolderId !== s.remoteFolderId)))
+		throw Error('Sparse Photos checkpoint requires the original cloud and Photos roots.');
+	return { run, localRootId: s.localRootId, remoteFolderId: s.remoteFolderId, ...(s.photoBaseline ? { photoBaseline: structuredClone(s.photoBaseline) } : {}) };
 };
 
 const headValue = (h: Header): PagedCheckpointHead => ({ version: 1, scope: h.scope, instance: h.instance, runId: h.spec.run.id,
@@ -37,13 +41,21 @@ export const validatePagedCheckpointHeader = (h: Header, spec: PagedCheckpointSp
 		!['collecting', 'building', 'sealing', 'published'].includes(h.phase) || ![h.paths, h.entries, h.pages, h.revision].every(nonnegative) ||
 		h.entries > h.paths || (h.previous !== null && !identifier(h.previous)) || !h.after || !h.baseline ||
 		!Array.isArray(h.instances) || h.instances.length !== 4 || !h.instances.every(identifier) ||
-		!Array.isArray(h.positions) || h.positions.length !== 5 || !Array.isArray(h.totals) || h.totals.length !== 5 || !h.totals.every(nonnegative) ||
+		!Array.isArray(h.positions) || h.positions.length !== (spec.run.plan.earlyRunId ? 6 : 5) || !Array.isArray(h.totals) || h.totals.length !== h.positions.length || !h.totals.every(nonnegative) ||
 		h.positions.some((p, i) => !p || !nonnegative(p.read) || p.read > h.totals[i] || (p.read === 0 ? p.after !== null : !validSyncPathKey(p.after))) ||
 		(['sealing', 'published'].includes(h.phase) && h.positions.some((p, i) => p.read !== h.totals[i])) ||
 		(h.phase === 'collecting' && (h.paths || h.pages || h.entries || h.positions.some(p => p.read)))) throw Error('Checkpoint progress changed.');
+		if (!!spec.run.plan.earlyRunId !== (h.earlyInstance !== undefined) || (h.earlyInstance !== undefined && !identifier(h.earlyInstance)))
+		throw Error('Early checkpoint evidence changed.');
 	const captures = owned(h).map(inventoryIdentity);
 	if (new Set(captures.map(c => c.id)).size !== 4 || captures.some((c, i) => c.source !== (i % 2 ? 'remote' : 'local'))) throw Error('Checkpoint capture identity changed.');
 	validatePagedCheckpointHead(headValue(h), key);
+	if (!!h.publishedBaseline !== (h.phase === 'published' && !!spec.photoBaseline)) throw Error('Published Photos baseline changed.');
+	if (h.publishedBaseline) {
+		validatePagedCheckpointHead({ ...headValue(h), baseline: h.publishedBaseline }, key);
+		if (h.publishedBaseline.local.id !== spec.photoBaseline!.baseline.local.id ||
+			h.publishedBaseline.remote.id !== spec.photoBaseline!.baseline.remote.id) throw Error('Published Photos baseline identities changed.');
+	}
 };
 
 export function upgradePagedCheckpointJournal(db: IDBDatabase) {
@@ -61,7 +73,7 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 		const request = tx.objectStore(store).get(id);
 		request.onsuccess = () => { try { check(); done(request.result); } catch (e) { fail(e); } };
 	};
-	const context = (tx: IDBTransaction, spec: PagedCheckpointSpec, done: (run: PagedRunHeader, plan: PagedPlanHeader, captures: InventoryHeader[]) => void, fail: (e: unknown) => void) => {
+	const context = (tx: IDBTransaction, spec: PagedCheckpointSpec, done: (run: PagedRunHeader, plan: PagedPlanHeader, captures: InventoryHeader[], early?: PagedRunHeader, earlyEffects?: number) => void, fail: (e: unknown) => void) => {
 		get<string>(tx, PAGED_RUN_HEADS, key, active => {
 			if (active !== spec.run.id) throw Error('Resume the active paged sync run.');
 			get<PagedRunHeader>(tx, PAGED_RUN_STORES[0], [key, spec.run.id], run => {
@@ -74,7 +86,22 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 					original(spec).forEach((capture, i) => get<InventoryHeader>(tx, INVENTORY_STORES[0], [key, capture.id], header => {
 						validateInventoryHeader(header, capture, key);
 						if (header.phase !== 'complete' || header.instance !== plan.inputInstances![i]) throw Error('Checkpoint input was replaced.');
-						captures[i] = header; if (!--pending) done(run, plan, captures);
+						captures[i] = header;
+						if (--pending) return;
+						const early = spec.run.plan.earlyRunId;
+						if (!early) { done(run, plan, captures); return; }
+						get<string>(tx, PAGED_RUN_HEADS, streamReconciliationKey(key), pointer => {
+							if (pointer !== early) throw Error('Early checkpoint receipt root changed.');
+							get<PagedRunHeader>(tx, PAGED_RUN_STORES[0], [key, early], saved => {
+								const earlySpec = parsePagedRunSpec(saved?.spec);
+								validatePagedRunHeader(saved, earlySpec, scope);
+								if (earlySpec.id !== early || !earlySpec.streaming || saved.phase !== 'complete' ||
+									earlySpec.configuration?.localRootId !== spec.localRootId || earlySpec.configuration.remoteFolderId !== spec.remoteFolderId)
+									throw Error('Early checkpoint receipts belong to another run or root.');
+								countConfirmedSyncEffects(tx, key, saved, check,
+                                    count => done(run, plan, captures, saved, count), fail);
+							}, fail);
+						}, fail);
 					}, fail));
 				}, fail);
 			}, fail);
@@ -85,8 +112,8 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 		transaction<T>(stores, mode, (tx, done, fail) => get<Header>(tx, PAGED_CHECKPOINT_DRAFTS, [key, spec.run.id], h => {
 			validate(h, spec);
 			if (h.phase === 'published') { work(h, tx, done, fail, []); return; }
-			context(tx, spec, (run) => {
-				if (run.instance !== h.runInstance) throw Error('Checkpoint run was replaced.');
+			context(tx, spec, (run, _plan, _inputs, early) => {
+				if (run.instance !== h.runInstance || early?.instance !== h.earlyInstance) throw Error('Checkpoint run was replaced.');
 				const captures: InventoryHeader[] = []; let pending = 4;
 				owned(h).forEach((capture, i) => get<InventoryHeader>(tx, INVENTORY_STORES[0], [key, capture.id], header => {
 					validateInventoryHeader(header, capture, key);
@@ -100,17 +127,20 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 		const spec = specification(value);
 		return transaction(stores, 'readwrite', (tx, done, fail) => get<Header | undefined>(tx, PAGED_CHECKPOINT_DRAFTS, [key, spec.run.id], existing => {
 			if (existing) { validate(existing, spec); done(state(existing)); return; }
-			context(tx, spec, (run, _plan, inputs) => get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
+			context(tx, spec, (run, _plan, inputs, early, earlyEffects) => get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
 				if (previous) {
 					validatePagedCheckpointHead(previous, key);
 					if (previous.localRootId !== spec.localRootId || previous.remoteFolderId !== spec.remoteFolderId ||
-						JSON.stringify(previous.baseline) !== JSON.stringify(spec.run.plan.baseline)) throw Error('Checkpoint roots or prior baseline changed.');
-				}
+						(spec.photoBaseline ? JSON.stringify(previous) !== JSON.stringify(spec.photoBaseline) :
+							JSON.stringify(previous.baseline) !== JSON.stringify(spec.run.plan.baseline))) throw Error('Checkpoint roots or prior baseline changed.');
+				} else if (spec.photoBaseline) throw Error('The Photos baseline is unavailable.');
 				const captures = Array.from({ length: 4 }, (_, i) => newInventoryHeader({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source: i % 2 ? 'remote' : 'local' }, key));
 				const pair = (start: number): Pair => ({ local: inventoryIdentity(captures[start]), remote: inventoryIdentity(captures[start + 1]) });
 				const h: Header = { spec, scope: key, instance: crypto.randomUUID(), runInstance: run.instance, phase: 'collecting', paths: 0, entries: 0, pages: 0,
 					after: pair(0), baseline: pair(2), instances: captures.map(c => c.instance!), previous: previous?.instance ?? null,
-					positions: Array.from({ length: 5 }, () => ({ after: null, read: 0 })), totals: [0, 0, inputs[2].entries, inputs[3].entries, run.operations], revision: 0 };
+					positions: Array.from({ length: early ? 6 : 5 }, () => ({ after: null, read: 0 })),
+					totals: [0, 0, inputs[2].entries, inputs[3].entries, run.operations, ...(early ? [earlyEffects!] : [])],
+					...(early ? { earlyInstance: early.instance } : {}), revision: 0 };
 				for (const capture of captures) {
 					tx.objectStore(INVENTORY_STORES[0]).add(capture, [key, capture.id]);
 					registerJournalMetadata(tx, access, key, 'inventory', capture.id, capture.instance);
@@ -144,15 +174,25 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 				get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
 					if (previous) validatePagedCheckpointHead(previous, key);
 					if ((previous?.instance ?? null) !== h.previous) throw Error('Published checkpoint changed.');
-					if (previous) for (const capture of [previous.baseline.local, previous.baseline.remote])
-						tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, previous.instance, 'baseline']);
-					for (const capture of [h.baseline.local, h.baseline.remote]) tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, capture.id, h.instance, 'baseline']);
-					for (const capture of owned(h)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.run.id, 'checkpoint']);
-					for (const capture of original(spec)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.run.id, 'run']);
-					tx.objectStore(PLAN_PIN_STORE).delete([key, spec.run.plan.id, spec.run.id]);
-					tx.objectStore(PAGED_RUN_HEADS).delete(key);
-					tx.objectStore(PAGED_CHECKPOINT_HEADS).put(headValue(h), key);
-					current.phase = 'published'; current.revision++; save(current, tx); done(state(current));
+					const publish = (baseline: Pair) => {
+						if (previous) for (const capture of [previous.baseline.local, previous.baseline.remote])
+							tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, previous.instance, 'baseline']);
+						for (const capture of [baseline.local, baseline.remote]) tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, capture.id, h.instance, 'baseline']);
+						for (const capture of owned(h)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.run.id, 'checkpoint']);
+						for (const capture of original(spec)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.run.id, 'run']);
+						tx.objectStore(PLAN_PIN_STORE).delete([key, spec.run.plan.id, spec.run.id]);
+						if (spec.run.plan.earlyRunId) tx.objectStore(PAGED_RUN_HEADS).delete(streamReconciliationKey(key));
+						tx.objectStore(PAGED_RUN_HEADS).delete(key);
+						tx.objectStore(PAGED_CHECKPOINT_HEADS).put({ ...headValue(h), baseline }, key);
+						if (spec.photoBaseline) current.publishedBaseline = baseline;
+						current.phase = 'published'; current.revision++; save(current, tx); done(state(current));
+					};
+					if (!spec.photoBaseline) { publish(h.baseline); return; }
+					if (!previous || JSON.stringify(previous) !== JSON.stringify(spec.photoBaseline))
+						throw Error('The Photos baseline changed before publication.');
+					inventory.advancePhotoBaseline(tx, previous.baseline.local, h.baseline.local, local => {
+						inventory.advancePhotoBaseline(tx, previous.baseline.remote, h.baseline.remote, remote => publish({ local, remote }), fail);
+					}, fail);
 				}, fail);
 			});
 		}
@@ -167,8 +207,17 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 			{ id: spec.run.id, instance: h.runInstance, scope, after: p.after, read: p.read }).then(page => {
 				if (page.total !== h.totals[4]) throw Error('Checkpoint receipt count changed.'); return page.rows;
 			});
+		const ep = h.positions[5];
+		const earlyEffects = !ep || ep.read === h.totals[5] ? [] : await (async () => {
+			const early = await runs.streamAwaitingReconciliation();
+			if (!early || early.id !== spec.run.plan.earlyRunId) throw Error('Early checkpoint receipt root changed.');
+			const page = await runs.readConfirmed(early, ep.after === null ? undefined :
+				{ id: early.id, instance: h.earlyInstance!, scope, after: ep.after, read: ep.read });
+			if (page.total !== h.totals[5]) throw Error('Early checkpoint receipt count changed.');
+			return page.rows;
+		})();
 		check();
-		const candidatePaths = [...new Set([...pages.flat().map(entry => entry.path), ...effects.map(effect => effect.operation.mutation.path)])];
+		const candidatePaths = [...new Set([...pages.flat().map(entry => entry.path), ...[...effects, ...earlyEffects].map(effect => effect.operation.mutation.path)])];
 		const unobserved = new Map<string, boolean>(), protectedParents = new Map<string, boolean>();
 		for (let offset = 0; offset < candidatePaths.length; offset += INVENTORY_PAGE_ENTRIES) {
 			const paths = candidatePaths.slice(offset, offset + INVENTORY_PAGE_ENTRIES), flags = await inventory.unobserved(h.after.local, paths);
@@ -176,12 +225,13 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 			paths.forEach((path, i) => { unobserved.set(path, flags[i]); protectedParents.set(path, parents[i]); });
 		}
 		const ignore = createSyncIgnorePolicy(spec.run.plan.ignoreRules, spec.run.plan.excludedPaths);
-		const positions = structuredClone(h.positions), offsets = [0, 0, 0, 0, 0], output: [SyncEntry[], SyncEntry[]] = [[], []];
-		const lengths = [...pages.map(page => page.length), effects.length]; let paths = 0, size = 4096;
+		const positions = structuredClone(h.positions), offsets = h.positions.map(() => 0), output: [SyncEntry[], SyncEntry[]] = [[], []];
+		const lengths = [...pages.map(page => page.length), effects.length, ...(ep ? [earlyEffects.length] : [])]; let paths = 0, size = 4096;
 		while (paths < INVENTORY_PAGE_ENTRIES) {
 			if (offsets.some((n, i) => n === lengths[i] && positions[i].read < h.totals[i])) break;
-			const heads = pages.map((page, i) => page[offsets[i]] ?? null), effect = effects[offsets[4]] ?? null;
-			const names = [...heads.map(e => e?.path ?? null), effect?.operation.mutation.path ?? null];
+			const heads = pages.map((page, i) => page[offsets[i]] ?? null), effect = effects[offsets[4]] ?? null,
+				early = earlyEffects[offsets[5]] ?? null;
+			const names = [...heads.map(e => e?.path ?? null), effect?.operation.mutation.path ?? null, ...(ep ? [early?.operation.mutation.path ?? null] : [])];
 			const keys = names.filter((n): n is string => n !== null).map(syncPathKey).sort(); if (!keys.length) break;
 			const pathKey = keys[0], included = names.map(name => name !== null && syncPathKey(name) === pathKey);
 			const path = names[included.indexOf(true)]!;
@@ -189,13 +239,21 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 			const entries = heads.map((entry, i) => included[i] ? entry : null);
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Checkpoint baseline must contain matching content.');
 			let prior = entries[2] && entries[3] ? { path, local: entries[2], remote: entries[3] } : null;
-			const unobservedLocal = unobserved.get(path) === true || ignore.ignored(path, (entries.find(Boolean)?.kind ?? (effect!.operation.mutation.kind === 'copy' ? effect!.operation.mutation.source.kind : effect!.operation.mutation.expected.kind)));
-			if (included[4] && !unobservedLocal) {
-				const m = effect!.operation.mutation, receipt = effect!.receipt;
+			const beforeKind = entries.find(Boolean)?.kind;
+			const candidate = included[4] ? effect : included[5] ? early : null;
+			const mutation = candidate?.operation.mutation;
+			const kind = beforeKind ?? (mutation?.kind === 'copy' ? mutation.source.kind : mutation?.expected.kind);
+			if (!kind) throw Error('Checkpoint path evidence is missing.');
+			const unobservedLocal = unobserved.get(path) === true || ignore.ignored(path, kind);
+			// An exclusion can prevent a new write, but cannot erase a copy
+			// already confirmed under the earlier approved policy.
+			for (const confirmed of [included[5] ? early : null, included[4] && (!unobservedLocal || spec.run.photoAssetOrder) ? effect : null]) {
+				if (!confirmed) continue;
+				const m = confirmed.operation.mutation, receipt = confirmed.receipt;
 				prior = m.kind === 'trash' ? null : { path, local: m.from === 'local' ? m.source : receipt.entry!, remote: m.from === 'remote' ? m.source : receipt.entry! };
 			}
 			const next = unobservedLocal || (prior && protectedParents.get(path)) ? prior : advanceSyncBaselinePair(prior, entries[0], entries[1]);
-			const bytes = new TextEncoder().encode(JSON.stringify([entries, included[4] ? effect : null, next])).length;
+			const bytes = new TextEncoder().encode(JSON.stringify([entries, candidate, next])).length;
 			if (size + bytes > INVENTORY_PAGE_BYTES) { if (!paths) throw Error('Checkpoint row exceeds its byte bound.'); break; }
 			if (next) { output[0].push(next.local); output[1].push(next.remote); }
 			size += bytes; paths++;

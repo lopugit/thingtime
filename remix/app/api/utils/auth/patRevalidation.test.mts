@@ -52,3 +52,20 @@ test('canonical tagged Actor revalidator keeps PAT fences and does not admit a c
 	assert.ok(!(next instanceof Response)); assert.equal(next.kind, 'pat'); if (next.kind === 'pat') { assert.equal(next.pat.jti, 'admitted-token'); assert.equal(next.pat.usesRemaining, 0); }
 	const denied = await revalidateActor(request(), actor, { thingsScope: 'things.read' }); assert.ok(denied instanceof Response); assert.equal(denied.status, 401);
 });
+
+test('body pre-admission checks alternatives without spending a use or granting revalidation', async () => {
+  reset(); scopes = ['things.comment'];
+  const { inspectActorForBody } = await import('./resolveActor');
+  const req = request();
+  const inspected = await inspectActorForBody(req, ['things.create', 'things.comment', 'things.react']);
+  assert.ok(!(inspected instanceof Response) && inspected.kind === 'pat');
+  assert.equal(consumptions, 0); assert.equal(remaining, 1);
+  const unauthorized = await revalidateActor(req, inspected, { thingsScope: 'things.comment' });
+  assert.ok(unauthorized instanceof Response); assert.equal(unauthorized.status, 401);
+  const denied = await resolveActor(req, { thingsScope: 'things.create' });
+  assert.ok(denied instanceof Response); assert.equal(denied.status, 403); assert.equal(consumptions, 0);
+  const admitted = await resolveActor(req, { thingsScope: 'things.comment' });
+  assert.ok(!(admitted instanceof Response) && admitted.kind === 'pat'); assert.equal(consumptions, 1);
+  const exhausted = await inspectActorForBody(request(), ['things.comment']);
+  assert.ok(exhausted instanceof Response); assert.equal(exhausted.status, 401);
+});

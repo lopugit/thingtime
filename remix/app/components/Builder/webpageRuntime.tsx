@@ -8,6 +8,9 @@ import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { useCharacterScope } from '../Characters/CharacterScope';
+import { isSelectionKey, localQueryParams, reducePageSelection, type PageSelection } from '../Actions/localUiAction';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
@@ -41,7 +44,7 @@ export type WebpageRuntimeViewer = {
 
 export type WebpageRuntime = {
 	// Opaque identity changes before protected state can cross viewer/page/link boundaries.
-	identity: object;
+	identity: { key: number };
 	pageId: string | null;
 	pageKey: string | null;
 	suiteKey: string | null;
@@ -50,6 +53,10 @@ export type WebpageRuntime = {
 	source: 'user' | 'system' | null;
 	viewer: WebpageRuntimeViewer;
 	query: Record<string, string>;
+	setPageQuery: (params: unknown, merge?: boolean, clearSelection?: unknown) => void;
+	selection: PageSelection;
+	updatePageSelection: (input: Record<string, unknown>) => void;
+	applyActivationQuery: (params: Record<string, string | number | boolean>) => void;
 	version: number;
 	// Explicit Refresh/Retry requests, separate from completed control reports.
 	refreshVersion: number;
@@ -73,14 +80,19 @@ const INERT_VIEWER: WebpageRuntimeViewer = { signedIn: false, id: null, username
 
 // Outside a provider (the builder canvas, gallery thumbnails, /components
 // previews) the runtime is inert: nothing fetches, nothing installs.
+let nextRuntimeKey = 0;
 const INERT_RUNTIME: WebpageRuntime = {
-	identity: {},
+	identity: { key: 0 },
 	pageId: null,
 	pageKey: null,
 	suiteKey: null,
 	source: null,
 	viewer: INERT_VIEWER,
 	query: {},
+	setPageQuery: () => {},
+	selection: {},
+	updatePageSelection: () => {},
+	applyActivationQuery: () => {},
 	version: 0,
 	refreshVersion: 0,
 	last: null,
@@ -96,7 +108,6 @@ const WebpageRuntimeContext = React.createContext<WebpageRuntime>(INERT_RUNTIME)
 export const useWebpageRuntime = (): WebpageRuntime => React.useContext(WebpageRuntimeContext);
 
 const MAX_QUERY_KEYS = 32;
-const MAX_QUERY_VALUE_CHARS = 200;
 const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 
 // A shared-load entry only earns its keep for the SIBLING blocks that ask for
@@ -139,7 +150,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 		// oversized token into a valid first-page request by silently dropping it.
 		out[key] = isPaginationCursorKey(key)
 			? value.length <= MAX_PAGINATION_CURSOR_CHARS ? value : INVALID_PAGINATION_CURSOR
-			: value.slice(0, MAX_QUERY_VALUE_CHARS);
+			: value;
 		count += 1;
 	});
 	return out;
@@ -167,6 +178,8 @@ export const WebpageRuntimeProvider = ({
 	enabled?: boolean;
 }) => {
 	const user = useCurrentUser();
+	const dataPlane = useDataPlane();
+	const characterId = useCharacterScope()?.id;
 	const location = useLocation();
 	const [version, setVersion] = React.useState(0);
 	const [refreshVersion, setRefreshVersion] = React.useState(0);
@@ -185,14 +198,69 @@ export const WebpageRuntimeProvider = ({
 		[user]
 	);
 	const runtimeSearch = pageRuntimeSearch(location.pathname, location.search);
-	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
+	const urlQuery = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
 	// The bearer key participates only in this private dependency boundary.
 	// It is never a template value or a persistent cache key.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional opaque access-context token
-	const identity = React.useMemo(() => ({}), [viewer.id, pageId, shared, linkKey, enabled]);
+	const identity = React.useMemo(() => ({ key: ++nextRuntimeKey }), [viewer.id, characterId, dataPlane, pageId, pageKey, source, shared, linkKey, enabled]);
+	// An explicit route transition (even a back/forward visit to the same
+	// URL) starts a new page selection. Local updates leave the route alone.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque route generation
+	const queryIdentity = React.useMemo(() => ({}), [identity, location.key, location.pathname, location.search]);
+	const activeQueryIdentity = React.useRef(queryIdentity);
+	activeQueryIdentity.current = queryIdentity;
+	const [localQuery, setLocalQuery] = React.useState<{
+		identity: object; values: Record<string, string>; manual: Set<string>;
+	} | null>(null);
+	const query = localQuery?.identity === queryIdentity ? localQuery.values : urlQuery;
+	const [localSelection, setLocalSelection] = React.useState<{ identity: object; values: PageSelection } | null>(null);
+	const selection = localSelection?.identity === queryIdentity ? localSelection.values : INERT_RUNTIME.selection;
+	const updatePageSelection = React.useCallback((input: Record<string, unknown>) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
+		setLocalSelection((current) => {
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const previous = current?.identity === queryIdentity ? current.values : INERT_RUNTIME.selection;
+			const values = reducePageSelection(previous, input);
+			return values === previous ? current : { identity: queryIdentity, values };
+		});
+	}, [enabled, pageId, queryIdentity]);
+	const setPageQuery = React.useCallback((params: unknown, merge = false, clearSelection?: unknown) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
+		const validated = localQueryParams(params);
+		if (!validated) return;
+		const values = Object.fromEntries(validated);
+		setLocalQuery((current) => {
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const active = current?.identity === queryIdentity ? current : null;
+			const base = active?.values ?? urlQuery;
+			const next = merge ? localQueryParams({ ...base, ...values }) : validated;
+			if (!next) return current;
+			const manual = new Set(active?.manual ?? Object.keys(urlQuery));
+			// Navigation can carry the current selection through unchanged.
+			// Only a change or removal takes manual ownership of that key.
+			for (const [key, value] of Object.entries(values)) if (value !== (base[key] ?? '')) manual.add(key);
+			if (!merge) for (const [key, value] of Object.entries(base)) {
+				if (value !== '' && !Object.prototype.hasOwnProperty.call(values, key)) manual.add(key);
+			}
+			return { identity: queryIdentity, values: Object.fromEntries(next), manual };
+		});
+		if (isSelectionKey(clearSelection) && !merge) updatePageSelection({ op: 'clear-selection', key: clearSelection });
+	}, [enabled, pageId, queryIdentity, urlQuery, updatePageSelection]);
+	const applyActivationQuery = React.useCallback((params: Record<string, string | number | boolean>) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity || !Object.keys(params).length) return;
+		setLocalQuery((current) => {
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const active = current?.identity === queryIdentity ? current : null;
+			const manual = active?.manual ?? new Set(Object.keys(urlQuery));
+			const values = Object.fromEntries(Object.entries(params).filter(([key]) => !manual.has(key)));
+			if (!Object.keys(values).length) return current;
+			const next = localQueryParams({ ...(active?.values ?? urlQuery), ...values });
+			return next ? { identity: queryIdentity, values: Object.fromEntries(next), manual } : current;
+		});
+	}, [enabled, pageId, queryIdentity, urlQuery]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
-			await requireThingtimeCapability('api.actions-run', '1.11.0');
+			await requireThingtimeCapability('api.actions-run', '1.38.1');
 			const response = await fetch('/api/v1/actions/run', {
 				method: 'POST',
 				credentials: 'include',
@@ -260,6 +328,10 @@ export const WebpageRuntimeProvider = ({
 			source,
 			viewer,
 			query,
+			setPageQuery,
+			selection,
+			updatePageSelection,
+			applyActivationQuery,
 			version,
 			refreshVersion,
 			last,
@@ -278,6 +350,10 @@ export const WebpageRuntimeProvider = ({
 			source,
 			viewer,
 			query,
+			setPageQuery,
+			selection,
+			updatePageSelection,
+			applyActivationQuery,
 			version,
 			refreshVersion,
 			last,
@@ -386,6 +462,12 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 				if (input.checked) out[name] = input.value;
 				return;
 			}
+		}
+		if (field.tagName === 'SELECT' && (field as HTMLSelectElement).multiple) {
+			out[name] = Array.from((field as HTMLSelectElement).selectedOptions)
+				.filter((option) => !option.matches(':disabled'))
+				.map((option) => option.value);
+			return;
 		}
 		if (typeof field.value === 'string') {
 			if (field.getAttribute('data-tt-input-type') === 'json') {

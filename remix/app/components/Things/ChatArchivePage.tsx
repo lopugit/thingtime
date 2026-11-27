@@ -7,6 +7,9 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { customReactionEmojiId } from '~/utils/reactionTokens';
+import { ThingMetadataPanel } from './ThingMetadataPanel';
+import { ThingStoragePanel } from './ThingStoragePanel';
+import { thingStorageHref } from './thingStorageNavigation';
 import { ThingTransferControls } from './ThingTransferControls';
 import { PostAttachments } from '../Attachments/PostAttachments';
 import { aiProviderAvatar } from '../Messenger/messengerTypes';
@@ -166,6 +169,10 @@ const OwnedArchivePage = ({ id, user }: { id: string; user: ArchiveUser }) => {
       <Box minWidth={0}><Heading size="md" overflowWrap="anywhere">{String(archive?.group.root.crystal.name || 'Chat archive')}</Heading><Badge marginTop={2}>Private archive · read only</Badge></Box>
       {archive && <Flex gap={2}><ThingTransferControls id={id} canCut /><Button size="xs" variant="outline" onClick={() => { void remove(); }} isDisabled={deleting}>Delete archive</Button></Flex>}
     </Flex>
+    {archive && <Stack spacing={3} marginBottom={4}>
+      <ThingMetadataPanel id={id} revision={archive.updatedAt} sourceVerified archive storageHref={thingStorageHref(id, { archive: true })} />
+      <ThingStoragePanel id={id} ownerId={user.id} kind="chat-archive" revision={archive.updatedAt} sourceVerified />
+    </Stack>}
     {archive?.group.root.crystal.topic && <Text marginBottom={4} whiteSpace="pre-wrap" overflowWrap="anywhere">{String(archive.group.root.crystal.topic)}</Text>}
     {error && <Box role="alert" borderWidth="1px" borderRadius="lg" padding={3} marginBottom={4}><Text overflowWrap="anywhere">{error}</Text><Button size="sm" onClick={() => setRetry(value => value + 1)}>Retry</Button></Box>}
     {archive ? <ChatArchiveHistory archive={archive} user={user} /> : !error && <Text role="status">Opening private history…</Text>}

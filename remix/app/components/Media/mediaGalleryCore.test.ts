@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { PresentedImage } from './PresentedImage';
 
 // @ts-ignore Node executes this TypeScript test through the repository tsx loader.
 import {
@@ -8,9 +11,21 @@ import {
 	createLinkedImageItem,
 	isLinkedImageUrl,
 	linkedImageAddMessage,
-	linkedImageItemError,
-	MAX_LINKED_IMAGES
+	linkedImageItemError
 } from './mediaGalleryCore.ts';
+
+test('image presentation encodes literal source metacharacters and preserves valid media URLs', () => {
+	const markup = (src: string) => renderToStaticMarkup(React.createElement(PresentedImage, { src, loading: 'lazy' }));
+	assert.match(markup('https://images.example/file%20name?q="<tag>"&signature=a%2Bb'), /src="https:\/\/images\.example\/file%20name\?q=%22%3Ctag%3E%22&amp;signature=a%2Bb"/);
+	assert.match(markup('/api/v1/attachments/content?id=att_1'), /src="\/api\/v1\/attachments\/content\?id=att_1"/);
+	assert.match(markup('blob:https://thingtime.com/fixture'), /src="blob:https:\/\/thingtime\.com\/fixture"/);
+	assert.match(markup('data:image/png;base64,iVBORw0KGgo='), /src="data:image\/png;base64,iVBORw0KGgo="/);
+	assert.match(markup('data:image/svg+xml,<svg/>'), /src="data:image\/svg\+xml,%3Csvg\/%3E"/);
+	// eslint-disable-next-line no-script-url -- Intentionally rejected URL fixtures.
+	for (const src of ['javascript:alert(1)', 'java\tscript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'file:///private/preview.png']) {
+		assert.doesNotMatch(markup(src), /\bsrc=/);
+	}
+});
 
 test('linked image URLs are trimmed, validated, and deduplicated in stable order', () => {
 	const items = [
@@ -63,15 +78,9 @@ test('multi-line add keeps stable ids, skips duplicates, and leaves invalid line
 	assert.match(linkedImageAddMessage(result) || '', /duplicate/i);
 });
 
-test('multi-line add enforces the eight-image limit without discarding overflow input', () => {
-	const current = Array.from({ length: MAX_LINKED_IMAGES - 1 }, (_, index) =>
-		createLinkedImageItem(`https://images.example/${index}.jpg`, () => `existing-${index}`)
-	);
-	const result = appendLinkedImageLines(current, 'https://images.example/last.jpg\nhttps://images.example/overflow.jpg', {
-		idFactory: () => 'last'
-	});
-	assert.equal(result.items.length, MAX_LINKED_IMAGES);
-	assert.equal(result.overflowCount, 1);
-	assert.equal(result.remainingInput, 'https://images.example/overflow.jpg');
-	assert.match(linkedImageAddMessage(result) || '', /up to 8/i);
+test('multi-line add preserves arbitrary valid URL counts and complete long URLs', () => {
+ const urls = Array.from({ length: 30 }, (_, index) => `https://images.example/${index}.jpg`);
+ urls.push('https://images.example/' + 'x'.repeat(10_000));
+ const result = appendLinkedImageLines([], urls.join('\n'));
+ assert.equal(result.items.length, urls.length); assert.equal(result.overflowCount, 0); assert.equal(result.remainingInput, ''); assert.deepEqual(canonicalLinkedImageUrls(result.items), urls);
 });

@@ -98,12 +98,15 @@ test('accepted inference survives caller cancellation and identical concurrent a
 		});
 	};
 	const abort = new AbortController();
-	const [a, b] = await Promise.all([startBackgroundTask(request('once', undefined, abort.signal), execute), startBackgroundTask(request(), execute)]);
-	assert.equal(a.status, 202);
-	assert.equal(b.status, 202);
-	abort.abort();
-	release!();
-	await Promise.all(pending);
+	try {
+		const [a, b] = await Promise.all([startBackgroundTask(request('once', undefined, abort.signal), execute), startBackgroundTask(request(), execute)]);
+		assert.equal(a.status, 202);
+		assert.equal(b.status, 202);
+		abort.abort();
+	} finally {
+		release!();
+		await Promise.all(pending);
+	}
 	assert.equal(calls, 1);
 	assert.equal(rows.length, 1);
 	const detail = await (await read(rows[0].shareId)).json();
@@ -244,13 +247,18 @@ test('two operation ids cannot concurrently execute against one existing chat', 
 		await gate;
 		return new Response('done');
 	};
-	const results = await Promise.all(
-		['first', 'second'].map((id) => startBackgroundTask(request(id, { chatId: 'owned-chat', text: 'hello', requestId: id }), execute))
-	);
-	assert.deepEqual(results.map((r) => r.status).sort(), [202, 409]);
+	try {
+		const results = await Promise.all(
+			['first', 'second'].map((id) => startBackgroundTask(request(id, { chatId: 'owned-chat', text: 'hello', requestId: id }), execute))
+		);
+		assert.deepEqual(results.map((r) => r.status).sort(), [202, 409]);
+	} finally {
+		release!();
+		await Promise.all(pending);
+	}
+	// Admission can return before the worker acquires its gateway lease. Count
+	// executions after draining the admitted work, rather than racing its start.
 	assert.equal(calls, 1);
-	release!();
-	await Promise.all(pending);
 });
 
 
@@ -474,4 +482,25 @@ test('personal-plan background admission never invokes Vercel Workflow for expli
     assert.equal(rows[index].crystal.management, 'client');
     assert.equal(rows[index].workflowInput, undefined);
   }
+});
+
+for (const claimed of [false, true]) test(`gateway promotion reconciles expired ${claimed ? 'claimed' : 'unclaimed'} workflow without replay`, async t => {
+  const { row } = await pendingServerRoot();
+  row.workflowGatewayDeploymentId = 'previous-owner'; row.deadlineAt = new Date(0);
+  if (claimed) { row.workerStarted = true; row.activeWorkerRequestId = row.crystal.requestId; }
+  const gateway = await import('../deployment/environmentGateway');
+  const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET', 'THINGTIME_GATEWAY_DEPLOYMENT_ID'] as const;
+  const before = keys.map(key => process.env[key]);
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'preview'; process.env.THINGTIME_GATEWAY_ORIGIN = 'https://gateway.test';
+  process.env.THINGTIME_GATEWAY_SECRET = 'synthetic'.repeat(8); process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'current-owner';
+  t.mock.method(gateway.gatewayAuthority, 'current', async () => ({ owner: true, settings: gateway.getGatewaySettings()!, manifest: {} }) as any);
+  try {
+    assert.equal((await read(row.shareId)).status, 200);
+    assert.equal(row.cancelRequested, true);
+    assert.match(row.crystal.error, /gateway changed/i);
+    assert.equal(row.workflowFinalStatus, 'needs-attention');
+    assert.equal(row.workflowInput, undefined);
+    if (claimed) { assert.ok(row.uniqueKeys); assert.equal(row.workflowFinalizedAt, undefined); }
+    else { assert.equal(row.crystal.workflowStatus, 'needs-attention'); assert.equal(row.uniqueKeys, undefined); }
+  } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 });

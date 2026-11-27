@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { NativePushSettings } from './NativePushSettings';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -47,8 +48,8 @@ export function NotificationTools({ ownerId }: { ownerId: string }) {
   React.useEffect(() => {
     epoch.current++; active.current = false; mutating.current = false; setReady(false); setReminders([]); setStatus(''); setBusy(false);
     void refresh();
-    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 30_000);
-    return () => { epoch.current++; clearInterval(timer); };
+    const timer = activityInterval('timer:components/Settings/NotificationTools:1', 'Notification Tools', () => { if (!document.hidden) return refresh(); }, 30_000);
+    return () => { epoch.current++; clearActivityInterval(timer); };
   }, [refresh]);
   const mutate = async (path: string, body: unknown) => {
     if (!ready || mutating.current) return;

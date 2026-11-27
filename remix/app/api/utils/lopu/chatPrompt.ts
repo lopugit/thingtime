@@ -16,14 +16,12 @@ import {
   ACTION_SEARCH_SCOPES,
   ACTION_STEP_OPS,
   COMPONENT_ARG_TYPES,
-  MAX_ACTION_INPUTS,
   MAX_ACTION_STEPS,
   MAX_SCHEMA_NAME_CHARS,
   MAX_WEBPAGE_BLOCK_DEPTH,
   MAX_WEBPAGE_BLOCK_ID_CHARS,
   MAX_WEBPAGE_BLOCKS,
   MAX_WEBPAGE_BLOCKS_BYTES,
-  MAX_WEBPAGE_TEXT_CHARS,
   SCHEMA_FIELD_TYPES,
   WEBPAGE_BLOCK_ALIGNS,
   WEBPAGE_BLOCK_TYPES,
@@ -109,7 +107,7 @@ const grammars = (): string => {
     '### Webpage blocks\n' +
     `Block types: ${WEBPAGE_BLOCK_TYPES.join(' | ')}. Caps: ${MAX_WEBPAGE_BLOCKS} blocks, depth ${MAX_WEBPAGE_BLOCK_DEPTH}, ${MAX_WEBPAGE_BLOCKS_BYTES} bytes serialised; ` +
     `ids are unique lowercase-dashed slugs ≤ ${MAX_WEBPAGE_BLOCK_ID_CHARS} chars; page names ≤ ${MAX_SCHEMA_NAME_CHARS} chars.\n` +
-    '- `{ id, type: "text", text (≤ ' + MAX_WEBPAGE_TEXT_CHARS + ' chars), style: ' + WEBPAGE_TEXT_STYLES.join(' | ') + ', tag?: ' + WEBPAGE_TEXT_TAGS.join(' | ') + ', href?: https:// or site-relative or mailto:/tel: (a styled text with href IS a button) }`\n' +
+    '- `{ id, type: "text", text, style: ' + WEBPAGE_TEXT_STYLES.join(' | ') + ', tag?: ' + WEBPAGE_TEXT_TAGS.join(' | ') + ', href?: https:// or site-relative or mailto:/tel: (a styled text with href IS a button) }`\n' +
     '- `{ id, type: "container", direction: ' + WEBPAGE_CONTAINER_DIRECTIONS.join(' | ') + ', gap?: number (spacing units), columns?: number (grid), children: [blocks] }` — the only block that holds children\n' +
     '- `{ id, type: "component", component: "<componentKey or thing id>", args?: { argName: scalar }, source?: { action: "<actionKey>", inputs?: {}, refresh?: "load" | "manual" | "interval" } }` (source binds the action result into the template as `result`)\n' +
     '- `{ id, type: "media", media: "image" | "video" | "audio", src: https:// or site-relative, alt? }`\n' +
@@ -128,7 +126,7 @@ const grammars = (): string => {
     'Interactive controls: put `"ttAction": "<actionKey>"` (and optional `"ttActionInputs": { key: "{arg}" }`) on a button/element node — clicking runs that action AS THE VIEWER. Named form fields (input/select/textarea with `name`) inside the component are read into the inputs automatically.\n' +
     `Arg descriptors: \`{ name, type: ${COMPONENT_ARG_TYPES.join(' | ')}, label?, description?, default?, values? (enum), min?/max? (number), maxLength? (string) }\`, max 16 args. componentKey is a lowercase-dashed slug.\n` +
     '\n### Actions\n' +
-    `\`{ name, actionKey (lowercase-dashed), description?, category?, inputs: [{ name, type: ${ACTION_INPUT_TYPES.join(' | ')}, label?, required?, default?, values? (enum), min?, max?, maxLength? }] (≤ ${MAX_ACTION_INPUTS}), steps: [...] (1–${MAX_ACTION_STEPS}), capabilities: [{ capability: ${ACTION_CAPABILITIES.join(' | ')}, schemas?: [schema names], actions?: [actionKeys] }], limits?: { timeoutMs ≤ ${ACTION_LIMIT_CEILINGS.timeoutMs}, maxOperations ≤ ${ACTION_LIMIT_CEILINGS.maxOperations}, maxDepth, maxChildActions, maxResultBytes, maxInputBytes } }\`\n` +
+    `\`{ name, actionKey (lowercase-dashed), description?, category?, inputs: [{ name, type: ${ACTION_INPUT_TYPES.join(' | ')}, label?, required?, default?, values? (enum), min?, max?, maxLength? }], steps: [...] (1–${MAX_ACTION_STEPS}), capabilities: [{ capability: ${ACTION_CAPABILITIES.join(' | ')}, schemas?: [schema names], actions?: [actionKeys] }], limits?: { timeoutMs ≤ ${ACTION_LIMIT_CEILINGS.timeoutMs}, maxOperations ≤ ${ACTION_LIMIT_CEILINGS.maxOperations}, maxDepth, maxChildActions, maxResultBytes, maxInputBytes } }\`\n` +
     `Step ops: ${ACTION_STEP_OPS.join(', ')}. Shapes: \`{ op: "things.create", schema, values }\`, \`{ op: "things.get", id }\`, \`{ op: "things.search", schema?, scope?: ${ACTION_SEARCH_SCOPES.join(' | ')}, where?: { field: value }, limit?, sort?: { field, dir } }\`, ` +
     '`{ op: "things.update", id, values }`, `{ op: "things.delete", id }`, `{ op: "actions.invoke", action, inputs? }`, `{ op: "compute", value }`, `{ op: "each", list, action, inputs? }`, `{ op: "fail", message }`, `{ op: "return", value }`. Any step may carry `when: <value>` (falsy skips it).\n' +
     'Values are literals, whole-value refs (`"$input.name"`, `"$step.1"`, `"$step.2.id"`, `"$now"`, `"$viewer.id"`, `"$item"`, `"$index"`), `{ ttConcat: [...] }` text composition, or pure expressions `{ ttExpr: ["fn", ...args] }`. ' +

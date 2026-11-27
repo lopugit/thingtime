@@ -18,7 +18,7 @@ test('the full device page renders without Chakra Drawer context', () => {
 		React.createElement(
 			MemoryRouter,
 			null,
-			React.createElement(DeviceDetailsDrawer, { isOpen: true, onClose: () => {}, presentation: 'page', state: null })
+			React.createElement(DeviceDetailsDrawer, { isOpen: true, onClose: () => {}, presentation: 'page', ownerId: 'standalone-owner', state: null })
 		)
 	);
 	const html = renderToString(page);

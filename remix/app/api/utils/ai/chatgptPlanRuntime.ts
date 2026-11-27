@@ -35,6 +35,7 @@ export interface ChatGPTPlanScope {
 	origin: string;
 	sessionId: string;
 }
+export type DevicePlanTurn = { chatId: string | null; providerId: string; requestId: string; text: string; answer: string };
 interface Account {
 	id: string;
 	scope: string;
@@ -89,6 +90,7 @@ interface Dependencies {
 	storage?: ChatGPTPlanStorage;
 	identity: typeof validateChatGPTIdentity;
 	allowLoopbackAuthorization?: boolean;
+	protectedFile?: { encrypt: (plaintext: string) => Buffer; decrypt: (ciphertext: Buffer) => string };
 }
 const defaults: Dependencies = {
 	exchange: exchangeAuthorization,
@@ -150,9 +152,10 @@ export class ChatGPTPlanRuntime {
 	};
 	constructor(directory: string, dependencies: Partial<Dependencies> = {}) {
 		if (!isAbsolute(directory)) throw new ChatGPTPlanRuntimeError('invalid_directory', 'ChatGPT plan storage requires an absolute local directory.');
+		if (dependencies.storage && dependencies.protectedFile) throw new Error('Choose one ChatGPT credential storage authority.');
 		this.directory = resolve(directory);
 		this.lockPath = join(this.directory, '.runtime.lock');
-		this.storePath = join(this.directory, dependencies.storage ? 'identity.json' : 'accounts.json');
+		this.storePath = join(this.directory, dependencies.storage ? 'identity.json' : dependencies.protectedFile ? 'accounts.enc' : 'accounts.json');
 		this.deps = { ...defaults, ...dependencies };
 	}
 	private async initialize() {
@@ -188,7 +191,8 @@ export class ChatGPTPlanRuntime {
 					try {
 						const stat = await file.stat();
 						if (!stat.isFile() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error('permissions');
-						const value = JSON.parse(await file.readFile('utf8')) as Store;
+						const value = JSON.parse(this.deps.protectedFile
+							? this.deps.protectedFile.decrypt(await file.readFile()) : await file.readFile('utf8')) as Store;
 						if (value.version !== 1 || !/^urn:uuid:[0-9a-f-]{36}$/.test(value.hostId) || !Array.isArray(value.accounts)) throw new Error('store');
 						this.store = value;
 					} finally {
@@ -241,14 +245,13 @@ export class ChatGPTPlanRuntime {
 				return;
 			}
 			const temp = join(this.directory, `.${randomUUID()}.tmp`);
-			const file = await open(temp, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
 			try {
-				await file.writeFile(JSON.stringify(this.store));
-				await file.sync();
-			} finally {
-				await file.close();
-			}
-			try {
+				const file = await open(temp, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+				try {
+					const plaintext = JSON.stringify(this.store);
+					await file.writeFile(this.deps.protectedFile ? this.deps.protectedFile.encrypt(plaintext) : plaintext);
+					await file.sync();
+				} finally { await file.close(); }
 				await rename(temp, this.storePath);
 				const directory = await open(this.directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
 				try {
@@ -323,7 +326,7 @@ export class ChatGPTPlanRuntime {
 		return {
 			accounts,
 			canAuthorize: this.canAuthorize(scope),
-			storageMode: this.deps.storage ? ('mongodb' as const) : ('file' as const),
+			storageMode: this.deps.storage ? ('mongodb' as const) : this.deps.protectedFile ? ('device' as const) : ('file' as const),
 			attempts: [...this.attempts.values()]
 				.filter((value) => value.scope === key && value.session === session)
 				.map(({ id, status, error }) => ({ id, status, ...(error ? { error } : {}) }))
@@ -411,7 +414,7 @@ export class ChatGPTPlanRuntime {
 				id,
 				scope: key,
 				session,
-				accountId: account?.id ?? `chatgpt-plan-${randomUUID()}`,
+				accountId: account?.id ?? `chatgpt-plan-${this.deps.protectedFile ? 'device-' : ''}${randomUUID()}`,
 				protocol,
 				status: 'pending',
 				server,
@@ -571,6 +574,69 @@ export class ChatGPTPlanRuntime {
 			};
 		});
 	}
+	/** Reserve a device turn before sending inference. The durable, empty claim
+	 * contains no prompt or credential. Only a saved account receipt can replay a
+	 * claimed operation; process death or an uncertain network result cannot
+	 * spend the plan on the same request a second time. */
+	async reserveDeviceTurn(scope: ChatGPTPlanScope, accountId: string, requestId: string) {
+		if (!this.deps.protectedFile) throw new ChatGPTPlanRuntimeError('device_required', 'Use the device that owns this connection.', 409);
+		const key = scopeKey(scope);
+		return this.exclusive(async () => {
+			this.account(key, accountId);
+			const directory = join(this.directory, 'turn-claims');
+			await mkdir(directory, { recursive: true, mode: 0o700 });
+			const dir = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+			try {
+				const stat = await dir.stat();
+				if ((stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid()))
+					throw new ChatGPTPlanRuntimeError('unsafe_directory', 'The desktop turn store is unavailable.', 503);
+				try {
+					const claim = await open(join(directory, digest(JSON.stringify([key, requestId]))), constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW | constants.O_WRONLY, 0o600);
+					try { await claim.sync(); } finally { await claim.close(); }
+					await dir.sync();
+					return true;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+					throw error;
+				}
+			} finally { await dir.close(); }
+		});
+	}
+	private deviceTurnFile(scope: ChatGPTPlanScope, requestId: string) {
+		return join(this.directory, 'turn-claims', digest(JSON.stringify([scopeKey(scope), requestId])));
+	}
+	async pendingDeviceTurn(scope: ChatGPTPlanScope, accountId: string, requestId: string): Promise<DevicePlanTurn | null> {
+		const protector = this.deps.protectedFile;
+		if (!protector) throw new ChatGPTPlanRuntimeError('device_required', 'Use the device that owns this connection.', 409);
+		return this.exclusive(async () => {
+			this.account(scopeKey(scope), accountId);
+			let file;
+			try { file = await open(this.deviceTurnFile(scope, requestId), constants.O_RDONLY | constants.O_NOFOLLOW); }
+			catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+			try {
+				const bytes = await file.readFile();
+				return bytes.length ? JSON.parse(protector.decrypt(bytes)) as DevicePlanTurn : null;
+			} finally { await file.close(); }
+		});
+	}
+	async settleDeviceTurn(scope: ChatGPTPlanScope, accountId: string, requestId: string, pending: DevicePlanTurn | null) {
+		const protector = this.deps.protectedFile;
+		if (!protector) throw new ChatGPTPlanRuntimeError('device_required', 'Use the device that owns this connection.', 409);
+		return this.exclusive(async () => {
+			this.account(scopeKey(scope), accountId);
+			const directory = join(this.directory, 'turn-claims');
+			const file = this.deviceTurnFile(scope, requestId);
+			const temporary = join(directory, `.${randomUUID()}.tmp`);
+			try {
+				const target = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+				try { if (pending) await target.writeFile(protector.encrypt(JSON.stringify(pending))); await target.sync(); }
+				finally { await target.close(); }
+				await rename(temporary, file);
+				const dir = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+				try { await dir.sync(); } finally { await dir.close(); }
+			} finally { await unlink(temporary).catch(() => undefined); }
+		});
+	}
 	private async requireSession(revalidate?: () => Promise<boolean>) {
 		if (revalidate && !(await revalidate())) throw new ChatGPTPlanRuntimeError('session_expired', 'Sign in to Thingtime again.', 401);
 	}
@@ -680,7 +746,7 @@ export class ChatGPTPlanRuntime {
 			const identity = await this.deps.identity(credentials.idToken, credentials.clientId, { subject: credentials.subject });
 			await this.requireSession(revalidate);
 			const account: Account = {
-				id: `chatgpt-plan-${randomUUID()}`,
+				id: `chatgpt-plan-${this.deps.protectedFile ? 'device-' : ''}${randomUUID()}`,
 				scope: key,
 				clientId: credentials.clientId,
 				subject: identity.subject,
@@ -745,6 +811,24 @@ export class ChatGPTPlanRuntime {
 	}
 }
 let singleton: ChatGPTPlanRuntime | undefined;
+type DesktopProtectedRuntime = NonNullable<Dependencies['protectedFile']> & {
+	ownerId: string;
+	directory: string;
+	available: () => boolean;
+	sessionSignal: () => AbortSignal;
+	isActiveSession: (rendererOrigin: string, cookieValue: string, requireHome: boolean) => Promise<boolean>;
+};
+const desktopProtectedRuntimeKey = Symbol.for('thingtime.desktop.protected-runtime');
+let desktopSingleton: ChatGPTPlanRuntime | undefined;
+export function getDesktopProtectedRuntime(): DesktopProtectedRuntime | undefined {
+	if (process.env.THINGTIME_DESKTOP !== '1' || process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return;
+	return Reflect.get(globalThis, desktopProtectedRuntimeKey) as DesktopProtectedRuntime | undefined;
+}
+export function getDesktopChatGPTPlanRuntime(): ChatGPTPlanRuntime | null {
+	const protectedFile = getDesktopProtectedRuntime();
+	if (!protectedFile?.available()) return null;
+	return (desktopSingleton ??= new ChatGPTPlanRuntime(protectedFile.directory, { protectedFile, allowLoopbackAuthorization: true }));
+}
 export function getChatGPTPlanRuntime(): ChatGPTPlanRuntime | null {
 	// This filesystem/loopback adapter requires one durable process. Serverless
 	// execution needs a database-backed credential and refresh-lease adapter.
@@ -758,6 +842,8 @@ export function getChatGPTPlanRuntime(): ChatGPTPlanRuntime | null {
 
 export async function closeChatGPTPlanRuntime() {
 	const runtime = singleton;
+	const desktop = desktopSingleton;
 	singleton = undefined;
-	if (runtime) await runtime.close();
+	desktopSingleton = undefined;
+	await Promise.all([runtime?.close(), desktop?.close()]);
 }

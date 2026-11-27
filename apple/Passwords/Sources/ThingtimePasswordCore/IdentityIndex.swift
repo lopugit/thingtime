@@ -13,6 +13,11 @@ import Foundation
 }
 @MainActor public enum PasswordIdentityIndex {
     private static let operations = PasswordIdentityOperations()
+    public static func isEnabled() async -> Bool {
+        await withCheckedContinuation { continuation in
+            ASCredentialIdentityStore.shared.getState { continuation.resume(returning: $0.isEnabled) }
+        }
+    }
     public static func identities(_ catalog: [PasswordCatalogItem]) -> [any ASCredentialIdentity] {
         var result: [any ASCredentialIdentity] = []
         for item in catalog {
