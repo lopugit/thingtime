@@ -45330,9 +45330,9 @@
     "semantic_hash": ""
   },
   "cloudflare/router/src/index.js": {
-    "mtime": 1795774215.5349066,
-    "seen": 1795774609.922348,
-    "ast_hash": "68564c2ea0d05bce72a74e34646c8961",
+    "mtime": 1795774754.195032,
+    "seen": 1795774873.8226109,
+    "ast_hash": "edc27e2ca99bae9d011ace91e0a14932",
     "semantic_hash": ""
   },
   "cloudflare/router/src/routeTable.js": {
@@ -45342,9 +45342,9 @@
     "semantic_hash": ""
   },
   "cloudflare/router/test/router.test.js": {
-    "mtime": 1795774232.8536572,
-    "seen": 1795774609.922379,
-    "ast_hash": "b20ec9faa7d79b7cba6ad60f07cac28f",
+    "mtime": 1795774759.1109781,
+    "seen": 1795774873.822646,
+    "ast_hash": "13624c63b2b03b50db029b937ef3cca9",
     "semantic_hash": ""
   },
   "cloudflare/router/README.md": {
