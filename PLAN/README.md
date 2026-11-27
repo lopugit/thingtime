@@ -1,5 +1,7 @@
 # Thingtime plans
 
+[Cloudflare Workers migration](cloudflare-workers-migration.md) — run the API on CPU-billed Workers beside Vercel with a one-click route table; MongoDB driver spike, native-module blockers, phases and costs (proposed, 2026-11-27).
+
 [Vercel memory and CI webhooks](vercel-memory-and-ci-webhooks.md) — why 2 GB is the floor, skipping CI detail webhooks, batching CI state, and cutting time in flight (active, 2026-11-26).
 
 [Device location history and find-device implementation](device-location-history.md) — private observations, retention, native collection/actions and editable Mapbox composition (active).
