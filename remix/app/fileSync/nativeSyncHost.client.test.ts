@@ -7,7 +7,8 @@ function fixture() {
 	const savedWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 	const savedFetch = globalThis.fetch;
 	const signal = new AbortController();
-	let current = true, device = 'device';
+	let current = true, device = 'device', busy = 0, held = false;
+ let deliverHeld: (() => void) | undefined;
 	const calls: { target: string; init?: RequestInit }[] = [], native: string[] = [];
 	const page = Object.assign(new EventTarget(), { location: { origin: 'https://sync.example' }, thingtimeNativeBridge: undefined as ThingtimeNativeBridge | undefined,
 		fetch: (async function (this: unknown, target, init) {
@@ -17,16 +18,17 @@ function fixture() {
 		devicePairingVersion: '1.0.0', fileAccessVersion: '1.3.1', fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0',
 		postMessage(message) {
 			const payload = message.payload as Record<string, unknown>; native.push(String(payload.action));
-			queueMicrotask(() => page.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: {
+			const deliver = () => page.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: {
 				type: message.type === 'mobile-device' ? 'mobile-device-result' : 'mobile-files-result',
-				payload: { ...payload, ...(message.type === 'mobile-device' ? { state: 'paired', deviceId: device } : { roots: [] }) }
-			} })));
+				payload: { ...payload, ...(message.type === 'mobile-device' ? (busy-- > 0 ? { error: 'Another device request is still running. Try again shortly.' } : { state: 'paired', deviceId: device }) : { roots: [] }) }
+			} }));
+   if (held && message.type === 'mobile-device') { deliverHeld = deliver; held = false; } else queueMicrotask(deliver);
 		}
 	};
 	page.thingtimeNativeBridge = bridge;
 	Object.defineProperty(globalThis, 'window', { configurable: true, value: page });
 	globalThis.fetch = async () => Response.json({ schemaVersion: 1, origin: page.location.origin, features: { 'api.things': { version: '1.36.0' } } });
-	return { page, bridge, signal, native, calls, setDevice: (value: string) => { device = value; }, invalidate: () => { current = false; },
+	return { page, bridge, signal, native, calls, busyNext: (count: number) => { busy = count; }, holdNext: () => { held = true; }, release: () => { const old = deliverHeld; deliverHeld = undefined; old?.(); }, setDevice: (value: string) => { device = value; }, invalidate: () => { current = false; },
 		create: () => createNativeSyncHost({ adapter: getNativeSyncAdapter()!, ownerId: 'owner', deviceId: 'device', signal: signal.signal,
 			assertCurrent() { if (!current) throw Error('Account changed'); } }),
 		close() { signal.abort(); if (savedWindow) Object.defineProperty(globalThis, 'window', savedWindow); else delete (globalThis as { window?: unknown }).window; globalThis.fetch = savedFetch; }
@@ -68,4 +70,34 @@ for (const changed of ['device', 'account', 'origin', 'bridge', 'abort'] as cons
 		await assert.rejects(host.authorizeDevice('owner', 'device', f.signal.signal));
 		assert.equal(f.native.length, changed === 'device' ? 2 : 1);
 	} finally { f.close(); }
+});
+
+
+test('old native busy refusal remains explicit without replaying a device request', async () => {
+ const f = fixture();
+ try {
+  f.busyNext(1);
+  await assert.rejects(f.create(), /Another device request/);
+  assert.deepEqual(f.native, ['status']);
+ } finally { f.close(); }
+});
+
+test('a queued native status reply preserves cancellation, identity and device binding', async () => {
+ for (const changed of ['abort', 'identity', 'origin', 'bridge', 'device']) {
+  const f = fixture();
+  try {
+   f.holdNext();
+   const pending = f.create();
+   const refused = assert.rejects(pending);
+   await new Promise(resolve => setImmediate(resolve));
+   if (changed === 'abort') f.signal.abort();
+   if (changed === 'identity') f.invalidate();
+   if (changed === 'origin') f.page.location.origin = 'https://other.example';
+   if (changed === 'bridge') f.page.thingtimeNativeBridge = { ...f.bridge };
+   if (changed === 'device') f.setDevice('other-device');
+   f.release();
+   await refused;
+   assert.equal(f.native.length, changed === 'abort' ? 2 : 1);
+  } finally { f.close(); }
+ }
 });

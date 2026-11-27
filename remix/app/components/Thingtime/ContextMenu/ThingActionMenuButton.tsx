@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, IconButton } from '@chakra-ui/react';
 import { MoreHorizontal } from 'lucide-react';
-import { ThingContextMenu, type ThingContextMenuAction } from './ThingContextMenu';
+import type { ThingContextMenuAction } from './ThingContextMenu';
+import { PersistedThingContextMenu as ThingContextMenu } from './PersistedThingContextMenu';
 import type { ThingContextMenuModel } from './contextMenuModel';
 import { useThingContextMenu } from './useThingContextMenu';
 import { useThingtime } from '../useThingtime';

@@ -47,6 +47,7 @@ test('profile update fields keep managed ids separate from external fallbacks', 
 	assert.deepEqual(preservedProfileMediaSnapshot('/api/v1/attachments/content?id=att'), {
 		mutation: { kind: 'preserve' },
 		previewUrl: '/api/v1/attachments/content?id=att',
+		previewPresentation: null,
 		blocking: false
 	});
 	assert.deepEqual(profileMediaUpdateFields('avatar', { kind: 'preserve' }), {});

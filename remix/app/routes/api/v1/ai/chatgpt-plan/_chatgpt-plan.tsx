@@ -1,11 +1,27 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { chatGPTPlanFailure, chatGPTPlanScope } from '~/api/utils/ai/chatgptPlanScope';
-import { ChatGPTPlanRuntimeError, getChatGPTPlanRuntime } from '~/api/utils/ai/chatgptPlanRuntime';
+import { ChatGPTPlanRuntimeError, getChatGPTPlanRuntime, type ChatGPTPlanRuntime, type ChatGPTPlanScope } from '~/api/utils/ai/chatgptPlanRuntime';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 const PRIVATE = { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' };
 const defaults = { getCurrentUser, getRuntime: getChatGPTPlanRuntime, scope: chatGPTPlanScope, enforceRateLimit };
+
+export const applyChatGPTPlanAction = async (
+	runtime: ChatGPTPlanRuntime, scope: ChatGPTPlanScope, revalidate: () => Promise<boolean>, body: any
+) => {
+	switch (body?.action) {
+		case 'begin': return runtime.begin(scope, revalidate, body.id);
+		case 'cancel': return runtime.cancel(scope, body.attemptId);
+		case 'select-model': return runtime.selectModel(scope, body.id, body.model);
+		case 'refresh-models': return runtime.refreshModels(scope, body.id, revalidate);
+		case 'disconnect': return runtime.disconnect(scope, body.id);
+		case 'prepare-import': return runtime.prepareImport(scope, revalidate);
+		case 'move-account': return runtime.moveAccount(scope, body.id, body.recipient, revalidate);
+		case 'import-account': return runtime.importAccount(scope, body.bundle, revalidate);
+		default: throw new ChatGPTPlanRuntimeError('unknown_action', 'Unknown ChatGPT plan action.');
+	}
+};
 
 export const createChatGPTPlanHandlers = (dependencies = defaults) => {
 	const handle = async (request: Request, mutation: boolean) => {
@@ -41,20 +57,7 @@ export const createChatGPTPlanHandlers = (dependencies = defaults) => {
 				const current = await dependencies.getCurrentUser(request);
 				return current?.id === user.id && !current.temporary && current.accountKind !== 'service';
 			};
-			let result: unknown;
-			switch (body?.action) {
-				case 'begin':
-					result = await runtime.begin(scope, revalidate, body.id);
-					break;
-				case 'cancel': result = await runtime.cancel(scope, body.attemptId); break;
-				case 'select-model': result = await runtime.selectModel(scope, body.id, body.model); break;
-				case 'refresh-models': result = await runtime.refreshModels(scope, body.id, revalidate); break;
-				case 'disconnect': result = await runtime.disconnect(scope, body.id); break;
-				case 'prepare-import': result = await runtime.prepareImport(scope, revalidate); break;
-				case 'move-account': result = await runtime.moveAccount(scope, body.id, body.recipient, revalidate); break;
-				case 'import-account': result = await runtime.importAccount(scope, body.bundle, revalidate); break;
-				default: return json({ ok: false, error: 'Unknown ChatGPT plan action.' }, { status: 400, headers: PRIVATE });
-			}
+			const result = await applyChatGPTPlanAction(runtime, scope, revalidate, body);
 			return json({ ok: true, result }, { headers: PRIVATE });
 		} catch (error) {
 			return json({ ok: false, ...chatGPTPlanFailure(error) }, { status: error instanceof ChatGPTPlanRuntimeError ? error.status : 400, headers: PRIVATE });

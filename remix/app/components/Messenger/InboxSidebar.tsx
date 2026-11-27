@@ -1,5 +1,6 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
-import { Box, Button, Flex, Image, Input } from '@chakra-ui/react';
+import { Box, Button, Flex, Input } from '@chakra-ui/react';
 
 import { timeAgo } from '../Feed/feedTypes';
 import { chatDisplayName, externalSourceAvatar, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
@@ -56,7 +57,7 @@ const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: strin
       flexShrink: 0
     };
     return profile?.avatarUrl ? (
-      <Image src={profile.avatarUrl} alt={letter} objectFit="cover" {...common} />
+      <Box {...common} overflow="hidden"><PresentedImage src={profile.avatarUrl} presentation={profile.avatarPresentation} alt={letter} /></Box>
     ) : (
       <Flex
         align="center"
@@ -101,7 +102,7 @@ export type InboxSidebarProps = {
 export const InboxSidebar = (props: InboxSidebarProps) => {
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<
-    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean; avatarUrl: string | null }>
+    Array<MessengerProfile>
   >([]);
   const seqRef = React.useRef(0);
 
@@ -177,7 +178,7 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
 								flexShrink={0}
 							>
 								{person.avatarUrl ? (
-									<Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" />
+									<PresentedImage src={person.avatarUrl} presentation={person.avatarPresentation} alt={getUserDisplayName(person)} />
 								) : (
 									getUserDisplayName(person).slice(0, 1).toUpperCase()
 								)}

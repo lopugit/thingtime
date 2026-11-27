@@ -6,6 +6,14 @@ import { SITEMAP_PAGE_SIZE } from './sitemapCore';
 
 const origin = 'https://thingtime.example';
 
+test('nonproduction robots refuses crawling without advertising a sitemap', async () => {
+	const request = new Request(`${origin}/robots.txt`);
+	const preview = respondRobots(request, origin, { allowCrawling: false });
+	assert.equal(await preview.text(), 'User-agent: *\nDisallow: /\n');
+	assert.match(await respondRobots(request, origin).text(), /Allow: \/\n/);
+	assert.equal(await respondRobots(new Request(request, { method: 'HEAD' }), origin, { allowCrawling: false }).text(), '');
+});
+
 // A data source that records what was asked of it — the whole response path
 // is exercised without MongoDB; the Mongo-backed source is covered by the
 // manual TESTING.md checklist against a real data plane.

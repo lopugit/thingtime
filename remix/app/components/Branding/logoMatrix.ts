@@ -12,13 +12,35 @@ export const LOGO_ICON_MATRIX: LogoMatrix = [
   [0, 8, 0]
 ];
 
+// The two i's mirror each other, exactly as drawn in the owner's artwork
+// (public/branding/thingtime-horizontal.svg): the first carries red over cyan,
+// the second cyan over red.
 export const LOGO_FULL_MATRIX: LogoMatrix = [
-  '111,020,030,000,000,070,030',
+  '111,020,040,000,000,070,030',
   '010,022,000,550,660,707,000,999,0xx',
-  '010,022,040,550,660,080,040,999,0xx',
+  '010,022,030,550,660,080,040,999,0xx',
   '00000000000006',
   '00000000000066'
 ];
+
+// The two-line lock-up: "Thing" stacked over "time". Same glyphs and colour
+// keys as the wordmark; the first i carries its dots red-over-cyan and the
+// second cyan-over-red, exactly as drawn in the owner's square logo artwork.
+export const LOGO_STACKED_MATRIX: LogoMatrix = [
+  '11102004000000',
+  '01002200055066',
+  '01002203055066',
+  '00000000000006',
+  '00000000000066',
+  '00700300000000',
+  '07070009990xx0',
+  '00800409990xx0'
+];
+
+// The square logo is the stacked lock-up centred on a 24×24 voxel canvas (the
+// artwork spans 58% of the width). The transparent frame is part of the mark,
+// so this matrix is rendered untrimmed.
+export const LOGO_SQUARE_SIZE = 24;
 
 export const LOGO_DEFAULT_COLOURS: LogoColourMap = {
   0: 'transparent',
@@ -26,7 +48,7 @@ export const LOGO_DEFAULT_COLOURS: LogoColourMap = {
   2: '#59bdff',
   3: '#00b7ef',
   4: '#ed1c24',
-  5: '#ffa3b1',
+  5: '#ffa9dd',
   6: '#6f3198',
   7: '#a8e61d',
   8: '#9c5a3c',
@@ -88,6 +110,25 @@ export const trimLogoCells = (cells: string[][], colourMap: LogoColourMap): stri
   return sliced.map((row) => row.slice(left, right));
 };
 
+// Centre a cell grid on a larger transparent canvas (odd leftovers go right /
+// bottom). Used for lock-ups whose frame is part of the mark.
+export const frameLogoCells = (cells: string[][], columns: number, rows: number, empty = '0'): string[][] => {
+  const width = Math.max(0, ...cells.map((row) => row.length));
+  const left = Math.max(0, Math.floor((columns - width) / 2));
+  const top = Math.max(0, Math.floor((rows - cells.length) / 2));
+  const totalColumns = Math.max(columns, width);
+  const totalRows = Math.max(rows, cells.length);
+  return Array.from({ length: totalRows }, (_, y) =>
+    Array.from({ length: totalColumns }, (_, x) => cells[y - top]?.[x - left] ?? empty)
+  );
+};
+
+export const LOGO_SQUARE_MATRIX: LogoMatrix = frameLogoCells(
+  logoMatrixToCells(LOGO_STACKED_MATRIX),
+  LOGO_SQUARE_SIZE,
+  LOGO_SQUARE_SIZE
+);
+
 // Compact number formatting so fractional padding doesn't bloat the SVG.
 const fmt = (n: number) => String(Math.round(n * 10000) / 10000);
 
@@ -97,7 +138,8 @@ export const buildLogoSvg = ({
   background,
   trim = true,
   padding,
-  pixelWidth
+  pixelWidth,
+  mergeRuns = false
 }: {
   matrix: LogoMatrix;
   colourMap: LogoColourMap;
@@ -109,6 +151,9 @@ export const buildLogoSvg = ({
   padding?: Partial<LogoPadding>;
   // when set, the <svg> gets explicit width/height attrs at this pixel width
   pixelWidth?: number;
+  // join same-colour neighbours on a row into one <rect> — identical pixels,
+  // far fewer nodes for the fine-grained cuts (outline, dither, extrusion)
+  mergeRuns?: boolean;
 }): { svg: string; columns: number; rows: number; totalColumns: number; totalRows: number; pixelHeight?: number } => {
   let cells = logoMatrixToCells(matrix);
   if (trim) cells = trimLogoCells(cells, colourMap);
@@ -123,12 +168,16 @@ export const buildLogoSvg = ({
     rects.push(`<rect x="${fmt(-pad.left)}" y="${fmt(-pad.top)}" width="${fmt(totalColumns)}" height="${fmt(totalRows)}" fill="${background}"/>`);
   }
   cells.forEach((row, y) => {
-    row.forEach((col, x) => {
-      const fill = resolveLogoColour(col, colourMap);
-      if (fill) {
-        rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${fill}"/>`);
+    for (let x = 0; x < row.length; x += 1) {
+      const fill = resolveLogoColour(row[x], colourMap);
+      if (!fill) continue;
+      let run = 1;
+      if (mergeRuns) {
+        while (x + run < row.length && resolveLogoColour(row[x + run], colourMap) === fill) run += 1;
       }
-    });
+      rects.push(`<rect x="${x}" y="${y}" width="${run}" height="1" fill="${fill}"/>`);
+      x += run - 1;
+    }
   });
 
   const pixelHeight = pixelWidth === undefined ? undefined : Math.max(1, Math.round((pixelWidth / totalColumns) * totalRows));

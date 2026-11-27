@@ -2,6 +2,7 @@ import React from 'react';
 
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { drawerItemClosesOnClick } from './drawerMenu';
+import { normalizeCustomDrawerItems, commitCustomDrawerItems, type CustomDrawerItem } from './drawerCustomItems';
 
 // z-index ladder for the app chrome, above the web nav (9999) and below
 // DevKit (99999+). Floating editor windows layer AROUND the drawer (bands
@@ -164,10 +165,11 @@ export const AccountModalProvider = (props: { children: React.ReactNode }) => {
 export type DrawerDirection = 'left' | 'right';
 
 export const useDrawer = () => {
-	const { thingtime, setThingtime, loading } = useThingtime();
+	const { thingtime, setThingtime, thingtimeRef, flushThingtimePersistence, canPersistThingtime, loading } = useThingtime();
 	const accountModal = React.useContext(AccountModalContext);
 
 	const drawerSettings = thingtime?.settings?.drawer;
+	const customItems = React.useMemo(() => normalizeCustomDrawerItems(drawerSettings?.customItems), [drawerSettings?.customItems]);
 
 	const open = !!drawerSettings?.open;
 	const direction: DrawerDirection = drawerSettings?.opens?.direction === 'right' ? 'right' : 'left';
@@ -195,6 +197,16 @@ export const useDrawer = () => {
 		},
 		[setThingtime]
 	);
+
+	const setCustomItems = React.useCallback(async (items: CustomDrawerItem[], signal?: AbortSignal) => {
+  if (loading || !canPersistThingtime) throw new Error('Local preferences are not ready to save.');
+  if (!flushThingtimePersistence) throw new Error('Local preferences cannot be saved in this workspace.');
+  await commitCustomDrawerItems(items, {
+   read: () => thingtimeRef.current?.settings?.drawer?.customItems,
+   write: value => setDrawerSetting('customItems', value),
+   flush: flushThingtimePersistence, signal
+  });
+ }, [thingtimeRef, flushThingtimePersistence, canPersistThingtime, loading, setDrawerSetting]);
 
 	const setOpen = React.useCallback(
 		(value: boolean) => {
@@ -320,6 +332,8 @@ export const useDrawer = () => {
 
 	return {
 		loading,
+		customItems,
+		setCustomItems,
 		open,
 		setOpen,
 		toggleOpen,

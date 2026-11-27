@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
+import { browserOnly } from './app-shell-routing.mjs';
 
 const configPath = '.vercel/output/config.json';
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -45,6 +46,11 @@ const socialCardRoute = {
 	headers: socialCardHeaders,
 	dest: serverFallbackRoute?.dest || '/index.html'
 };
+// Browsers take the identical static shell straight from the CDN; only link
+// unfurlers, crawlers and unknown clients reach the social controller. See
+// app-shell-routing.mjs for why and how a browser is recognised.
+const browserRootRoute = { src: '^/$', ...browserOnly, headers: appShellHeaders, dest: '/index.html' };
+const browserShellRoute = { src: '^/(?:.*)$', ...browserOnly, headers: appShellHeaders, dest: '/index.html' };
 
 config.routes = [
   // Global Content-Security-Policy (no 'unsafe-eval' — see scripts/csp.mjs).
@@ -82,20 +88,19 @@ config.routes = [
     },
     continue: true
   },
-  // The /authorize consent popup must never render inside a frame (UI-redress
-  // hardening; token delivery already requires window.opener + a validated
-  // origin). Headers-only route: stamp and continue matching, so the page is
-  // still served by the SPA fallback below.
+  // Keep consent and credential review pages out of frames while allowing
+  // the SPA fallback to serve their documents.
   {
-    src: '^/authorize/?$',
+    src: '^/(?:authorize|credentials/import)/?$',
     headers: {
       'X-Frame-Options': 'DENY',
       'Content-Security-Policy': authorizeCsp
     },
     continue: true
   },
-	// The homepage and every public permalink need server-generated metadata;
-	// the browser still receives the identical Vite shell from the handler.
+	// The homepage and every public permalink need server-generated metadata for
+	// unfurlers; browsers get the identical Vite shell statically.
+	...(serverFallbackRoute ? [browserRootRoute] : []),
 	{ src: '^/$', headers: appShellHeaders, dest: serverFallbackRoute?.dest || '/index.html' },
   { src: '^/index\\.html$', headers: appShellHeaders, dest: '/index.html' },
   // Content-hashed build output can be cached forever. Vite gives every file
@@ -131,7 +136,7 @@ config.routes = [
 	// Rich 1200×630 cards are rendered only by the safe social controller. The
 	// companion public route list sends every shareable URL variant through the
 	// same handler, where its tags are built from anonymous projections.
-	...(serverFallbackRoute ? [socialCardRoute, socialMetaRoute] : []),
+	...(serverFallbackRoute ? [socialCardRoute, browserShellRoute, socialMetaRoute] : []),
   { src: '/(?:.*)', headers: appShellHeaders, dest: '/index.html' }
 ];
 

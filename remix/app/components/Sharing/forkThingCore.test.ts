@@ -18,3 +18,17 @@ test('each copyable content kind remains ordinary standalone content in the cano
 		assert.equal(isProtectedThingtime([kind]), false, kind);
 	}
 });
+
+
+test('Builder provenance preserves legitimate content without admitting marker-only or control roots', () => {
+	for (const kind of ['webpage', 'component', 'action', 'schema']) {
+		assert.equal(canForkThing({ thingtime: [kind, 'builder-thing'] }), true, kind);
+		assert.equal(canForkThing({ thingtime: ['builder-thing', kind] }), true, `${kind} marker order`);
+		assert.equal(canForkThing({ thingtime: [kind, 'builder-thing'], targetId: 'parent' }), false, `${kind} relationship`);
+	}
+	assert.equal(canForkThing({ thingtime: ['builder-thing'] }), false);
+	for (const kind of ['unknown', 'user', 'passkey', 'attachment', 'app-data', 'comment', 'notification']) {
+		assert.equal(canForkThing({ thingtime: [kind, 'builder-thing'] }), false, kind);
+		assert.equal(canForkThing({ thingtime: ['webpage', 'builder-thing', kind] }), false, `mixed ${kind}`);
+	}
+});

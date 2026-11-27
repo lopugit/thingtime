@@ -1,3 +1,4 @@
+import type { ImagePresentation } from '~/components/Media/imagePresentation';
 import { useCharacterScope } from '~/components/Characters/CharacterScope';
 import { useRouteLoaderData } from 'react-router';
 
@@ -10,6 +11,8 @@ export type CurrentUser = {
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  avatarPresentation?: ImagePresentation;
+  bannerPresentation?: ImagePresentation;
 	avatarAttachmentId: string | null;
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;

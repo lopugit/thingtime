@@ -6,9 +6,11 @@ public struct PasskeyMaterial: Sendable {
     public let userHandle: Data
     public let privateKey: Data
     public let username: String
+    private let savedTitle: String
     public init(relyingParty: String, userHandle: Data, username: String) throws {
         guard Self.validRP(relyingParty), !userHandle.isEmpty, userHandle.count <= 64 else { throw PasswordProviderError.invalidCredential }
         self.relyingParty = relyingParty; self.userHandle = userHandle; self.username = username
+        self.savedTitle = "\(PasswordProviderIdentity.name) Passkey · \(relyingParty) · \(username)"
         self.privateKey = P256.Signing.PrivateKey().rawRepresentation
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw PasswordProviderError.unavailable }
@@ -20,6 +22,7 @@ public struct PasskeyMaterial: Sendable {
               let credential = Data(base64URL: entry.value("credentialId")), credential.count == 32,
               let user = Data(base64URL: entry.value("userHandle")), !user.isEmpty, user.count <= 64 else { throw PasswordProviderError.invalidCredential }
         _ = try P256.Signing.PrivateKey(rawRepresentation: key)
+        self.savedTitle = entry.title
         self.relyingParty = rp; self.privateKey = key; self.credentialID = credential; self.userHandle = user; self.username = entry.value("username")
     }
     public static func validRP(_ rp: String) -> Bool {
@@ -27,7 +30,7 @@ public struct PasskeyMaterial: Sendable {
         return rp.unicodeScalars.allSatisfy { CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.").contains($0) }
     }
     public var entry: PasswordEntry {
-        PasswordEntry(title: "\(relyingParty) · \(username)", passwordType: "passkey", fields: [
+        PasswordEntry(title: savedTitle, passwordType: "passkey", fields: [
             PasswordField("username", "Username", "text", username), PasswordField("website", "Website", "url", "https://\(relyingParty)"),
             PasswordField("relyingParty", "Relying party", "text", relyingParty), PasswordField("credentialId", "Credential id", "text", credentialID.base64URL),
             PasswordField("userHandle", "User handle", "text", userHandle.base64URL), PasswordField("privateKey", "Passkey private key", "password", privateKey.base64URL)
@@ -40,7 +43,7 @@ public struct PasskeyMaterial: Sendable {
         var data = Data(SHA256.hash(data: Data(relyingParty.utf8)))
         data.append(attested ? 0x5d : 0x1d); data.append(contentsOf: [0, 0, 0, 0])
         if attested {
-            data.append(Data(repeating: 0, count: 16)) // no vendor attestation
+            data.append(PasswordProviderIdentity.aaguidBytes) // provider model identity, not vendor attestation
             data.append(contentsOf: [0, UInt8(credentialID.count)]); data.append(credentialID)
             let publicKey = try P256.Signing.PrivateKey(rawRepresentation: privateKey).publicKey.x963Representation
             // COSE EC2 / ES256 / P-256, x and y.

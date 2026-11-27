@@ -11,6 +11,7 @@
 // offline generator can exercise the whole response path without MongoDB.
 
 import brandingAssetsJson from '../../../components/Branding/brandingAssets.generated.json';
+import brandingImageryJson from '../../../components/Branding/brandingImagery.generated.json';
 import {
 	PAGED_SITEMAP_SECTIONS,
 	SITEMAP_MAX_PAGES,
@@ -30,7 +31,7 @@ import {
 	type SitemapUrl
 } from './sitemapCore';
 
-const brandingAssets = brandingAssetsJson as BrandingAssetsManifest;
+const brandingAssets: BrandingAssetsManifest = { ...(brandingAssetsJson as BrandingAssetsManifest), imagery: brandingImageryJson.items };
 
 export type SitemapPage = { urls: SitemapUrl[] };
 
@@ -202,10 +203,11 @@ export const respondSitemap = async (request: Request, origin: string, source: S
 	return sitemapDocumentResponse(document, method);
 };
 
-export const respondRobots = (request: Request, origin: string): Response => {
+export const respondRobots = (request: Request, origin: string, options: { allowCrawling?: boolean } = {}): Response => {
 	const method = request.method.toUpperCase();
 	if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
-	return new Response(method === 'HEAD' ? null : buildRobotsTxt(origin), { headers: textHeaders });
+	const body = options.allowCrawling === false ? 'User-agent: *\nDisallow: /\n' : buildRobotsTxt(origin);
+	return new Response(method === 'HEAD' ? null : body, { headers: textHeaders });
 };
 
 export { buildRobotsTxt };

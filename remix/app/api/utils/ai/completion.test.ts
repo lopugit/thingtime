@@ -95,14 +95,12 @@ test('completion route requires a full account, same origin, bounded JSON and fa
 
 test('central completion advertises and requires its independent compatible feature version', () => {
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	// The advertised version may run ahead of this floor: 1.2.0 added the optional
-	// background transport, which only `aiTasks.client` requires. The plain central
-	// caller (useApi.ai.complete) still works against any compatible 1.1.0 server,
-	// so the invariant is compatibility, not equality.
+	// Console API-key connections require the additive native Messages contract.
 	assert.equal(capabilitySatisfies(manifest.features['api.ai-complete'].version, AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/ai/complete' && op.methods.includes('POST')));
-	assert.equal(capabilitySatisfies('1.1.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
-	assert.equal(capabilitySatisfies('1.2.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
+	assert.equal(capabilitySatisfies('1.1.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), false);
+	assert.equal(capabilitySatisfies('1.2.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), false);
+	assert.equal(capabilitySatisfies('1.3.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
 	for (const version of ['1.0.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, AI_COMPLETION_REQUIREMENTS['api.ai-complete']), false);
 });
 

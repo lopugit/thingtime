@@ -1,5 +1,6 @@
+import { copyTimelineContent } from './contentJson.ts';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
-import { TIMELINE_EVENT_MAX_BYTES, parseTimelineEntry, type TimelineEntry, type TimelineSnapshot } from './contract.ts';
+import { parseTimelineEntry, type TimelineEntry, type TimelineSnapshot } from './contract.ts';
 import { isTimelineBranchId, parseTimelineBranchEntry, parseTimelineBranchCommand, type TimelineBranchEntry } from './branches.ts';
 import { versionContent } from './versions.ts';
 
@@ -18,7 +19,7 @@ export function branchCheckoutRequest(target: TimelineBranchEntry): BranchChecko
 /** Transient materialized view. The entry retains its exact canonical format;
  * a checkout never rewrites that event or creates a second persistence schema. */
 export function parseBranchCheckout(input: unknown, ownerId: string, request: BranchCheckoutRequest): BranchCheckout {
- const value = copyBoundedJson(input, { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 100, maxNodes: 200_000, sortKeys: true }, 'Branch checkout') as any;
+ const value = copyTimelineContent(input, 'Branch checkout', 2) as any;
  if (!keys(value, ['branch', 'head', 'entry', 'snapshot'])) throw new Error('Invalid branch checkout');
  const target = parseTimelineBranchEntry(value); const entry = parseTimelineEntry(value.entry);
  if (target.branch.ownerId !== ownerId || target.branch.id !== request.branchId || target.head.thingId !== request.thingId || target.head.eventId !== request.expectedHeadId || target.head.revision !== request.expectedRevision || entry.event.id !== request.expectedHeadId || entry.event.ownerId !== ownerId || entry.event.thingId !== request.thingId || entry.event.mode === 'effect' || !entry.event.after) throw new Error('This checkout belongs to another branch version');
@@ -32,7 +33,7 @@ export function branchEditableSnapshot(input: TimelineSnapshot): TimelineSnapsho
 }
 export function branchCrystalSnapshot(basis: TimelineSnapshot, crystal: unknown): TimelineSnapshot {
  const checked = branchEditableSnapshot(basis);
- return branchEditableSnapshot({ ...checked, value: { ...(checked.value as Record<string, any>), crystal: copyBoundedJson(crystal, { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 80, maxNodes: 100_000, sortKeys: true }, 'Branch fields') } });
+ return branchEditableSnapshot({ ...checked, value: { ...(checked.value as Record<string, any>), crystal: copyTimelineContent(crystal, 'Branch fields', -1) } });
 }
 export function branchEditCommand(target: TimelineBranchEntry, eventId: string, operationId = crypto.randomUUID()) {
  return parseTimelineBranchCommand({ command: 'advance-branch', operationId, branchId: target.branch.id, thingId: target.head.thingId, eventId, expectedRevision: target.head.revision, name: null });

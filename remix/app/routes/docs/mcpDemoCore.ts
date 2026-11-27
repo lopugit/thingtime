@@ -263,6 +263,10 @@ export const reviewPayloadForScenario = (scenario: McpDemoScenario) => {
     confirmationRequired,
     ...(confirmationRequired ? { receipt: `demo-signed-receipt:${scenario.id}` } : {}),
     preview: {
+      previewId: `demo-preview:${scenario.id}`,
+      cursor: 0,
+      nextCursor: null,
+      total: scenario.steps.length,
       operations: scenario.steps.map((step, index) => ({
         id: `${scenario.id}-${index + 1}`,
         action: step.tool,

@@ -277,9 +277,9 @@ test('rebuild goes one index at a time: twin, drop, recreate from the live defin
   });
 });
 
-test('at the 64-index cap a unique index is rebuilt without a twin and reported as unprotected', async () => {
+test('at the 64-index cap a unique rebuild refuses before dropping its constraint', async () => {
   const actions: string[] = [];
-  const definitions = [{ name: '_id_', key: { _id: 1 } }, { name: 'shareId_1', key: { shareId: 1 }, unique: true }];
+  const definitions: Array<{ name: string; key: Record<string, number>; unique?: boolean }> = [{ name: '_id_', key: { _id: 1 } }, { name: 'shareId_1', key: { shareId: 1 }, unique: true }];
   for (let i = 0; i < 62; i += 1) definitions.push({ name: `filler_${i}`, key: { [`f${i}`]: 1 } });
   const collection = {
     async indexes() {
@@ -292,19 +292,19 @@ test('at the 64-index cap a unique index is rebuilt without a twin and reported 
       actions.push(`drop:${name}`);
     }
   };
-  const report = await rebuildPlanIndexes({ collection, planNames: new Set(['shareId_1']), ensurePlan: async () => {}, dryRun: false });
-  assert.deepEqual(report.unprotected, ['shareId_1']);
-  assert.deepEqual(report.twins, []);
-  assert.deepEqual(actions, ['drop:shareId_1', 'create:shareId_1']);
+  await assert.rejects(rebuildPlanIndexes({ collection, planNames: new Set(['shareId_1']), ensurePlan: async () => {}, dryRun: false }), /one free index slot/);
+  assert.deepEqual(actions, []);
 });
 
-test('an interrupted run is recovered first: twins are dropped and orphaned originals come back from the plan', async () => {
+test('interrupted recovery restores orphaned originals before removing their unique twins', async () => {
   const actions: string[] = [];
+  let restored = false;
   const collection = {
     async indexes() {
       return [
         { name: '_id_', key: { _id: 1 } },
         { name: 'shareId_1__rebuild', key: { shareId: 1 }, unique: true, partialFilterExpression: { shareId: { $exists: true } } },
+        ...(restored ? [{ name: 'shareId_1', key: { shareId: 1 }, unique: true, sparse: true }] : []),
         { name: 'uniqueKeys_1', key: { uniqueKeys: 1 }, unique: true, sparse: true },
         { name: 'uniqueKeys_1__rebuild', key: { uniqueKeys: 1 }, unique: true, partialFilterExpression: { uniqueKeys: { $exists: true } } }
       ];
@@ -320,17 +320,17 @@ test('an interrupted run is recovered first: twins are dropped and orphaned orig
     collection,
     ensurePlan: async () => {
       actions.push('ensure-plan');
+      restored = true;
     }
   });
-  assert.deepEqual(recovered, ['shareId_1__rebuild', 'uniqueKeys_1__rebuild']);
-  assert.deepEqual(actions, ['drop:shareId_1__rebuild', 'drop:uniqueKeys_1__rebuild', 'ensure-plan']);
+  assert.deepEqual(recovered, ['uniqueKeys_1__rebuild', 'shareId_1__rebuild']);
+  assert.deepEqual(actions, ['drop:uniqueKeys_1__rebuild', 'ensure-plan', 'drop:shareId_1__rebuild']);
 });
 
-test('the boot ensure pruning a twin mid-rebuild does not abort the run', async () => {
-  // collections.ts pruneRebuildTwins runs on every bootstrap ensureIndexes, so
-  // a signup on a fresh instance can drop the live twin while this migration
-  // holds it. dropIndex then raises IndexNotFound (27) — verified on MongoDB
-  // 8.0 — and the rebuild must treat "already absent" as the state it wanted.
+test('an already absent redundant twin cleanup is idempotent', async () => {
+  // Current startup and rebuild share a lifecycle lease. Cleanup still
+  // tolerates an already absent redundant twin once its original is restored;
+  // an older worker or operator may have completed that cleanup first.
   const live = new Set(['_id_', 'shareId_1', 'thingtime_1_createdAt_-1']);
   const rebuilt: string[] = [];
   const collection = {
@@ -344,8 +344,8 @@ test('the boot ensure pruning a twin mid-rebuild does not abort the run', async 
     async createIndex(_keys: Record<string, unknown>, options: Record<string, unknown> = {}) {
       const name = String(options.name);
       live.add(name);
-      // the boot pruner races in the instant the twin exists
-      if (name.endsWith('__rebuild')) live.delete(name);
+      // A redundant twin may already be absent after its original is restored.
+      if (name === 'shareId_1') live.delete('shareId_1__rebuild');
     },
     async dropIndex(name: string) {
       if (!live.has(name)) {
@@ -420,4 +420,16 @@ test('the text index is rebuilt last, because it is the only one whose absence i
   // the dry run previews the same order the real run will take
   const dry = await rebuildPlanIndexes({ collection, planNames, ensurePlan: async () => {}, dryRun: true });
   assert.deepEqual(dry.rebuilt, ['shareId_1', 'tags_1_createdAt_-1_shareId_1', 'things_text_search']);
+});
+
+
+test('failed orphan restoration preserves the only live unique twin', async () => {
+  const dropped: string[] = [];
+  const collection = {
+    async indexes() { return [{ name: 'uniqueKeys_1__rebuild', key: { uniqueKeys: 1 }, unique: true }]; },
+    async createIndex() {},
+    async dropIndex(name: string) { dropped.push(name); }
+  };
+  await assert.rejects(reconcileRebuildTwins({ collection, ensurePlan: async () => {} }), /only verified constraint/);
+  assert.deepEqual(dropped, []);
 });

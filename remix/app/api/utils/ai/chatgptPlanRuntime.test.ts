@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import test, { type TestContext } from 'node:test';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,10 +50,10 @@ async function fixture(t: TestContext, overrides: ConstructorParameters<typeof C
 	});
 	return { directory, runtime };
 }
-function callback(authorizationUrl: string) {
+function callback(authorizationUrl: string, clientId = 'oaiapp_test') {
 	const auth = new URL(authorizationUrl);
 	const url = new URL(auth.searchParams.get('redirect_uri')!);
-	url.search = new URLSearchParams({ state: auth.searchParams.get('state')!, code: 'fixture-code', client_id: 'oaiapp_test' }).toString();
+	url.search = new URLSearchParams({ state: auth.searchParams.get('state')!, code: 'fixture-code', client_id: clientId }).toString();
 	return url;
 }
 async function connect(runtime: ChatGPTPlanRuntime) {
@@ -82,6 +83,54 @@ test('private files and public projections preserve owner and origin isolation',
 	await runtime.selectModel(scope, account.id, 'model-two');
 	assert.equal((await runtime.resolveProvider(scope, account.id)).model, 'model-two');
 	await assert.rejects(runtime.selectModel(scope, account.id, 'not-in-catalog'));
+});
+
+test('desktop grants survive a restart only through the encrypted device store, scoped to the account API', async (t) => {
+	const key = randomBytes(32);
+	const protectedFile = {
+		encrypt(plaintext: string) {
+			const iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv);
+			const bytes = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+			return Buffer.concat([iv, cipher.getAuthTag(), bytes]);
+		},
+		decrypt(ciphertext: Buffer) {
+			const decipher = createDecipheriv('aes-256-gcm', key, ciphertext.subarray(0, 12));
+			decipher.setAuthTag(ciphertext.subarray(12, 28));
+			return Buffer.concat([decipher.update(ciphertext.subarray(28)), decipher.final()]).toString();
+		}
+	};
+	const { runtime, directory } = await fixture(t, { protectedFile, allowLoopbackAuthorization: true,
+		exchange: async (attempt, params) => ({ ...credential(attempt), clientId: params.get('client_id')! }) });
+	const remoteScope = { ...scope, origin: 'https://account.test' };
+	const { authorizationUrl } = await runtime.begin(remoteScope, async () => true);
+	assert.equal((await fetch(callback(authorizationUrl))).status, 200);
+	const second = await runtime.begin(remoteScope, async () => true);
+	assert.equal((await fetch(callback(second.authorizationUrl, 'oaiapp_second_grant'))).status, 200);
+	const first = await runtime.status(remoteScope);
+	assert.equal(first.storageMode, 'device');
+	assert.equal(first.accounts.length, 2);
+	assert.notEqual(first.accounts[0].id, first.accounts[1].id);
+	assert.equal(first.accounts[0].email, first.accounts[1].email);
+	assert.match(first.accounts[0].id, /^chatgpt-plan-device-/);
+	assert.deepEqual(await Promise.all([runtime.reserveDeviceTurn(remoteScope, first.accounts[0].id, 'one-turn'),
+		runtime.reserveDeviceTurn(remoteScope, first.accounts[0].id, 'one-turn')]), [true, false]);
+	assert.equal((await readFile(join(directory, 'accounts.enc'))).includes('private-access-token'), false);
+	await assert.rejects(stat(join(directory, 'accounts.json')), { code: 'ENOENT' });
+	await runtime.close();
+	const reopened = new ChatGPTPlanRuntime(directory, { protectedFile, allowLoopbackAuthorization: true, models: async () => models, revoke: async () => undefined });
+	try {
+		assert.deepEqual((await reopened.list({ ...remoteScope, sessionId: 'other-browser-session' })).accounts, first.accounts);
+		assert.equal(await reopened.reserveDeviceTurn(remoteScope, first.accounts[0].id, 'one-turn'), false);
+		assert.equal(await reopened.reserveDeviceTurn(remoteScope, first.accounts[0].id, 'new-turn'), true);
+		await reopened.selectModel(remoteScope, first.accounts[0].id, 'model-two');
+		assert.equal((await reopened.resolveProvider(remoteScope, first.accounts[0].id)).model, 'model-two');
+		assert.equal((await reopened.resolveProvider(remoteScope, first.accounts[1].id)).model, 'model-one');
+		await reopened.disconnect(remoteScope, first.accounts[0].id);
+		assert.equal((await reopened.list(remoteScope)).accounts[0].connected, false);
+		assert.equal((await reopened.list(remoteScope)).accounts[1].connected, true);
+		assert.deepEqual((await reopened.list({ ...remoteScope, origin: 'https://other.test' })).accounts, []);
+		assert.deepEqual((await reopened.list({ ...remoteScope, ownerId: 'user-two' })).accounts, []);
+	} finally { await reopened.close(); }
 });
 
 test('state mismatch does not consume sign-in and callback exchange is one-use', async (t) => {

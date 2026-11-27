@@ -1,0 +1,9 @@
+[package]
+name = "commander-platform"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+publish = false
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+libc = "0.2"

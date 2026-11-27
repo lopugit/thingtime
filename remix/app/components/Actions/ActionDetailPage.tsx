@@ -1,3 +1,4 @@
+import { thingOpenHref } from '../Things/thingsCore';
 import React from 'react';
 import { openThingHistory } from '../Timeline/TimelineHost';
 import { actionTimelineWarning, type ActionTimelineReport } from '../../timeline/actionOutcome';
@@ -274,7 +275,7 @@ export const ActionDetailPage = () => {
 	const [editing, setEditing] = React.useState(false);
 	const [runs, setRuns] = React.useState<RunRecord[]>([]);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
-	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null }[]>([]);
+	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null; thingtime: string[]; author?: { id: string } | null; crystal?: Record<string, unknown> }[]>([]);
 	const actionId = state.action?.id || null;
 	const loadRuns = React.useCallback(async () => {
 		if (!actionId) return;
@@ -327,13 +328,14 @@ export const ActionDetailPage = () => {
 					// (🧩 Invoice Card → Send button), clickable both directions.
 					apiRef.current.v1.things
 						.list({ thingtime: 'component', limit: 100 })
-						.then((response: { things?: { id: string; crystal?: Record<string, unknown> }[] }) => {
+						.then((response: { things?: { id: string; thingtime?: string[]; author?: { id: string } | null; crystal?: Record<string, unknown> }[] }) => {
 							if (cancelled) return;
 							const key = typeof resolvedAction.crystal.actionKey === 'string' ? resolvedAction.crystal.actionKey : null;
 							const bound = (response?.things || [])
 								.filter((component) => componentBindsAction(component.crystal?.render, { id: resolvedAction.id, actionKey: key }))
 								.map((component) => ({
 									id: component.id,
+									thingtime: component.thingtime || [], author: component.author, crystal: component.crystal,
 									name: typeof component.crystal?.name === 'string' ? (component.crystal.name as string) : 'Component',
 									componentKey: typeof component.crystal?.componentKey === 'string' ? (component.crystal.componentKey as string) : null
 								}));
@@ -571,7 +573,7 @@ export const ActionDetailPage = () => {
 								</Text>
 								<Flex gap={2} wrap="wrap">
 									{usedBy.map((component) => (
-										<Link key={component.id} to={`/thing/${encodeURIComponent(component.id)}`}>
+										<Link key={component.id} to={thingOpenHref(component, 'actions', user?.id)}>
 											<ActionChip size="md" tone="invoke">
 												🧩 {component.name}
 											</ActionChip>

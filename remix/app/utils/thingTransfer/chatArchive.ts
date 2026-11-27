@@ -1,4 +1,4 @@
-import { CHAT_ARCHIVE_THINGTIME, MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_MESSAGE_CHARS, MAX_NICKNAME_CHARS } from '../../schemas/registry';
+import { CHAT_ARCHIVE_THINGTIME, MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_NICKNAME_CHARS } from '../../schemas/registry';
 import { customReactionEmojiId, sanitizeChatReactionToken } from '../reactionTokens';
 import { validateTransfer, type TransferThing, type TransferFile, type TransferLink } from './format';
 
@@ -88,7 +88,7 @@ export const validateChatArchiveRecords = (manifest: {
     for (const message of messages) {
       fields(message, ['participantId', 'text', 'createdAt', 'editedAt', 'deleted', 'replyToId', 'threadRootId', 'systemText', 'toolHistory', 'position']);
       if (message.crystal.toolHistory !== undefined && !validArchiveToolHistory(message.crystal.toolHistory)) reject();
-      if (message.folderId || !people.has(String(message.crystal.participantId)) || !text(message.crystal.text, MAX_MESSAGE_CHARS) ||
+      if (message.folderId || !people.has(String(message.crystal.participantId)) || !text(message.crystal.text, Number.POSITIVE_INFINITY) ||
         !date(message.crystal.createdAt) || typeof message.crystal.deleted !== 'boolean' ||
         (message.crystal.editedAt !== undefined && !date(message.crystal.editedAt)) ||
         (message.crystal.systemText !== undefined && !text(message.crystal.systemText, 10_000))) reject();

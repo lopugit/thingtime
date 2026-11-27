@@ -12,6 +12,7 @@ import {
 import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
 import { FrontendStatus, NitroStatus } from './ServiceStatus';
+import { useAutomationSwitch } from '~/automation/useAutomationSwitches';
 import {
   getDefaultStatusEnvironmentId,
   getStatusEnvironmentTargets,
@@ -33,6 +34,28 @@ export const FooterStatusPanel = ({
   showDeploymentStatus: boolean;
 }) => {
   const [currentOrigin, setCurrentOrigin] = React.useState('');
+  // The health probes run only once the footer is actually on screen. Most page
+  // views never scroll this far, so mounting alone must not cost four requests.
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const [onScreen, setOnScreen] = React.useState(false);
+  // The administrator's Automation switch turns the footer service checks off.
+  const checksOn = useAutomationSwitch('web.statusChecks') && onScreen;
+  React.useEffect(() => {
+    if (onScreen) return;
+    const node = panelRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setOnScreen(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setOnScreen(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onScreen]);
   const [selectedEnvironmentId, setSelectedEnvironmentId] =
     React.useState<StatusEnvironmentId>('current');
   const [loadedStoredSelection, setLoadedStoredSelection] = React.useState(false);
@@ -119,7 +142,7 @@ export const FooterStatusPanel = ({
   const targetOrigin = selectedEnvironment?.origin;
 
   return (
-    <Flex flexDirection="column" rowGap={2} alignItems="flex-start">
+    <Flex ref={panelRef} flexDirection="column" rowGap={2} alignItems="flex-start">
       <Menu placement="bottom-start" isLazy>
         {({ isOpen }) => (
           <>
@@ -223,10 +246,10 @@ export const FooterStatusPanel = ({
         )}
       </Menu>
 
-      <NitroStatus targetOrigin={targetOrigin} />
-      <FrontendStatus targetOrigin={targetOrigin} />
-      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} /> : null}
-      <MongoStatus targetOrigin={targetOrigin} />
+      <NitroStatus targetOrigin={targetOrigin} enabled={checksOn} />
+      <FrontendStatus targetOrigin={targetOrigin} enabled={checksOn} />
+      {showDeploymentStatus ? <VercelStatus targetOrigin={targetOrigin} enabled={checksOn} /> : null}
+      <MongoStatus targetOrigin={targetOrigin} enabled={checksOn} />
     </Flex>
   );
 };

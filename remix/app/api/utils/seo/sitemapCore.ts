@@ -48,12 +48,14 @@ export type SitemapUrl = {
 
 export type SitemapIndexEntry = { loc: string; lastmod?: string };
 
-// The subset of brandingAssets.generated.json the sitemap reads. Passed in
-// rather than imported so the offline script can load the JSON with fs and
-// the runtime can import it through Vite — one builder, two loaders.
+// The subset of brandingAssets.generated.json the sitemap reads, plus the
+// curated imagery set from brandingImagery.generated.json under `imagery`.
+// Passed in rather than imported so the offline script can load the JSON with
+// fs and the runtime can import it through Vite — one builder, two loaders.
 export type BrandingAssetsManifest = {
 	variants: Array<{ slug: string; name: string; svg: { url: string }; pngs: Array<{ w: number; h: number; url: string }> }>;
 	presskit?: Array<{ slug: string; name: string; url: string }>;
+	imagery?: Array<{ name: string; url: string }>;
 };
 
 // XML 1.0: TAB/LF/CR are the only legal C0 controls; C1 controls, DEL and the
@@ -155,6 +157,7 @@ export const brandImagesFor = (origin: string, path: string, manifest: BrandingA
 		if (variant.svg?.url) images.push({ loc: absoluteUrl(origin, variant.svg.url), title: `Thingtime ${variant.name} logo (SVG)` });
 	}
 	for (const item of manifest.presskit ?? []) images.push({ loc: absoluteUrl(origin, item.url), title: `Thingtime ${item.name}` });
+	for (const item of manifest.imagery ?? []) images.push({ loc: absoluteUrl(origin, item.url), title: `Thingtime ${item.name}` });
 	return images;
 };
 

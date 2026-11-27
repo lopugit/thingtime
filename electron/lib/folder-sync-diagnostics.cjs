@@ -2,7 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const codes = new Set(['transport-retry', 'transport-refused', 'response-origin', 'http-retry', 'http-rejected', 'response-invalid']);
-const actions = new Set(['validate-folder-batch', 'upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed']);
+const actions = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'observe-path', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed']);
 const steps = new Set(['capture', 'admission', 'account-verification', 'capability-verification', 'native-request', 'reply-verification']);
 const failureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'cancelled', 'unsupported_feature', 'host-refused', 'unclassified']);
 const milliseconds = ['totalMs', 'queueMs', 'accountMs', 'capabilityMs', 'nativeMs', 'replyMs'];
@@ -30,6 +30,11 @@ function closedRow(value) {
         if (phase === 'upload-sign' && codes.has(code)) {
             const status = scalar(value, 'status');
             return Number.isInteger(status) && (status === 0 || (status >= 100 && status <= 599)) ? { phase, code, status } : null;
+        }
+        if (phase === 'download-stage') {
+            const step = scalar(value, 'step');
+            return ['staging-lookup', 'cloud-source', 'sign-target', 'transport', 'native-append'].includes(step) &&
+                ['temporary', 'rejected'].includes(code) ? { phase, step, code } : null;
         }
         if (!actions.has(action)) return null;
         if (phase === 'folder-request') {

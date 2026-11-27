@@ -20,8 +20,6 @@ export type PushDevice = {
 
 export type PublicPushDevice = Omit<PushDevice, 'ownerId' | 'token' | 'updatedAt'> & { updatedAt: string };
 
-const MAX_DEVICES_PER_USER = 12;
-const MAX_BATCH_SIZE = 4;
 const TOKEN_PATTERN = /^[0-9a-f]{32,400}$/i;
 
 export const normalizePushDeviceInput = (
@@ -90,11 +88,12 @@ export const pushDeviceUpsert = (
   ownerId: string,
   sessionId: string,
   device: { token: string; platform: PushPlatform; environment: PushEnvironment; topic: string; key: string },
-  now: Date
+  now: Date,
+  binding?: {deviceId:string;cacheGeneration:string}
 ) => ({
   $set: {
     ownerId,
-    crystal: { platform: device.platform, environment: device.environment, topic: device.topic },
+    crystal: { platform: device.platform, environment: device.environment, topic: device.topic, ...(binding?{canonicalDeviceId:binding.deviceId,cacheGeneration:binding.cacheGeneration}:{}) },
     secure: packToken(device.token),
     targetId: sessionId,
     updatedAt: now
@@ -117,8 +116,8 @@ export const registerPushDevices = async (
   sessionId: string,
   values: unknown
 ): Promise<{ ok: false; status: number; error: string } | { ok: true; devices: PublicPushDevice[] }> => {
-  if (!Array.isArray(values) || values.length < 1 || values.length > MAX_BATCH_SIZE) {
-    return { ok: false, status: 400, error: `Pass between 1 and ${MAX_BATCH_SIZE} devices` };
+  if (!Array.isArray(values) || values.length < 1) {
+    return { ok: false, status: 400, error: 'Pass at least one device' };
   }
   const normalized = values.map(normalizePushDeviceInput);
   const failed = normalized.find((entry) => entry.ok === false);
@@ -140,10 +139,7 @@ export const registerPushDevices = async (
     .sort({ updatedAt: -1, shareId: 1 })
     .project({ _id: 1, shareId: 1, crystal: 1, updatedAt: 1 })
     .toArray();
-  if (rows.length > MAX_DEVICES_PER_USER) {
-    await things.deleteMany({ _id: { $in: rows.slice(MAX_DEVICES_PER_USER).map((row: any) => row._id) } } as any);
-  }
-  return { ok: true, devices: rows.slice(0, MAX_DEVICES_PER_USER).map(publicDevice) };
+  return { ok: true, devices: rows.map(publicDevice) };
 };
 
 export const listPushDevicesForUser = async (ownerId: string): Promise<PushDevice[]> => {
@@ -151,7 +147,6 @@ export const listPushDevicesForUser = async (ownerId: string): Promise<PushDevic
   const rows = await things
     .find({ thingtime: 'push-device', ownerId, 'crystal.purpose': { $ne: 'lopu-chat-live-activity' } } as any)
     .sort({ updatedAt: -1, shareId: 1 })
-    .limit(MAX_DEVICES_PER_USER)
     .project({ shareId: 1, ownerId: 1, targetId: 1, crystal: 1, secure: 1, updatedAt: 1 })
     .toArray();
 
@@ -198,3 +193,14 @@ export const removePushDeviceById = async (id: string): Promise<void> => {
   const things = await getHomeThingsCollection();
   await things.deleteOne({ thingtime: 'push-device', shareId: id } as any);
 };
+
+/** Exact canonical device registration; user-wide delivery cannot substitute for this binding. */
+export async function getCanonicalDevicePush(ownerId:string,deviceId:string):Promise<(PushDevice&{cacheGeneration:string;sessionId:string})|null>{
+ const row=await (await getHomeThingsCollection()).findOne({thingtime:'push-device',ownerId,'crystal.canonicalDeviceId':deviceId},{sort:{updatedAt:-1}});
+ if(!row)return null;
+ const device=await(await getHomeThingsCollection()).findOne({thingtime:'device',ownerId,shareId:deviceId});
+ if(!device||device.crystal?.alertCacheGeneration!==row.crystal.cacheGeneration)return null;
+ const live=await (await getSessionsCollection()).findOne({jti:row.targetId,userId:ownerId,purpose:'device','meta.deviceId':deviceId,revokedAt:null,$or:[{expiresAt:null},{expiresAt:{$gt:new Date()}}]});
+ const token=unpackToken(row.secure);
+ return live&&token&&typeof row.crystal.cacheGeneration==='string'?{id:row.shareId,ownerId,token,platform:row.crystal.platform,environment:row.crystal.environment,topic:row.crystal.topic,updatedAt:row.updatedAt,cacheGeneration:row.crystal.cacheGeneration,sessionId:row.targetId}:null;
+}

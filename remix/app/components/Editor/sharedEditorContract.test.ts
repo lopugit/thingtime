@@ -14,8 +14,10 @@ test('all application Editor.js runtimes are owned by the shared editor', () => 
 	const owners = sourceFiles(app).filter((file) => /(?:from\s*|import\s*\()['"]@editorjs\/editorjs['"]/.test(readFileSync(file, 'utf8')));
 	assert.deepEqual(
 		owners.map((file) => path.relative(app, file)),
-		['components/Editor/LongTextEditor.tsx']
+		['components/Editor/editorJsRuntimeImports.ts']
 	);
+	assert.match(readFileSync(path.join(app, 'components/Editor/LongTextEditor.tsx'), 'utf8'), /loadEditorJsRuntime\(ownerDocument\)/);
+	assert.match(readFileSync(path.join(app, 'components/Editor/editorJsRuntime.entry.ts'), 'utf8'), /from '\.\/editorJsRuntimeImports'/);
 });
 
 test('every rich-text entry point uses the shared editor without disabling styling', () => {

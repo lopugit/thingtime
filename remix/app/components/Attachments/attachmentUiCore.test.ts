@@ -16,6 +16,7 @@ import {
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
 	canonicalPostTags,
+	canonicalLinkedMediaUrl,
 	formatAttachmentBytes,
 	matchesCommittedPostCreate,
 	MAX_POST_ATTACHMENTS,
@@ -300,21 +301,8 @@ test('ambiguous post creation reconciles only an exact committed snapshot', () =
 	);
 });
 
-test('post tag reconciliation uses the server create canonicalizer', () => {
-	assert.deepEqual(canonicalPostTags(['  One ', 'ONE', 'x'.repeat(50), 42, '', ...Array.from({ length: 20 }, (_, index) => `t${index}`)]), [
-		'one',
-		'x'.repeat(40),
-		't0',
-		't1',
-		't2',
-		't3',
-		't4',
-		't5',
-		't6',
-		't7',
-		't8',
-		't9'
-	]);
+test('post tag reconciliation preserves all tags and complete normalized text', () => {
+ assert.deepEqual(canonicalPostTags(['  One ', 'ONE', 'x'.repeat(50), 42, '', ...Array.from({ length: 20 }, (_, index) => `t${index}`)]), ['one', 'x'.repeat(50), ...Array.from({ length: 20 }, (_, index) => `t${index}`)]);
 });
 
 test('only a genuinely unknown post outcome keeps later duplicate conflicts frozen', () => {
@@ -322,4 +310,13 @@ test('only a genuinely unknown post outcome keeps later duplicate conflicts froz
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 409, true), true);
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 409, false), false);
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 422, true), false);
+});
+
+
+test('attachment presentation metadata and linked URLs are not silently truncated', () => {
+ const title = 'Title'.repeat(3000), description = 'Description'.repeat(3000), filenamePreview = 'Preview'.repeat(1000), name = ' original name ';
+ const attachment = normalizePublicAttachment({ id: 'attachment', name, size: 10, contentType: 'application/octet-stream', mediaKind: 'file', title, description, filenamePreview });
+ assert.equal(attachment?.title, title); assert.equal(attachment?.description, description); assert.equal(attachment?.filenamePreview, filenamePreview); assert.equal(attachment?.name, name);
+ const url = 'https://example.com/' + 'a'.repeat(10_000);
+ assert.equal(canonicalLinkedMediaUrl(url), url);
 });

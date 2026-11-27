@@ -1,6 +1,11 @@
+import { PdfDocument, PdfPageCanvas, usePdfElementBinding } from '../Attachments/PdfDocument';
+import { ACTION_BATCH_ATTRIBUTE } from '../Actions/actionBatches';
+import { MODIFIER_ACTION_INPUTS } from '../Actions/localUiAction';
+import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
+import { ComponentRichText } from '../Builder/ComponentRichText';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
@@ -11,10 +16,13 @@ import { componentPageHref, componentNavigationState } from '../Builder/componen
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
-import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { ComponentMapbox } from '../Builder/Maps/ComponentMapbox';
+import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled, ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
+import { HtmlMultipleSelect, HtmlSelectOption } from './HtmlMultipleSelect';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
@@ -25,6 +33,9 @@ import {
 } from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
+import { allowsAuthoredHtmlAttribute, authoredHtmlPropValue } from './htmlRenderPolicy';
+
+
 
 const WebPlatformSurface = React.lazy(() => import('../../webPlatform/WebPlatformSurface'));
 
@@ -70,111 +81,7 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 // Exported so the allowlist itself carries a regression test: every entry is a
 // decision about what untrusted markup may hand the browser, and a prop added
 // back by habit should fail a test rather than ship.
-export const ALLOWED_PROPS = new Set([
-	'style',
-	'className',
-	'class',
-	'href',
-	'target',
-	'rel',
-	'src',
-	'alt',
-	'title',
-	'width',
-	'height',
-	'type',
-	'placeholder',
-	'value',
-	'checked',
-	'disabled',
-	// form-field props: a NAMED field inside a component root is what the
-	// trusted ttAction click wrapper reads into the run inputs
-	// (useTtActionClicks) — inert markup otherwise, no URL or JS sink
-	'name',
-	'min',
-	'max',
-	'step',
-	'maxLength',
-	'required',
-	'readOnly',
-	'htmlFor',
-	'selected',
-	'autoComplete',
-	'inputMode',
-	// accessibility labelling: inert strings the browser only ever exposes to
-	// assistive tech — no URL, no JS sink, no validation engine
-	'role',
-	'aria-label',
-	'aria-valuenow',
-	'aria-valuemin',
-	'aria-valuemax',
-	'aria-valuetext',
-	'aria-hidden',
-	'aria-pressed',
-	'aria-expanded',
-	'aria-selected',
-	'aria-current',
-	'open',
-	// NOT `pattern`. Every other constraint-validation prop above is a cheap
-	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
-	// and runs from untrusted markup, on the main thread, with no timeout.
-	// Constraint validation runs as soon as a field has a non-empty value —
-	// and `fieldProps` below turns a template's `value` into `defaultValue`,
-	// so a component thing can ship both halves — which makes
-	// `<input value="aaaaaaaaaaaaaaaaaaaaaaaaaaX" pattern="(a+)+$">` a wedged
-	// tab for anyone who merely renders that component. Nothing in the
-	// library uses it, the run inputs are validated server-side by the action
-	// input descriptors (type/min/max/maxLength/enum) rather than by the
-	// field's own validity, and a client-side hint is not worth an
-	// author-supplied regex engine.
-	'rows',
-	'cols',
-	'controls',
-	'loop',
-	'muted',
-	'poster',
-	'viewBox',
-	'fill',
-	'stroke',
-	'strokeWidth',
-	'strokeLinecap',
-	'strokeLinejoin',
-	'd',
-	'cx',
-	'cy',
-	'r',
-	'x',
-	'y',
-	'x1',
-	'y1',
-	'x2',
-	'y2',
-	'rx',
-	'ry',
-	'points',
-	'xmlns',
-	'transform',
-	'opacity',
-	'fillOpacity',
-	'strokeOpacity',
-	'strokeDasharray',
-	'textAnchor',
-	'dominantBaseline',
-	'fontSize',
-	'fontWeight',
-	'fontFamily',
-	'letterSpacing',
-	'dx',
-	'dy',
-	// the ONLY data-* attributes allowed through: the component ttAction
-	// binding (componentTemplate.ts) — inert markup that a trusted-surface
-	// click wrapper reads to run an action AS the viewer. Values are plain
-	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
-	'data-tt-action',
-	'data-tt-action-inputs',
-	// Inert editor address, validated against the authored template before editing.
-	'data-tt-label-key'
-]);
+export { ALLOWED_PROPS } from './htmlRenderPolicy';
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	if (!style || typeof style !== 'object' || Array.isArray(style)) return undefined;
@@ -193,11 +100,19 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 	if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
 
 	const out: Record<string, unknown> = {};
-	Object.entries(props as Record<string, unknown>).forEach(([key, value]) => {
+	const attributes = props as Record<string, unknown>;
+	const multiple = tag === 'select' && (attributes.multiple === true ||
+		(typeof attributes.multiple === 'string' && authoredHtmlPropValue('multiple', attributes.multiple) === true));
+	Object.entries(attributes).forEach(([key, value]) => {
 		// no event handlers, no dangerouslySetInnerHTML, whitelist only
 		if (isEventHandlerProp(key)) return;
-		if (!ALLOWED_PROPS.has(key)) return;
-
+		// Structured Action descriptors use a button-only serializer, separate
+		// from the ordinary HTML attribute policy and free-form inspector.
+		if (key === MODIFIER_ACTION_INPUTS || key === ACTION_BATCH_ATTRIBUTE) {
+			if (tag === 'button' && value && typeof value === 'object' && !Array.isArray(value)) out[key] = JSON.stringify(value);
+			return;
+		}
+		if (!allowsAuthoredHtmlAttribute(key, tag)) return;
 		if (key === 'style') {
 			const style = sanitizeStyle(value);
 			if (style) out.style = style;
@@ -213,6 +128,8 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 			return;
 		}
 		if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+			out[key] = typeof value === 'string' ? authoredHtmlPropValue(key, value) : value;
+		} else if (multiple && key === 'value' && Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
 			out[key] = value;
 		}
 	});
@@ -233,6 +150,15 @@ const FIELD_TAGS = new Set(['input', 'textarea', 'select']);
 const fieldProps = (tag: string, props: Record<string, unknown>): Record<string, unknown> => {
 	if (!FIELD_TAGS.has(tag)) return props;
 	const out: Record<string, unknown> = { ...props };
+	if (tag === 'select' && out.multiple === true) {
+		// A typed array is an authored default. String query bindings stay
+		// authoritative and can explicitly clear an edited filter.
+		if (Array.isArray(out.value)) {
+			out.defaultValue = out.value;
+			delete out.value;
+		}
+		return out;
+	}
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
 	if (out.type === 'file') { delete out.value; delete out.defaultValue; return out; }
@@ -259,7 +185,7 @@ export type HtmlThingNode =
 			children?: HtmlThingNode[] | HtmlThingNode;
 	  };
 
-type RenderState = { count: number; mediaUrl: (url: string) => string };
+type RenderState = { displayOnly?: boolean; count: number; mediaUrl: (url: string) => string };
 
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
 	const inRouter = useInRouterContext();
@@ -290,6 +216,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-media-pipeline') return <LocalMediaPipeline key={key} pipeline={node.props?.pipeline}>{renderChildren(node.children, depth + 1, state)}</LocalMediaPipeline>;
+	if (tag === 'tt-web-platform' && state.displayOnly) return <p key={key}>Web Platform programs are available on the interactive page.</p>;
 	if (tag === 'tt-web-platform') return <React.Suspense key={key} fallback={<p>Web Platform program</p>}><WebPlatformSurface program={node.props?.program} name={node.props?.name} /></React.Suspense>;
 	if (tag === 'tt-service-workspace') {
 		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
@@ -314,9 +242,13 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentStyle>
 		);
+	if (tag === 'tt-pdf') return <PdfDocument key={key} {...node.props}>{node.children}</PdfDocument>;
+	if (tag === 'tt-pdf-page') return <PdfPageCanvas key={key} />;
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
+	if (tag === 'tt-rich-text') return <ComponentRichText key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
+	if (tag === 'tt-mapbox') return <ComponentMapbox key={key} {...node.props} />;
 	if (tag === 'tt-form')
 		return (
 			<ComponentForm
@@ -358,8 +290,11 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; delete props[MODIFIER_ACTION_INPUTS]; delete props[ACTION_BATCH_ATTRIBUTE]; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
+	if (tag === 'option') return <HtmlSelectOption key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlSelectOption>;
+	if (tag === 'select' && props.multiple) return <HtmlMultipleSelect key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlMultipleSelect>;
 
 	if (tag === 'textarea') {
 		// React forbids textarea children whenever a value/defaultValue exists,
@@ -393,21 +328,55 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
+	const held = useContentExecutionHeld();
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) || held };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
 
+// Authored images may keep a local fallback while a source loads or fails.
+// The fallback is a static same-origin asset: it does not carry user data or
+// expand the shared-media dependency graph to a second arbitrary source URL.
+function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<string, any>; fallback: string }) {
+ const [ready, setReady] = React.useState(false);
+ const [failed, setFailed] = React.useState(false);
+ const src = !failed && typeof elementProps.src === 'string' ? elementProps.src : undefined;
+ return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer"
+  loading={elementProps.loading === 'eager' ? 'eager' : 'lazy'}
+  decoding={elementProps.decoding === 'sync' || elementProps.decoding === 'auto' ? elementProps.decoding : 'async'}
+  style={{ ...elementProps.style, ...(!ready && src && { background: `center / contain no-repeat url("${fallback}")`, color: 'transparent' }) }}
+  onLoad={() => setReady(true)} onError={() => setFailed(true)} />;
+}
+
 /** Individual Builder elements share the exact HTML allowlist and URL policy. */
-export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
- tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+export function HtmlBlockElement({ tag, attributes, editorProps, children, markerContent }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode; markerContent?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
+ const pdfBinding = usePdfElementBinding(attributes, children);
+ attributes = pdfBinding.attributes; children = pdfBinding.children;
+ if (tag === 'tt-pdf') return <div {...editorProps}>{editorProps?.onClick ? children : <PdfDocument {...attributes} renderedChildren={children} />}</div>;
+ if (tag === 'tt-pdf-page') return <div {...editorProps}><PdfPageCanvas /></div>;
+ if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
+ if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} markerContent={markerContent} /></div>;
+ if (tag === 'tt-upload') return <div {...editorProps}><ComponentUpload {...attributes} /></div>;
+ if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
+ if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
+ if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-rich-text') return <div {...editorProps}><ComponentRichText {...attributes} /></div>;
+ if (tag === 'tt-menu') return <div {...editorProps}><ComponentMenu {...attributes}>{children}</ComponentMenu></div>;
+ if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
  for (const key of ['src', 'poster', 'href']) if (typeof props[key] === 'string') props[key] = mediaUrl(props[key]);
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
+ if (safeTag === 'option') return <HtmlSelectOption props={merged}>{children}</HtmlSelectOption>;
+ if (safeTag === 'select' && props.multiple) return <HtmlMultipleSelect props={merged} editing={!!editorProps?.onClick}>{children}</HtmlMultipleSelect>;
  if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ const fallback = attributes?.['data-tt-image-fallback'];
+ if (safeTag === 'img' && typeof fallback === 'string' && /^\/[a-zA-Z0-9_/-]+\.(?:png|svg|webp)$/.test(fallback) && !fallback.startsWith('//')) {
+  return <HtmlBlockImage key={String(props.src ?? '')} elementProps={merged} fallback={fallback} />;
+ }
  return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
 }

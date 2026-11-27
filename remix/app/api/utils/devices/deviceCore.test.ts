@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
+import { BSON } from 'mongodb';
 
 import { isFullAccountSessionPurpose } from '../auth/getCurrentUser.ts';
 import { thingUniqueKey } from '../mongodb/uniqueKeys.ts';
@@ -334,6 +335,9 @@ test('device-wide commands require the capability from the signed pairing claim'
 
 test('command vocabulary is closed and every input envelope is kind-specific', () => {
 	assert.deepEqual(DEVICE_COMMAND_KINDS, [
+		'notification.show',
+		'media.play',
+		'media.prepare',
  'script.run',
     'filesystem',
 		'connector.start',
@@ -608,4 +612,43 @@ for (const platform of ['ios', 'android'] as const) {
 }
 test('unknown device platforms are still refused', () => {
  for (const platform of ['', 'iOS', 'Android', 'browser', 'unknown', null]) assert.equal(normalizeDeviceDescriptor({ name: 'Phone', platform }), null);
+});
+
+test('device state preserves only measured, bounded host resource values', () => {
+	const resources = {
+		cpuPercent: 0,
+		memoryUsedBytes: 17_179_869_184,
+		memoryTotalBytes: 34_359_738_368,
+		diskUsedBytes: 200_000_000_000,
+		diskTotalBytes: 512_000_000_000,
+		diskReadBytesPerSecond: 134.5,
+		diskWriteBytesPerSecond: 0,
+		networkRxBytesPerSecond: 0,
+		networkTxBytesPerSecond: 42.25,
+		networkLinkBitsPerSecond: 1_000_000_000
+	};
+	assert.deepEqual(normalizeDeviceState({ locked: false, resources })?.resources, resources);
+	assert.deepEqual(normalizeDeviceState({ locked: true, resources: { cpuPercent: 100 } })?.resources, { cpuPercent: 100 });
+	assert.equal(normalizeDeviceState({ locked: false })?.resources, undefined);
+	assert.equal(normalizeDeviceState({ locked: false, resources: {} })?.resources, undefined);
+	for (const invalid of [
+		null, [], { interfaceName: 'en0' }, { mountPath: '/private' }, { cpuPercent: 101 }, { cpuPercent: '23' },
+		{ cpuPercent: null }, { memoryTotalBytes: 0 }, { memoryUsedBytes: 1.25 }, { memoryUsedBytes: 10, memoryTotalBytes: 1 },
+		{ diskTotalBytes: 1e20 }, { diskWriteBytesPerSecond: -1 }, { diskUsedBytes: 10, diskTotalBytes: 1 }, { networkRxBytesPerSecond: -1 },
+		{ networkTxBytesPerSecond: Infinity }, { networkLinkBitsPerSecond: 0 }
+	]) assert.equal(normalizeDeviceState({ locked: false, resources: invalid }), null);
+});
+
+test('device snapshots survive BSON roundtrip with omitted optional objects and legacy nulls', () => {
+	const state = normalizeDeviceState({ locked: false, resources: { cpuPercent: 30 } });
+	assert.ok(state);
+	const stored = BSON.deserialize(BSON.serialize(state));
+	assert.deepEqual(normalizeDeviceState(stored), state);
+	const priorHashShape = {
+		...state, powerTimers: undefined, appleMusic: undefined, spotify: undefined, chromeYouTube: undefined
+	};
+	const legacy = BSON.deserialize(BSON.serialize(priorHashShape, { ignoreUndefined: false }));
+	assert.equal(legacy.powerTimers, null);
+	assert.deepEqual(normalizeDeviceState(legacy), state);
+	assert.equal(deviceSnapshotHash(state, []), deviceSnapshotHash(priorHashShape, []));
 });

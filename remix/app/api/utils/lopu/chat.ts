@@ -1,3 +1,4 @@
+import { normalizeVaultProviderEffort } from './userVaultCore';
 import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
@@ -6,6 +7,7 @@ import type { LopuPromptSettings } from './promptSettingsCore';
 import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
 import { lopuResultLinks } from '~/utils/lopuLinks';
+import { createAnthropicApiKeyClient, sanitizeAnthropicApiKeyError } from '../ai/anthropicApiKey';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -150,6 +152,7 @@ export type LopuChatDependencies = {
   // options are passed only for a vault turn (the viewer's own key + base URL
   // + the redirect-refusing fetch); the server-key clients take none
   createAnthropic: (options?: AnthropicClientOptions) => Anthropic;
+  createAnthropicApiKey: (options: AnthropicClientOptions) => Anthropic;
   createOpenAi: (options?: OpenAiClientOptions) => OpenAI;
   // the SSRF fence + kind → transport mapping for a vault turn
   resolveVaultProviderClient: typeof resolveVaultProviderClientConfig;
@@ -194,6 +197,7 @@ const defaultDependencies = (): LopuChatDependencies => ({
   runTool: runLopuTool,
   getPreferredModelWaterfall: getAiPreferredModelWaterfall,
   createAnthropic: (options) => createClaudeOAuthClient(typeof options?.apiKey === 'string' ? { token: options.apiKey } : {}),
+  createAnthropicApiKey: createAnthropicApiKeyClient,
   createOpenAi: (options) => (options ? new OpenAI(options) : new OpenAI()),
   resolveVaultProviderClient: resolveVaultProviderClientConfig,
   mintConfirmation: mintLopuConfirmation,
@@ -1243,7 +1247,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       model,
       label: `${entry.name} · ${model}`,
       provider: vaultProviderTransport(entry.provider),
-      effort: entry.effort ?? null,
+      effort: normalizeVaultProviderEffort(entry.provider, model, entry.effort ?? null),
       speed: 'normal'
     });
     const state = newState();
@@ -1255,8 +1259,9 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         yield { type: 'error', message: failure.message, retryable: failure.retryable };
         return outcome('vault', model ? vaultChoice(model) : null, state, model ?? undefined, entry.name);
       }
-      const message = friendlyVaultProviderError(entry.name, model, error);
-      console.error(`[lopu] vault provider "${entry.name}" failed before replying:`, (error as any)?.message || error);
+      const safeError = entry.provider === 'anthropic-api-key' ? sanitizeAnthropicApiKeyError(error) : error;
+      const message = friendlyVaultProviderError(entry.name, model, safeError);
+      console.error(`[lopu] vault provider failed before replying:`, entry.provider === 'anthropic-api-key' ? { status: (safeError as any)?.status ?? null } : (error as any)?.message || error);
       yield { type: 'error', message, retryable: true };
       state.text = yield* streamFallbackReply('vault', deps.fallbackPaceMs);
       state.stopReason = 'fallback';
@@ -1281,7 +1286,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
-        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
+        ? anthropicProvider({ client: entry.provider === 'anthropic-api-key' ? deps.createAnthropicApiKey(options) : deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
         : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: providerText, media: input.media, toolMode: config.toolProtocol, signal: input.signal, authMode: entry.authMode });
     const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
@@ -1312,10 +1317,11 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         yield { type: 'error', message: failure.message, retryable: failure.retryable };
       }
       else {
-        console.error(`[lopu] vault provider "${entry.name}" failed mid-reply:`, (error as any)?.message || error);
+        const safeError = entry.provider === 'anthropic-api-key' ? sanitizeAnthropicApiKeyError(error) : error;
+        console.error('[lopu] vault provider failed mid-reply:', entry.provider === 'anthropic-api-key' ? { status: (safeError as any)?.status ?? null } : (error as any)?.message || error);
         state.stopReason = 'error';
-        state.error = friendlyVaultProviderError(entry.name, config.model, error).slice(0, 300);
-        yield { type: 'error', message: `${friendlyVaultProviderError(entry.name, config.model, error)} What streamed so far is kept.`, retryable: true };
+        state.error = friendlyVaultProviderError(entry.name, config.model, safeError).slice(0, 300);
+        yield { type: 'error', message: `${friendlyVaultProviderError(entry.name, config.model, safeError)} What streamed so far is kept.`, retryable: true };
       }
     }
     return outcome('vault', choice, state, undefined, entry.name);

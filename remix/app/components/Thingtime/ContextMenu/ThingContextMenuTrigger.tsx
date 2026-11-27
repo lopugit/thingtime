@@ -14,7 +14,8 @@ import { serializeTransfer, TRANSFER_FORMAT } from '~/utils/thingTransfer/format
 import { ThingValueTransferDialog } from './ThingValueTransferDialog';
 import { resolveThingZone } from '../thingZones';
 import type { ThingZone } from '../thingZones';
-import { ThingContextMenu } from './ThingContextMenu';
+import { PersistedThingContextMenu as ThingContextMenu } from './PersistedThingContextMenu';
+import { usePersistedThingSubject } from './PersistedThingSubject';
 import type { ThingContextMenuAction } from './ThingContextMenu';
 import {
 	buildThingContextMenuModel,
@@ -107,6 +108,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 	const user = useCurrentUser();
 	const [transfer, setTransfer] = React.useState<{ mode: 'download' | 'import'; path: string; owner?: string; value: unknown; original?: string } | null>(null);
 	const menu = useThingContextMenu();
+  const subjectId = usePersistedThingSubject();
 
 	const menuUuid = React.useId();
 
@@ -246,7 +248,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			};
 		}
 
-		const base = buildThingContextMenuModel({
+		const base = { ...buildThingContextMenuModel({
 			editMode,
 			readonly,
 			canDelete: !!onDelete,
@@ -255,11 +257,12 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			collapsed,
 			types,
 			selectedTypeKey
-		});
+		}), subjectId: subjectId || undefined, subjectScope: 'containing-thing' as const };
 
 		// right-clicking the key zone leads with key-specific verbs
 		if (targetZone === 'key' && typeof path === 'string' && path) {
 			return {
+        subjectId: base.subjectId, subjectScope: base.subjectScope,
 				sections: [
 					{
 						id: 'key-zone',
@@ -277,7 +280,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		return base;
-	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, selectedTypeKey, targetZone, path]);
+	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, selectedTypeKey, targetZone, path, subjectId]);
 
 	// ------------------------------------------------------------------
 	// live command implementations

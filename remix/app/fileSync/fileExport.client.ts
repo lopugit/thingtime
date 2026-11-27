@@ -1,3 +1,5 @@
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+import { parseSymbolicLink, sameSymbolicLink, type SymbolicLink } from './symbolicLink';
 import { getElectronBridge, type ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import type { TimelineScope } from '../timeline/contract';
@@ -24,6 +26,8 @@ export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal
 	signal.throwIfAborted();
 	if (!supportsFileExport(bridge, desktop) || scope.dataPlane !== 'home' || scope.apiOrigin !== window.location.origin)
 		return Promise.reject(Error('Saving files is unavailable in this app version.'));
+	if (file.symbolicLink && !capabilitySatisfies((supportsDesktopExport(desktop) ? desktop : bridge)?.fileExportVersion ?? '', '1.1.0'))
+		return Promise.reject(Error('Update the native app to save symbolic links without losing their target metadata.'));
 	const requestId = crypto.randomUUID();
 	const identity = { requestId, ownerId: scope.ownerId, origin: scope.apiOrigin };
 	return new Promise((resolve, reject) => {
@@ -64,7 +68,11 @@ export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal
 			const message = (event as CustomEvent).detail,
 				p = message?.payload;
 			if (message?.type !== 'file-export-result' || !p || Object.entries(identity).some(([key, value]) => p[key] !== value)) return;
+			let symbolicLink: SymbolicLink | undefined;
+			try { symbolicLink = p.symbolicLink === undefined ? undefined : parseSymbolicLink(p.symbolicLink); } catch { cancel(); finish(false, Error('The saved symbolic link could not be verified.')); return; }
 			if (
+				!sameSymbolicLink(file.symbolicLink, symbolicLink) ||
+				(file.symbolicLink && p.saved === true && !['symbolic-link', 'symbolic-link-fallback'].includes(p.representation)) ||
 				p.attachmentId !== file.content.attachmentId ||
 				p.version !== file.content.version ||
 				p.size !== file.content.size ||
@@ -83,7 +91,7 @@ export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal
 		window.addEventListener(nativeBridgeMessageEvent, receive);
 		signal.addEventListener('abort', abort, { once: true });
 		try {
-			send({ ...identity, action: 'save', name: file.name, content: file.content });
+			send({ ...identity, action: 'save', name: file.name, content: file.content, ...(file.symbolicLink ? { symbolicLink: file.symbolicLink } : {}) });
 		} catch (error) {
 			finish(false, error);
 		}

@@ -1,4 +1,5 @@
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
+export const ATTACHMENT_BLOB_THINGTIME = 'attachment-content-blob' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
 export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
@@ -7,8 +8,15 @@ export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 // A purpose is stamped before any upload URL is issued and never changes.
 // That keeps a private draft created for one surface from being replayed into
 // a different audience (for example, a DM attachment becoming a public post).
-export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password'] as const;
+export const VAULT_ATTACHMENT_PURPOSE = 'password' as const;
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', VAULT_ATTACHMENT_PURPOSE] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
+// Empty ordinary files remain valid content on these surfaces. Image-only,
+// recording and vault ceremonies retain their existing nonempty validation.
+export const EMPTY_ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'file'] as const;
+export const attachmentPurposeAllowsEmpty = (purpose: unknown): boolean =>
+  (EMPTY_ATTACHMENT_PURPOSES as readonly unknown[]).includes(purpose);
+
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
 
@@ -38,6 +46,9 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// An explicit same-source Live Photo pair. Only authorized attachment
+	// projections carry it; a filename or matching timestamp is never evidence.
+	livePhoto?: { pairId: string; role: 'photo' | 'motion' };
 	filenamePreview?: string;
 	// owner-authored presentation metadata for the media's own Thing page and
 	// lightbox — optional, absent on legacy attachments, never empty strings
@@ -61,6 +72,19 @@ export type AttachmentPublicMetadata = {
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id' | 'pending' | 'nsfw'>;
+
+export const canonicalLivePhoto = (value: unknown): AttachmentCrystal['livePhoto'] | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const raw = value as Record<string, unknown>;
+	if (Object.keys(raw).length !== 2 || typeof raw.pairId !== 'string' ||
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw.pairId) ||
+		(raw.role !== 'photo' && raw.role !== 'motion')) return null;
+	return { pairId: raw.pairId.toLowerCase(), role: raw.role };
+};
+
+export const visibleLivePhoto = (crystal: AttachmentCrystal): AttachmentCrystal['livePhoto'] | undefined =>
+	crystal.livePhoto && ((crystal.livePhoto.role === 'photo' && crystal.mediaKind === 'image') ||
+		(crystal.livePhoto.role === 'motion' && crystal.mediaKind === 'video')) ? crystal.livePhoto : undefined;
 
 export type AttachmentAnnotationPatch = {
 	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
@@ -92,6 +116,15 @@ export type AttachmentPrivateObjectFields = {
 	attachmentLinked?: true;
 };
 
+export type AttachmentBlobRef = { id: string; objectAttachmentId: string; objectVersionId: string };
+export const validAttachmentBlobRef = (value: unknown): value is AttachmentBlobRef => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const ref = value as AttachmentBlobRef;
+  return Object.keys(ref).length === 3 && typeof ref.id === 'string' && /^blob-[a-f0-9]{64}$/.test(ref.id) &&
+    typeof ref.objectAttachmentId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(ref.objectAttachmentId) &&
+    isAttachmentObjectVersionId(ref.objectVersionId);
+};
+
 export type AttachmentStorageCandidate = {
 	thingtime?: unknown;
 	crystal?: unknown;
@@ -110,6 +143,8 @@ export type AttachmentStorageCandidate = {
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
 	attachmentLinked?: unknown;
+	attachmentBlob?: unknown;
+	attachmentRedundantDeleteAfter?: unknown;
 };
 
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
@@ -205,7 +240,6 @@ export const canonicalLinkedAttachmentUrl = (value: unknown): string | null => {
 	const trimmed = value.trim();
 	if (
 		!trimmed ||
-		trimmed.length > MAX_LINKED_ATTACHMENT_URL_CHARS ||
 		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
 		trimmed.includes('\\') ||
 		!/^https?:\/\//i.test(trimmed)
@@ -302,13 +336,13 @@ export const linkedMediaTypeForUrl = (url: string): { contentType: string; media
 
 // A display name for the linked media, from the URL path basename (decoded
 // when possible), falling back to the hostname. The result must survive the
-// crystal name sanitizer's round-trip EXACTLY (trimmed, well-formed unicode,
-// no control/format chars, ≤255) — a name that doesn't would make the freshly
+// crystal name sanitizer's round-trip EXACTLY (well-formed Unicode with
+// no control/format characters) — a name that doesn't would make the freshly
 // minted crystal non-canonical and fail the mint.
 export const linkedAttachmentNameForUrl = (url: string): string => {
 	const canonicalName = (value: string): string | null => {
-		const sliced = value.slice(0, MAX_ATTACHMENT_NAME_CHARS).trim();
-		return sliced && !UNSAFE_FILENAME_CHAR_RE.test(sliced) && isWellFormedUnicode(sliced) ? sliced : null;
+		const sliced = value;
+		return sliced.trim() && !UNSAFE_FILENAME_CHAR_RE.test(sliced) && isWellFormedUnicode(sliced) ? sliced : null;
 	};
 	try {
 		const parsed = new URL(url);
@@ -326,12 +360,11 @@ export const linkedAttachmentNameForUrl = (url: string): string => {
 };
 
 // Single-line owner text (titles): the same hygiene as filenames.
-const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentLine = (value: unknown, _maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
 	if (!trimmed) return { ok: true };
-	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
 	if (UNSAFE_FILENAME_CHAR_RE.test(trimmed)) return { ok: false, error: `Attachment ${label}s cannot contain control or format characters` };
 	if (!isWellFormedUnicode(trimmed)) return { ok: false, error: `Attachment ${label}s must contain valid Unicode` };
 	return { ok: true, value: trimmed };
@@ -340,12 +373,11 @@ const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string)
 // Multi-line owner text (descriptions): newlines allowed, every other control
 // or format character still rejected.
 const UNSAFE_MULTILINE_CHAR_RE = /[\p{Cf}\p{Cs}]/u;
-const sanitizeAttachmentBlock = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentBlock = (value: unknown, _maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
 	if (!trimmed) return { ok: true };
-	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
 	for (let index = 0; index < trimmed.length; index += 1) {
 		const code = trimmed.charCodeAt(index);
 		if ((code <= 0x1f && code !== 0x0a) || code === 0x7f) {
@@ -364,11 +396,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 		return { ok: false, error: 'Attachment metadata must be an object' };
 	}
 	const raw = input as Record<string, unknown>;
-	const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-	if (!name) return { ok: false, error: 'Attachment name is required' };
-	if (name.length > MAX_ATTACHMENT_NAME_CHARS) {
-		return { ok: false, error: `Attachment names can contain at most ${MAX_ATTACHMENT_NAME_CHARS} characters` };
-	}
+	const name = typeof raw.name === 'string' ? raw.name : '';
+	if (!name.trim()) return { ok: false, error: 'Attachment name is required' };
 	if (UNSAFE_FILENAME_CHAR_RE.test(name)) {
 		return { ok: false, error: 'Attachment names cannot contain control or format characters' };
 	}
@@ -391,6 +420,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 	if (description.ok === false) return description;
 	const filenamePreview = sanitizeAttachmentLine(raw.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, 'filename preview');
 	if (filenamePreview.ok === false) return filenamePreview;
+	const livePhoto = raw.livePhoto === undefined ? undefined : canonicalLivePhoto(raw.livePhoto);
+	if (livePhoto === null) return { ok: false, error: 'Attachment Live Photo metadata is invalid' };
 
 	return {
 		ok: true,
@@ -401,6 +432,7 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 			// Always derive this from the normalized content type. A caller cannot
 			// label HTML/SVG/arbitrary bytes as inline-safe image or video content.
 			mediaKind: attachmentMediaKindForContentType(contentType),
+			...(livePhoto ? { livePhoto } : {}),
 			...(filenamePreview.value ? { filenamePreview: filenamePreview.value } : {}),
 			// blank owner text is stored as ABSENT, never as an empty string
 			...(title.value ? { title: title.value } : {}),
@@ -433,7 +465,7 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
 // Owner-authored presentation text plus the server-written sniffed container
 // type; each is validated below before a crystal counts as canonical.
-const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType']);
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType', 'livePhoto']);
 // Linked crystals swap detectedContentType (a stored-bytes sniff) for the
 // external url; every other key keeps the base hygiene.
 const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'filenamePreview', 'title', 'description']);
@@ -498,7 +530,10 @@ export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | 
 		raw.mediaKind === sanitized.crystal.mediaKind &&
 		raw.title === sanitized.crystal.title &&
 		raw.description === sanitized.crystal.description &&
-		raw.filenamePreview === sanitized.crystal.filenamePreview
+		raw.filenamePreview === sanitized.crystal.filenamePreview &&
+		(raw.livePhoto === undefined || (typeof raw.livePhoto === 'object' && raw.livePhoto !== null &&
+			(raw.livePhoto as { pairId?: unknown }).pairId === sanitized.crystal.livePhoto?.pairId &&
+			(raw.livePhoto as { role?: unknown }).role === sanitized.crystal.livePhoto?.role))
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
@@ -516,7 +551,8 @@ export const applyAttachmentAnnotationPatch = (value: unknown, patch: Attachment
 		contentType: before.contentType,
 		title: patch.title === undefined ? before.title : patch.title,
 		description: patch.description === undefined ? before.description : patch.description,
-		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview
+		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview,
+		livePhoto: before.livePhoto
 	});
 	if (!sanitized.ok) return sanitized;
 	return {
@@ -558,10 +594,13 @@ export const toAttachmentPublicMetadata = (
 	if (typeof id !== 'string' || !id || !canonical) return null;
 	const status = (moderation as { status?: unknown } | null | undefined)?.status;
 	if (status === 'blocked') return null;
+	const { livePhoto: _claimedPair, ...other } = canonical;
+	const livePhoto = visibleLivePhoto(canonical);
+	const publicCrystal = { ...other, ...(livePhoto ? { livePhoto } : {}) };
 	if (status === 'pending') {
-		return options.ownerView === true ? { id, ...canonical, pending: true as const } : null;
+		return options.ownerView === true ? { id, ...publicCrystal, pending: true as const } : null;
 	}
-	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
+	return { id, ...publicCrystal, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 
 // The owner-chosen display position, stamped on each bound attachment thing at
@@ -719,6 +758,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (looksLinked) {
 		if (
 			doc.attachmentLinked !== true ||
+      doc.attachmentBlob !== undefined ||
 			typeof doc.objectKey !== 'string' ||
 			!doc.objectKey.startsWith(LINKED_ATTACHMENT_OBJECT_KEY_PREFIX) ||
 			doc.objectSizeBytes !== 0 ||
@@ -747,5 +787,15 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	}
 	const crystal = canonicalAttachmentCrystal(doc.crystal);
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
+  if (doc.attachmentRedundantDeleteAfter !== undefined && (!validAttachmentBlobRef(doc.attachmentBlob) ||
+    (doc.attachmentRedundantDeleteAfter !== null && (!(doc.attachmentRedundantDeleteAfter instanceof Date) ||
+      !Number.isFinite(doc.attachmentRedundantDeleteAfter.getTime()))) ||
+    doc.objectKey === 'objects/' + doc.attachmentBlob.objectAttachmentId)) return null;
+  if (doc.attachmentBlob !== undefined) {
+    if (!validAttachmentBlobRef(doc.attachmentBlob) || doc.attachmentPurpose !== 'file' ||
+      !['ready', 'deleting'].includes(doc.attachmentState as string) ||
+      !isAttachmentObjectVersionId(doc.objectVersionId) || doc.uploadId !== undefined) return null;
+    return doc.attachmentRedundantDeleteAfter === undefined ? 0 : Number(doc.objectSizeBytes);
+  }
 	return Number(doc.objectSizeBytes);
 };

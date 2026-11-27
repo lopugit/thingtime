@@ -15,43 +15,58 @@ const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
 export const isHexColor = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
 /** Swatch + hex/text input pair used by the Theme Studio and settings modal. */
-export const ColorControl = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-	<Flex alignItems="center" gap="8px">
-		<Box
-			position="relative"
-			width="28px"
-			height="28px"
-			borderRadius="var(--tt-radius-xs, 7px)"
-			overflow="hidden"
-			border="1px solid var(--tt-border, #ececef)"
-		>
-			<Box position="absolute" inset={0} background={value} />
+export const ColorControl = ({ value, onChange, label = 'Theme colour' }: { value: string; onChange: (v: string) => void; label?: string }) => {
+	// An empty or partially typed colour is an editing draft, not a request to
+	// reset the persisted theme to its default on every keystroke.
+	const [draft, setDraft] = React.useState(value);
+	const editing = React.useRef(false);
+	React.useEffect(() => { if (!editing.current) setDraft(value); }, [value]);
+	return (
+		<Flex alignItems="center" gap="8px">
+			<Box
+				position="relative"
+				width="28px"
+				height="28px"
+				borderRadius="var(--tt-radius-xs, 7px)"
+				overflow="hidden"
+				border="1px solid var(--tt-border, #ececef)"
+			>
+				<Box position="absolute" inset={0} background={value} />
+				<Input
+					type="color"
+					aria-label={`${label} picker`}
+					value={isHexColor(value) ? value : '#888888'}
+					onChange={(e) => { setDraft(e.target.value); onChange(e.target.value); }}
+					position="absolute"
+					inset={0}
+					opacity={0}
+					width="100%"
+					height="100%"
+					padding={0}
+					cursor="pointer"
+				/>
+			</Box>
 			<Input
-				type="color"
-				value={isHexColor(value) ? value : '#888888'}
-				onChange={(e) => onChange(e.target.value)}
-				position="absolute"
-				inset={0}
-				opacity={0}
-				width="100%"
-				height="100%"
-				padding={0}
-				cursor="pointer"
+				aria-label={`${label} text`}
+				value={draft}
+				onFocus={() => { editing.current = true; }}
+				onBlur={() => { editing.current = false; setDraft(value); }}
+				onChange={(e) => {
+					const next = e.target.value;
+					setDraft(next);
+					if (next.trim() && CSS.supports('color', next)) onChange(next);
+				}}
+				width="130px"
+				size="sm"
+				fontFamily={MONO}
+				fontSize="12px"
+				background="var(--tt-surface-alt, #f5f5f7)"
+				border="1px solid var(--tt-border, #ececef)"
+				borderRadius="var(--tt-radius-sm, 9px)"
 			/>
-		</Box>
-		<Input
-			value={value}
-			onChange={(e) => onChange(e.target.value)}
-			width="130px"
-			size="sm"
-			fontFamily={MONO}
-			fontSize="12px"
-			background="var(--tt-surface-alt, #f5f5f7)"
-			border="1px solid var(--tt-border, #ececef)"
-			borderRadius="var(--tt-radius-sm, 9px)"
-		/>
-	</Flex>
-);
+		</Flex>
+	);
+};
 
 const THINGS_BADGE_PADDING_OPTIONS: { value: TtThingsBadgePadding; label: string }[] = [
 	{ value: 'small', label: 'Small' },

@@ -1,3 +1,6 @@
+import { AclWriteFenceError } from '../mongodb/aclWriteFence';
+import { createAclWriteFenceMigration } from './aclWriteFence';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { subspaceMessagingMigration } from './subspaceMessaging';
 import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
 import { createHash, randomUUID } from 'node:crypto';
@@ -5,6 +8,11 @@ import { isDeepStrictEqual } from 'node:util';
 
 import {
   ensureHomeThingsIndexPlan,
+  inspectHomeThingAclWriteFence,
+  inspectHomeThingCollModAuthority,
+  provisionHomeThingAclWriteFence,
+  withHomeIndexMaintenance,
+  isHomeIndexRecoveryActive,
   ensureIndexes,
   getAdoptionIssues,
   getCiControlCollection,
@@ -40,6 +48,7 @@ import {
 	fromBin,
 	packRecentReactions,
 	profileAttachmentRefsForUserRoot,
+	projectProfilePresentation,
 	removeLegacyUserStorageFields,
 	toBin,
 	userEmailKey,
@@ -132,6 +141,9 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	secure: 1,
 	updatedAt: 1,
 	attachmentEnvelopeVersion: 1,
+  attachmentBlob: 1,
+  attachmentRedundantDeleteAfter: 1,
+  attachmentBlobData: 1,
 	attachmentState: 1,
 	objectSizeBytes: 1,
 	objectKey: 1,
@@ -155,6 +167,7 @@ export type MigrationReport = {
   created: number;
   skipped: number;
   notes: string[];
+  collModAuthority?: 'granted' | 'absent' | 'unknown';
 };
 
 export type Migration = {
@@ -167,6 +180,7 @@ export type Migration = {
   // drops data (cleanup migrations): the run endpoint requires an explicit
   // confirm flag and the panel badges it
   destructive?: boolean;
+  homeOnly?: boolean;
   // physical collections this migration still READS from — the cleanup
   // migration refuses to drop any collection a pending migration lists here
   sourcePhysicals?: () => string[];
@@ -195,8 +209,11 @@ type MigrationLease = {
 };
 
 const acquireMigrationLease = async (migrationId: string): Promise<MigrationLease | null> => {
-	await ensureIndexes();
+	if (!isHomeIndexRecoveryActive()) await ensureIndexes();
 	const settings = await getSettingsCollection();
+	// Authenticated repair must remain reachable when an unrelated unique index
+	// cannot build, but the existing migration lease still needs its own constraint.
+	if (isHomeIndexRecoveryActive()) await settings.createIndex({ key: 1 }, { unique: true, maxTimeMS: 15_000 });
 	const token = randomUUID();
 	const now = new Date();
 	try {
@@ -1242,7 +1259,9 @@ const usersToThings = collectionToThingsMigration({
           displayName: doc.displayName ?? null,
           bio: doc.bio ?? null,
           avatarUrl: doc.avatarUrl ?? null,
-          bannerUrl: doc.bannerUrl ?? null
+          bannerUrl: doc.bannerUrl ?? null,
+          ...projectProfilePresentation(doc, 'avatar'),
+          ...projectProfilePresentation(doc, 'banner')
         },
         // users own themselves (insertUser convention)
         ownerId: shareId,
@@ -2968,21 +2987,23 @@ const rebuildThingsIndexes: Migration = {
   },
   run: async ({ dryRun, assertLease }) => {
     const db = await getHomeThingtimeDb();
-    const collection = db.collection(physicalCollectionName('things'));
     const notes = makeNotes();
     const before = await collectionStorage(db, physicalCollectionName('things'));
-    const report = await rebuildPlanIndexes({
-      collection,
+    const runRebuild = async (targetDb: any, assertIndexLease?: () => Promise<void>) => rebuildPlanIndexes({
+      collection: targetDb.collection(physicalCollectionName('things')),
       planNames: await thingsIndexPlanNames(),
-      ensurePlan: () => ensureHomeThingsIndexPlan(db),
+      ensurePlan: () => ensureHomeThingsIndexPlan(targetDb, { underLease: true }),
       dryRun,
-      assertLease
+      assertLease: async () => { await assertLease?.(); await assertIndexLease?.(); }
     });
+    // Startup cannot prune a live rebuild's twin or race its create/drop phase.
+    // Preserve the independent admin migration lease as well as the DDL lease.
+    const report = dryRun ? await runRebuild(db) : await withHomeIndexMaintenance(runRebuild);
     notes.push(
       `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
     );
     if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
-    for (const name of report.unprotected) notes.push(`${name}: rebuilt WITHOUT a twin — the collection sits at MongoDB's 64-index cap, so its uniqueness lapsed for the rebuild window`);
+    // Unique rebuilds now require a protective slot and fail closed at the cap.
     for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
     if (!dryRun) {
       const after = await collectionStorage(db, physicalCollectionName('things'));
@@ -3247,7 +3268,32 @@ const retireLegacyThingIndexes: Migration = {
 	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
 	run: migrateLegacyThingIndexLayout
 };
+const activateSyncAttachmentBlobs: Migration = {
+  id: 'activate-sync-attachment-blobs',
+  collection: 'things',
+  fromVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  toVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  title: 'Activate shared sync file storage',
+  description: 'Confirm only after every origin sharing this home database supports shared sync attachment reads, accounting and deletion. This enables new same-account references and the separate historical consolidation. Older servers must no longer access this database before activation.',
+  destructive: true,
+  pending: async () => await (await import('../attachments/attachmentBlobActivation')).syncAttachmentDedupActive() ? 0 : 1,
+  run: async options => (await import('../attachments/attachmentBlobActivation')).activateSyncAttachmentDedup(options)
+};
+
+const consolidateSyncAttachmentBlobs: Migration = {
+  id: 'consolidate-sync-attachment-blobs',
+  collection: 'things',
+  fromVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  toVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  title: 'Consolidate identical synced file bytes',
+  description: 'Home storage only. Deploy compatible readers and cleanup to all origins sharing this database first. Dry run lists remaining eligible records. Confirmed bounded passes preserve every attachment and logical version, register exact verified bytes by account, then permanently remove redundant S3 versions after signed URLs expire. Repeat until no work remains.',
+  destructive: true,
+  pending: async () => (await import('../attachments/attachmentBlobMaintenance')).countSyncAttachmentDedupPending(),
+  run: async options => (await import('../attachments/attachmentBlobMaintenance')).runSyncAttachmentDedupMigration(options)
+};
+
 export const migrations: Migration[] = [
+  createAclWriteFenceMigration({ customPlane: isCustomMongoEndpointActive, inspect: inspectHomeThingAclWriteFence, inspectAuthority: inspectHomeThingCollModAuthority, provision: provisionHomeThingAclWriteFence }),
   subspaceMessagingMigration,
 	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical
@@ -3267,6 +3313,8 @@ export const migrations: Migration[] = [
   stampMigration('feedAlgorithms', 'Feed algorithm docs already match the v2 shape — stamps schemaVersion.'),
 	stampMigration('lopuMusingRateLimits', 'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'),
   backfillAppNamespaceFields,
+  activateSyncAttachmentBlobs,
+  consolidateSyncAttachmentBlobs,
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
@@ -3425,6 +3473,8 @@ export const runMigration = async (
 ): Promise<Fail | MigrationFailure | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
+  if (migration.homeOnly && isCustomMongoEndpointActive())
+    return migrationFailureResult(migration.id, new AclWriteFenceError('selection', 'wrong-plane'), 'rejected');
   const dryRun = options.dryRun === true || options.dryRun === 'true';
   // destructive migrations (collection drops) never run on an unconfirmed
   // call — a mis-sent id can cost data, so the API demands intent twice

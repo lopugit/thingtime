@@ -3,8 +3,7 @@ import React from 'react';
 import { Button, Flex, Text } from '@chakra-ui/react';
 import { SavedAiWaterfallSelector } from '~/components/AI/SavedAiWaterfallSelector';
 import {
-	normalizePrConflictResolverModelWaterfall,
-	parseAiWorkflowModelOptionId
+	parseAiWorkflowModelOptionId, parsePublishedAiWorkflowChoice, getAiWorkflowBaseModel, AI_MODEL_EFFORT_LABELS, type AiWorkflowBaseModel, type AiModelEffort
 } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
 import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
 import { useApi } from '~/hooks/useApi';
@@ -12,23 +11,21 @@ import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 
 const CACHE_KEY = 'tt-admin-pr-conflict-resolver-model-waterfall-v1';
-const cached = () => normalizePrConflictResolverModelWaterfall(readLocalCache(CACHE_KEY));
+const cached = () => {const value=readLocalCache<unknown>(CACHE_KEY);return Array.isArray(value)&&value.length?value.filter((id):id is string=>typeof id==='string'):['default'];};
+const cachedCatalog=()=>readLocalCache<AiWorkflowBaseModel[]>(CACHE_KEY+'-catalog')??readLocalCache<AiWorkflowBaseModel[]>('tt-ai-available-models')??[];
 const endpoints = (['anthropic', 'openai', 'default'] as const).map((provider) => ({
 	id: provider === 'default' ? 'default' : `server:${provider}`,
 	label: provider === 'default' ? 'Provider default' : provider === 'anthropic' ? 'Anthropic' : 'OpenAI',
 	models: provider === 'default' ? [{ id: 'default', label: 'Default model', efforts: [], speeds: ['normal' as const] }] : []
 }));
-const asConfig = (waterfall: string[]): AiWaterfallConfig => ({
-	version: 1,
-	entries: waterfall.map((id) => {
-		const choice = parseAiWorkflowModelOptionId(id)!;
-		return {
-			endpointId: choice.provider === 'default' ? 'default' : `server:${choice.provider}`,
-			modelId: choice.model,
-			effort: choice.effort,
-			speed: choice.speed
-		};
-	})
+const asConfig = (waterfall: string[],models:readonly AiWorkflowBaseModel[]): AiWaterfallConfig => ({
+ version:1,entries:waterfall.flatMap(id=>{
+  const base=models.find(model=>model.id===id.split(':')[0])??getAiWorkflowBaseModel(id.split(':')[0]);
+  // A cached selection remains representable while the async published
+  // catalogue loads. This presentation fallback never authorizes a save/run.
+  const choice=parsePublishedAiWorkflowChoice(id,models)??parseAiWorkflowModelOptionId(id,base?{...base,efforts:Object.keys(AI_MODEL_EFFORT_LABELS) as AiModelEffort[],speeds:['normal','fast']}:undefined);
+  return choice?[{endpointId:choice.provider==='default'?'default':`server:${choice.provider}`,modelId:choice.model,effort:choice.effort,speed:choice.speed}]:[];
+ })
 });
 
 export const PRConflictResolverModelWaterfallEditor = () => {
@@ -36,6 +33,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const lopu = useLopu();
+	const [catalog,setCatalog]=React.useState(cachedCatalog);
 	const [waterfall, setWaterfall] = React.useState(cached);
 	const [saved, setSaved] = React.useState(cached);
 	const [open, setOpen] = React.useState(false);
@@ -48,13 +46,16 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 		apiRef.current.v1.settings
 			.prConflictResolverModelWaterfall()
 			.then((response: any) => {
-				if (cancelled || generation.current !== atStart) return;
-				if (!response?.ok) throw new Error('Refresh failed');
-				const next = normalizePrConflictResolverModelWaterfall(response.waterfall);
-				setWaterfall(next);
-				setSaved(next);
-				writeLocalCache(CACHE_KEY, next);
-			})
+        if(cancelled)return;
+        if(!response?.ok)throw new Error('Refresh failed');
+        const published:AiWorkflowBaseModel[]=response.models??cachedCatalog();
+        setCatalog(published);writeLocalCache(CACHE_KEY+'-catalog',published);
+        // Catalogue refresh is independent of the draft-generation fence.
+        // Opening/editing the chooser must not strand its outer catalogue.
+        if(generation.current!==atStart)return;
+        const next:string[]=response.waterfall;
+        setWaterfall(next);setSaved(next);writeLocalCache(CACHE_KEY,next);
+      })
 			.catch(() => {
 				if (!cancelled) setRefreshFailed(true);
 			});
@@ -69,7 +70,9 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 		try {
 			const response = await apiRef.current.v1.admin.setPrConflictResolverModelWaterfall(nextWaterfall);
 			if (!response?.ok) throw new Error(response?.error || 'Could not save model order.');
-			const next = normalizePrConflictResolverModelWaterfall(response.waterfall);
+			const published:AiWorkflowBaseModel[]=response.models??cachedCatalog();
+        setCatalog(published);writeLocalCache(CACHE_KEY+'-catalog',published);
+        const next:string[] = response.waterfall;
 			setSaved(next);
 			setWaterfall(next);
 			writeLocalCache(CACHE_KEY, next);
@@ -89,7 +92,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 			summary={`${waterfall.length} models · ${dirty ? 'Unsaved changes' : 'Saved'}`}
 		>
 			<Text fontSize="sm" overflowWrap="anywhere">
-				{waterfall.map((id) => [parseAiWorkflowModelOptionId(id)?.label || id, ...id.split(':').slice(1)].join(' · ')).join(' → ')}
+				{waterfall.map((id) => [parsePublishedAiWorkflowChoice(id,catalog)?.label || id, ...id.split(':').slice(1)].join(' · ')).join(' → ')}
 			</Text>
 			<Flex gap={2} wrap="wrap">
 				<Button
@@ -109,26 +112,20 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 			<Text fontSize="xs">{dirty ? 'Unsaved changes' : refreshFailed ? 'Showing last-known order; reopen this page to refresh.' : 'Saved'}</Text>
 			<SavedAiWaterfallSelector
 				isOpen={open}
-				value={asConfig(waterfall)}
+				value={asConfig(waterfall,catalog)}
 				endpoints={endpoints}
 				useLiveServerModels
 				onSaveApply={async (config) => {
-					await save(normalizePrConflictResolverModelWaterfall(config.entries.map((entry) =>
+					await save(config.entries.map((entry) =>
 						[entry.modelId, ...(entry.effort ? [entry.effort] : []), ...(entry.speed === 'fast' ? ['fast'] : [])].join(':')
-					)));
+					));
 				}}
 				allowInherit={false}
 				onClose={() => setOpen(false)}
 				onApply={(config) => {
 					if (!config) return;
 					generation.current += 1;
-					setWaterfall(
-						normalizePrConflictResolverModelWaterfall(
-							config.entries.map((entry) =>
-								[entry.modelId, ...(entry.effort ? [entry.effort] : []), ...(entry.speed === 'fast' ? ['fast'] : [])].join(':')
-							)
-						)
-					);
+          setWaterfall(config.entries.map(entry=>[entry.modelId,...(entry.effort?[entry.effort]:[]),...(entry.speed==='fast'?['fast']:[])].join(':')));
 				}}
 			/>
 		</SettingsSection>

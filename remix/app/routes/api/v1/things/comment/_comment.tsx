@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
@@ -34,8 +34,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'You’re commenting too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...cors } });
   }
 
-  // same ceiling as post creation — rich comments carry image URL lists
-  const body = await readJsonBodyWithCors(request, 256 * 1024, cors);
+  const body = await readJsonBodyWithCors(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT, cors);
 	let bodyForComment = body || {};
 	let commentOptions: Parameters<typeof addComment>[4] | undefined;
   if (bodyHasAttachmentIds(body)) {

@@ -1,7 +1,6 @@
 import Foundation
 import CryptoKit
 import Darwin
-import SQLite3
 
 /// Private, disposable scan metadata. This does not retain file contents, grant
 /// access, or replace Timeline history. Hosts reauthorize the grant on every call.
@@ -21,21 +20,25 @@ public struct MobileFolderInventory: Sendable {
         public let coverage: String?
         public let consistency: String?
         public let totalSkipped: Int?
-        public init(id: String, generation: String, totalEntries: Int, coverage: String? = nil, consistency: String? = nil, totalSkipped: Int? = nil) {
+        public let photoQueue: PhotoBackupQueueBatch?
+        public init(id: String, generation: String, totalEntries: Int, coverage: String? = nil, consistency: String? = nil, totalSkipped: Int? = nil,
+                    photoQueue: PhotoBackupQueueBatch? = nil) {
             self.id = id; self.generation = generation; self.totalEntries = totalEntries
-            self.coverage = coverage; self.consistency = consistency; self.totalSkipped = totalSkipped
+            self.coverage = coverage; self.consistency = consistency; self.totalSkipped = totalSkipped; self.photoQueue = photoQueue
         }
     }
     public struct BackupStatus: Encodable, Sendable {
         public let id: String; public let generation: String; public let state: String
         public let coverage: String; public let consistency = "per-entry"
         public let totalEntries: Int; public let totalSkipped: Int
+        public let photoQueue: PhotoBackupQueueBatch?
         /// Count of pruned entries/subtree roots, never unseen descendants.
         public let ignoredCount: Int
         public init(capture: Capture, state: String, ignoredCount: Int = 0) {
             id = capture.id; generation = capture.generation; self.state = state
             coverage = state == "complete" ? (capture.coverage ?? "partial") : "partial"
             totalEntries = capture.totalEntries; totalSkipped = capture.totalSkipped ?? 0; self.ignoredCount = ignoredCount
+            photoQueue = capture.photoQueue
         }
     }
     public struct Skipped: Codable, Sendable {
@@ -77,293 +80,38 @@ public struct MobileFolderInventory: Sendable {
             if let nextOffset { try c.encode(nextOffset, forKey: .nextOffset) } else { try c.encodeNil(forKey: .nextOffset) }
         }
     }
-    private struct Record: Codable {
+    // This is an authorization/recovery record only. Entries, gaps, counts
+    // and revisions live in Commander’s canonical Rust store.
+    private struct Record: Codable, Equatable {
         let scope: Scope
         let bookmarkHash: String
-        var capture: Capture
-        let complete: Bool
-        var excludedPaths: [String]? = nil
-        var retired: Bool? = nil
-        var capturePolicy: String? = nil
-        var prepared: Bool? = nil
-        var ignoreRules: String? = nil
-        var ignoredCount: Int? = nil
-        var streamState: String? = nil
+        let id: String
+        let generation: String
+        let policy: String
+        let exclusions: [String]
+        let ignoreRules: String?
+        let rootIdentity: String
+        var rootContinuity: String? = nil
+        var rootPath: String? = nil
+        var phase: String
     }
-    public static let maximumPageEntries = 128
-    public static let maximumBatchPageEntries = 4096
-    private static func pageLimit(_ requested: Int?) throws -> Int {
-        let limit = requested ?? maximumPageEntries
-        guard (1...maximumBatchPageEntries).contains(limit) else { throw Failure.invalid }
-        return limit
+    private struct LegacyRecord: Decodable {
+        let scope: Scope
+        let bookmarkHash: String
+        let capture: Capture
+        let excludedPaths: [String]?
+        let capturePolicy: String?
+        let ignoreRules: String?
     }
-    public static let maximumPageBytes = 512 * 1024
-    public static let maximumCaptures = 8
-    private typealias Failure = MobileFolderStore.Failure
-    private let directory: URL
-    private let commanderIndexer: URL?
-    public var supportsResourceGovernance: Bool { commanderIndexer != nil }
-    public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("ThingtimeFolderInventories", isDirectory: true), commanderIndexer: URL? = nil) {
-        self.directory = directory
-        #if os(macOS)
-        self.commanderIndexer = commanderIndexer ?? Bundle.main.url(forAuxiliaryExecutable: "commander-indexer")
-        #else
-        self.commanderIndexer = nil
-        #endif
-    }
-
-    private func location(_ scope: Scope, id: String) throws -> URL {
-        guard UUID(uuidString: id) != nil, UUID(uuidString: scope.rootId) != nil,
-              !scope.deviceId.isEmpty, scope.deviceId.utf8.count <= 512 else { throw Failure.invalid }
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let key = Self.digest(try encoder.encode(scope))
-        return directory.appendingPathComponent(key, isDirectory: true).appendingPathComponent(id.lowercased(), isDirectory: true)
-    }
-    private static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
-    /// Serialize readers and eviction under the scope lock. These are disposable
-    /// observations: an evicted generation must be recaptured, never treated as
-    /// empty or spliced into pages already imported from its predecessor.
-    private func locked<T>(_ scope: Scope, id: String, creating: Bool = false, removing: Bool = false,
-                           work: (Int32) throws -> T) throws -> T {
-        let target = try location(scope, id: id), bucket = target.deletingLastPathComponent()
-        return try NativeFileJournal.locked(directory: bucket) { bucketFD in
-            var attributes = stat()
-            let exists = fstatat(bucketFD, target.lastPathComponent, &attributes, AT_SYMLINK_NOFOLLOW) == 0
-            guard !exists || attributes.st_mode & S_IFMT == S_IFDIR else { throw Failure.storage }
-            if !exists {
-                guard errno == ENOENT, creating else { throw Failure.changed }
-                let children = try FileManager.default.contentsOfDirectory(at: bucket,
-                    includingPropertiesForKeys: [.creationDateKey], options: [])
-                    .filter { UUID(uuidString: $0.lastPathComponent) != nil }
-                guard children.count <= Self.maximumCaptures else { throw Failure.storage }
-                if children.count == Self.maximumCaptures {
-                    let oldest = try children.map { ($0, try $0.resourceValues(forKeys: [.creationDateKey]).creationDate ?? .distantPast) }
-                        .sorted { $0.1 < $1.1 }.first!.0
-                    try FileManager.default.removeItem(at: oldest)
-                }
-            }
-            let result = try NativeFileJournal.locked(directory: target, work: work)
-            if removing { try FileManager.default.removeItem(at: target) }
-            return result
-        }
-    }
-    private func validate(_ record: Record, scope: Scope, id: String, bookmark: Data) throws {
-        guard record.scope == scope, record.capture.id == id.lowercased(), record.bookmarkHash == Self.digest(bookmark),
-              UUID(uuidString: record.capture.generation) != nil, record.capture.totalEntries >= 0 else { throw Failure.changed }
-        guard try MobileFolderIgnoreRules.sameText(MobileFolderIgnoreRules(record.ignoreRules).text, record.ignoreRules), (record.ignoredCount ?? 0) >= 0 else { throw Failure.changed }
-        if record.capturePolicy == "one-way-supported" {
-            guard ["running", "indexed", "complete", "interrupted"].contains(record.streamState ?? ""), record.capture.consistency == "per-entry" else { throw Failure.changed }
-        } else if record.capturePolicy == "backup-supported" {
-            guard record.capture.consistency == "per-entry", let skipped = record.capture.totalSkipped, skipped >= 0,
-                  ["full", "partial"].contains(record.capture.coverage ?? ""),
-                  record.capture.coverage != "full" || skipped == 0,
-                  !record.complete || record.prepared == true else { throw Failure.changed }
-        } else {
-            guard record.capturePolicy == nil, record.capture.coverage == nil, record.capture.consistency == nil,
-                  record.capture.totalSkipped == nil else { throw Failure.changed }
-        }
-    }
-
-    /// A caller-chosen ID survives a lost reply. Unsealed captures can be rebuilt;
-    /// their server-generated generation changes and no pages were readable.
-    public func capture(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> Capture {
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        return try locked(scope, id: id, creating: true) { fd in
-            if let old = try NativeFileJournal.read(fd, as: Record.self) {
-                try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true, old.capturePolicy == nil, (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
-                if old.complete { return old.capture }
-            }
-            let generation = UUID().uuidString.lowercased(), key = Self.digest(bookmark)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key,
-                capture: Capture(id: id.lowercased(), generation: generation, totalEntries: 0), complete: false, excludedPaths: exclusions, ignoreRules: rules), fd)
-            for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
-                if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
-            }
-            let db = try Database(directory: fd, create: true)
-            try db.execute("CREATE TABLE entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
-            try db.execute("BEGIN IMMEDIATE")
-            var count = 0
-            try MobileFolderReader.capture(bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: rules, append: { entry in
-                guard count < 9_007_199_254_740_991 else { throw Failure.limit }
-                try db.insert(entry, ordinal: count); count += 1
-            }, replay: { visit in
-                try db.rows(offset: 0) { _, data in
-                    try visit(JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)); return true
-                }
-            })
-            try db.execute("COMMIT")
-            let result = Capture(id: id.lowercased(), generation: generation, totalEntries: count)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true, excludedPaths: exclusions, ignoreRules: rules), fd)
-            return result
-        }
-    }
-
-    /// Private provisional rows are committed before the host's final live
-    /// authorization check. Only sealBackup makes them readable.
-    public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
-                              resourceLimits: SyncResourceLimits? = nil, resourceUsage: @Sendable (CommanderResourceUsage) -> Void = { _ in }, sourceCpuMeter: SyncSourceCpuMeter? = nil, ignored: @Sendable (Int) -> Void = { _ in }, progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
-        if resourceLimits != nil && commanderIndexer == nil { throw Failure.unavailable }
-        guard UUID(uuidString: generation) != nil else { throw Failure.invalid }
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        return try locked(scope, id: id, creating: true) { fd in
-            if let old = try NativeFileJournal.read(fd, as: Record.self) {
-                try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
-                if old.complete { return old.capture }
-            }
-            let initial = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: 0, coverage: "partial", consistency: "per-entry", totalSkipped: 0)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: initial,
-                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", ignoreRules: rules, ignoredCount: 0), fd)
-            for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
-                if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
-            }
-            let db = try Database(directory: fd, create: true)
-            try db.execute("CREATE TABLE entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
-            try db.execute("CREATE TABLE skipped (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL)")
-            try db.execute("CREATE TABLE blocked_paths (path TEXT PRIMARY KEY)")
-            try db.execute("BEGIN IMMEDIATE")
-            var count = 0, skipped = 0, nextOrdinal = 0, ignoredCount = 0
-            func skip(_ gap: MobileFolderReader.BackupGap) throws {
-                guard skipped < 9_007_199_254_740_991 else { throw Failure.limit }
-                try db.insertSkipped(Skipped(ordinal: skipped, gap: gap)); skipped += 1; progress(count, skipped)
-            }
-            func scan(ignored: () throws -> Void, append: (MobileFolderReader.Entry) throws -> Bool, skip: (MobileFolderReader.BackupGap) throws -> Void) throws {
-                #if os(macOS)
-                if let helper = commanderIndexer {
-                    try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: exclusions,
-                        ignoreRules: rules, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter, ignored: ignored, append: append, skip: skip)
-                    return
-                }
-                #endif
-                try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules,
-                    ignored: ignored, append: append, skip: skip)
-            }
-            try scan(
-                ignored: { ignoredCount += 1; ignored(ignoredCount) }, append: { row in
-                try Task.checkCancellation()
-                do {
-                    if try db.blocked(row.path) {
-                        try skip(.init(path: row.path, reason: .pathCollision, scope: row.kind == "folder" ? .subtree : .entry))
-                        return false
-                    }
-                    try db.insert(row, ordinal: nextOrdinal); nextOrdinal += 1; count += 1; progress(count, skipped)
-                    return true
-                } catch let failure as MobileFolderReader.ScanFailure {
-                    if failure.reason == .pathCollision {
-                        // No first-wins upload into a case/Unicode ambiguous path.
-                        try db.block(row.path)
-                        count -= try db.removeCollision(row.path) { previous in
-                            try skip(.init(path: previous.path, reason: .pathCollision, scope: previous.kind == "folder" ? .subtree : .entry))
-                        }
-                    }
-                    try skip(.init(path: row.path, reason: failure.reason, scope: row.kind == "folder" ? .subtree : .entry))
-                    return false
-                }
-            }, skip: skip)
-            try Task.checkCancellation()
-            #if os(macOS)
-            if commanderIndexer != nil {
-                try MobileFolderReader.recheckCommanderDirectories(bookmark: bookmark, replay: { visit in
-                    try db.rows(offset: 0) { _, data in
-                        if let gap = try visit(JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)) { try skip(gap) }
-                        return true
-                    }
-                })
-            }
-            #endif
-            // Removing ambiguous earlier entries leaves ordinal gaps. Compact
-            // once on disk before publishing any final page/count.
-            try db.execute("CREATE TABLE sealed_entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
-            try db.execute("INSERT INTO sealed_entries SELECT ROW_NUMBER() OVER (ORDER BY ordinal) - 1, path, identity, data FROM entries")
-            try db.execute("DROP TABLE entries")
-            try db.execute("ALTER TABLE sealed_entries RENAME TO entries")
-            try db.execute("COMMIT")
-            let result = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: count,
-                                 coverage: skipped == 0 ? "full" : "partial", consistency: "per-entry", totalSkipped: skipped)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: result,
-                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", prepared: true, ignoreRules: rules, ignoredCount: ignoredCount), fd)
-            return result
-        }
-    }
-    public struct Change: Encodable, Sendable {
+    public struct Change: Codable, Sendable {
         public let sequence: Int
         public let entry: MobileFolderReader.Entry
         public let revision: String
     }
-    public struct ChangesPage: Encodable, Sendable {
+    public struct ChangesPage: Codable, Sendable {
         public let id: String; public let generation: String; public let state: String
         public let revision: Int; public let changes: [Change]; public let nextSequence: Int; public let hasMore: Bool
         public let totalEntries: Int; public let totalSkipped: Int
-    }
-    /// Streaming has its own policy and log. The legacy sealed inventory never
-    /// exposes provisional rows. Each short commit is visible between callbacks.
-    public func beginStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?) throws -> ChangesPage {
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        try locked(scope, id: id, creating: true) { fd in
-            if var old = try NativeFileJournal.read(fd, as: Record.self) {
-                try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.capturePolicy == "one-way-supported", old.retired != true, old.excludedPaths == exclusions,
-                      MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
-                if old.streamState != "complete" { old.streamState = "running"; try NativeFileJournal.save(old, fd) }
-                return
-            }
-            let db = try Database(directory: fd, create: true)
-            try db.execute("PRAGMA journal_mode=WAL")
-            try db.execute("PRAGMA synchronous=FULL")
-            try db.execute("CREATE TABLE changes (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL, path TEXT NOT NULL, revision TEXT NOT NULL)")
-            try db.execute("CREATE TABLE current_entries (path TEXT PRIMARY KEY, revision TEXT NOT NULL)")
-            try db.execute("CREATE TABLE stream_metadata (skipped INTEGER NOT NULL, totalEntries INTEGER NOT NULL)")
-            try db.execute("INSERT INTO stream_metadata VALUES (0, 0)")
-            let capture = Capture(id: id.lowercased(), generation: UUID().uuidString.lowercased(), totalEntries: 0,
-                                  coverage: "partial", consistency: "per-entry", totalSkipped: 0)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: capture, complete: false,
-                excludedPaths: exclusions, capturePolicy: "one-way-supported", ignoreRules: rules, streamState: "running"), fd)
-        }
-        return try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: 0)
-    }
-    public func streamChanges(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, afterSequence: Int, pageSize: Int? = nil) throws -> ChangesPage {
-        guard afterSequence >= 0, afterSequence <= 9_007_199_254_740_991 else { throw Failure.invalid }
-        let limit = try Self.pageLimit(pageSize), exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        return try locked(scope, id: id) { fd in
-            guard let record = try NativeFileJournal.read(fd, as: Record.self), record.retired != true,
-                  record.capturePolicy == "one-way-supported", record.excludedPaths == exclusions,
-                  MobileFolderIgnoreRules.sameText(record.ignoreRules, rules) else { throw Failure.changed }
-            try validate(record, scope: scope, id: id, bookmark: bookmark)
-            let db = try Database(directory: fd, create: false)
-            var changes: [Change] = [], bytes = 16_384
-            try db.rows(offset: afterSequence + 1, table: "changes") { ordinal, data in
-                guard ordinal == afterSequence + changes.count + 1 else { throw Failure.storage }
-                let entry = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)
-                let change = Change(sequence: ordinal, entry: entry, revision: entry.version)
-                let encodedBytes = try JSONEncoder().encode(change).count + 1 // comma; envelope reserves16KiB above
-                if changes.count == limit || bytes + encodedBytes > Self.maximumPageBytes { return false }
-                changes.append(change); bytes += encodedBytes; return true
-            }
-            let revision = try db.lastSequence()
-            guard afterSequence <= revision else { throw Failure.changed }
-            let next = changes.last?.sequence ?? afterSequence
-            return ChangesPage(id: record.capture.id, generation: record.capture.generation, state: record.streamState ?? "interrupted",
-                revision: revision, changes: changes, nextSequence: next, hasMore: next < revision,
-                totalEntries: try db.streamTotal(), totalSkipped: try db.streamSkipped())
-        }
-    }
-    public func finishStream(_ scope: Scope, id: String, bookmark: Data, state: String) throws {
-        guard ["indexed", "complete", "interrupted"].contains(state) else { throw Failure.invalid }
-        try locked(scope, id: id) { fd in
-            guard var record = try NativeFileJournal.read(fd, as: Record.self), record.capturePolicy == "one-way-supported" else { throw Failure.changed }
-            try validate(record, scope: scope, id: id, bookmark: bookmark)
-            let db = try Database(directory: fd, create: false)
-            record.capture = Capture(id: record.capture.id, generation: record.capture.generation, totalEntries: try db.streamTotal(),
-                coverage: "partial", consistency: "per-entry", totalSkipped: try db.streamSkipped())
-            record.streamState = state
-            try NativeFileJournal.save(record, fd)
-        }
     }
     public final class StreamControl: @unchecked Sendable {
         private let lock = NSLock()
@@ -372,349 +120,567 @@ public struct MobileFolderInventory: Sendable {
         public func finish(afterSequence: Int) { lock.lock(); revision = afterSequence; lock.unlock() }
         func take() -> Int? { lock.lock(); defer { lock.unlock() }; let value = revision; revision = nil; return value }
     }
-    /// Only the app-owned metadata directory is hidden from a live source.
-    /// Resolve the pinned grant and cache physically; never omit a broad parent
-    /// such as Library, or reinterpret a user-selected exclusion.
-    private func streamInternalExclusions(bookmark: Data) throws -> [String] {
-        try MobileFolderReader.access(bookmark) { root in
-            var rootPath = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            guard fcntl(root, F_GETPATH, &rootPath) == 0 else { throw Failure.unavailable }
-            let cache = Darwin.open(directory.resolvingSymlinksInPath().path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-            guard cache >= 0 else { throw Failure.storage }; defer { close(cache) }
-            var cachePath = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            guard fcntl(cache, F_GETPATH, &cachePath) == 0 else { throw Failure.storage }
-            let source = String(cString: rootPath), owned = String(cString: cachePath)
-            guard source != owned else { throw Failure.invalid }
-            let prefix = source == "/" ? "/" : source + "/"
-            guard owned.hasPrefix(prefix) else { return [] }
-            return try MobileFolderReader.canonicalExclusions([String(owned.dropFirst(prefix.count))])
-        }
+
+    public struct Capabilities: Decodable, Sendable {
+        public let version: Int
+        public let strictCoverage: Bool
     }
-    /// The helper validates each directory namespace before emitting eligible
-    /// entries. It remains the only scanner, with host path/version revalidation.
-    public func runStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, resourceLimits: SyncResourceLimits? = nil, resourceUsage: @Sendable (CommanderResourceUsage) -> Void = { _ in }, sourceCpuMeter: SyncSourceCpuMeter? = nil, control: StreamControl? = nil, wake: @Sendable () -> Void, authorize: @Sendable () throws -> Void = {}) throws {
+
+    public static let maximumPageEntries = 128
+    public static let maximumBatchPageEntries = 4096
+    public static let maximumPageBytes = 512 * 1024
+    private static let backup = "backup-supported"
+    private static let strict = "strict-async"
+    private static let legacy = "strict-inline"
+    private static let stream = "one-way-supported"
+    private typealias Failure = MobileFolderStore.Failure
+    private let directory: URL
+    private let client: RustInventoryClient?
+    private let databaseDirectory: URL?
+    public var supportsResourceGovernance: Bool { client != nil }
+
+    public init(directory: URL? = nil, commanderIndexer: URL? = nil,
+                transport: (any RustInventoryTransport)? = nil, database: URL? = nil) {
+        self.directory = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ThingtimeFolderInventories", isDirectory: true)
         #if os(macOS)
-        _ = try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules, afterSequence: 0)
-        // Keep one writer open for the scan. Closing the final WAL connection
-        // after every entry would checkpoint and recreate its journal each time.
-        let writer = try locked(scope, id: id) { fd in try Database(directory: fd, create: false, writable: true) }
-        try writer.execute("PRAGMA synchronous=FULL")
-        try writer.execute("PRAGMA wal_autocheckpoint=1000")
-        var pending: [MobileFolderReader.Entry] = [], skipped = 0, first = true, autoFinish = false
-        var committed = Date()
-        func flush() throws {
-            guard !pending.isEmpty || skipped > 0 else { return }
-            try Task.checkCancellation()
-            try authorize()
-            try locked(scope, id: id) { fd in
-                guard let record = try NativeFileJournal.read(fd, as: Record.self), record.capturePolicy == "one-way-supported", ["running", "indexed"].contains(record.streamState ?? "") else { throw Failure.changed }
-                try validate(record, scope: scope, id: id, bookmark: bookmark)
-                let db = writer
-                try db.execute("BEGIN IMMEDIATE")
-                var count = try db.lastSequence()
-                for entry in pending {
-                    guard count < 9_007_199_254_740_991 else { throw Failure.limit }
-                    if try db.insertChange(entry, sequence: count + 1) { count += 1 }
-                }
-                try db.execute("UPDATE stream_metadata SET skipped = skipped + \(skipped)")
-                try db.execute("COMMIT")
-            }
-            if !pending.isEmpty { first = false }
-            pending.removeAll(keepingCapacity: true); skipped = 0; committed = Date(); wake()
-        }
-        guard let helper = commanderIndexer else { throw Failure.unavailable }
-        let internalExclusions = try streamInternalExclusions(bookmark: bookmark)
-        try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: excludedPaths,
-            ignoreRules: ignoreRules, streaming: true, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter, internalExclusions: internalExclusions, ignored: {}, append: { entry in
-                pending.append(entry)
-                // A WAL commit makes each ready result visible without waiting for
-                // the next file hash; SQLite checkpoints bound its journal.
-                if first || pending.count >= 128 || Date().timeIntervalSince(committed) >= 0.1 { try flush() }
-                return true
-            }, skip: { _ in skipped += 1; if skipped >= 128 { try flush() } }, indexed: {
-                try flush(); try finishStream(scope, id: id, bookmark: bookmark, state: "indexed"); wake()
-                if control == nil { autoFinish = true }
-            }, tick: {
-                if Date().timeIntervalSince(committed) >= 0.1 { try flush() }
-                if autoFinish { autoFinish = false; return true }
-                if let expected = control?.take() {
-                    try flush()
-                    if try writer.lastSequence() == expected { return true }
-                    wake()
-                }
-                return false
-            })
-        try flush()
+        let database = database ?? RustProcessInventoryTransport.defaultDatabase
+        let resolved = transport ?? (commanderIndexer ?? RustProcessInventoryTransport.bundledHelper)
+            .map { RustProcessInventoryTransport(helper: $0, database: database) }
+        self.databaseDirectory = ((resolved as? RustProcessInventoryTransport)?.database ?? database).deletingLastPathComponent()
         #else
-        throw Failure.unavailable
+        let resolved = transport
+        self.databaseDirectory = database?.deletingLastPathComponent()
         #endif
+        client = resolved.map(RustInventoryClient.init(transport:))
     }
-    public func sealBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        try locked(scope, id: capture.id) { fd in
-            guard let old = try NativeFileJournal.read(fd, as: Record.self), old.capture == capture,
-                  old.capturePolicy == "backup-supported", old.prepared == true, old.retired != true else { throw Failure.changed }
-            try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
-            try Task.checkCancellation()
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
-                complete: true, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: true, ignoreRules: old.ignoreRules, ignoredCount: old.ignoredCount), fd)
-        }
+
+    private func requireClient() throws -> RustInventoryClient {
+        guard let client else { throw RustInventoryTransportFailure.unavailable }; return client
     }
-    /// Close a cancellation/seal race without reopening the source grant.
-    /// This only makes private provisional metadata unreadable again.
-    public func abandonBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
-        try locked(scope, id: capture.id) { fd in
-            guard let old = try NativeFileJournal.read(fd, as: Record.self), old.capture == capture,
-                  old.capturePolicy == "backup-supported", old.retired != true else { throw Failure.changed }
-            try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
-                complete: false, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: false, ignoreRules: old.ignoreRules, ignoredCount: old.ignoredCount), fd)
-        }
-    }
-    /// Call only when this scope has no active scanner holding its cache lock.
-    public func backupStatus(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> BackupStatus? {
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return nil }
-        return try locked(scope, id: id) { fd in
-            guard let old = try NativeFileJournal.read(fd, as: Record.self) else { return nil }
-            try validate(old, scope: scope, id: id, bookmark: bookmark)
-            guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
-            return BackupStatus(capture: old.capture, state: old.complete ? "complete" : "interrupted", ignoredCount: old.ignoredCount ?? 0)
-        }
-    }
-    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil, pageSize: Int? = nil) throws -> SkippedPage {
-        let limit = try Self.pageLimit(pageSize)
-        try MobileFolderReader.checkAccess(bookmark: bookmark)
-        guard offset >= 0, let total = capture.totalSkipped, total >= 0,
-              offset < total || (offset == 0 && total == 0) else { throw Failure.invalid }
-        return try locked(scope, id: capture.id) { fd in
-            guard let record = try NativeFileJournal.read(fd, as: Record.self), record.complete, record.retired != true,
-                  record.capturePolicy == "backup-supported", record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text) else { throw Failure.changed }
-            try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
-            let db = try Database(directory: fd, create: false)
-            var rows: [Skipped] = [], bytes = 16_384, bounded = false
-            try db.rows(offset: offset, table: "skipped") { ordinal, data in
-                guard ordinal == offset + rows.count, ordinal < total else { throw Failure.storage }
-                if rows.count == limit || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
-                let row = try JSONDecoder().decode(Skipped.self, from: data)
-                let gap = MobileFolderReader.BackupGap(path: row.path, reason: row.reason, scope: row.scope)
-                guard row.ordinal == ordinal, gap.path == row.path, gap.reason == row.reason, gap.scope == row.scope else { throw Failure.storage }
-                rows.append(row); bytes += data.count; return true
+    public func capabilities() throws -> Capabilities { try capabilities(fields: [:]) }
+
+    public func checkStrictVolume(bookmark: Data) throws {
+        try withRoot(bookmark) { root in
+            guard try capabilities(fields: root.fields).strictCoverage else {
+                throw RustInventoryTransportFailure.operation("strict_watcher_unavailable")
             }
-            let next = offset + rows.count
-            guard next <= total, !rows.isEmpty || total == 0, bounded || next == total else { throw Failure.storage }
-            return SkippedPage(capture: capture, offset: offset, skipped: rows, nextOffset: next == total ? nil : next, totalSkipped: total)
         }
     }
 
-    /// Sealed rows are immutable. The final offset and total count prove that
-    /// the client received the whole capture, including an empty directory.
-    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil, pageSize: Int? = nil) throws -> Page {
-        let limit = try Self.pageLimit(pageSize)
+    private func capabilities(fields: [String: Any]) throws -> Capabilities {
+        let value: Capabilities = try requireClient().run("capabilities", fields: fields)
+        guard value.version == 1 else { throw RustInventoryTransportFailure.invalidResponse }
+        return value
+    }
+
+    private static func pageLimit(_ requested: Int?) throws -> Int {
+        let limit = requested ?? maximumPageEntries
+        guard (1...maximumBatchPageEntries).contains(limit) else { throw Failure.invalid }; return limit
+    }
+    private static func digest(_ data: Data) -> String { NativeSymbolicLinks.hash(data) }
+    private func location(_ scope: Scope, id: String) throws -> URL {
+        guard UUID(uuidString: id) != nil, UUID(uuidString: scope.rootId) != nil,
+              !scope.deviceId.isEmpty, scope.deviceId.utf8.count <= 512 else { throw Failure.invalid }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        return directory.appendingPathComponent(Self.digest(try encoder.encode(scope)), isDirectory: true)
+            .appendingPathComponent(id.lowercased(), isDirectory: true)
+    }
+
+    private func record<T>(_ scope: Scope, id: String, bookmark: Data, missing: Bool = false,
+                           work: (Record?, LegacyRecord?, Int32) throws -> T) throws -> T {
+        let target = try location(scope, id: id)
+        if !missing && !FileManager.default.fileExists(atPath: target.path) { throw Failure.changed }
+        return try NativeFileJournal.locked(directory: target.deletingLastPathComponent()) { _ in
+            try NativeFileJournal.locked(directory: target) { fd in
+                let existing: Record?
+                let legacy: LegacyRecord?
+                do { existing = try NativeFileJournal.read(fd, as: Record.self); legacy = nil }
+                catch DecodingError.keyNotFound {
+                    existing = nil; legacy = try NativeFileJournal.read(fd, as: LegacyRecord.self)
+                }
+                if let existing {
+                    guard existing.scope == scope, existing.id == id.lowercased(), existing.bookmarkHash == Self.digest(bookmark),
+                          UUID(uuidString: existing.generation) != nil else { throw Failure.changed }
+                }
+                if let legacy {
+                    guard legacy.scope == scope, legacy.capture.id == id.lowercased(), legacy.bookmarkHash == Self.digest(bookmark) else { throw Failure.changed }
+                }
+                return try work(existing, legacy, fd)
+            }
+        }
+    }
+
+    private func matches(_ record: Record, policy: String, exclusions: [String]? = nil, rules: String?) -> Bool {
+        record.policy == policy && (exclusions == nil || record.exclusions == exclusions) &&
+            MobileFolderIgnoreRules.sameText(record.ignoreRules, rules)
+    }
+    private func canonical(_ excludedPaths: [String], _ ignoreRules: String?) throws -> ([String], String?) {
+        (try MobileFolderReader.canonicalExclusions(excludedPaths), try MobileFolderIgnoreRules(ignoreRules).text)
+    }
+    private func withRoot<T>(_ bookmark: Data, expected: String? = nil, continuity: String? = nil, path: String? = nil, work: (RustInventoryClient.Root) throws -> T) throws -> T {
+        try MobileFolderReader.access(bookmark) { fd in
+            let root = try RustInventoryClient.Root(fd: fd)
+            if let continuity, continuity != root.continuity { throw Failure.changed }
+            if expected != nil && (expected != root.identity || (path != nil && path != root.path)) {
+                guard let expected, root.continues(identity: expected, continuity: continuity, bookmark: bookmark) else { throw Failure.changed }
+                throw FolderReconnectFailure.remounted
+            }
+            let result = try work(root)
+            try Task.checkCancellation()
+            // Keep the security scope alive during Rust calls, and catch a
+            // rename/replacement before releasing the pinned descriptor.
+            try root.revalidate(fd: fd)
+            return result
+        }
+    }
+
+    private func internalPaths(_ root: RustInventoryClient.Root) throws -> [String] {
+        let prefix = root.path == "/" ? "/" : root.path + "/"
+        var paths: [String] = []
+        if let databaseDirectory {
+            try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+        }
+        for folder in [directory, NativeSymbolicLinks.registry, databaseDirectory].compactMap({ $0 }) {
+            // URL normalization can retain /var when the root descriptor
+            // reports /private/var. Compare physically opened directories.
+            let fd = open(folder.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            if fd < 0 {
+                guard folder != directory, errno == ENOENT else { throw Failure.storage }
+                continue
+            }
+            defer { close(fd) }
+            let path = try RustInventoryClient.Root(fd: fd).path
+            guard path != root.path else { throw Failure.invalid }
+            if path.hasPrefix(prefix) { paths.append(String(path.dropFirst(prefix.count))) }
+        }
+        return paths
+    }
+
+    private func makeRecord(_ scope: Scope, id: String, bookmark: Data, policy: String, generation: String,
+                            exclusions: [String], rules: String?, root: RustInventoryClient.Root) -> Record {
+        Record(scope: scope, bookmarkHash: Self.digest(bookmark), id: id.lowercased(), generation: generation.lowercased(),
+            policy: policy, exclusions: exclusions, ignoreRules: rules, rootIdentity: root.identity,
+            rootContinuity: root.continuity, rootPath: root.path, phase: "running")
+    }
+
+    private func start(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
+                       policy: String, resourceLimits: SyncResourceLimits?, resourceUsage: @escaping @Sendable (CommanderResourceUsage) -> Void,
+                       sourceCpuMeter: SyncSourceCpuMeter?, ignored: @escaping @Sendable (Int) -> Void,
+                       progress: @escaping @Sendable (Int, Int) -> Void) throws -> Capture {
+        guard UUID(uuidString: generation) != nil else { throw Failure.invalid }
+        let client = try requireClient()
+        let (exclusions, rules) = try canonical(excludedPaths, ignoreRules)
+        return try withRoot(bookmark) { root in
+            if policy != Self.backup, try !capabilities(fields: root.fields).strictCoverage {
+                throw RustInventoryTransportFailure.operation("strict_watcher_unavailable")
+            }
+            let pending = try record(scope, id: id, bookmark: bookmark, missing: true) { old, legacy, fd in
+                if let legacy {
+                    guard (legacy.capturePolicy ?? Self.legacy) == policy, (legacy.excludedPaths ?? []) == exclusions,
+                          MobileFolderIgnoreRules.sameText(legacy.ignoreRules, rules) else { throw Failure.changed }
+                }
+                if let old {
+                    if let continuity = old.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                    guard matches(old, policy: policy, exclusions: exclusions, rules: rules),
+                          old.rootIdentity == root.identity || (["retired", "reindex"].contains(old.phase) && root.continues(identity: old.rootIdentity, continuity: old.rootContinuity, bookmark: bookmark)) else { throw Failure.changed }
+                    if old.phase == "complete" { return old }
+                    // An exact prepared retry can resume sealing after loss of
+                    // the scan reply, but never expose its rows yet.
+                    if old.generation == generation.lowercased(), old.phase == "prepared" { return old }
+                    if old.phase != "retired" {
+                        try client.invalidateIfPresent(scope, generation: old.generation)
+                    }
+                }
+                let fresh = makeRecord(scope, id: id, bookmark: bookmark, policy: policy, generation: generation,
+                    exclusions: exclusions, rules: rules, root: root)
+                try NativeFileJournal.save(fresh, fd)
+                if legacy != nil {
+                    for filename in ["inventory.sqlite", "inventory.sqlite-wal", "inventory.sqlite-shm", "inventory.sqlite-journal"] {
+                        _ = unlinkat(fd, filename, 0)
+                    }
+                }
+                return fresh
+            }
+            if pending.phase != "running" {
+                return try capture(pending, status: client.requireStatus(scope, generation: pending.generation))
+            }
+            let privatePaths = try internalPaths(root).flatMap { try MobileFolderReader.canonicalExclusions([$0]) }
+            let all = Array(Set(exclusions + privatePaths)).sorted()
+            try client.scan(scope, generation: pending.generation, mode: policy == Self.backup ? "backup" : "strict",
+                root: root, exclusions: all, rules: rules, limits: resourceLimits, resourceUsage: resourceUsage,
+                sourceCpuMeter: sourceCpuMeter, ignored: ignored, progress: progress)
+            let status = try client.requireStatus(scope, generation: pending.generation)
+            guard status.coverage == (policy == Self.backup ? "provisional" : "prepared") else { throw Failure.changed }
+            try record(scope, id: id, bookmark: bookmark) { current, _, fd in
+                guard var current, current == pending else { throw Failure.changed }
+                current.phase = "prepared"; try NativeFileJournal.save(current, fd)
+            }
+            return try capture(pending, status: status)
+        }
+    }
+
+    /// A native caller must finish live authorization before calling sealBackup.
+    public func capture(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                        preparingGeneration: String? = nil, resourceLimits: SyncResourceLimits? = nil,
+                        resourceUsage: @escaping @Sendable (CommanderResourceUsage) -> Void = { _ in },
+                        sourceCpuMeter: SyncSourceCpuMeter? = nil, progress: @escaping @Sendable (Int) -> Void = { _ in }) throws -> Capture {
+        let policy = preparingGeneration == nil ? Self.legacy : Self.strict
+        let result = try start(scope, id: id, generation: preparingGeneration ?? UUID().uuidString, bookmark: bookmark,
+            excludedPaths: excludedPaths, ignoreRules: ignoreRules, policy: policy, resourceLimits: resourceLimits,
+            resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter, ignored: { _ in }, progress: { entries, _ in progress(entries) })
+        if preparingGeneration == nil {
+            try seal(scope, capture: result, bookmark: bookmark, policy: policy, resourceLimits: resourceLimits)
+        }
+        return result
+    }
+
+    public func prepareInline(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [],
+                              ignoreRules: String? = nil, resourceLimits: SyncResourceLimits? = nil,
+                              resourceUsage: @escaping @Sendable (CommanderResourceUsage) -> Void = { _ in },
+                              sourceCpuMeter: SyncSourceCpuMeter? = nil) throws -> Capture {
+        try start(scope, id: id, generation: generation, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules,
+            policy: Self.legacy, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter,
+            ignored: { _ in }, progress: { _, _ in })
+    }
+
+    public func sealInline(_ scope: Scope, capture: Capture, bookmark: Data, resourceLimits: SyncResourceLimits? = nil) throws {
+        try seal(scope, capture: capture, bookmark: bookmark, policy: Self.legacy, resourceLimits: resourceLimits)
+    }
+
+    public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                              resourceLimits: SyncResourceLimits? = nil, resourceUsage: @escaping @Sendable (CommanderResourceUsage) -> Void = { _ in },
+                              sourceCpuMeter: SyncSourceCpuMeter? = nil, ignored: @escaping @Sendable (Int) -> Void = { _ in },
+                              progress: @escaping @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
+        try start(scope, id: id, generation: generation, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules,
+            policy: Self.backup, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter,
+            ignored: ignored, progress: progress)
+    }
+
+    private func capture(_ record: Record, status: RustInventoryClient.Status) throws -> Capture {
+        guard status.generation == record.generation, status.mode == ([Self.backup, Self.stream].contains(record.policy) ? "backup" : "strict") else { throw Failure.changed }
+        if record.policy == Self.backup {
+            return Capture(id: record.id, generation: record.generation, totalEntries: status.entryCount,
+                coverage: status.gapCount == 0 ? "full" : "partial", consistency: "per-entry", totalSkipped: status.gapCount)
+        }
+        return Capture(id: record.id, generation: record.generation, totalEntries: status.entryCount)
+    }
+
+    private func seal(_ scope: Scope, capture: Capture, bookmark: Data, policy: String, resourceLimits: SyncResourceLimits?) throws {
+        let client = try requireClient()
+        try record(scope, id: capture.id, bookmark: bookmark) { current, _, fd in
+            guard var current, current.generation == capture.generation, current.policy == policy,
+                  ["prepared", "complete"].contains(current.phase) else { throw Failure.changed }
+            try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { root in
+                let existing = try client.requireStatus(scope, generation: current.generation)
+                guard try self.capture(current, status: existing) == capture else { throw Failure.changed }
+                if current.policy == Self.backup {
+                    guard existing.coverage == "provisional" else { throw Failure.changed }
+                } else if existing.coverage != "sealed" {
+                    try client.seal(scope, generation: current.generation, root: root, limits: resourceLimits)
+                }
+            }
+            try Task.checkCancellation()
+            current.phase = "complete"; try NativeFileJournal.save(current, fd)
+        }
+    }
+    public func sealBackup(_ scope: Scope, capture: Capture, bookmark: Data, strict: Bool = false,
+                           resourceLimits: SyncResourceLimits? = nil) throws {
+        try seal(scope, capture: capture, bookmark: bookmark, policy: strict ? Self.strict : Self.backup, resourceLimits: resourceLimits)
+    }
+
+    private func retire(_ scope: Scope, id: String, generation: String, bookmark: Data, policy: String? = nil,
+                        ignoreRules: String? = nil, checkRules: Bool = false) throws {
+        guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return }
+        let client = try requireClient()
+        try record(scope, id: id, bookmark: bookmark) { current, legacy, fd in
+            guard var current else {
+                guard legacy?.capture.generation == generation else { throw Failure.changed }
+                // Old rows cannot be consumed in the new store. Keep recovery
+                // metadata rather than deleting an unrelated or unknown job.
+                return
+            }
+            guard current.generation == generation, policy == nil || current.policy == policy,
+                  !checkRules || MobileFolderIgnoreRules.sameText(current.ignoreRules, ignoreRules) else { throw Failure.changed }
+            if current.phase == "retired" { return }
+            try client.invalidateIfPresent(scope, generation: generation)
+            current.phase = "retired"; try NativeFileJournal.save(current, fd)
+        }
+    }
+
+    public func abandonBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
+        try retire(scope, id: capture.id, generation: capture.generation, bookmark: bookmark, policy: Self.backup)
+    }
+    public func abandonStrict(_ scope: Scope, id: String, generation: String, bookmark: Data) throws {
+        try retire(scope, id: id, generation: generation, bookmark: bookmark, policy: Self.strict)
+    }
+    public func discard(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String? = nil) throws {
+        try retire(scope, id: capture.id, generation: capture.generation, bookmark: bookmark,
+            ignoreRules: try MobileFolderIgnoreRules(ignoreRules).text, checkRules: true)
+    }
+
+    public func backupStatus(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                             strict: Bool = false) throws -> BackupStatus? {
+        let (exclusions, rules) = try canonical(excludedPaths, ignoreRules)
+        let policy = strict ? Self.strict : Self.backup
+        guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return nil }
+        let client = try requireClient()
         try MobileFolderReader.checkAccess(bookmark: bookmark)
-        guard offset >= 0 else { throw Failure.invalid }
-        return try locked(scope, id: capture.id) { fd in
-            guard let record = try NativeFileJournal.read(fd, as: Record.self), record.complete, record.retired != true,
-                  record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text), offset < capture.totalEntries || (offset == 0 && capture.totalEntries == 0) else { throw Failure.changed }
-            try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
-            let db = try Database(directory: fd, create: false)
-            var entries: [MobileFolderReader.Entry] = [], bytes = 16_384, bounded = false
-            try db.rows(offset: offset) { ordinal, data in
-                guard ordinal == offset + entries.count, ordinal < capture.totalEntries else { throw Failure.storage }
-                if entries.count == limit || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
-                entries.append(try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)); bytes += data.count
+        return try record(scope, id: id, bookmark: bookmark) { current, legacy, fd in
+            guard let current else {
+                guard let legacy else { return nil }
+                guard legacy.capturePolicy == policy, (legacy.excludedPaths ?? []) == exclusions,
+                      MobileFolderIgnoreRules.sameText(legacy.ignoreRules, rules) else { throw Failure.changed }
+                return BackupStatus(capture: legacy.capture, state: "interrupted")
+            }
+            guard matches(current, policy: policy, exclusions: exclusions, rules: rules) else { throw Failure.changed }
+            if current.phase == "reindex" { return nil }
+            let remounted = try withRoot(bookmark) { root in
+                if let continuity = current.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                guard root.identity != current.rootIdentity || (current.rootPath != nil && current.rootPath != root.path) else { return false }
+                guard root.continues(identity: current.rootIdentity, continuity: current.rootContinuity, bookmark: bookmark) else { throw Failure.changed }
                 return true
+            }
+            if remounted {
+                if current.phase == "retired" {
+                    // An availability change cannot undo explicit abandonment.
+                    // Status may report its retained private counts, but cannot
+                    // turn it into a new automatic-capture admission.
+                    let status = try client.requireStatus(scope, generation: current.generation)
+                    return BackupStatus(capture: try capture(current, status: status), state: "interrupted", ignoredCount: status.ignoredCount)
+                }
+                // The exact authorized bookmark returned, on the same volume
+                // and root inode/birth. Old device IDs and paths are still
+                // invalid: retire its Rust snapshot before allocating another.
+                try client.invalidateIfPresent(scope, generation: current.generation)
+                var retired = current; retired.phase = "reindex"
+                try NativeFileJournal.save(retired, fd)
+                return nil
+            }
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
+                guard let status = try client.status(scope, generation: current.generation) else {
+                    return BackupStatus(capture: Capture(id: current.id, generation: current.generation, totalEntries: 0), state: "interrupted")
+                }
+                if current.phase != "retired", status.coverage == "invalidated" {
+                    var retired = current; retired.phase = "reindex"
+                    try NativeFileJournal.save(retired, fd)
+                    return nil
+                }
+                let readable = current.phase == "complete" && status.coverage == (strict ? "sealed" : "provisional")
+                return BackupStatus(capture: try capture(current, status: status), state: readable ? "complete" : "interrupted",
+                    ignoredCount: status.ignoredCount)
+            }
+        }
+    }
+
+    private func withReadableRecord<T>(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String?,
+                                       work: (Record, RustInventoryClient) throws -> T) throws -> T {
+        let client = try requireClient(), rules = try MobileFolderIgnoreRules(ignoreRules).text
+        return try record(scope, id: capture.id, bookmark: bookmark) { current, _, _ in
+            guard let current, current.phase == "complete", current.generation == capture.generation,
+                  current.policy != Self.stream, MobileFolderIgnoreRules.sameText(current.ignoreRules, rules) else { throw Failure.changed }
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
+                return try work(current, client)
+            }
+        }
+    }
+
+    private func readRecord<T>(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String?,
+                               work: (Record, RustInventoryClient, RustInventoryClient.Status) throws -> T) throws -> T {
+        try withReadableRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { current, client in
+            let status = try client.requireStatus(scope, generation: current.generation)
+            guard status.coverage == (current.policy == Self.backup ? "provisional" : "sealed"),
+                  try self.capture(current, status: status) == capture else { throw Failure.changed }
+            return try work(current, client, status)
+        }
+    }
+
+    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil,
+                     pageSize: Int? = nil) throws -> Page {
+        let limit = try Self.pageLimit(pageSize)
+        guard offset >= 0, offset < capture.totalEntries || (offset == 0 && capture.totalEntries == 0) else { throw Failure.changed }
+        return try withReadableRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { record, client in
+            let rules = try MobileFolderIgnoreRules(record.ignoreRules)
+            var entries: [MobileFolderReader.Entry] = [], bytes = 16_384
+            while entries.count < limit {
+                let at = offset + entries.count, want = min(512, limit - entries.count)
+                let (page, status) = try client.checkedPage(scope, generation: record.generation, offset: at, limit: want)
+                guard status.coverage == (record.policy == Self.backup ? "provisional" : "sealed"),
+                      try self.capture(record, status: status) == capture,
+                      page.totalEntries == capture.totalEntries,
+                      page.entries.count <= want, at + page.entries.count <= capture.totalEntries,
+                      page.nextOffset == (at + page.entries.count < capture.totalEntries ? at + page.entries.count : nil),
+                      !page.entries.isEmpty || capture.totalEntries == 0 else { throw Failure.changed }
+                for entry in page.entries {
+                    try RustInventoryClient.validate(entry, exclusions: record.exclusions, compiledRules: rules)
+                    bytes += try JSONEncoder().encode(entry).count + 1
+                    if bytes > Self.maximumPageBytes {
+                        guard !entries.isEmpty else { throw Failure.storage }
+                        return Page(capture: capture, offset: offset, entries: entries, nextOffset: offset + entries.count)
+                    }
+                    entries.append(entry)
+                }
+                if page.nextOffset == nil { break }
             }
             let next = offset + entries.count
-            guard next <= capture.totalEntries, !entries.isEmpty || capture.totalEntries == 0 else { throw Failure.storage }
-            guard bounded || next == capture.totalEntries else { throw Failure.storage }
-            return Page(capture: capture, offset: offset, entries: entries, nextOffset: next == capture.totalEntries ? nil : next)
+            return Page(capture: capture, offset: offset, entries: entries, nextOffset: next < capture.totalEntries ? next : nil)
         }
     }
 
-    /// Removing metadata never removes a source file. Reusing an evicted ID
-    /// produces a different generation, which every page request must pin.
-    public func discard(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String? = nil) throws {
-        try locked(scope, id: capture.id, removing: true) { fd in
-            guard var record = try NativeFileJournal.read(fd, as: Record.self), record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text) else { throw Failure.changed }
-            try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
-            record.retired = true
-            try NativeFileJournal.save(record, fd)
-            for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
-                if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
+    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil,
+                            pageSize: Int? = nil) throws -> SkippedPage {
+        let limit = try Self.pageLimit(pageSize)
+        guard let total = capture.totalSkipped, offset >= 0, offset < total || (offset == 0 && total == 0) else { throw Failure.invalid }
+        return try readRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { record, client, _ in
+            guard record.policy == Self.backup else { throw Failure.changed }
+            var rows: [Skipped] = [], bytes = 16_384
+            while rows.count < limit {
+                let at = offset + rows.count, want = min(512, limit - rows.count)
+                let page = try client.gaps(scope, generation: record.generation, offset: at, limit: want)
+                guard page.gapCount == total, page.gaps.count <= want, at + page.gaps.count <= total,
+                      page.nextOffset == (at + page.gaps.count < total ? at + page.gaps.count : nil),
+                      !page.gaps.isEmpty || total == 0 else { throw Failure.changed }
+                for gap in page.gaps {
+                    let row = Skipped(ordinal: offset + rows.count, gap: try gap.checked())
+                    bytes += try JSONEncoder().encode(row).count + 1
+                    if bytes > Self.maximumPageBytes {
+                        guard !rows.isEmpty else { throw Failure.storage }
+                        return SkippedPage(capture: capture, offset: offset, skipped: rows, nextOffset: offset + rows.count, totalSkipped: total)
+                    }
+                    rows.append(row)
+                }
+                if page.nextOffset == nil { break }
+            }
+            let next = offset + rows.count
+            return SkippedPage(capture: capture, offset: offset, skipped: rows, nextOffset: next < total ? next : nil, totalSkipped: total)
+        }
+    }
+
+    /// Compatibility for older native clients; the bounded whole-result
+    /// envelope reads the same strict Rust generation as modern paged scans.
+    public func legacyScan(_ scope: Scope, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> [MobileFolderReader.Entry] {
+        let id = UUID().uuidString.lowercased()
+        let capture = try capture(scope, id: id, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules)
+        defer { try? discard(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) }
+        return try readInline(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules)
+    }
+
+    public func readInline(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String? = nil) throws -> [MobileFolderReader.Entry] {
+        guard capture.totalEntries <= MobileFolderReader.maximumEntries else { throw Failure.limit }
+        var entries: [MobileFolderReader.Entry] = [], offset: Int? = 0, bytes = 0
+        while let next = offset {
+            let page = try read(scope, capture: capture, bookmark: bookmark, offset: next, ignoreRules: ignoreRules, pageSize: 512)
+            for entry in page.entries {
+                bytes += try JSONEncoder().encode(entry).count
+                guard bytes <= 4 * 1024 * 1024 else { throw Failure.limit }
+                entries.append(entry)
+            }
+            offset = page.nextOffset
+        }
+        return entries
+    }
+
+    private func emptyStream(_ record: Record, state: String) -> ChangesPage {
+        ChangesPage(id: record.id, generation: record.generation, state: state, revision: 0, changes: [], nextSequence: 0,
+            hasMore: false, totalEntries: 0, totalSkipped: 0)
+    }
+
+    public func beginStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?) throws -> ChangesPage {
+        let client = try requireClient(), (exclusions, rules) = try canonical(excludedPaths, ignoreRules)
+        let current = try withRoot(bookmark) { root in
+            try record(scope, id: id, bookmark: bookmark, missing: true) { existing, legacy, fd in
+                // A legacy stream’s consumed cursor cannot be spliced onto a
+                // different log. The caller must allocate a fresh capture ID.
+                guard legacy == nil else { throw Failure.changed }
+                if var existing {
+                    if let continuity = existing.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                    guard matches(existing, policy: Self.stream, exclusions: exclusions, rules: rules), existing.phase != "retired" else { throw Failure.changed }
+                    if existing.rootIdentity != root.identity || (existing.rootPath != nil && existing.rootPath != root.path) {
+                        guard root.continues(identity: existing.rootIdentity, continuity: existing.rootContinuity, bookmark: bookmark) else { throw Failure.changed }
+                        throw FolderReconnectFailure.remounted
+                    }
+                    if existing.phase != "complete" { existing.phase = "running"; try NativeFileJournal.save(existing, fd) }
+                    return existing
+                }
+                let fresh = makeRecord(scope, id: id, bookmark: bookmark, policy: Self.stream, generation: UUID().uuidString,
+                    exclusions: exclusions, rules: rules, root: root)
+                try NativeFileJournal.save(fresh, fd); return fresh
+            }
+        }
+        if try client.status(scope, generation: current.generation) == nil { return emptyStream(current, state: "running") }
+        return try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: 0)
+    }
+
+    public func streamChanges(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
+                              afterSequence: Int, pageSize: Int? = nil) throws -> ChangesPage {
+        guard afterSequence >= 0, afterSequence <= 9_007_199_254_740_991 else { throw Failure.invalid }
+        let limit = try Self.pageLimit(pageSize), (exclusions, rules) = try canonical(excludedPaths, ignoreRules)
+        let client = try requireClient()
+        return try record(scope, id: id, bookmark: bookmark) { current, _, _ in
+            guard let current, current.phase != "retired", matches(current, policy: Self.stream, exclusions: exclusions, rules: rules) else { throw Failure.changed }
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
+                guard try client.status(scope, generation: current.generation) != nil else {
+                    guard afterSequence == 0, current.phase != "complete" else { throw Failure.changed }
+                    return emptyStream(current, state: current.phase)
+                }
+                let page = try client.changes(scope, generation: current.generation, after: afterSequence, limit: min(limit, 512))
+                guard page.nextSequence == afterSequence + page.changes.count, page.nextSequence <= page.revision,
+                      page.hasMore == (page.nextSequence < page.revision),
+                      page.changes.count <= limit else { throw Failure.storage }
+                let compiledRules = try MobileFolderIgnoreRules(rules)
+                for (ordinal, change) in page.changes.enumerated() {
+                    guard change.sequence == afterSequence + ordinal + 1, change.revision == change.entry.version else { throw Failure.storage }
+                    try RustInventoryClient.validate(change.entry, exclusions: exclusions, compiledRules: compiledRules)
+                }
+                // An indexed Rust snapshot is still provisional. Only the
+                // host may publish completion after current live authorization.
+                let state = current.phase == "complete" ? "complete" : current.phase == "interrupted" ? "interrupted" : page.state == "complete" ? "indexed" : page.state
+                return ChangesPage(id: current.id, generation: current.generation, state: state, revision: page.revision,
+                    changes: page.changes, nextSequence: page.nextSequence, hasMore: page.hasMore,
+                    totalEntries: page.totalEntries, totalSkipped: page.totalSkipped)
             }
         }
     }
 
-    final class Database {
-        private var handle: OpaquePointer?
-        init(directory: Int32, create: Bool, writable: Bool = false) throws {
-            let file = openat(directory, "inventory.sqlite", O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK | (create ? O_CREAT | O_EXCL : 0), 0o600)
-            guard file >= 0 else { throw Failure.storage }; defer { close(file) }
-            let info = try MobileFolderReader.info(file)
-            guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1 else { throw Failure.storage }
-            // SQLite rejects /dev/fd aliases with NOFOLLOW. Resolve only this
-            // already-open private cache file; no caller supplies a path.
-            var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            guard fcntl(file, F_GETPATH, &path) == 0 else { throw Failure.storage }
-            let flags = ((create || writable) ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY) | SQLITE_OPEN_NOFOLLOW
-            guard sqlite3_open_v2(String(cString: path), &handle, flags, nil) == SQLITE_OK else {
-                sqlite3_close(handle); handle = nil; throw Failure.storage
+    public func finishStream(_ scope: Scope, id: String, bookmark: Data, state: String) throws {
+        guard ["indexed", "complete", "interrupted"].contains(state) else { throw Failure.invalid }
+        let client = try requireClient()
+        try record(scope, id: id, bookmark: bookmark) { current, _, fd in
+            guard var current, current.policy == Self.stream, current.phase != "retired" else { throw Failure.changed }
+            if state == "complete" {
+                try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
+                    let status = try client.requireStatus(scope, generation: current.generation)
+                    guard status.coverage == "provisional" else { throw Failure.changed }
+                }
             }
-            var current = stat()
-            guard lstat(path, &current) == 0, current.st_mode & S_IFMT == S_IFREG,
-                  current.st_dev == info.st_dev, current.st_ino == info.st_ino, current.st_nlink == 1 else {
-                sqlite3_close(handle); handle = nil; throw Failure.storage
+            if current.phase == "complete" && state == "interrupted" { return }
+            current.phase = state; try NativeFileJournal.save(current, fd)
+        }
+    }
+
+    public func runStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
+                          resourceLimits: SyncResourceLimits? = nil, resourceUsage: @escaping @Sendable (CommanderResourceUsage) -> Void = { _ in },
+                          sourceCpuMeter: SyncSourceCpuMeter? = nil, control: StreamControl? = nil,
+                          wake: @escaping @Sendable () -> Void, authorize: @escaping @Sendable () throws -> Void = {}) throws {
+        let client = try requireClient(), (exclusions, rules) = try canonical(excludedPaths, ignoreRules)
+        let current = try record(scope, id: id, bookmark: bookmark) { current, _, _ in
+            guard let current, matches(current, policy: Self.stream, exclusions: exclusions, rules: rules), current.phase == "running" else { throw Failure.changed }
+            return current
+        }
+        try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { root in
+            try authorize()
+            if try client.status(scope, generation: current.generation)?.coverage == "provisional" {
+                // Rust finished before a lost completion reply or a revoked
+                // host session. Reauthorization still gates publication.
+                return
             }
-            if create {
-                try execute("PRAGMA page_size=4096")
-                try execute("PRAGMA journal_mode=DELETE")
-                try execute("PRAGMA synchronous=FULL")
-                try execute("PRAGMA cache_size=-2048")
-                try execute("PRAGMA temp_store=FILE")
-                // Metadata streams to disk; SQLite's bounded cache controls RAM.
-                // Do not impose a fixed inventory-size ceiling on large homes.
-            }
-        }
-        deinit { sqlite3_close(handle) }
-        func execute(_ sql: String) throws {
-            guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw Failure.storage }
-        }
-        func insert(_ entry: MobileFolderReader.Entry, ordinal: Int) throws {
-            let data = try JSONEncoder().encode(entry)
-            guard data.count <= 65_536 else { throw Failure.limit }
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "INSERT INTO entries VALUES (?, ?, ?, ?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            guard sqlite3_bind_int64(statement, 1, Int64(ordinal)) == SQLITE_OK,
-                  sqlite3_bind_text(statement, 2, entry.path.precomposedStringWithCanonicalMapping.lowercased(), -1, copy) == SQLITE_OK,
-                  sqlite3_bind_text(statement, 3, entry.id, -1, copy) == SQLITE_OK,
-                  data.withUnsafeBytes({ sqlite3_bind_blob(statement, 4, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK else { throw Failure.storage }
-            guard sqlite3_step(statement) == SQLITE_DONE else {
-                guard sqlite3_errcode(handle) == SQLITE_CONSTRAINT else { throw Failure.storage }
-                // Determine the violated key without publishing SQLite error text.
-                var check: OpaquePointer?
-                guard sqlite3_prepare_v2(handle, "SELECT 1 FROM entries WHERE path = ?", -1, &check, nil) == SQLITE_OK else { throw Failure.storage }
-                defer { sqlite3_finalize(check) }
-                guard sqlite3_bind_text(check, 1, entry.path.precomposedStringWithCanonicalMapping.lowercased(), -1, copy) == SQLITE_OK else { throw Failure.storage }
-                let status = sqlite3_step(check)
-                guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
-                throw MobileFolderReader.ScanFailure(reason: status == SQLITE_ROW ? .pathCollision : .duplicateIdentity, path: entry.path)
-            }
-        }
-        func streamTotal() throws -> Int { try streamCount(column: "totalEntries") }
-        func streamSkipped() throws -> Int { try streamCount(column: "skipped") }
-        private func streamCount(column: String) throws -> Int {
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT " + column + " FROM stream_metadata", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_step(statement) == SQLITE_ROW else { throw Failure.storage }
-            return Int(sqlite3_column_int64(statement, 0))
-        }
-        func lastSequence() throws -> Int {
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT COALESCE(MAX(ordinal), 0) FROM changes", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_step(statement) == SQLITE_ROW else { throw Failure.storage }
-            return Int(sqlite3_column_int64(statement, 0))
-        }
-        @discardableResult
-        func insertChange(_ entry: MobileFolderReader.Entry, sequence: Int) throws -> Bool {
-            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            var current: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT revision FROM current_entries WHERE path = ?", -1, &current, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(current) }
-            guard sqlite3_bind_text(current, 1, entry.path, -1, copy) == SQLITE_OK else { throw Failure.storage }
-            let status = sqlite3_step(current)
-            guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
-            if status == SQLITE_ROW, let revision = sqlite3_column_text(current, 0), String(cString: revision) == entry.version { return false }
-            let data = try JSONEncoder().encode(entry)
-            guard data.count <= 65_536 else { throw Failure.limit }
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "INSERT INTO changes VALUES (?, ?, ?, ?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_bind_int64(statement, 1, Int64(sequence)) == SQLITE_OK,
-                  data.withUnsafeBytes({ sqlite3_bind_blob(statement, 2, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK,
-                  sqlite3_bind_text(statement, 3, entry.path, -1, copy) == SQLITE_OK,
-                  sqlite3_bind_text(statement, 4, entry.version, -1, copy) == SQLITE_OK,
-                  sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
-            var save: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "INSERT INTO current_entries VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET revision = excluded.revision", -1, &save, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(save) }
-            guard sqlite3_bind_text(save, 1, entry.path, -1, copy) == SQLITE_OK,
-                  sqlite3_bind_text(save, 2, entry.version, -1, copy) == SQLITE_OK,
-                  sqlite3_step(save) == SQLITE_DONE else { throw Failure.storage }
-            if status == SQLITE_DONE { try execute("UPDATE stream_metadata SET totalEntries = totalEntries + 1") }
-            return true
-        }
-        func insertSkipped(_ row: Skipped) throws {
-            let data = try JSONEncoder().encode(row)
-            guard data.count <= 65_536 else { throw Failure.limit }
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "INSERT INTO skipped VALUES (?, ?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            guard sqlite3_bind_int64(statement, 1, Int64(row.ordinal)) == SQLITE_OK,
-                  data.withUnsafeBytes({ sqlite3_bind_blob(statement, 2, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK,
-                  sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
-        }
-        func blocked(_ path: String) throws -> Bool {
-            let key = path.precomposedStringWithCanonicalMapping.lowercased(), copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT 1 FROM blocked_paths WHERE ? = path OR substr(?,1,length(path)+1) = path || '/' LIMIT 1", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            for i in Int32(1)...2 { guard sqlite3_bind_text(statement, i, key, -1, copy) == SQLITE_OK else { throw Failure.storage } }
-            let status = sqlite3_step(statement); guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
-            return status == SQLITE_ROW
-        }
-        func block(_ path: String) throws {
-            let key = path.precomposedStringWithCanonicalMapping.lowercased(), copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "INSERT OR IGNORE INTO blocked_paths VALUES (?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_bind_text(statement, 1, key, -1, copy) == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
-        }
-        func removeCollision(_ path: String, visit: (MobileFolderReader.Entry) throws -> Void) throws -> Int {
-            let key = path.precomposedStringWithCanonicalMapping.lowercased()
-            let predicate = "path = ? OR substr(path, 1, length(?) + 1) = ? || '/'"
-            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            func bind(_ statement: OpaquePointer?) throws {
-                for i in Int32(1)...3 { guard sqlite3_bind_text(statement, i, key, -1, copy) == SQLITE_OK else { throw Failure.storage } }
-            }
-            var read: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT data FROM entries WHERE " + predicate, -1, &read, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(read) }; try bind(read)
-            while true {
-                try Task.checkCancellation()
-                let status = sqlite3_step(read)
-                if status == SQLITE_DONE { break }
-                guard status == SQLITE_ROW, let blob = sqlite3_column_blob(read, 0) else { throw Failure.storage }
-                let size = Int(sqlite3_column_bytes(read, 0)); guard size > 0, size <= 65_536 else { throw Failure.storage }
-                try visit(JSONDecoder().decode(MobileFolderReader.Entry.self, from: Data(bytes: blob, count: size)))
-            }
-            var remove: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "DELETE FROM entries WHERE " + predicate, -1, &remove, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(remove) }; try bind(remove)
-            guard sqlite3_step(remove) == SQLITE_DONE else { throw Failure.storage }
-            return Int(sqlite3_changes(handle))
-        }
-        func rows(offset: Int, table: String = "entries", visit: (Int, Data) throws -> Bool) throws {
-            var statement: OpaquePointer?
-            guard ["entries", "skipped", "changes"].contains(table) else { throw Failure.invalid }
-            guard sqlite3_prepare_v2(handle, "SELECT ordinal, data FROM " + table + " WHERE ordinal >= ? ORDER BY ordinal", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_bind_int64(statement, 1, Int64(offset)) == SQLITE_OK else { throw Failure.storage }
-            while true {
-                try Task.checkCancellation()
-                let status = sqlite3_step(statement)
-                if status == SQLITE_DONE { return }
-                guard status == SQLITE_ROW, let blob = sqlite3_column_blob(statement, 1) else { throw Failure.storage }
-                let count = Int(sqlite3_column_bytes(statement, 1))
-                guard count > 0, count <= 65_536 else { throw Failure.storage }
-                if try !visit(Int(sqlite3_column_int64(statement, 0)), Data(bytes: blob, count: count)) { return }
-            }
+            let privatePaths = try internalPaths(root).flatMap { try MobileFolderReader.canonicalExclusions([$0]) }
+            let all = Array(Set(exclusions + privatePaths)).sorted()
+            try client.scan(scope, generation: current.generation, mode: "backup", root: root, exclusions: all,
+                rules: rules, limits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter,
+                ignored: { _ in }, progress: { _, _ in }, streaming: true, control: control,
+                wake: { try authorize(); wake() })
         }
     }
 }

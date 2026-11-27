@@ -1,9 +1,12 @@
+import { authorizeCsp } from '../../scripts/csp.mjs';
 import { defineHandler } from 'nitro/h3';
 import { useStorage } from 'nitro/storage';
 
 import { fallbackSocialMeta, injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
+import { withGatewayShellWork } from '../utils/environmentGateway';
+import { socialPreviewDesignFromUrl, socialPreviewDesignParams } from '../../app/utils/socialPreviewDesign';
 
 // The SPA shell for every non-API, non-static path. Nitro compiles this route
 // as MIDDLEWARE ahead of its built-in SPA renderer (rootDir/index.html), and
@@ -34,7 +37,10 @@ export default defineHandler(async (event) => {
 		// (uncapped parent walk on a comment or attachment). HEAD therefore bought
 		// that projection with no PNG to make the miss worth caching.
 		if (method === 'HEAD') return new Response(null, { headers: cardHeaders });
-		const path = normaliseSocialPreviewPath(requestUrl.searchParams.get('path'));
+		const target = requestUrl.searchParams.get('path') || '/';
+		const choice = { ...socialPreviewDesignFromUrl(target), ...socialPreviewDesignFromUrl(requestUrl) };
+		const designParams = socialPreviewDesignParams(choice);
+		const path = `${normaliseSocialPreviewPath(target)}${designParams.size ? `?${designParams}` : ''}`;
 		// lazy, for the same reason socialPreview.ts lazy-imports things/users/
 		// webpages/attachments: socialCard.ts pulls in the @resvg native binding and
 		// ~1.1 MB of embedded font source, measuring ~40ms and ~7 MiB of heap at
@@ -69,6 +75,10 @@ export default defineHandler(async (event) => {
 		}
 	}
 
+	const frameDenyHeaders: Record<string, string> = /^\/credentials\/import\/?$/.test(requestUrl.pathname)
+		? { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': authorizeCsp }
+		: {};
+
 	// assets:shell is the explicit server/assets mount (nitro.config.ts);
 	// assets:server and assets:client stay as fallbacks for older built layouts
 	// where nitro's default mount still resolved to one of those instead.
@@ -88,10 +98,14 @@ export default defineHandler(async (event) => {
 	// is best-effort: a data-plane hiccup must never take down page serving.
 	let body = html;
 	try {
-		// same endpoint context as the API catch-all, so shell meta and the SPA's
-		// own follow-up API reads resolve against the same data plane
-		const mongoEndpoint = await getRequestMongoEndpoint(event.req);
-		const social = await runWithMongoEndpoint(mongoEndpoint, () => resolveSocialMeta(event.req));
+		// Proxy followers keep their branch's shell and assets. Dynamic API/card/SEO
+		// reads go to the gateway; shell metadata remains safely generic here.
+		const social = await withGatewayShellWork(async () => {
+			// Hold admission through metadata DB work, while keeping the static
+			// shell and its response lifetime independent from pool drainage.
+			const mongoEndpoint = await getRequestMongoEndpoint(event.req);
+			return runWithMongoEndpoint(mongoEndpoint, () => resolveSocialMeta(event.req));
+		}, () => fallbackSocialMeta(event.req));
 		body = injectSocialMeta(html, renderSocialMetaHtml(social));
 	} catch (error) {
 		// serve the untouched shell — but audibly, never silently
@@ -101,6 +115,7 @@ export default defineHandler(async (event) => {
 
 	return new Response(body, {
 		headers: {
+			...frameDenyHeaders,
 			'Content-Type': 'text/html; charset=utf-8',
 			// marks shells served by this handler (vs the static /index.html copy) so
 			// the Vercel permalink routing stays curl-verifiable in production

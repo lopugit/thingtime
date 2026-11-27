@@ -3,7 +3,9 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
-const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmRunner = process.platform === 'win32'
+  ? { command: process.execPath, args: [path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')] }
+  : { command: 'npm', args: [] };
 
 const loadBcrypt = () => {
   try {
@@ -30,7 +32,7 @@ try {
 console.warn('[bcrypt] Native binding is missing or invalid; running bcrypt install script.');
 console.warn(`[bcrypt] ${initial.err?.message || initial.err}`);
 
-const install = spawnSync(npmBin, ['run', 'install'], {
+const install = spawnSync(npmRunner.command, [...npmRunner.args, 'run', 'install'], {
   cwd: packageDir,
   stdio: 'inherit'
 });

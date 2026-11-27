@@ -657,6 +657,13 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
                     connectionState = .offline
                     connectionMessage = "Connection interrupted. Retrying in \(Int(retryDelay)) seconds. Your code is still valid."
                 }
+                // The administrator's Automation switch decides whether the
+                // Watch keeps re-checking on its own; off checks once per open.
+                if let switchOrigin = URL(string: origin),
+                   !(await ThingtimeAutomationSwitches.shared.isEnabled("watch.pairing", origin: switchOrigin)) {
+                    connectionMessage = "Automatic checks are off. Approve the code, then tap Check approval."
+                    return
+                }
                 try await Task.sleep(for: .seconds(retryDelay))
             }
         } catch is CancellationError {

@@ -22,6 +22,8 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
   const user = actorUser(actor);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+  if (query.libraryArchive !== undefined && (actor.kind !== 'user' || user?.accountKind !== 'user' || user.temporary))
+    return json({ ok: false, error: 'The library archive filter requires a first-party owner' }, { status: 403, headers: cors });
 
   // throttled for everyone (searches hit indexes, but a query builder is still
   // an invitation to hammer) — authed users by id, anonymous by hashed IP,
@@ -64,7 +66,7 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
         // actor), but compose rather than clobber so an app actor ever
         // reaching it keeps its Vary: Origin
         { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL, Vary: [cors.Vary, ANON_CACHE_VARY].filter(Boolean).join(', ') } }
-      : { headers: cors }
+      : { headers: user ? { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } : cors }
   );
 };
 
@@ -96,6 +98,7 @@ export const loader = async ({ request }: { request: Request }) => {
     request,
     actor,
     {
+      libraryArchive: params.get('libraryArchive') ?? undefined,
       q: params.get('q') || undefined,
       thingtime: params.get('thingtime') || undefined,
       tags: params.get('tags') || undefined,
@@ -131,6 +134,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (actor instanceof Response) return actor;
   const body = await readJsonBodyWithCors(request, MAX_BODY_BYTES, actorCors(actor));
   return respond(request, actor, {
+    libraryArchive: body?.libraryArchive,
     q: body?.q,
     near: body?.near,
     radiusKm: body?.radiusKm,

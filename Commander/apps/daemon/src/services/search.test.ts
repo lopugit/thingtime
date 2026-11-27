@@ -23,7 +23,7 @@ const item = (id: string, title: string, keywords: string[] = []): SearchItem =>
   actions: [{ id: 'run', title: 'Run' }],
 });
 
-const createRustProcess = (): ChildProcessWithoutNullStreams => {
+const createRustProcess = (): ChildProcessWithoutNullStreams & { stdout: PassThrough } => {
   const child = Object.assign(new EventEmitter(), {
     stdin: new PassThrough(),
     stdout: new PassThrough(),
@@ -31,7 +31,7 @@ const createRustProcess = (): ChildProcessWithoutNullStreams => {
     exitCode: null as number | null,
     kill: vi.fn(() => true),
   });
-  return child as unknown as ChildProcessWithoutNullStreams;
+  return child as unknown as ChildProcessWithoutNullStreams & { stdout: PassThrough };
 };
 
 const searchableItems = [item('settings', 'Settings'), item('terminal', 'Terminal')];
@@ -106,6 +106,30 @@ describe('SearchService Rust failure fallback', () => {
 
     await expect(search).resolves.toMatchObject([{ id: 'settings' }]);
     service.close();
+  });
+
+  it('handles a broken stdin pipe for every pending search and keeps fallback usable', async () => {
+    const child = createRustProcess();
+    spawnMock.mockReturnValueOnce(child);
+    const service = new SearchService('/test/commander-search');
+    service.setItems(searchableItems);
+    try {
+      const first = service.search('settings');
+      const second = service.search('terminal');
+      const brokenPipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+      expect(() => child.stdin.emit('error', brokenPipe)).not.toThrow();
+      await expect(first).resolves.toMatchObject([{ id: 'settings' }]);
+      await expect(second).resolves.toMatchObject([{ id: 'terminal' }]);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+      // The failed child can still emit buffered events after it was retired.
+      child.stdin.emit('error', brokenPipe);
+      child.stdout.write('invalid old response\n');
+      child.emit('exit', 1, null);
+      await expect(service.search('settings')).resolves.toMatchObject([{ id: 'settings' }]);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      service.close();
+    }
   });
 
   it('times out an unresponsive Rust process, terminates it, and resolves through the fallback', async () => {

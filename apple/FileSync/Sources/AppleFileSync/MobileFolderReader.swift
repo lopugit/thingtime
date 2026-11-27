@@ -15,7 +15,7 @@ public struct MobileFolderReader {
         public let sha256: String
     }
     public struct Entry: Codable, Equatable, Sendable {
-        public init(path: String, id: String, version: String, kind: String, size: Int64, sha256: String?, fingerprint: Fingerprint?) { self.path = path; self.id = id; self.version = version; self.kind = kind; self.size = size; self.sha256 = sha256; self.fingerprint = fingerprint }
+        public init(path: String, id: String, version: String, kind: String, size: Int64, sha256: String?, fingerprint: Fingerprint?, symbolicLink: NativeSymbolicLink? = nil) { self.symbolicLink = symbolicLink; self.path = path; self.id = id; self.version = version; self.kind = kind; self.size = size; self.sha256 = sha256; self.fingerprint = fingerprint }
 
         public let path: String
         public let id: String
@@ -24,14 +24,25 @@ public struct MobileFolderReader {
         public let size: Int64
         public let sha256: String?
         public let fingerprint: Fingerprint?
-        enum CodingKeys: String, CodingKey { case path, id, version, kind, size, sha256, fingerprint }
+        public let symbolicLink: NativeSymbolicLink?
+        enum CodingKeys: String, CodingKey { case path, id, version, kind, size, sha256, fingerprint, symbolicLink }
         public func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(path, forKey: .path); try c.encode(id, forKey: .id); try c.encode(version, forKey: .version)
             try c.encode(kind, forKey: .kind); try c.encode(size, forKey: .size)
             if let sha256 { try c.encode(sha256, forKey: .sha256) } else { try c.encodeNil(forKey: .sha256) }
             try c.encodeIfPresent(fingerprint, forKey: .fingerprint)
+            try c.encodeIfPresent(symbolicLink, forKey: .symbolicLink)
         }
+    }
+    /// Current exact-path metadata only. This carries no content digest and
+    /// cannot by itself establish that bytes match an earlier inventory row.
+    public struct Stamp: Codable, Equatable, Sendable {
+        public let path: String
+        public let id: String
+        public let version: String
+        public let kind: String
+        public let size: Int64
     }
     public struct Chunk: Encodable, Sendable {
         public init(version: String, size: Int64, offset: Int64, data: String) { self.version = version; self.size = size; self.offset = offset; self.data = data }
@@ -42,6 +53,7 @@ public struct MobileFolderReader {
     public struct ScanFailure: Error, Encodable, Equatable, Sendable {
         public enum Reason: String, Codable, Sendable {
             case symlink, special, unreadable, changed, fifo, socket, device
+            case cloudOriginal = "cloud-original"
             case invalidPath = "invalid-path"
             case duplicateIdentity = "duplicate-identity"
             case pathCollision = "path-collision"
@@ -72,12 +84,11 @@ public struct MobileFolderReader {
             throw ScanFailure(reason: errno == ENOENT ? .changed : .unreadable, path: path)
         }
         let type = before.st_mode & S_IFMT
-        guard type != S_IFLNK else { throw ScanFailure(reason: .symlink, path: path) }
-        guard type == S_IFREG || type == S_IFDIR else {
+        guard type == S_IFREG || type == S_IFDIR || type == S_IFLNK else {
             let reason: ScanFailure.Reason = backup ? (type == S_IFIFO ? .fifo : type == S_IFSOCK ? .socket : type == S_IFCHR || type == S_IFBLK ? .device : .special) : .special
             throw ScanFailure(reason: reason, path: path)
         }
-        let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        let fd = openat(parent, name, O_RDONLY | (type == S_IFLNK ? O_SYMLINK : O_NOFOLLOW) | O_CLOEXEC | O_NONBLOCK)
         guard fd >= 0 else { throw ScanFailure(reason: errno == ENOENT || errno == ELOOP ? .changed : .unreadable, path: path) }
         do {
             guard try stamp(info(fd)) == stamp(before) else { throw ScanFailure(reason: .changed, path: path) }
@@ -95,6 +106,7 @@ public struct MobileFolderReader {
     }
     /// Same exact-path/descendant and NFC/lowercase contract as syncPathKey.
     /// Validate before accessing the grant; globs have no special meaning.
+    public static func validatePath(_ path: String) throws { _ = try components(path) }
     public static func canonicalExclusions(_ paths: [String]) throws -> [String] {
         guard paths.count <= 100, paths.reduce(0, { $0 + $1.utf8.count }) <= 16_384 else { throw Failure.invalid }
         let keys = try paths.map { path -> String in
@@ -126,7 +138,7 @@ public struct MobileFolderReader {
     static func openPath(_ root: Int32, path: String, directory: Bool = false) throws -> Int32 {
         let parts = try components(path); var fd = dup(root); guard fd >= 0 else { throw Failure.unavailable }
         for (i, name) in parts.enumerated() {
-            let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | ((i < parts.count - 1 || directory) ? O_DIRECTORY : 0))
+            let next = (i < parts.count - 1 || directory) ? openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | O_DIRECTORY) : (try NativeSymbolicLinks.openEntry(fd, name: name))!
             close(fd); guard next >= 0 else { throw Failure.unavailable }; fd = next
         }
         return fd
@@ -144,6 +156,7 @@ public struct MobileFolderReader {
                 try invalidName(); continue
             }
             if name == "." || name == ".." { continue }
+            if try NativeSymbolicLinks.checkedOwnedJournal(fd, name: name) { continue }
             try visit(name)
         }
     }
@@ -165,8 +178,10 @@ public struct MobileFolderReader {
             try Task.checkCancellation()
             try SyncResourceCpuContext.chunk {
                 let wanted = Int(min(Int64(buffer.count), size - offset, partSize - inPart))
+                try SyncScanContext.current?.pace(wanted)
                 let n = pread(fd, &buffer, wanted, off_t(offset))
                 guard n > 0 else { throw Failure.changed }
+                SyncScanContext.current?.record(n)
                 part.update(data: Data(buffer.prefix(n))); offset += Int64(n); inPart += Int64(n)
                 if inPart == partSize || offset == size { composite.update(data: Data(part.finalize())); part = SHA256(); inPart = 0 }
             }
@@ -191,8 +206,12 @@ public struct MobileFolderReader {
         if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
     }
     public static func checkAccess(bookmark: Data) throws { try access(bookmark) { _ in try Task.checkCancellation() } }
-    private static func entry(_ fd: Int32, path: String) throws -> Entry {
+    static func entry(_ fd: Int32, path: String) throws -> Entry {
         let before = try info(fd), type = before.st_mode & S_IFMT
+        if let bytes = try NativeSymbolicLinks.bytes(fd) {
+            return Entry(path: path, id: NativeSymbolicLinks.identity(before), version: stamp(before), kind: "file",
+                         size: Int64(bytes.count), sha256: nil, fingerprint: NativeSymbolicLinks.fingerprint(bytes), symbolicLink: try NativeSymbolicLink(target: bytes))
+        }
         guard type == S_IFDIR || type == S_IFREG else { throw Failure.invalid }
         guard before.st_size >= 0, before.st_size <= 9_007_199_254_740_991 else { throw Failure.limit }
         let digest = type == S_IFREG ? try fingerprint(fd, size: before.st_size) : nil
@@ -204,16 +223,36 @@ public struct MobileFolderReader {
     /// a directory listing. Absence is distinct from permission/provider errors.
     /// Both traversals must resolve the same ancestors and the same final object.
     public static func inspect(bookmark: Data, path: String) throws -> Entry? {
-        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false)
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false) { fd, path in
+            let entry = try entry(fd, path: path)
+            return (entry, entry.version)
+        }
     }
     /// Metadata-only directory inspection: a file replacement must never enter
     /// the regular-file fingerprint path, including between the two resolves.
     public static func inspectFolder(bookmark: Data, path: String) throws -> Entry? {
-        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: true)
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: true) { fd, path in
+            let entry = try entry(fd, path: path)
+            return (entry, entry.version)
+        }
     }
-    private static func inspectEntry(bookmark: Data, path: String, directoryOnly: Bool) throws -> Entry? {
+    /// Reuses the full inspector's two descriptor-relative traversals, but
+    /// performs no file read or fingerprint. Final symlinks are refused.
+    public static func inspectStamp(bookmark: Data, path: String) throws -> Stamp? {
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false) { fd, path in
+            let before = try info(fd), type = before.st_mode & S_IFMT
+            guard type == S_IFREG || type == S_IFDIR, before.st_size >= 0,
+                  before.st_size <= 9_007_199_254_740_991 else { throw Failure.invalid }
+            let version = stamp(before)
+            return (Stamp(path: path, id: "\(before.st_dev):\(before.st_ino)", version: version,
+                          kind: type == S_IFDIR ? "folder" : "file", size: type == S_IFDIR ? 0 : before.st_size), version)
+        }
+    }
+    private static func inspectEntry<T>(bookmark: Data, path: String, directoryOnly: Bool,
+                                        inspect: (Int32, String) throws -> (T, String)) throws -> T? {
         let parts = try components(path)
         return try access(bookmark) { root in
+            guard try !NativeSymbolicLinks.isWithinOwnedJournal(root, path: path) else { throw Failure.invalid }
             func resolve() throws -> (fd: Int32?, ancestors: [String]) {
                 var fd = dup(root), ancestors: [String] = []
                 guard fd >= 0 else { throw Failure.unavailable }
@@ -231,7 +270,7 @@ public struct MobileFolderReader {
                         guard try stamp(info(fd)) == before else { throw Failure.changed }
                         ancestors.append(before)
                         if !found { close(fd); return (nil, ancestors) }
-                        let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (index < parts.count - 1 || directoryOnly ? O_DIRECTORY : 0))
+                        let next = (index < parts.count - 1 || directoryOnly) ? openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | O_DIRECTORY) : (try NativeSymbolicLinks.openEntry(fd, name: name))!
                         guard next >= 0 else { throw Failure.unavailable }
                         close(fd); fd = next
                     }
@@ -239,14 +278,14 @@ public struct MobileFolderReader {
                 } catch { close(fd); throw error }
             }
             let first = try resolve(); defer { if let fd = first.fd { close(fd) } }
-            let value = try first.fd.map { try entry($0, path: path) }
+            let inspected = try first.fd.map { try inspect($0, path) }
             let second = try resolve(); defer { if let fd = second.fd { close(fd) } }
             guard first.ancestors == second.ancestors else { throw Failure.changed }
-            if let value, let original = first.fd, let current = second.fd {
-                guard try stamp(info(original)) == value.version, try stamp(info(current)) == value.version else { throw Failure.changed }
+            if let inspected, let original = first.fd, let current = second.fd {
+                guard try stamp(info(original)) == inspected.1, try stamp(info(current)) == inspected.1 else { throw Failure.changed }
             } else if first.fd != nil || second.fd != nil { throw Failure.changed }
             try Task.checkCancellation()
-            return value
+            return inspected?.0
         }
     }
     public static func scan(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> [Entry] {
@@ -288,9 +327,9 @@ public struct MobileFolderReader {
     /// The sink owns uniqueness checks and bounded, disk-backed retention. No
     /// provisional rows become a complete capture until the second pass succeeds.
     static func capture(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil, append: (Entry) throws -> Void,
-                        replay: ((Entry) throws -> Void) throws -> Void) throws {
+                        replay: ((Entry) throws -> Void) throws -> Void) throws -> String {
         let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
-        try access(bookmark) { root in
+        return try access(bookmark) { root in
             let initial = try stamp(info(root))
             func walk(_ parent: Int32, prefix: String) throws {
                 let before = try stamp(info(parent))
@@ -306,15 +345,26 @@ public struct MobileFolderReader {
                 guard try stamp(info(parent)) == before else { throw Failure.changed }
             }
             try walk(root, prefix: "")
-            try replay { row in
-                try Task.checkCancellation()
-                try scanAt(row.path) {
-                    let fd = try openPath(root, path: row.path); defer { close(fd) }
-                    guard try stamp(info(fd)) == row.version else { throw Failure.changed }
-                }
-            }
-            guard try stamp(info(root)) == initial else { throw Failure.changed }
+            try verifyCapture(root, initial: initial, replay: replay)
+            return initial
         }
+    }
+
+    static func verifyCapture(bookmark: Data, rootVersion: String,
+                              replay: ((Entry) throws -> Void) throws -> Void) throws {
+        try access(bookmark) { root in try verifyCapture(root, initial: rootVersion, replay: replay) }
+    }
+
+    private static func verifyCapture(_ root: Int32, initial: String, replay: ((Entry) throws -> Void) throws -> Void) throws {
+        guard try stamp(info(root)) == initial else { throw Failure.changed }
+        try replay { row in
+            try Task.checkCancellation()
+            try scanAt(row.path) {
+                let fd = try openPath(root, path: row.path); defer { close(fd) }
+                guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+            }
+        }
+        guard try stamp(info(root)) == initial else { throw Failure.changed }
     }
     public struct BackupGap: Codable, Equatable, Sendable {
         public enum Scope: String, Codable, Sendable { case entry, subtree, root }
@@ -391,8 +441,15 @@ public struct MobileFolderReader {
                               receive: (Data) throws -> Void) throws -> Int64 {
         guard offset >= 0, length > 0, length <= maximumStreamBytes else { throw Failure.invalid }
         return try access(bookmark) { root in
+            guard try !NativeSymbolicLinks.isWithinOwnedJournal(root, path: path) else { throw Failure.invalid }
             let fd = try openPath(root, path: path); defer { close(fd) }
             let before = try info(fd)
+            if let bytes = try NativeSymbolicLinks.bytes(fd) {
+                guard stamp(before) == version, offset <= bytes.count else { throw Failure.changed }
+                let count = min(length, bytes.count - Int(offset))
+                let selected = bytes.subdata(in: Int(offset)..<(Int(offset) + count))
+                guard count == length else { throw Failure.changed }; try receive(selected); return Int64(bytes.count)
+            }
             guard before.st_mode & S_IFMT == S_IFREG, stamp(before) == version,
                   offset <= before.st_size, Int64(length) <= before.st_size - offset else { throw Failure.changed }
             var buffer = [UInt8](repeating: 0, count: maximumReadBytes), sent = 0
@@ -413,8 +470,15 @@ public struct MobileFolderReader {
     public static func read(bookmark: Data, path: String, version: String, offset: Int64, length: Int) throws -> Chunk {
         guard offset >= 0, length > 0, length <= maximumReadBytes else { throw Failure.invalid }
         return try access(bookmark) { root in
+            guard try !NativeSymbolicLinks.isWithinOwnedJournal(root, path: path) else { throw Failure.invalid }
             let fd = try openPath(root, path: path); defer { close(fd) }
             let before = try info(fd)
+            if let bytes = try NativeSymbolicLinks.bytes(fd) {
+                guard stamp(before) == version, offset <= bytes.count else { throw Failure.changed }
+                let count = min(length, bytes.count - Int(offset))
+                let selected = bytes.subdata(in: Int(offset)..<(Int(offset) + count))
+                return Chunk(version: version, size: Int64(bytes.count), offset: offset, data: selected.base64EncodedString())
+            }
             guard before.st_mode & S_IFMT == S_IFREG, stamp(before) == version, offset <= before.st_size else { throw Failure.changed }
             var bytes = [UInt8](repeating: 0, count: Int(min(Int64(length), before.st_size - offset))), count = 0
             while count < bytes.count {

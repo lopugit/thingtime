@@ -1,6 +1,7 @@
 @testable import AppleFileSync
 import XCTest
 import CryptoKit
+import Security
 
 @MainActor
 final class MobileFolderTests: XCTestCase {
@@ -11,6 +12,23 @@ final class MobileFolderTests: XCTestCase {
         let scope = try FileSyncOwnerScope(ownerId: "folder-test-" + UUID().uuidString, url: URL(string: "https://thingtime.test")!)
         var data: Data?
         return (root, scope, MobileFolderStore(load: { _ in data }, save: { _, next in data = next }))
+    }
+    func testSourceLocationIsExactOwnerScopedMetadataAndNeverRelativeAuthority() throws {
+        let (root, owner, store) = try fixture()
+        let selected = root.appendingPathComponent("nested/Music library")
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        let grant = try store.add(owner, selected: selected)
+        XCTAssertEqual(grant.name, "Music library")
+        let location = try XCTUnwrap(store.sourcePath(owner, id: grant.id))
+        XCTAssertTrue(location.hasSuffix("/" + root.lastPathComponent + "/nested/Music library"))
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: location)[.systemFileNumber] as? NSNumber,
+                       try FileManager.default.attributesOfItem(atPath: selected.path)[.systemFileNumber] as? NSNumber)
+        let other = try FileSyncOwnerScope(ownerId: "other", url: owner.origin)
+        XCTAssertThrowsError(try store.sourcePath(other, id: grant.id))
+        XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: selected.path))
+        XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "../sibling"))
+        try FileManager.default.removeItem(at: selected)
+        XCTAssertNil(try store.sourcePath(owner, id: grant.id))
     }
     func testWriteApprovalIsSeparateBoundedAndClearedByReselection() throws {
         let (root, owner, store) = try fixture(), grant = try store.add(owner, selected: root)
@@ -43,6 +61,40 @@ final class MobileFolderTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: chunk.data), bytes.suffix(17)); XCTAssertEqual(chunk.version, entry.version)
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: entry.path, version: entry.version, offset: 0, length: 65_537))
     }
+    func testStampInspectionAvoidsWholeFileHashAndRejectsChangedOrUnsafePaths() throws {
+        let (root, owner, store) = try fixture()
+        let nested = root.appendingPathComponent("nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("large.bin")
+        XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: 8 * 1024 * 1024 * 1024)
+        try handle.close()
+        let grant = try store.add(owner, selected: root)
+        let started = Date()
+        let stamp = try XCTUnwrap(MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/large.bin"))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5, "A sparse 8 GiB file must not be read to make a metadata observation")
+        XCTAssertEqual(stamp.path, "nested/large.bin")
+        XCTAssertEqual(stamp.kind, "file")
+        XCTAssertEqual(stamp.size, 8 * 1024 * 1024 * 1024)
+        XCTAssertEqual(stamp.id, stamp.version.split(separator: ":").prefix(2).joined(separator: ":"))
+        let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(stamp)) as? [String: Any])
+        XCTAssertEqual(Set(fields.keys), ["path", "id", "version", "kind", "size"])
+        XCTAssertNil(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/missing"))
+        try handleReplacement(file)
+        let changed = try XCTUnwrap(MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/large.bin"))
+        XCTAssertNotEqual(changed.version, stamp.version)
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "link"))
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "link/child"))
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "../escape"))
+    }
+
+    private func handleReplacement(_ file: URL) throws {
+        try FileManager.default.removeItem(at: file)
+        try Data("changed".utf8).write(to: file)
+    }
     func testDirectoriesAndEmptyFilesStayInCompleteInventory() throws {
         let (root, scope, store) = try fixture()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("nested"), withIntermediateDirectories: true)
@@ -64,7 +116,7 @@ final class MobileFolderTests: XCTestCase {
             XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: row.path), row)
         }
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("unrelated-link"), withDestinationURL: root)
-        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertTrue(try MobileFolderReader.scan(bookmark: grant.bookmark).contains { $0.symbolicLink != nil })
         XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "nested/file.bin")?.size, 65_537)
         XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing"))
         XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing/child"))
@@ -103,7 +155,7 @@ final class MobileFolderTests: XCTestCase {
         try Data("changed".utf8).write(to: file)
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: "file", version: entry.version, offset: 0, length: 1))
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("link"), withDestinationURL: file)
-        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertTrue(try MobileFolderReader.scan(bookmark: grant.bookmark).contains { $0.symbolicLink != nil })
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: "link", version: entry.version, offset: 0, length: 1))
     }
     func testMissingFolderIsFailureNotAnEmptyScan() throws {
@@ -120,7 +172,45 @@ final class MobileFolderTests: XCTestCase {
         try store.remove(scope, id: a.id); XCTAssertEqual(try store.list(scope).count, 0); XCTAssertTrue(FileManager.default.fileExists(atPath: root.path))
         XCTAssertThrowsError(try store.grant(scope, id: a.id))
     }
+    func testPersistedReloadStaysScopedToAccountAndOrigin() throws {
+        let (root, scope, _) = try fixture()
+        var persisted: [String: Data] = [:]
+        func reopen() -> MobileFolderStore {
+            MobileFolderStore(load: { persisted[$0.key] }, save: { persisted[$0.key] = $1 })
+        }
+        let first = reopen(), grant = try first.add(scope, selected: root)
+        let reopened = reopen()
+        XCTAssertEqual(try reopened.grant(scope, id: grant.id).bookmark, grant.bookmark)
+        let otherOrigin = try FileSyncOwnerScope(ownerId: scope.ownerId, url: URL(string: "https://elsewhere.test")!)
+        XCTAssertTrue(try reopened.list(otherOrigin).isEmpty)
+        XCTAssertTrue(try reopened.list(FileSyncOwnerScope(ownerId: "other", url: scope.origin)).isEmpty)
+        try reopened.remove(scope, id: grant.id)
+        XCTAssertTrue(try reopen().list(scope).isEmpty)
+    }
     func testKeychainReloadStaysOnDeviceAndScopedToAccountAndOrigin() throws {
+        // Distinguish an unsigned simulator runner from a product persistence failure.
+        let probe: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.thingtime.folder-grants.test-capability",
+            kSecAttrAccount as String: UUID().uuidString,
+            kSecAttrSynchronizable as String: false,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: Data("probe".utf8)
+        ]
+        let status = SecItemAdd(probe as CFDictionary, nil)
+        defer {
+            if status == errSecSuccess {
+                let query = probe.filter { ![kSecValueData as String, kSecAttrAccessible as String].contains($0.key) }
+                SecItemDelete(query as CFDictionary)
+            }
+        }
+        #if targetEnvironment(simulator)
+        if status == errSecMissingEntitlement {
+            throw XCTSkip("Simulator runner has no Keychain entitlement (OSStatus \(status)); scoped persistence is covered separately. Run this integration check with a signed host.")
+        }
+        #endif
+        XCTAssertEqual(status, errSecSuccess, "Keychain capability probe failed: \(status)")
+        guard status == errSecSuccess else { return }
         let (root, scope, _) = try fixture(); let first = MobileFolderStore(), grant = try first.add(scope, selected: root)
         defer { try? first.remove(scope, id: grant.id) }
         let reopened = MobileFolderStore(); XCTAssertEqual(try reopened.grant(scope, id: grant.id).bookmark, grant.bookmark)

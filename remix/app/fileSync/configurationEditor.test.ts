@@ -3,15 +3,44 @@ import assert from 'node:assert/strict';
 import { newFileSyncConfiguration } from './configuration';
 import {
 	ConfigurationConflict,
+	cancelSyncEnrollmentRecovery,
+	canonicalDraftConfiguration,
+	claimSyncEnrollment,
 	configurationDraftKey,
 	persistConfigurationDraft,
+	persistConfigurationDrafts,
+	readConfigurationDrafts,
 	readConfigurationDraft,
 	readOwnedSyncFolder,
+	readPendingSyncEnrollment,
+	readSavedSyncEnrollment,
 	saveConfigurationDraft,
 	type ConfigurationDraft,
 	type ConfigurationEditorTransport
 } from './configurationEditor';
 const scope = { origin: 'https://thingtime.com', ownerId: 'owner', dataPlane: 'home', deviceId: 'device' };
+test('enrollment cancellation targets only the current background claim for the exact scope', () => {
+	const otherScope = { ...scope, origin: 'https://other.test' };
+	const background = new AbortController();
+	const other = new AbortController();
+	const releaseBackground = claimSyncEnrollment(scope, background);
+	const releaseOther = claimSyncEnrollment(otherScope, other);
+	assert.ok(releaseBackground && releaseOther);
+	try {
+		cancelSyncEnrollmentRecovery(scope);
+		assert.equal(background.signal.aborted, true);
+		assert.equal(other.signal.aborted, false);
+		assert.equal(claimSyncEnrollment(scope), null, 'the aborting claim still holds its scope');
+		releaseBackground();
+		const releaseForeground = claimSyncEnrollment(scope);
+		assert.ok(releaseForeground);
+		try {
+			releaseBackground();
+			cancelSyncEnrollmentRecovery(scope);
+			assert.equal(claimSyncEnrollment(scope), null, 'a stale release or recovery cancel cannot clear a foreground claim');
+		} finally { releaseForeground(); }
+	} finally { releaseBackground(); releaseOther(); }
+});
 const config = newFileSyncConfiguration({ name: 'Documents', deviceId: 'device', localRootId: 'root', remoteFolderId: 'cloud' });
 const fresh = (): ConfigurationDraft => ({ version: 1, id: 'connection', baseUpdatedAt: null, pending: true, configuration: config, exclusions: '' });
 const row = (configuration = config, updatedAt = '2026-10-17T00:00:01Z') => ({
@@ -83,6 +112,28 @@ test('persisted fixed identity recovers an accepted create with a lost reply wit
 	await saveConfigurationDraft(pending, scope, f.api);
 	assert.deepEqual(f.stats(), { creates: 1, updates: 0, verifies: 1 });
 });
+test('interrupted automatic setup preserves its exact cloud revision and cadence across reload', async () => {
+	const original = row(), api = fixture(original);
+	const pending = readConfigurationDraft(JSON.stringify({ ...fresh(), enrollment: { intervalMs: 900_000, savedRevision: original.updatedAt } }), scope.deviceId)!;
+	assert.equal(pending.enrollment?.intervalMs, 900_000);
+	assert.equal((await readPendingSyncEnrollment(pending, scope, api.api)).updatedAt, original.updatedAt);
+	assert.deepEqual(api.stats(), { creates: 0, updates: 0, verifies: 0 });
+	for (const changed of [row(config, '2026-10-17T00:00:02Z'), row({ ...config, name: 'Changed' }), null])
+		await assert.rejects(readPendingSyncEnrollment(pending, scope, fixture(changed).api), ConfigurationConflict);
+	api.switch();
+	await assert.rejects(readPendingSyncEnrollment(pending, scope, api.api), /identity changed/);
+	assert.throws(() => readConfigurationDraft(JSON.stringify({ ...pending, pending: false }), scope.deviceId), /automatic sync request/);
+});
+
+test('startup checks a lost save by fixed identity without writing or accepting a different policy', async () => {
+	const pending = { ...fresh(), enrollment: { intervalMs: 300_000 } };
+	const f = fixture();
+	assert.equal(await readSavedSyncEnrollment(pending, scope, f.api), null);
+	assert.deepEqual(f.stats(), { creates: 0, updates: 0, verifies: 0 });
+	assert.equal((await readSavedSyncEnrollment(pending, scope, fixture(row()).api))?.id, pending.id);
+	await assert.rejects(readSavedSyncEnrollment(pending, scope, fixture(row({ ...config, name: 'New settings' })).api), ConfigurationConflict);
+});
+
 test('accepted update with lost response recovers exact current state and never repeats mutation', async () => {
 	const original = row(),
 		f = fixture(original);
@@ -212,4 +263,37 @@ test('drafts reject corruption, cross-device replay and invalid pending payloads
 });
 test('only private owned cloud folders are offered', () => {
 	assert.throws(() => readOwnedSyncFolder({ id: 'cloud', author: { id: 'owner' }, acl: ['tt:all'], thingtime: ['folder'] }, 'owner'));
+});
+
+test('legacy draft migrates without losing pending identity or entered fields when another draft is added', () => {
+ let value: string | null = JSON.stringify(fresh());
+ const store = { getItem: () => value, setItem: (_key: string, next: string) => { value = next; }, removeItem: () => { value = null; } };
+ const legacy = value;
+ const drafts = readConfigurationDrafts(value, 'device');
+ assert.equal(value, legacy, 'read does not rewrite legacy bytes');
+ const second = { ...fresh(), id: 'second', pending: false, configuration: { ...config, name: 'Unfinished', remoteFolderId: '' }, exclusions: '../not valid yet' };
+ let raw = persistConfigurationDrafts(store, 'key', legacy, [...drafts, second]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh(), second]);
+ const edited = { ...second, configuration: { ...second.configuration, name: 'Edited second' } };
+ raw = persistConfigurationDrafts(store, 'key', raw, [drafts[0], edited]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh(), edited]);
+ raw = persistConfigurationDrafts(store, 'key', raw, [drafts[0]]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh()], 'saving/discarding second removes only second');
+ assert.equal(persistConfigurationDrafts(store, 'key', raw, []), null);
+});
+test('draft collection rejects mixed devices, duplicate IDs, damage and concurrent replacement without overwriting', () => {
+ const raw = JSON.stringify({ version: 2, drafts: [fresh()] });
+ assert.throws(() => readConfigurationDrafts(raw, 'another-device'));
+ assert.throws(() => readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [fresh(), fresh()] }), 'device'), /duplicate/);
+ assert.throws(() => readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [fresh(), { invalid: true }] }), 'device'));
+ assert.throws(() => readConfigurationDrafts('{', 'device'));
+ let writes = 0;
+ assert.throws(() => persistConfigurationDrafts({ getItem: () => raw, setItem: () => { writes++; }, removeItem: () => { writes++; } }, 'key', null, [fresh()]), /another tab/);
+ assert.equal(writes, 0);
+});
+test('incomplete resource field spelling survives draft collection reload without becoming a saved limit', () => {
+ const draft = { ...fresh(), pending: false, resourceDraft: { upload: '-', uploadUnit: 'Mbps' as const, download: '1.', downloadUnit: 'Kbps' as const, transferConcurrency: '', indexingConcurrency: '', cpuPercent: '101' } };
+ const restored = readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [draft] }), 'device');
+ assert.deepEqual(restored, [draft]);
+ assert.deepEqual(canonicalDraftConfiguration(restored[0]), config);
 });

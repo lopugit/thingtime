@@ -29,12 +29,206 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## One user-visible chat per task
+
+Original request (verbatim, 11 November 2026):
+
+> Can you find out which chat made all of these ??? :O And tell it not to and just use 1 chat for whatever it was doing? And to add this same instruction and example to AI_ALL.md please
+
+- Keep one existing user-visible chat for each task, including retries, recovery, release checks and completion monitoring. Resume that chat through supported continuation; never create or fork replacement chats, per-run chats or sidebar chats unless the user explicitly requests them. Retain and reuse the stable chat/task IDs. If creation has an uncertain outcome, inspect current state before retrying rather than creating a duplicate.
+- Bounded internal subagents may handle distinct work within the same chat when delegation is authorized; they must not create additional user-visible sidebar chats. Internal delegation does not reset retry budgets or task ownership.
+- This rule takes precedence over older five-minute retry and `/loop` defaults. Check whether the scheduler creates a new user-visible chat on each run before using it. If it cannot continue the existing chat, do not use it for task retries or monitoring. Where the runtime prohibits automations that track a specific task to completion, continue permitted work in the current chat; never substitute another scheduler or workaround.
+- If duplicates already exist, stop their duplicate work, preserve useful evidence and consolidate continuation into the original chat. Do not delete chat history or archive chats without authorization.
+- Example (11 November 2026): the “Add dismiss option to draft dialog” chat created the five-minute `finish-ios-draft-dismiss-release` automation, which produced repeated “Finish iOS draft dismiss release” chats; the user's screenshot showed eleven same-titled entries. The correct recovery is to stop the duplicate-producing automation and continue the release task in its original chat, preserving the existing history.
+
+## Get it done; report decisions after completion
+
+Original request (verbatim):
+
+> “Can you please add a global and thingtime local AI_ALL.md entry that AI agents should never come back to the user with questions, they should decide on what to do and what the user would want them to do, generally being the user would want them to "Get it done", and to never block work on a goal or task or tasks with questions to the user, but should work in a way where when the task/feature is complete they can send a report to the user will all the decisions and potential questions they may have for the user and assumptions they took in the task and then ask if the user wants those things changed or corrected please? Thank you.”
+
+- Default to "Get it done." Do not come back to the user with routine clarification or preference questions, or block a goal, task, subtask, or feature on those questions. Infer the intended outcome from the request, prior decisions, existing conventions, and available evidence; make reasonable decisions and carry the authorized work through implementation and verification.
+- Investigate uncertainty yourself, use supported tools and bounded recovery, and choose safe, reversible defaults where practical. Do not make the user select between reasonable implementation options, approve a routine plan, or answer questions the agent can resolve. Keep independent work moving when one path is unavailable.
+- Keep a concise record of material decisions, assumptions, tradeoffs, and potential questions while working. Defer optional questions until the task or feature is complete; do not use them as checkpoints or completion gates.
+- When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
+- This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
+
+## Private user applications stay in saved Things
+
+User guidance (verbatim):
+
+> “Yes please do it this way, we want all Thingtime features to be as abstracted and extensible as possible 🙌🙌🙌 please add this example and my exact words as guidance into AI_ALL please 🥰🥰🥰🥰🥰🥰🙌”
+
+- Map-marker example: the Mapbox SDK can mount an element, but a hardcoded
+  marker with icon/photo/label options is not a substitute for Builder
+  composition. Expose a reusable slot for a saved Component or editable block
+  template bound to each map point. Keep the SDK adapter responsible for map
+  positioning and lifecycle, and render the marker through the ordinary
+  Component resolver, data bindings, authorization and individually editable
+  blocks. Author the user's marker appearance as private saved Things. Apply
+  this reasoning to other SDK-backed surfaces and new features instead of
+  growing a separate collection of fixed native presentations.
+
+- Build user-requested applications, pages, dashboards, forms and workflows
+  through Thingtime's existing Builder and supported Things APIs first. Save
+  their Webpage, Component, Schema, Action and data Things in the intended
+  user's account with its intended private audience. A reusable user-authored
+  Component is still a saved Thing; reusability alone does not justify adding
+  its definition to the product source.
+- Do not commit, bundle, seed or register a private user's Builder Things,
+  Component definitions, application layouts, workflows, IDs or content in
+  Thingtime source, app suites, migrations, fixtures or generated artifacts.
+  Never convert a private application into a built-in product feature merely
+  to deliver that application. Synthetic, account-independent test fixtures
+  may exercise framework contracts, but must not reproduce the private app.
+- Before changing framework code, verify the deployed capabilities and trace
+  the existing composition, binding, Action and SDK integration paths. Record
+  the concrete missing reusable primitive and why existing functionality cannot
+  express the required behavior. Prefer extending the canonical composition
+  contract over adding application-specific branches or preset presentations.
+- Only fundamental, generally reusable framework capabilities belong in a
+  source PR: for example, a data binding, local-state operation, authorized
+  adapter or editable composition slot. Keep application-specific composition
+  and presentation in saved Things. For SDK-backed surfaces such as maps,
+  prefer a saved Component/template slot bound to each item's data over
+  hardcoded marker/card layouts; SDK ownership of a DOM element is not a reason
+  to bypass normal Builder rendering, dependency authorization or editing.
+- Verify both layers separately: test the framework independently with
+  synthetic inputs, then author and verify the intended private saved Things
+  through the platform, including nested editing, save and reload. A merged
+  framework PR does not deliver the user's saved application. Report source
+  changes and saved-Thing changes separately, and explicitly identify any
+  remaining composition limitation.
+
+## One Thingtime MCP with general-purpose capabilities
+
+Original request (verbatim, 5 November 2026):
+
+> Please update global AI_ALL and thingtime local AI_ALL that there should only be 1 thingtime MCP and all features should be added to that, no seperate mcp's should be built please ❤️
+>
+> And any feature should be added to the mcp in a general and as highly abstracted as possible, not in a feature specific way like the thingtime_reporting was done please ❤️
+>
+> Please add my instructions word for word and add anything you think of too ❤️
+
+- Maintain exactly one canonical Thingtime MCP integration and user-facing server identity, `thingtime`. Add all MCP-accessible Thingtime features to its shared implementation, registry and tool catalogue. Do not build, register, recommend or configure separate feature-specific Thingtime MCPs such as `thingtime_reporting`, including aliases that merely conceal a duplicate server.
+- Design additions at the highest useful reusable abstraction supported by the real requirements. Prefer general Things, schemas, relationships, discovery, reads, queries, projections, validated mutations, Actions and capability composition. Express reporting, task management and other domain workflows as data, schemas and composed Actions over those primitives rather than dedicated domain-specific servers or a growing tool for each feature, page or workflow.
+- Inspect and extend the existing primitives and canonical contracts first. Add a new general-purpose primitive only when existing composition cannot represent the needed behavior clearly, safely or efficiently; document that gap and how the new contract can serve other workflows. Keep tools typed, discoverable, understandable and composable. Do not hide feature-specific switches or business logic behind a nominally generic tool name, and do not replace the catalogue with an unrestricted execute-anything tool.
+- One MCP does not mean one undifferentiated permission. Preserve least-privilege scopes, account and origin selection, ACLs, independent authorization boundaries, confirmation policy, validation, secret redaction, idempotency, pagination and capability negotiation. Generalization must never introduce arbitrary database queries, code execution, filesystem access, URL fetching or unregistered API dispatch as a shortcut around those boundaries.
+- Keep local/device execution behind supported, narrowly scoped adapters that reuse canonical contracts and serve the same Thingtime integration. Do not introduce a separate MCP or feature-specific side channel merely to evade this rule. If a capability is unavailable in a selected host or origin, expose that limitation accurately and extend the supported common path instead of silently creating another integration or broadening access.
+- Treat existing specialized tools and duplicate registrations as migration work: consolidate their reusable behavior into the canonical integration, preserve required capabilities and saved user configuration, update callers and documentation, and provide deliberate compatibility/deprecation where needed. Do not abruptly delete working interfaces, reset credentials or expand a documentation-only task into an unrequested implementation migration.
+- Verify the resulting public tool catalogue and configured server inventory, not just names in source. Cover representative different workflows using the shared primitives, capability/version compatibility and authorization refusals. Connection or authentication failures must be repaired in the canonical integration rather than worked around by adding a second Thingtime MCP.
+
+## Discover every authorized reporting account
+
+- Use the single canonical `thingtime` MCP for both `@thingtime` and `@lopu`.
+  Enumerate all connected accounts with `list_thingtime_accounts`; do not stop
+  after the first account lacks a scope, workspace access or private-subspace
+  membership. Inspect each task-authorized candidate on `https://thingtime.com`
+  with its explicit `accountId` and `get_thingtime_profile`, verifying its live
+  owning user, origin and independent `agents.report` grant. A display name,
+  default account, cached account list or general Things scope is not proof.
+- Check the stable `externalTaskId` with `get_thingtime_agent_task` on each
+  eligible candidate before preparing anything. Prefer the existing binding's
+  verified owner and origin, including a refreshed connector ID for that same
+  owner. If no binding exists, select an authorized candidate only after
+  verifying the exact saved workspace ownership/ACLs, private Thingtime Agents
+  administration and Character membership required by the gateway. Membership
+  alone does not grant ownership of saved workspace Things or reporting access.
+- Verify the exact private subspace ID and stored slug through supported reads
+  before interpreting a permission refusal. Do not guess a slug from its display
+  name or infer a server defect from a request aimed at the wrong target.
+- An unavailable candidate is a per-account dependency; continue inspecting
+  other authorized candidates. Do not treat a refusal as permission to bypass
+  it: never silently move an existing task to another owner, create a duplicate
+  task under another account, broaden scopes/audiences, post as the public owner,
+  or create a replacement subspace/workspace. Preserve unresolved operations and
+  their original request IDs. Record safe per-account results and recover the
+  existing binding through the supported account-specific flow.
+- Both accounts should be independently connected through the canonical MCP in
+  each host that needs them. Multi-account support does not establish that both
+  are authenticated, scoped or eligible in this chat, another desktop instance,
+  or another agent's host. Use the registered host OAuth flow for a missing
+  authorized connection; preserve existing connections and account isolation.
+  After connecting, enumerate again, verify live profiles and perform an actual
+  saved Action write plus exact-record readback before claiming reporting works.
+  See `docs/agent-reporting.md` for selection and recovery details.
+
 ## Individually editable Thingtime blocks
 
+- Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.
+- Default display surfaces to the rendered presentation. Keep the data/Thingtime inspector as an explicit user-selected inspection or editing view; a tree of `type`, `text`, and other implementation fields is not the finished presentation. Reuse the canonical Component resolver, renderer and permission checks rather than hardcoding each embed. A reference does not grant access to its Component or dependencies; missing, invalid or inaccessible explicit render components must not silently select another renderer from the data type.
+- Verify the saved render component and content through exact-Thing readback, then check the rendered result and reload in every intended placement, including narrow sidebars and mobile. Preserve existing content, ownership, audiences, and individual block editing when repairing older Things; missing renderers or access must be reported accurately rather than claimed as working.
 - Build Thingtime pages and interfaces from individual, user-editable Thingtime blocks. Headings, text, inputs, buttons, images/icons, containers, lists, and each field inside a repeated card must be selectable and editable through normal Builder controls, including rearranging, styling, duplicating, and deleting them where applicable.
 - Do not package a whole page, form, dashboard, or multi-part card as one opaque Component, native block, or monolithic HTML template. Editing one large source definition is not a substitute for individual block editing. Reusable Components must expose their constituent blocks for editing; repeated content must expose an editable block template rather than freezing each rendered instance into hardcoded markup.
 - When a needed primitive, binding, repetition, or interaction is missing, extend the reusable Thingtime Builder/framework so ordinary users can compose and edit it. Keep native code limited to necessary device capabilities and data adapters; compose the visible interface with editable Thingtime blocks.
 - Verify this in the actual Builder: select and edit representative nested text, controls, icons, and repeated-card fields separately, save, reload, and confirm the live page still works. A single outer selection outline or editable JSON/HTML alone does not meet this requirement.
+
+## Agent credential and end-to-end authentication workflows
+
+Read [the credential runbook](docs/agent-credential-workflows.md) before provider
+setup, password delivery, OAuth or passkey work. It is the executable workflow
+reference; the live global credential authorization and tool boundaries remain
+authoritative.
+
+- Negotiate the selected origin and installed host's capabilities. Provider
+  configuration belongs in the admin integration vault, personal entries in
+  Password manager, OAuth grants in Connections, and passkeys in their supported
+  provider ceremony. Never store secret transport payloads in ordinary Things,
+  editable layouts, task notes, screenshots, traces or model arguments.
+- Use **Import provider credentials** or the write-only `credentials:import`
+  CLI (`api.credentials-import` 1.0.0). Select a file or protected stdin; never
+  pass a raw credential as a command argument. Open the printed approval URL in
+  the assigned authenticated browser, verify account/origin/environment/label,
+  format and exact replacement revision, and perform authorized routine approval
+  yourself through a supported tool. This does not bypass vault/device checks.
+- Google Web application JSON validates the exact Connections callback and
+  preserves other bundle scopes. Generic text/JSON imports need the consuming
+  integration's documented label and structure. Google Mail uses a separate
+  bundle. No universal provider compatibility is implied by accepting JSON.
+- On uncertain writes, keep the same operation identity and immutable bytes,
+  reconcile status/receipt before retrying, and never overwrite a new revision.
+  `TRANSFER_UNCONFIRMED` requires metadata/consumer verification; cancellation
+  after upload is not rollback. Save receipts prove vault persistence only.
+- Use supported AutoFill/scoped direct delivery from an authorized source on
+  any device; match the destination account and origin. Read the password/native
+  runbooks for the actual installed platform. Verify the resulting sign-in;
+  filled fields or copied values alone do not establish authentication.
+- OAuth acceptance includes provider consent, exact callback, requesting-client
+  account read and granted-scope action. Test separate accounts and independent
+  named grants without silently broadening scopes. Passkeys require RP/origin/
+  credential matching and any device presence; never extract private keys. TOTP
+  setup/code delivery is a distinct flow.
+- Keep retries bounded, preserve sessions and unrelated data, and report the
+  exact remaining human-only dependency after supported recovery. Record source,
+  synthetic, deployed, installed and live-provider evidence separately.
+
+## Compact, collapsible multi-section interfaces
+
+User guidance (12 November 2026):
+
+> “multi-section pages with config/settings and many UI parts should always have headings and minimal info and be collapsable/expandable please defaulted to collapsed please”
+
+- Treat compact progressive disclosure as a foundational layout rule. Give each
+  section a clear heading, a concise useful summary where needed, and an
+  accessible expand/collapse control. Start configuration, settings and other
+  multi-section device surfaces collapsed; preserve deliberate user choices
+  when the surface explicitly remembers them. Do not expand every section on
+  first render or mount expensive hidden content merely to populate summaries.
+- Keep the main browsing surface focused on its Things. Give substantial tools
+  such as LiDAR capture their own page, with clear navigation back. Use ordinary
+  Thing browser cards, selection and context menus for saved and pending items;
+  distinguish device-only storage from an explicit cloud save.
+- Put secondary actions in the relevant Thing or page context menu instead of
+  crowding breadcrumbs and headers. Keep setup beside or directly below its
+  device item, and hide setup once that device is already configured. Preserve
+  a keyboard- and touch-accessible menu trigger; right-click cannot be the only
+  way to reach an action.
+- Show the ten most recent location-log entries initially, newest first. Put an
+  inline **Show more** control immediately below the list to fetch the next page.
+  This is a presentation batch size, never a retention or total-history limit.
+- Compose headings, summaries, controls and repeated fields as individually
+  editable Builder blocks. Check collapsed, expanded, menu, loading, empty and
+  error states at desktop and mobile widths, including the bottom of the page.
 
 ## Power users: no arbitrary product limits
 
@@ -326,14 +520,25 @@ or authorization for new work.
   scripts/configuration for it during the task and document how to start,
   inspect, stop and clean it. Do not let a dev app replace or stop the user's
   installed signed app or its Node service.
-- After dev acceptance, stop and remove the dev app and generated dev-only
-  artifacts. Run required tests and the canonical signed build/install once,
-  then verify the installed copy and any signing-sensitive Node/XPC or TCC
-  operation there. Do not claim a security-gated feature complete based only
-  on an unsigned dev app; preserve the prior installed copy if final checks fail.
+- Use a specifically built, separate Thingtime Mac development app on this
+  machine for feature testing and ongoing development usage. Keep a verified
+  development build available for that usage; clean up only superseded builds
+  and task-owned temporary resources. If Node/XPC, TCC or another security
+  boundary requires signing, build and verify a signed development app with a
+  stable, distinct development identity and installed path. Check the real
+  protected operation there; unsigned acceptance does not prove that boundary.
+- Treat `~/Applications/Thingtime.app` as the stable production app. Rebuild or
+  reinstall it only when a new Mac feature merged into `main` makes a newer
+  version available. Verify the fetched `main` source, merged feature and
+  version/build against the installed app before using the canonical stable
+  build/install workflow. Never install an unmerged branch or worktree build
+  over it. Follow the development/production policy below for final delivery.
 
-- For user-visible native telemetry, verify the real installed app against an
-  independent operating-system reading on the user's machine. Exercise the
+- For user-visible native telemetry, verify the real running app against an
+  independent operating-system reading on the user's machine. For Thingtime
+  Mac development, use the separate development build installed for this
+  purpose; stable release acceptance remains a separate check after the
+  eligible `main` update. Exercise the
   full collector → local/remote transport → selected origin → rendered control
   path for the paired device and account, in every promised view. Record which
   fields have actual values and which macOS truly omits. Synthetic tests,
@@ -381,10 +586,9 @@ or authorization for new work.
   after source or base changes. A started run, queued merge, status comment,
   skipped matrix job or green warning-only check is not completion. Identify
   cancelled, pending, missing and failing checks accurately.
-- Primary-branch merges/pushes still require explicit repository-specific
-  authorization for the current action. Historical PR approval text never grants
-  it. After an authorized merge, correlate the merge SHA, deployed source, actual
-  alias and behavior; ancestry alone cannot prove a feature was newly shipped.
+- Merge authorized changes through the normal PR process after required checks
+  and reviews pass. After merge, correlate the merge SHA, deployed source,
+  actual alias and behavior; ancestry alone cannot prove a feature was shipped.
 
 ### Preserve evidence without turning old results into policy
 
@@ -413,18 +617,26 @@ or authorization for new work.
   unavailable. Use the supported origin-scoped discovery path, distinguish edge
   refusal from capability/authentication/membership failures, and continue
   independent work. Never spoof clients, copy browser credentials, change origins
-  or weaken network isolation to recover coordination.
+  or bypass authentication or credential controls to recover coordination.
 - Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
   testing in the Thingtime Mac app, installation, CLI claims and live viewing.
   Keep tasks, todos and progress as editable Things; the native adapter owns
-  device browser installations, claims and enforced network boundaries.
+  device browser installations, claims and separate task-owned browser processes
+  and profiles.
 - Scope a native task to its origin, database identity, owner and Thing ID.
   Claim separately for each concurrent agent; never reuse another claim's
-  handle or mutable browser profile. Read and preserve the effective policy.
+  handle or mutable browser profile. Use separate Chrome profiles/browser
+  processes and VMs where needed to isolate task execution; preserve independent
+  accounts, credentials, databases and mutable test data.
 - Full-app acceptance must cover independent data and authentication, rendered
-  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
-  backend network restrictions. A fixture, healthy API or build alone is not
-  evidence that the installed feature works.
+  desktop/mobile task controls, live viewing and cleanup. A fixture, healthy API
+  or build alone is not evidence that the installed feature works.
+- Do not require network sandboxing, network isolation, outbound deny rules,
+  IP allowlists or browser/backend network restrictions for AI-agent work.
+  Normal network access is allowed within the task's authorization. This rule
+  supersedes older network-sandbox requirements in local instructions, runbooks
+  and historical acceptance checklists. Keep Chromium/Electron's normal process
+  sandbox and all account, credential, permission and data safeguards enabled.
 - The live global credential policy remains authoritative: use the Thingtime
   password manager on the executing device through its supported interfaces.
 
@@ -480,6 +692,35 @@ fork once the owner decides. Write a note before a plan and a plan before a new
 (`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
 `TODO/claude-todo/README.md`) in the same change — those indexes are the entry
 points, not the individual files.
+
+### Everything is a Thing: shared actions and context menus
+
+- **Fundamental architecture rule:** build common actions on the unified Thing
+  model, shared context-menu system and canonical permission checks. A Thing's
+  kind, page, card renderer or browsing mode must not arbitrarily determine
+  whether a common Thing action exists. Extend the shared action contract and
+  its consumers instead of implementing separate copies for individual views.
+- **Archive example (owner guidance, 11 November 2026):** Archive belongs on
+  every Thing-backed context menu when the current user has the appropriate
+  permission, including posts, comments, apps, folders, Builder items and
+  ordinary Things. Adding Archive only to `/things`, or excluding `builderMode`,
+  does not deliver this feature. Everything is a Thing; the shared action must
+  follow the Thing wherever its context menu is presented.
+- Derive availability from the canonical action and permission contract for
+  the exact Thing, account and origin. Reauthorize on the server when executing;
+  a visible menu item never grants access. Preserve protected-system boundaries,
+  scoped-token restrictions, ownership and collaborator rules. A missing
+  adapter or unsupported surface is an implementation gap to resolve or report,
+  not permission to silently exclude that class of Things.
+- Keep the action's meaning, mutation path, feedback and state updates
+  consistent across consumers. For Archive, preserve content and relationships,
+  define its visibility semantics explicitly, and provide a discoverable
+  Archived/Restore path. Do not confuse archiving with deletion or file export.
+- Verify the shared contract and representative real consumers: post/feed and
+  detail menus, Builder app cards, folders and ordinary Things, on desktop and
+  mobile. Cover authorized and refused actions, refresh/reload and restoration.
+  A successful test of one page is not evidence that a shared feature works
+  everywhere; inspect the menu consumers and record any uncovered surface.
 
 ## Local development and worktrees
 
@@ -557,40 +798,60 @@ points, not the individual files.
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
-## Native app changes must be deployed on the development machine
+## Thingtime Mac development and production delivery
 
-- After any update that affects the Thingtime Mac app, Thingtime Recovery,
-  Commander, or another native app, rebuild every affected app from the final
-  changed source, reinstall it on the machine where development is being done,
-  and start it before handing the task back. This includes changes to bundled
-  UI/assets, dependencies, build settings, helpers and daemons. Local delivery
-  is part of completing the change; a commit, PR, CI build or cloud release
-  alone does not make the changed app ready for immediate testing and use.
-- Read the affected app's local instructions and use its canonical build,
-  test, signing and installation workflow. Run the required checks before
-  replacing the installed app; preserve the previous working installation if
-  the build or verification fails.
-- On macOS, install the verified runnable bundle into
-  `~/Applications/<AppName>.app`, creating `~/Applications/` if needed. Use
-  `ditto` or the app's equivalent installer to preserve the bundle and signature,
-  replace only that app, and retain its stable bundle/signing identity, settings,
-  user data and existing privacy permissions. Verify the installed signature
-  with `codesign --verify --deep --strict` and check its executable.
-- Quit the affected old app cleanly, reinstall, then launch the installed copy.
-  Restart affected helpers/daemons through their canonical lifecycle so they
-  also run the new build without duplicate processes. Preserve unsaved work;
-  do not force-quit an app with unsaved user data to complete deployment.
-- Confirm that the running executable comes from the installed location and
-  matches the rebuilt version. Open the changed app surface and perform the
-  relevant smoke check, including helper health where applicable. For native
-  targets that cannot run directly on the development host, install and launch
-  the rebuilt app in the local supported simulator or connected test device,
-  and state which target was verified.
-- Report the build-output path, installed path, running build and smoke-check
-  result. If local build, installation, launch or verification is blocked,
-  identify the exact blocker and remaining step; do not claim the app is locally
-  deployed or ready for use. Keep existing signing and explicit privacy-consent
-  requirements in force.
+- All Thingtime Mac development work, including bundled UI/assets,
+  dependencies, build settings, helpers and daemons, must be tested and used
+  on this machine through a specifically built, separate development app.
+  Use the canonical parallel development workflow; build the final changed
+  source, start that development app and exercise the affected surface before
+  handoff. A commit, PR or cloud build alone is not local acceptance.
+- Keep the development app's bundle identity, installed path, profile/user data,
+  database, ports, processes, helpers and LaunchAgents separate from the stable
+  `~/Applications/Thingtime.app` and its services. Preserve the stable app and
+  user data. Do not stop, replace or reinstall it as routine feature delivery.
+  Add durable parallel tooling when a required development lane is missing.
+- Keep the stable app connected to Production (`https://thingtime.com`)
+  unless the user explicitly requests a different stable-app connection.
+  Use the separate development app for local and preview test connections.
+- Use fast unsigned development builds where appropriate. When signing or a
+  privacy permission is required, use a stable, distinct development bundle
+  identifier, signing identity, entitlements and path; install the verified
+  development bundle under its own name in `~/Applications/`. Verify its
+  signature with `codesign --verify --deep --strict`, executable path, permission
+  preflights and real protected operations after rebuilding. Never reuse the
+  production app identity or migrate its data to make development tests pass.
+  Explicit user presence and privacy-consent requirements remain in force.
+- Keep a verified development build available for testing and ongoing usage.
+  Stop obsolete task-owned processes and remove superseded generated artifacts
+  without removing the active development build, user state or live work.
+- Rebuild/reinstall the stable `~/Applications/Thingtime.app` only when a new Mac
+  feature merged into `main` makes a newer version available. Before replacing
+  it, fetch and verify the canonical `main`, identify the merged feature and
+  candidate source SHA, and compare candidate version/build with the installed
+  app. Build stable releases from verified `main` source; never use unmerged
+  feature-branch/worktree changes or treat a newer timestamp alone as a release.
+  This installation condition grants no permission to merge or push `main`.
+- For an eligible stable update, run canonical verification, signing and
+  installation checks before replacement; preserve the known-good app on
+  failure. Use `ditto` or the canonical installer to preserve signatures and
+  bundle contents. Quit the old app cleanly, retain its settings and user data,
+  restart only affected services through their canonical lifecycle, and launch
+  the installed copy. Verify its signature, running executable, version/build
+  and relevant smoke checks, including signing-sensitive operations. Never
+  force-quit unsaved work or change privacy grants without required consent.
+- Report development build/output and installed paths, source revision, running
+  build, smoke-check evidence and remaining limitations. Distinguish development
+  acceptance from stable release acceptance. Report an ineligible stable update
+  as intentionally deferred; do not replace the stable app to close a task.
+- Thingtime Recovery, Commander and other native apps retain their existing
+  local-delivery requirement: rebuild affected apps from final changed source,
+  run their canonical tests/signing workflow, install verified bundles under
+  their own names in `~/Applications/`, launch and verify the installed copies
+  before handoff. Preserve known-good installations and user data on failure.
+  For targets that cannot run on this Mac, use the supported simulator or
+  connected test device and report the exact verified target. This requirement
+  never authorizes replacing the stable Thingtime app with development work.
 
 ## Commander macOS distribution signing
 
@@ -608,6 +869,28 @@ points, not the individual files.
 
 - Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
 
+### Seamless inline loading
+
+- Use one subtle inline loading icon, animation, or progress bar beside the
+  affected control or content region. Never stack or repeat visible loading
+  messages for the same operation, or replace a usable screen with loading
+  text, a blocking spinner, or a skeleton.
+- Keep existing content, search results, input, focus, and scroll position
+  usable during same-account background refreshes. On a true cold start,
+  reserve the content's layout and show only the single inline indicator;
+  do not flash empty-result messages before loading finishes. Clear protected
+  content immediately when its account, origin, authorization, or lock state
+  changes.
+- Give the indicator an accessible status label and appropriate busy semantics
+  without duplicate screen-reader announcements. Respect reduced motion, avoid
+  flicker and layout shifts, and replace a failed or stalled load with one
+  clear inline error and a working retry action.
+- Apply this across pages, extensions, popups, dialogs, cards, lists, and
+  controls. Verify cold start, cached refresh, searching while loading, empty,
+  error/retry, and identity changes before declaring the flow complete.
+
+### Rendered interaction verification
+
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
   area the PR touches, and add a line there whenever a new bug class is fixed
@@ -616,11 +899,11 @@ points, not the individual files.
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
-- Optimistic rendering at all times (UI house rule): never flash a loading
-  screen, spinner, or skeleton when prior or cached state exists. Render the
+- Optimistic rendering at all times (UI house rule): never replace prior or
+  cached content with a loading screen, blocking spinner, or skeleton. Render the
   last-known value instantly from cache/local state and refetch in the
   background, reconciling (and reverting on failure) when fresh data lands.
-  Only show a loading state on a true cold start with nothing to show. Use the
+  Use the single inline indicator above for refreshes and true cold starts. Use the
   synchronous `~/hooks/localCache` tier (localStorage, keys `tt-<domain>`) for
   anything that gates first paint; the async localforage `thingtime` blob
   cannot seed the first render. Examples: the account switcher paints its
@@ -675,18 +958,29 @@ points, not the individual files.
 
 ## GitHub push and PR publishing
 
-- Product feature, fix, docs and chore PRs target `develop`. Protected
-  controller-only changes use the canonical `github-actions` branch and its
-  own runbook/contracts; do not route those through a missing product build.
-  Stacked branch → branch PRs keep their parent feature branch as base. Target
-  `main` only when the user explicitly authorizes that exact PR against `main`
-  (for example a `develop` → `main` promotion PR). Opening a promotion is not
-  permission to merge it or update the remote primary branch.
-- For a PR being maintained in the current task, correct an unintended `main`
-  base to `develop` (`gh pr edit <n> --base develop`) unless it is an authorized
-  promotion. Do not retarget unrelated PRs during a read-only history review.
-  GitHub refuses some native-stack base changes; report those rather than
-  forcing them.
+- Base new feature worktrees on freshly fetched `origin/main`. Create a
+  distinct `codex/<task-slug>` branch and verify the starting SHA and clean
+  worktree before editing.
+- Open all Thingtime PRs against `main`. For a PR owned by the current task,
+  correct an unintended base only after checking the resulting diff against
+  `main`; preserve explicitly requested bases and unrelated PRs.
+- Agents have standing authorization to merge their authorized Thingtime PRs
+  into `main` through GitHub's normal PR process. Verify the exact head, base,
+  scope, required checks and reviews, and follow any task-specific hold. Use the
+  repository's supported merge queue or auto-merge where appropriate. Verify the
+  actual merge and record the merge SHA. Direct pushes or other direct ref
+  updates to `main` still require explicit authorization.
+- When user-requested feature work reaches a verified completed state, merge
+  its PR into `main` as a required completion step, even when the user did not
+  write "please merge into main when complete." Complete the normal PR process,
+  required checks and reviews, and verify the actual merge before reporting the
+  feature complete. An explicit task-specific instruction to keep work local,
+  stop at review, use another integration branch, or hold the merge takes
+  precedence. If merging is genuinely blocked, preserve the branch and PR,
+  report the exact remaining blocker, and do not claim full delivery.
+- The deployed CI controller on `github-actions` remains a separate runtime
+  surface. Inspect it before changing CI and distinguish merging source into
+  `main` from updating the deployed controller.
 - The repository may not have a configured Git remote in a cloud checkout. The
   canonical repository URL from `package.json` is
   `https://github.com/lopugit/thingtime.git`.
@@ -731,13 +1025,17 @@ points, not the individual files.
 
   This entry point also repairs missing pnpm links in fresh worktrees before
   ESLint starts.
-- Use `corepack pnpm --dir remix run typecheck` for raw TypeScript results and
-  `corepack pnpm --dir remix run typecheck:ratchet` for the tracked comparison.
-  The ratchet is warning-only, including increases: read its diagnostics rather
-  than treating exit 0 as a clean typecheck. Compare with the current base and
-  baseline file, fix errors introduced by the change, and report unrelated
-  failures precisely. Never raise a baseline merely to hide a regression or
-  reuse historical error counts without rerunning the check.
+- Run `corepack pnpm --dir remix run typecheck` and
+  `corepack pnpm --dir remix run typecheck:ratchet`. The tracked TypeScript
+  error baseline is zero; the ratchet is a failing gate, not warning-only.
+  Fix diagnostics rather than raising the baseline, suppressing errors,
+  excluding source or weakening compiler/lint settings. Baseline updates may
+  only preserve or lower the count and must reject compiler failures.
+- Run the full Remix lint command before delivery as well as focused checks.
+  ESLint errors fail; warnings currently have no numeric budget. Do not claim
+  zero warnings, formatting coverage or stronger compiler strictness from a
+  passing error gate. See `docs/static-analysis-baselines.md` for commands,
+  audit evidence, coverage limits and follow-up priorities.
 - Use the package manager already used by the workspace being changed. For
   Remix checks, prefer `pnpm --dir remix ...`. Avoid lockfile changes unless
   dependency changes are intentional.

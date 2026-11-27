@@ -39,7 +39,7 @@ export function assertBuiltBatchManifest(manifest, origin) {
 	assert.equal(manifest.schemaVersion, 1);
 	assert.equal(manifest.origin, origin);
 	assert.equal(manifest.features?.['api.file-sync-batches']?.version, '1.2.0');
-	assert.equal(manifest.features?.['api.attachment-content']?.version, '1.17.0');
+	assert.equal(manifest.features?.['api.attachment-content']?.version, '1.17.2');
 	assert.ok(
 		manifest.operations?.some(
 			(op) => op.feature === 'api.file-sync-batches' && op.path === ENDPOINT && op.methods.length === 1 && op.methods[0] === 'POST'

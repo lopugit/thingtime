@@ -1,3 +1,4 @@
+import { ContentExecutionBoundary, useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { Badge, Box, Button, Center, Flex, Input, Select, Text, Textarea } from '@chakra-ui/react';
 import { ArrowLeft, Link as LinkIcon } from 'lucide-react';
@@ -206,8 +207,10 @@ const LivePane = ({
   confirm?: TtActionConfirmHandler;
   onUnowned?: TtActionUnownedHandler;
 }) => {
+  const held = source.entry.executionHeld === true;
+  interactive = interactive && !held;
   const { argValues } = useComponentArgValues(source.entry.crystal, values);
-  const live = useThingSource({ source: binding, cacheId: source.id, argValues, interactive });
+  const live = useThingSource({ source: binding, cacheId: source.id, argValues, interactive, executionHeld: held });
   const scope = React.useMemo(() => ({ ...argValues, ...live.scope }), [argValues, live.scope]);
   const background = source.previewBg && isSafeCssText(source.previewBg) ? source.previewBg : 'var(--tt-surface, #fafafb)';
   const status = live.scope.state;
@@ -257,7 +260,7 @@ const LivePane = ({
         </Flex>
       )}
       <Box background={background} width="100%" minWidth={0} data-testid="component-live" data-trust={interactive ? 'live' : 'inert'}>
-        <LiveTemplate confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
+        <LiveTemplate executionHeld={held} confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
       </Box>
     </Flex>
   );
@@ -522,7 +525,8 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   );
   const isOwner = trust === 'owner';
   const seeded = trust === 'seeded';
-  const interactive = isOwner || seeded;
+  const executionHeld = useContentExecutionHeld(active?.entry.executionHeld);
+  const interactive = !executionHeld && (isOwner || seeded);
   const suite = suiteByKey(suiteKey);
   const suggestions = React.useMemo(
     () => (suite && active?.componentKey ? suiteSourcesFor(suite, active.componentKey) : []),
@@ -908,7 +912,8 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                 </Text>
               )}
               <WebpageRuntimeProvider
-                onInstall={seeded ? onInstall : undefined}
+                enabled={!executionHeld}
+                onInstall={!executionHeld && seeded ? onInstall : undefined}
                 pageId={active.id}
                 pageKey={null}
                 source={isOwner ? 'user' : seeded ? 'system' : null}
@@ -943,6 +948,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                 padding={{ base: 4, md: 8 }}
                 data-testid="component-preview"
               >
+                <ContentExecutionBoundary held={executionHeld}>
                 <Box maxWidth="100%" sx={{ '& > *': { maxWidth: '100%' } }}>
                   {isChakraThingNode(resolved) ? (
                     <ChakraThingRenderer node={resolved as ChakraThingNode} />
@@ -950,6 +956,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                     <HtmlThingRenderer node={resolved as HtmlThingNode} />
                   )}
                 </Box>
+                </ContentExecutionBoundary>
               </Center>
             </Flex>
 

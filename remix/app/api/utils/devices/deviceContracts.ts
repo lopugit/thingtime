@@ -1,3 +1,4 @@
+import type {DeviceDescriptorPatch} from './deviceDescriptorPatch';
 import type { DeviceCommandInputByKind, DeviceCommandStatus, DeviceConnectorSnapshot, DeviceDescriptor, DeviceStateSnapshot } from './deviceCore';
 import type { PublicDevice } from './devices';
 import type { NodeDeviceCommand, PublicDeviceApproval, PublicDeviceCommand } from './deviceCommands';
@@ -43,6 +44,7 @@ export type DevicePairingClaimResponse =
 	  };
 
 export type DeviceNodeStateRequest = {
+	descriptorPatch?: DeviceDescriptorPatch;
 	capabilities?: string[];
 	revision: number;
 	state: DeviceStateSnapshot;

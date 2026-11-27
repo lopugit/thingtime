@@ -1,4 +1,5 @@
 import React from 'react';
+import { AccountBackupWorkspace } from './BackupWorkspace';
 import { parseBackupCoverageDescriptor, readBackupCoveragePage, type BackupCoverageDescriptor } from '~/fileSync/backupCoverage.client';
 import type { NativeSkippedPage } from '~/fileSync/nativeInventory';
 import type { SyncScope } from '~/fileSync/reconcile';
@@ -13,7 +14,7 @@ export function BackupCoverageViewer(props: Props) {
 	const parsed = React.useMemo(() => {
 		try { return parseBackupCoverageDescriptor(props.descriptor); } catch { return null; }
 	}, [props.descriptor]);
-	return <CoverageSession key={`${props.scopeKey}:${parsed?.inventory.id}:${parsed?.inventory.generation}`} {...props} parsed={parsed} />;
+	return <><CoverageSession key={`${props.scopeKey}:${parsed?.inventory.id}:${parsed?.inventory.generation}`} {...props} parsed={parsed} />{parsed && typeof window !== 'undefined' && parsed.scope.origin === window.location.origin ? <AccountBackupWorkspace ownerId={parsed.scope.ownerId} /> : null}</>;
 }
 function CoverageSession({ scopeKey, parsed, currentScope, accountTransport, read = readBackupCoveragePage }: Props & { parsed: BackupCoverageDescriptor | null }) {
 	const [page, setPage] = React.useState<NativeSkippedPage | null>(), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');

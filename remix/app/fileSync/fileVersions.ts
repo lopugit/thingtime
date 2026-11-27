@@ -1,3 +1,5 @@
+import { selectedDesktopApiOrigin } from '../utils/electronBridge';
+import { sameSymbolicLink } from './symbolicLink';
 import { timelineScopeKey, type TimelineEvent, type TimelineScope } from '../timeline/contract';
 import { CLOUD_FILE_ADAPTER, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
 import { equalContentFingerprints } from './contentFingerprint';
@@ -24,7 +26,7 @@ export function timelineFileVersion(event: TimelineEvent, side: 'before' | 'afte
 /** Include framing and size: this is a hash of part hashes, not a whole-file SHA256. */
 export function fileContentId(file: CloudFile): string {
 	const { size, fingerprint: f } = parseCloudFile(file).content;
-	return `${f.algorithm}:${size}:${f.partSizeBytes}:${f.partCount}:${f.sha256}`;
+	return `${file.symbolicLink ? 'posix-symlink-v1:' : ''}${f.algorithm}:${size}:${f.partSizeBytes}:${f.partCount}:${f.sha256}`;
 }
 
 export function fileRestoreCommand(current: CloudFile, version: CloudFile, operationId: string): CloudFileCommit {
@@ -37,7 +39,8 @@ export function fileRestoreCommand(current: CloudFile, version: CloudFile, opera
 		folderId: current.folderId,
 		trashed: false,
 		attachmentId: version.content.attachmentId,
-		contentVersion: version.content.version
+		contentVersion: version.content.version,
+		...(version.symbolicLink ? { symbolicLink: version.symbolicLink } : {})
 	});
 }
 
@@ -48,7 +51,7 @@ export function parseFileRestoreCommand(value: unknown, version: CloudFile): Clo
 		command.expectedRevision === null ||
 		command.trashed ||
 		command.attachmentId !== version.content.attachmentId ||
-		command.contentVersion !== version.content.version
+		command.contentVersion !== version.content.version || !sameSymbolicLink(command.symbolicLink, version.symbolicLink)
 	)
 		throw Error('Saved restore does not match this version.');
 	return command;
@@ -57,6 +60,12 @@ export function parseFileRestoreCommand(value: unknown, version: CloudFile): Clo
 export function fileRestoreKey(scope: TimelineScope, version: CloudFile): string {
 	if (scope.dataPlane !== 'home') throw Error('File versions require home storage.');
 	return `tt-file-restore:${timelineScopeKey(scope)}:${version.id}:${version.revision}`;
+}
+
+/** Desktop History is rendered locally, but file restores target its selected account API. */
+export function desktopFileRestoreScope(scope: TimelineScope, info: { contentOrigin?: string | null; apiOrigin?: string | null }): TimelineScope | null {
+	const apiOrigin = selectedDesktopApiOrigin(scope.apiOrigin, info);
+	return apiOrigin ? { ...scope, apiOrigin } : null;
 }
 
 async function fileOperationEventId(ownerId: string, id: string, operationId: string, kind: 'commit' | 'retain'): Promise<string> {
@@ -79,7 +88,7 @@ export async function checkFileRestoreReceipt(value: unknown, command: CloudFile
 		file.revision === command.expectedRevision ||
 		file.content.attachmentId !== command.attachmentId ||
 		file.content.version !== command.contentVersion ||
-		file.content.size !== version.content.size ||
+		file.content.size !== version.content.size || !sameSymbolicLink(file.symbolicLink, version.symbolicLink) ||
 		!equalContentFingerprints(file.content.fingerprint, version.content.fingerprint)
 	)
 		throw Error('Restore receipt does not match the requested version.');

@@ -318,7 +318,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 										onChange={(event) => setSteps((prior) => prior.map((entry, i) => (i === index ? { ...emptyStep(event.target.value), values: entry.values } : entry)))}
 										value={row.op}
 									>
-										{ACTION_STEP_OPS.filter((op) => op !== 'return' && op !== 'http.request').map((op) => (
+										{ACTION_STEP_OPS.filter((op) => op !== 'return' && op !== 'http.request' && op !== 'things.ensure').map((op) => (
 											<option key={op} value={op}>
 												{op}
 											</option>

@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '../schemas/builderThing';
 import { validateThingtimeCrystal } from '../schemas/registry';
 import { collectTransfer } from '../utils/thingTransfer/collect';
 import { parseTransfer, serializeTransfer, validateTransfer, type TransferThing } from '../utils/thingTransfer/format';
@@ -53,10 +54,11 @@ export async function prepareDraft(content: unknown, root?: string) {
   if (supplied.things.length > DRAFT_LIMITS.things || supplied.files.length || supplied.links?.length) fail('Drafts allow at most 32 supplied Things and no external assets');
   inspect(supplied);
   const normalized = supplied.things.map((thing) => {
-    if (thing.thingtime.length !== 1 || !['component','webpage'].includes(thing.thingtime[0])) fail('Drafts support component and webpage Things only');
+    const contentKinds = thing.thingtime.filter(kind => kind !== BUILDER_THING_KIND);
+    if (contentKinds.length !== 1 || !['component','webpage'].includes(contentKinds[0])) fail('Drafts support component and webpage Things only');
     const checked = validateThingtimeCrystal(thing.thingtime, thing.crystal);
     if (checked.ok === false) return fail(checked.error);
-    return { ...thing, crystal: checked.crystal } as TransferThing;
+    return { ...thing, thingtime: checked.thingtime, crystal: checked.crystal } as TransferThing;
   });
   const byId = new Map(normalized.map(thing => [thing.id, thing]));
   const components: Record<string, TransferThing> = Object.create(null);

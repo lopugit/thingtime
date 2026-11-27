@@ -4,7 +4,7 @@ const net = require('node:net');
 const os = require('node:os');
 const readline = require('node:readline');
 const { BrowserDriver } = require('./browser-driver.cjs');
-const { startApplication, stopApplication } = require('./application.cjs');
+const { startApplication, stopApplication, requireFixtureIsolation } = require('./application.cjs');
 
 const driver = new BrowserDriver();
 const networkMode = process.env.THINGTIME_NETWORK_MODE || 'isolated';
@@ -36,8 +36,10 @@ async function preflight() {
 async function dispatch(method, params = {}) {
   if (method === 'preflight') return preflight();
   if (method === 'launch') {
-    await preflight();
-    const application = await startApplication(process.env.THINGTIME_AGENT_SESSION);
+    const proof = await preflight();
+    requireFixtureIsolation(params.fixtureUsername, params.applicationOrigin, proof);
+    if (params.applicationOrigin !== undefined && networkMode !== 'isolated') throw new Error('Desktop acceptance requires isolated networking.');
+    const application = await startApplication(process.env.THINGTIME_AGENT_SESSION, params.applicationOrigin, params.fixtureUsername);
     const descriptor = JSON.parse(await fs.readFile('/opt/thingtime-browser/browser.json', 'utf8'));
     const result = await driver.launch({ executable: descriptor.executable, root: '/home/pwuser', build: descriptor });
     if (application) await driver.call('navigate', { pageId: result.tabs[0].id, url: application.origin }, { navigationTimeoutMs: 60000 });

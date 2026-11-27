@@ -20,3 +20,12 @@ export const characterSelectionAllowed = (principal: any, target: any): boolean 
   return !own && principal.accountKind !== 'service' && principal.meta?.temporary !== true &&
     !!character && !character.disabled && character.ownerId === String(principal._id);
 };
+
+// The optional public handle is also used in ACLs and profile path segments.
+// Keep it unambiguous without imposing an arbitrary character-count ceiling.
+export function normalizeCharacterUsername(value: unknown): string | null {
+  if (value === undefined || (typeof value === 'string' && !value.trim())) return '';
+  if (typeof value !== 'string') return null;
+  const username = value.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9._-]*$/.test(username) ? username : null;
+}

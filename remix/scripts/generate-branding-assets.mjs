@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 // Deterministic branding asset generator for the /branding page.
 //
-// Renders the shared voxel matrices (app/components/Branding/logoMatrix.ts —
+// Renders the shared logo registry (app/components/Branding/logoVariants.ts —
 // node 24 strips the types on import) into committed static files under
-// remix/public/branding/, so every logo variant exists as real PNG/SVG URLs
-// that Google Images can index and people can grab without the exporter:
-//   generated/<variant>/thingtime-<variant>-<w>x<h>.png  (+ one scalable .svg)
-//   presskit/thingtime-<name>-<w>x<h>.png                (marketing suite)
-// plus a manifest the page reads: app/components/Branding/brandingAssets.generated.json
+// remix/public/branding/, so every logo cut exists as real PNG/SVG URLs that
+// Google Images can index and people can grab without the exporter:
+//   generated/<cut>/thingtime-<cut>-<w>x<h>.png           transparent
+//   generated/<cut>/thingtime-<cut>-light-<w>x<h>.png     on white
+//   generated/<cut>/thingtime-<cut>-dark-<w>x<h>.png      on ink
+//   (+ one scalable .svg per background)
+//   presskit/thingtime-<name>-<w>x<h>.png                 marketing suite:
+//                                                         every format × logo × background
+//   imagery/thingtime-<format>-<logo>-<backdrop>-<pattern>-<w>x<h>.png
+//                                                         the curated generative set
+//                                                         (brandImagery.ts)
+// plus the manifests the page reads, beside the registry in app/components/Branding/.
 //
-// Zero native deps: pixels are composed in raw RGBA buffers and encoded as PNG
+// Zero native deps: pixels are composed in raw buffers and encoded as PNG
 // through node's zlib. Output is byte-stable run to run (no timestamps, seeded
 // PRNG) so re-running produces no git churn.
 
@@ -21,51 +28,39 @@ import { fileURLToPath } from 'node:url';
 import {
   LOGO_FULL_MATRIX,
   LOGO_ICON_MATRIX,
+  LOGO_STACKED_MATRIX,
   LOGO_THEMES,
-  buildLogoSvg,
   logoMatrixToCells,
   resolveLogoColour,
   trimLogoCells
 } from '../app/components/Branding/logoMatrix.ts';
+import {
+  BRAND_LOGO_VARIANTS,
+  BRAND_SURFACES,
+  backdropPadding,
+  brandPngUrl,
+  brandSvgUrl,
+  buildVariantSvg,
+  logoPixels,
+  seededRandom
+} from '../app/components/Branding/logoVariants.ts';
+import { BRAND_IMAGERY, brandImageryUrl } from '../app/components/Branding/brandImagery.ts';
+import { buildBrandScene } from '../app/components/Branding/brandScenes.ts';
 import { RAINBOW_PALETTE } from '../app/theme/tokens.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_BRANDING = path.join(HERE, '..', 'public', 'branding');
 const GENERATED_DIR = path.join(PUBLIC_BRANDING, 'generated');
 const PRESSKIT_DIR = path.join(PUBLIC_BRANDING, 'presskit');
+const IMAGERY_DIR = path.join(PUBLIC_BRANDING, 'imagery');
 const MANIFEST_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingAssets.generated.json');
+const SURFACES_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingSurfaces.generated.json');
+const IMAGERY_PATH = path.join(HERE, '..', 'app', 'components', 'Branding', 'brandingImagery.generated.json');
 
 // The requested ready-made ladder: 10px thumbnails up to 10k wall prints.
 const SIZES = [10, 16, 32, 50, 64, 100, 128, 200, 256, 500, 512, 1000, 1024, 2000, 2048, 4096, 5000, 8192, 10000];
 
 const INK = '#16161a';
-
-const VARIANTS = [
-  {
-    slug: 'logo',
-    name: 'Wordmark',
-    matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.default
-  },
-  {
-    slug: 'icon',
-    name: 'Icon',
-    matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.default
-  },
-  {
-    slug: 'logo-pink',
-    name: 'Wordmark · Pink',
-    matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.pink
-  },
-  {
-    slug: 'icon-pink',
-    name: 'Icon · Pink',
-    matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.pink
-  }
-];
 
 // ---------------------------------------------------------------------------
 // Colours
@@ -289,21 +284,13 @@ const renderCells = (cells, colourMap, outW, outH) => {
 // ---------------------------------------------------------------------------
 // Press-kit composition helpers
 
-const mulberry32 = (seed) => () => {
-  seed |= 0;
-  seed = (seed + 0x6d2b79f5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-
 // Extended accent dots from docs/design/DESIGN_LANGUAGE.md (the confetti set).
-const CONFETTI_COLOURS = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa3b1', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'].map(parseColour);
+const CONFETTI_COLOURS = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa9dd', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', '#ff69b4'].map(parseColour);
 
 const RAINBOW_STOPS = RAINBOW_PALETTE.map(parseColour);
 
 const scatterConfetti = (canvas, { seed, count, minSize, maxSize, avoid }) => {
-  const rand = mulberry32(seed);
+  const rand = seededRandom(seed);
   for (let i = 0; i < count; i += 1) {
     const size = Math.round(minSize + rand() * (maxSize - minSize));
     const x = Math.round(rand() * (canvas.w - size));
@@ -330,130 +317,320 @@ const rainbowBar = (canvas, height) => {
 };
 
 // ---------------------------------------------------------------------------
-// Build
+// Logo ladder renderer. A voxel logo scaled to N rows is mostly long runs of
+// identical rows, so each distinct row is rendered once and the image is kept
+// as (unique rows, row → index). That makes a 10000×10000 file cheap to build
+// and lets the encoder below emit repeats as all-zero "Up" filter rows.
 
-const wordmarkCells = trimLogoCells(logoMatrixToCells(LOGO_FULL_MATRIX), LOGO_THEMES.default);
-const iconCells = trimLogoCells(logoMatrixToCells(LOGO_ICON_MATRIX), LOGO_THEMES.default);
+const renderLogoRows = (grid, outW, outH, backdrop) => {
+  const rowCount = grid.length;
+  const colCount = Math.max(0, ...grid.map((row) => row.length));
+  const xMap = coverageMap(outW, colCount);
+  const yMap = coverageMap(outH, rowCount);
+  const bySpans = new Map();
+  const byContent = new Map();
+  const rows = [];
+  const rowOf = new Int32Array(outH);
+  for (let y = 0; y < outH; y += 1) {
+    const ySpans = yMap[y];
+    const spanKey = ySpans.map(([cell, weight]) => `${cell}:${weight}`).join('|');
+    let id = bySpans.get(spanKey);
+    if (id === undefined) {
+      const line = Buffer.alloc(outW * 4);
+      for (let x = 0; x < outW; x += 1) {
+        const xSpans = xMap[x];
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let a = 0;
+        for (const [cy, wy] of ySpans) {
+          const colourRow = grid[cy];
+          for (const [cx, wx] of xSpans) {
+            const c = colourRow[cx];
+            if (!c || c[3] === 0) continue;
+            const weight = wy * wx * (c[3] / 255);
+            r += c[0] * weight;
+            g += c[1] * weight;
+            b += c[2] * weight;
+            a += weight;
+          }
+        }
+        const idx = x * 4;
+        if (backdrop) {
+          // exact area average of the artwork over the solid backdrop
+          const rest = 1 - Math.min(1, a);
+          line[idx] = Math.round(r + backdrop[0] * rest);
+          line[idx + 1] = Math.round(g + backdrop[1] * rest);
+          line[idx + 2] = Math.round(b + backdrop[2] * rest);
+          line[idx + 3] = 255;
+        } else if (a > 0) {
+          line[idx] = Math.round(r / a);
+          line[idx + 1] = Math.round(g / a);
+          line[idx + 2] = Math.round(b / a);
+          line[idx + 3] = Math.round(Math.min(1, a) * 255);
+        }
+      }
+      const contentKey = line.toString('latin1');
+      id = byContent.get(contentKey);
+      if (id === undefined) {
+        id = rows.length;
+        rows.push(line);
+        byContent.set(contentKey, id);
+      }
+      bySpans.set(spanKey, id);
+    }
+    rowOf[y] = id;
+  }
+  return { w: outW, h: outH, rows, rowOf };
+};
 
-rmSync(GENERATED_DIR, { recursive: true, force: true });
-rmSync(PRESSKIT_DIR, { recursive: true, force: true });
-mkdirSync(GENERATED_DIR, { recursive: true });
-mkdirSync(PRESSKIT_DIR, { recursive: true });
-
-const manifest = { sizes: SIZES, variants: [], presskit: [] };
-
-for (const variant of VARIANTS) {
-  const cells = trimLogoCells(logoMatrixToCells(variant.matrix), variant.colourMap);
-  const rows = cells.length;
-  const cols = Math.max(0, ...cells.map((row) => row.length));
-  const dir = path.join(GENERATED_DIR, variant.slug);
-  mkdirSync(dir, { recursive: true });
-
-  const { svg } = buildLogoSvg({ matrix: variant.matrix, colourMap: variant.colourMap, pixelWidth: 1024 });
-  const svgName = `thingtime-${variant.slug}.svg`;
-  writeFileSync(path.join(dir, svgName), svg);
-
-  const entry = {
-    slug: variant.slug,
-    name: variant.name,
-    aspect: { cols, rows },
-    svg: { url: `/branding/generated/${variant.slug}/${svgName}`, bytes: Buffer.byteLength(svg) },
-    pngs: []
-  };
-
-  for (const size of SIZES) {
-    const w = size;
-    const h = cols === rows ? size : Math.max(1, Math.round((size / cols) * rows));
-    const png = encodePng(w, h, renderCells(cells, variant.colourMap, w, h).data);
-    const fileName = `thingtime-${variant.slug}-${w}x${h}.png`;
-    writeFileSync(path.join(dir, fileName), png);
-    entry.pngs.push({ w, h, url: `/branding/generated/${variant.slug}/${fileName}`, bytes: png.length });
-    console.log(`generated ${variant.slug} ${w}x${h} (${png.length} bytes)`);
+// Flat voxel art rarely needs more than a handful of colours, so the ladder
+// is written as palette PNGs at the smallest bit depth that fits (1/2/4/8),
+// falling back to RGBA only when antialiased edges push past 256 colours.
+// Same pixels as an RGBA file at a fraction of the bytes.
+const encodeRowsPng = ({ w, h, rows, rowOf }) => {
+  const colours = new Map();
+  let indexed = true;
+  scan: for (const line of rows) {
+    for (let i = 0; i < line.length; i += 4) {
+      const a = line[i + 3];
+      const key = a === 0 ? 0 : ((line[i] << 24) | (line[i + 1] << 16) | (line[i + 2] << 8) | a) >>> 0;
+      if (colours.has(key)) continue;
+      if (colours.size === 256) {
+        indexed = false;
+        break scan;
+      }
+      colours.set(key, a === 0 ? [0, 0, 0, 0] : [line[i], line[i + 1], line[i + 2], a]);
+    }
   }
 
-  manifest.variants.push(entry);
-}
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  const chunks = [];
+  let packed;
+
+  if (indexed) {
+    // translucent entries first so tRNS can stop at the last non-opaque one
+    const keys = [...colours.keys()].sort((ka, kb) => colours.get(ka)[3] - colours.get(kb)[3] || ka - kb);
+    const indexOf = new Map(keys.map((key, index) => [key, index]));
+    const bitDepth = keys.length <= 2 ? 1 : keys.length <= 4 ? 2 : keys.length <= 16 ? 4 : 8;
+    const stride = Math.ceil((w * bitDepth) / 8);
+    packed = rows.map((line) => {
+      const out = Buffer.alloc(stride);
+      for (let x = 0; x < w; x += 1) {
+        const i = x * 4;
+        const a = line[i + 3];
+        const key = a === 0 ? 0 : ((line[i] << 24) | (line[i + 1] << 16) | (line[i + 2] << 8) | a) >>> 0;
+        const bit = x * bitDepth;
+        out[bit >> 3] |= indexOf.get(key) << (8 - bitDepth - (bit & 7));
+      }
+      return out;
+    });
+    ihdr[8] = bitDepth;
+    ihdr[9] = 3; // colour type: palette
+    const plte = Buffer.alloc(keys.length * 3);
+    keys.forEach((key, index) => {
+      const [r, g, b] = colours.get(key);
+      plte[index * 3] = r;
+      plte[index * 3 + 1] = g;
+      plte[index * 3 + 2] = b;
+    });
+    chunks.push(pngChunk('PLTE', plte));
+    const translucent = keys.filter((key) => colours.get(key)[3] < 255);
+    if (translucent.length) chunks.push(pngChunk('tRNS', Buffer.from(translucent.map((key) => colours.get(key)[3]))));
+  } else {
+    packed = rows;
+    ihdr[8] = 8;
+    ihdr[9] = 6; // colour type: RGBA
+  }
+
+  const stride = packed[0].length;
+  const raw = Buffer.alloc((stride + 1) * h);
+  for (let y = 0; y < h; y += 1) {
+    const pos = y * (stride + 1);
+    if (y > 0 && rowOf[y - 1] === rowOf[y]) {
+      raw[pos] = 2; // Up filter: identical to the row above, so the delta is all zeros
+    } else {
+      packed[rowOf[y]].copy(raw, pos + 1); // filter 0 (None)
+    }
+  }
+
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([
+    signature,
+    pngChunk('IHDR', ihdr),
+    ...chunks,
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0))
+  ]);
+};
+
+// ---------------------------------------------------------------------------
+// Build
 
 const WHITE = parseColour('#ffffff');
 const INK_RGBA = parseColour(INK);
-const PASTEL_STOPS = RAINBOW_STOPS.map((stop) => pastel(stop));
+const EMPTY = [0, 0, 0, 0];
 
-const pressKit = [
+rmSync(GENERATED_DIR, { recursive: true, force: true });
+rmSync(PRESSKIT_DIR, { recursive: true, force: true });
+rmSync(IMAGERY_DIR, { recursive: true, force: true });
+mkdirSync(GENERATED_DIR, { recursive: true });
+mkdirSync(PRESSKIT_DIR, { recursive: true });
+mkdirSync(IMAGERY_DIR, { recursive: true });
+
+// Two manifests, split by who reads them. brandingAssets keeps the long-standing
+// shape (transparent files + press kit) for the sitemap, <Logo> and the
+// tt.assets tree, which ride in the main bundle. brandingSurfaces carries the
+// light/dark ladders as compact [w, h, bytes] tuples for the lazy /branding
+// route alone, which rebuilds each URL from brandSvgUrl/brandPngUrl.
+const manifest = { sizes: SIZES, variants: [], presskit: [] };
+const surfaceManifest = {};
+
+for (const variant of BRAND_LOGO_VARIANTS) {
+  const pixels = logoPixels(variant.matrix, variant.colourMap, variant.trim);
+  const dir = path.join(GENERATED_DIR, variant.slug);
+  mkdirSync(dir, { recursive: true });
+
+  const entry = { slug: variant.slug, name: variant.name, group: variant.group };
+  const surfaces = {};
+
+  for (const surface of BRAND_SURFACES) {
+    const pad = backdropPadding(variant, surface.key);
+    const artCols = Math.max(0, ...pixels.map((row) => row.length));
+    const cols = artCols + pad * 2;
+    const rows = pixels.length + pad * 2;
+    const grid = Array.from({ length: rows }, (_, y) =>
+      Array.from({ length: cols }, (_, x) => {
+        const colour = pixels[y - pad]?.[x - pad];
+        return colour ? parseColour(colour) : EMPTY;
+      })
+    );
+    const backdrop = surface.colour ? parseColour(surface.colour) : null;
+
+    const { svg } = buildVariantSvg(variant, surface.key, 1024);
+    const svgUrl = brandSvgUrl(variant.slug, surface.key);
+    writeFileSync(path.join(PUBLIC_BRANDING, '..', svgUrl), svg);
+
+    const pngs = [];
+    for (const size of SIZES) {
+      const w = size;
+      const h = cols === rows ? size : Math.max(1, Math.round((size / cols) * rows));
+      const png = encodeRowsPng(renderLogoRows(grid, w, h, backdrop));
+      const url = brandPngUrl(variant.slug, surface.key, w, h);
+      writeFileSync(path.join(PUBLIC_BRANDING, '..', url), png);
+      pngs.push({ w, h, url, bytes: png.length });
+    }
+    console.log(`generated ${variant.slug} · ${surface.key} (${pngs.length} PNGs, ${pngs.reduce((sum, png) => sum + png.bytes, 0)} bytes)`);
+
+    if (surface.key === 'transparent') {
+      entry.aspect = { cols, rows };
+      entry.svg = { url: svgUrl, bytes: Buffer.byteLength(svg) };
+      entry.pngs = pngs;
+    } else {
+      surfaces[surface.key] = {
+        aspect: { cols, rows },
+        svgBytes: Buffer.byteLength(svg),
+        pngs: pngs.map((png) => [png.w, png.h, png.bytes])
+      };
+    }
+  }
+
+  surfaceManifest[variant.slug] = surfaces;
+  manifest.variants.push(entry);
+}
+
+// ---------------------------------------------------------------------------
+// Press kit: every format × logo lock-up × background
+
+const PASTEL_STOPS = RAINBOW_STOPS.map((stop) => pastel(stop));
+const DUSK_STOPS = RAINBOW_STOPS.map((stop) => {
+  const deep = mix(stop, INK_RGBA, 0.3);
+  deep[3] = 255;
+  return deep;
+});
+
+const PRESS_LOGOS = [
+  { key: 'wordmark', name: 'Wordmark', cells: trimLogoCells(logoMatrixToCells(LOGO_FULL_MATRIX), LOGO_THEMES.default) },
+  { key: 'square', name: 'Square', cells: trimLogoCells(logoMatrixToCells(LOGO_STACKED_MATRIX), LOGO_THEMES.default) },
+  { key: 'icon', name: 'Icon', cells: trimLogoCells(logoMatrixToCells(LOGO_ICON_MATRIX), LOGO_THEMES.default) }
+];
+
+const PRESS_SURFACES = [
+  { key: 'light', name: 'Light', fill: WHITE, frame: PASTEL_STOPS },
+  { key: 'dark', name: 'Dark', fill: INK_RGBA, frame: DUSK_STOPS }
+];
+
+const paper = (canvas, surface) => fillRect(canvas, 0, 0, canvas.w, canvas.h, surface.fill);
+const logoOn = (canvas, logo, widths, options) => placeLogo(canvas, logo.cells, LOGO_THEMES.default, widths[logo.key], options);
+
+// `files` keeps the filenames published before the logo × background matrix
+// existed, so those URLs stay stable; every other combination is named
+// <format>-<logo>-<background>.
+const PRESS_FORMATS = [
   {
-    slug: 'og-card',
+    kind: 'og-card',
     name: 'Open Graph card',
-    description: 'Link-preview card — wordmark on white with the Thingtime rainbow.',
+    description: 'Link-preview card with the Thingtime rainbow underline.',
     w: 1200,
     h: 630,
-    surface: 'light',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, WHITE);
-      placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.58, { offsetY: -12 });
+    files: { 'wordmark/light': 'og-card', 'wordmark/dark': 'og-card-dark' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      logoOn(canvas, logo, { wordmark: 0.58, square: 0.44, icon: 0.2 }, { offsetY: -12 });
       rainbowBar(canvas, 14);
     }
   },
   {
-    slug: 'og-card-dark',
-    name: 'Open Graph card · Dark',
-    description: 'The same link-preview card on Thingtime ink.',
-    w: 1200,
-    h: 630,
-    surface: 'dark',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, INK_RGBA);
-      placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.58, { offsetY: -12 });
-      rainbowBar(canvas, 14);
-    }
-  },
-  {
-    slug: 'banner',
+    kind: 'banner',
     name: 'Social banner',
     description: 'Wide header for X/Twitter and community pages.',
     w: 1500,
     h: 500,
-    surface: 'light',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, WHITE);
-      placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.46, { offsetY: -8 });
+    files: { 'wordmark/light': 'banner' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      logoOn(canvas, logo, { wordmark: 0.46, square: 0.3, icon: 0.13 }, { offsetY: -8 });
       rainbowBar(canvas, 12);
     }
   },
   {
-    slug: 'linkedin-banner',
+    kind: 'linkedin-banner',
     name: 'LinkedIn banner',
     description: 'Company-page cover at LinkedIn’s exact ratio.',
     w: 1584,
     h: 396,
-    surface: 'light',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, WHITE);
-      placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.34, { offsetY: -6 });
+    files: { 'wordmark/light': 'linkedin-banner' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      logoOn(canvas, logo, { wordmark: 0.34, square: 0.22, icon: 0.1 }, { offsetY: -6 });
       rainbowBar(canvas, 10);
     }
   },
   {
-    slug: 'social-square',
+    kind: 'social-square',
     name: 'Social square',
-    description: 'Pastel rainbow square for feeds and profile posts.',
+    description: 'Rainbow-framed square for feeds and profile posts.',
     w: 1080,
     h: 1080,
-    surface: 'gradient',
-    draw: (canvas) => {
-      fillLinearGradient(canvas, 0, 0, canvas.w, canvas.h, PASTEL_STOPS, 120);
-      fillRect(canvas, 96, 96, canvas.w - 192, canvas.h - 192, WHITE);
-      placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.62);
+    files: { 'wordmark/light': 'social-square' },
+    draw: (canvas, logo, surface) => {
+      fillLinearGradient(canvas, 0, 0, canvas.w, canvas.h, surface.frame, 120);
+      fillRect(canvas, 96, 96, canvas.w - 192, canvas.h - 192, surface.fill);
+      logoOn(canvas, logo, { wordmark: 0.62, square: 0.5, icon: 0.26 });
     }
   },
   {
-    slug: 'wallpaper',
+    kind: 'wallpaper',
     name: 'Desktop wallpaper',
-    description: 'Ink wallpaper with voxel confetti, 1080p.',
+    description: 'Voxel-confetti desktop wallpaper, 1080p.',
     w: 1920,
     h: 1080,
-    surface: 'dark',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, INK_RGBA);
-      const box = placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.38);
+    files: { 'wordmark/dark': 'wallpaper' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      const box = logoOn(canvas, logo, { wordmark: 0.38, square: 0.24, icon: 0.09 });
       scatterConfetti(canvas, {
         seed: 20260822,
         count: 90,
@@ -464,15 +641,15 @@ const pressKit = [
     }
   },
   {
-    slug: 'wallpaper-4k',
+    kind: 'wallpaper-4k',
     name: 'Desktop wallpaper · 4K',
-    description: 'The same ink + confetti wallpaper at 4K.',
+    description: 'The same confetti wallpaper at 4K.',
     w: 3840,
     h: 2160,
-    surface: 'dark',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, INK_RGBA);
-      const box = placeLogo(canvas, wordmarkCells, LOGO_THEMES.default, 0.38);
+    files: { 'wordmark/dark': 'wallpaper-4k' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      const box = logoOn(canvas, logo, { wordmark: 0.38, square: 0.24, icon: 0.09 });
       scatterConfetti(canvas, {
         seed: 20260822,
         count: 90,
@@ -483,15 +660,15 @@ const pressKit = [
     }
   },
   {
-    slug: 'wallpaper-phone',
+    kind: 'wallpaper-phone',
     name: 'Phone wallpaper',
-    description: 'Icon-centred ink wallpaper for phones.',
+    description: 'Voxel-confetti wallpaper for phones.',
     w: 1170,
     h: 2532,
-    surface: 'dark',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, INK_RGBA);
-      const box = placeLogo(canvas, iconCells, LOGO_THEMES.default, 0.3);
+    files: { 'icon/dark': 'wallpaper-phone' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      const box = logoOn(canvas, logo, { wordmark: 0.72, square: 0.56, icon: 0.3 });
       scatterConfetti(canvas, {
         seed: 42,
         count: 110,
@@ -502,61 +679,109 @@ const pressKit = [
     }
   },
   {
-    slug: 'app-tile',
+    kind: 'app-tile',
     name: 'App tile',
-    description: 'Icon on white — ready for app grids and avatars.',
+    description: 'Square tile, ready for app grids and avatars.',
     w: 1024,
     h: 1024,
-    surface: 'light',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, WHITE);
-      placeLogo(canvas, iconCells, LOGO_THEMES.default, 0.56);
+    files: { 'icon/light': 'app-tile', 'icon/dark': 'app-tile-dark' },
+    draw: (canvas, logo, surface) => {
+      paper(canvas, surface);
+      logoOn(canvas, logo, { wordmark: 0.76, square: 0.58, icon: 0.56 });
     }
   },
   {
-    slug: 'app-tile-dark',
-    name: 'App tile · Dark',
-    description: 'Icon on Thingtime ink for dark surfaces.',
-    w: 1024,
-    h: 1024,
-    surface: 'dark',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, INK_RGBA);
-      placeLogo(canvas, iconCells, LOGO_THEMES.default, 0.56);
-    }
-  },
-  {
-    slug: 'confetti-pattern',
+    kind: 'confetti-pattern',
     name: 'Confetti pattern',
     description: 'Voxel confetti field — backgrounds, slides, wrapping paper.',
     w: 2048,
     h: 2048,
-    surface: 'light',
-    draw: (canvas) => {
-      fillRect(canvas, 0, 0, canvas.w, canvas.h, WHITE);
+    logoless: true,
+    files: { 'light': 'confetti-pattern', 'dark': 'confetti-pattern-dark' },
+    draw: (canvas, _logo, surface) => {
+      paper(canvas, surface);
       scatterConfetti(canvas, { seed: 7, count: 420, minSize: 10, maxSize: 30 });
     }
   }
 ];
 
-for (const item of pressKit) {
-  const canvas = makeCanvas(item.w, item.h);
-  item.draw(canvas);
-  const png = encodePng(item.w, item.h, canvas.data);
-  const fileName = `thingtime-${item.slug}-${item.w}x${item.h}.png`;
-  writeFileSync(path.join(PRESSKIT_DIR, fileName), png);
-  manifest.presskit.push({
-    slug: item.slug,
-    name: item.name,
-    description: item.description,
-    surface: item.surface,
-    w: item.w,
-    h: item.h,
-    url: `/branding/presskit/${fileName}`,
-    bytes: png.length
-  });
-  console.log(`presskit ${item.slug} ${item.w}x${item.h} (${png.length} bytes)`);
+for (const format of PRESS_FORMATS) {
+  for (const logo of format.logoless ? [null] : PRESS_LOGOS) {
+    for (const surface of PRESS_SURFACES) {
+      const combo = logo ? `${logo.key}/${surface.key}` : surface.key;
+      const slug = format.files[combo] ?? `${format.kind}-${logo.key}-${surface.key}`;
+      const canvas = makeCanvas(format.w, format.h);
+      format.draw(canvas, logo, surface);
+      const png = encodePng(format.w, format.h, canvas.data);
+      const fileName = `thingtime-${slug}-${format.w}x${format.h}.png`;
+      writeFileSync(path.join(PRESSKIT_DIR, fileName), png);
+      manifest.presskit.push({
+        slug,
+        kind: format.kind,
+        kindName: format.name,
+        logo: logo ? logo.key : null,
+        surface: surface.key,
+        name: [format.name, logo?.name, surface.name].filter(Boolean).join(' · '),
+        description: format.description,
+        w: format.w,
+        h: format.h,
+        url: `/branding/presskit/${fileName}`,
+        bytes: png.length
+      });
+      console.log(`presskit ${slug} ${format.w}x${format.h} (${png.length} bytes)`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Generative imagery: the curated scenes, painted from the same rectangle list
+// the studio draws. Scenes are flat colour on a voxel grid, so they go through
+// the palette encoder with consecutive identical rows collapsed.
+
+const colourCache = new Map();
+const sceneColour = (value) => {
+  let rgba = colourCache.get(value);
+  if (!rgba) {
+    rgba = parseColour(value);
+    colourCache.set(value, rgba);
+  }
+  return rgba;
+};
+
+const sceneRows = (scene) => {
+  const canvas = makeCanvas(scene.width, scene.height);
+  for (const [x, y, w, h, colour] of scene.rects) fillRect(canvas, x, y, w, h, sceneColour(colour));
+  const stride = scene.width * 4;
+  const rows = [];
+  const rowOf = new Int32Array(scene.height);
+  for (let y = 0; y < scene.height; y += 1) {
+    const line = canvas.data.subarray(y * stride, (y + 1) * stride);
+    if (y > 0 && line.equals(rows[rows.length - 1])) {
+      rowOf[y] = rows.length - 1;
+    } else {
+      rowOf[y] = rows.length;
+      rows.push(line);
+    }
+  }
+  return { w: scene.width, h: scene.height, rows, rowOf };
+};
+
+const imageryManifest = { items: [] };
+for (const item of BRAND_IMAGERY) {
+  const png = encodeRowsPng(sceneRows(buildBrandScene(item.scene)));
+  const url = brandImageryUrl(item);
+  writeFileSync(path.join(PUBLIC_BRANDING, '..', url), png);
+  imageryManifest.items.push({ id: item.id, name: item.name, w: item.format.width, h: item.format.height, url, bytes: png.length });
+  console.log(`imagery ${item.id} ${item.format.width}x${item.format.height} (${png.length} bytes)`);
 }
 
 writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`manifest → ${path.relative(process.cwd(), MANIFEST_PATH)}`);
+// keep each [w, h, bytes] tuple on one line so the file stays reviewable
+const surfaceJson = JSON.stringify(surfaceManifest, null, 2).replace(/\[\s+(\d+),\s+(\d+),\s+(\d+)\s+\]/g, '[$1, $2, $3]');
+writeFileSync(SURFACES_PATH, `${surfaceJson}\n`);
+console.log(`surfaces → ${path.relative(process.cwd(), SURFACES_PATH)}`);
+// one item per line, same reason
+const imageryJson = `{\n  "items": [\n${imageryManifest.items.map((entry) => `    ${JSON.stringify(entry)}`).join(',\n')}\n  ]\n}\n`;
+writeFileSync(IMAGERY_PATH, imageryJson);
+console.log(`imagery → ${path.relative(process.cwd(), IMAGERY_PATH)}`);

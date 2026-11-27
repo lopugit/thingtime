@@ -30,8 +30,6 @@ export type FriendState = 'none' | 'pending-outgoing' | 'pending-incoming' | 'fr
 export type FriendIntent = 'request' | 'cancel' | 'accept' | 'decline' | 'unfriend';
 export const FRIEND_INTENTS: FriendIntent[] = ['request', 'cancel', 'accept', 'decline', 'unfriend'];
 
-const MAX_FOLLOWING_PER_USER = 5000;
-const MAX_FRIENDS_PER_USER = 2000;
 const MAX_CONNECTIONS_LIMIT = 50;
 const DEFAULT_CONNECTIONS_LIMIT = 20;
 
@@ -69,13 +67,6 @@ export const setFollow = async (
   const things = await getThingsCollection();
   const existing = await isFollowing(viewer.id, targetId);
   const desired = typeof follow === 'boolean' ? follow : !existing;
-
-  if (desired && !existing) {
-    const followingCount = await things.countDocuments({ thingtime: 'follow', ownerId: viewer.id } as any);
-    if (followingCount >= MAX_FOLLOWING_PER_USER) {
-      return fail(400, `Following limit reached (${MAX_FOLLOWING_PER_USER})`);
-    }
-  }
 
   // One canonical writer for every caller: messenger + social both persist the
   // home-pinned crystal.followKey shape. `created` identifies the unique-index
@@ -155,14 +146,6 @@ export const friendAction = async (
           return accept(existing);
         }
         return { ok: true, friendState: friendStateOf(existing, viewer.id) };
-      }
-      const friendCount = await things.countDocuments({
-        thingtime: 'friend',
-        'crystal.status': 'accepted',
-        $or: [{ ownerId: viewer.id }, { targetId: viewer.id }]
-      } as any);
-      if (friendCount >= MAX_FRIENDS_PER_USER) {
-        return fail(400, `Friend limit reached (${MAX_FRIENDS_PER_USER})`);
       }
       try {
         await things.insertOne({
@@ -254,15 +237,24 @@ export const friendIdsOf = async (userId: string): Promise<Set<string>> => {
 // on the existing (thingtime, targetId) access pattern answers.
 export const groupIdsOf = async (userId: string): Promise<Set<string>> => {
   const things = await getThingsCollection();
-  const docs = await things
-    .find({ thingtime: 'group-member', targetId: userId } as any)
-    .project({ crystal: 1 })
-    .limit(2000)
-    .toArray();
-  const ids = new Set<string>();
-  for (const doc of docs as any[]) {
-    const groupId = String((doc as any).crystal?.groupId || '');
-    if (groupId) ids.add(groupId);
+  // Group owners are implicit members: creation deliberately omits an owner
+  // membership row. Read current roots so deletion revokes that authority.
+  const [owned, memberships] = await Promise.all([
+    things.find({ thingtime: 'group', ownerId: userId } as any).project({ shareId: 1 }).batchSize(100).toArray(),
+    things.find({ thingtime: 'group-member', targetId: userId } as any).project({ ownerId: 1, crystal: 1 }).batchSize(100).toArray()
+  ]);
+  const ids = new Set<string>(owned.map((doc: any) => String(doc.shareId)));
+  const memberOwners = new Map<string, string>();
+  for (const row of memberships as any[]) {
+    if (typeof row.crystal?.groupId === 'string') memberOwners.set(row.crystal.groupId, String(row.ownerId));
+  }
+  const candidates = [...memberOwners.keys()];
+  // An orphan/stale membership cannot revive a deleted or differently owned
+  // group. Batch root checks through the existing unique shareId index.
+  for (let offset = 0; offset < candidates.length; offset += 100) {
+    const roots = await things.find({ thingtime: 'group', shareId: { $in: candidates.slice(offset, offset + 100) } } as any)
+      .project({ shareId: 1, ownerId: 1 }).batchSize(100).toArray();
+    for (const root of roots as any[]) if (memberOwners.get(String(root.shareId)) === String(root.ownerId)) ids.add(String(root.shareId));
   }
   return ids;
 };

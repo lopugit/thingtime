@@ -7,17 +7,17 @@ import {
 } from '~/api/utils/health/statusTarget';
 
 const getFrontendStatus = async (origin: string): Promise<BasicServiceHealthStatus> => {
-  const { response, responseMs } = await fetchWithTimeout(`${origin}/`, {
+  const { response, responseMs, body: html } = await fetchWithTimeout(`${origin}/`, {
     headers: {
       Accept: 'text/html'
     },
-    redirect: 'follow'
-  });
-  const html = await response.text();
+    redirect: 'error'
+  }, undefined, response => response.text());
+  const content = html || '';
   const shellDetected =
-    html.includes('<div id="root"></div>') ||
-    html.includes('<div id="root"') ||
-    html.includes('Thingtime');
+    content.includes('<div id="root"></div>') ||
+    content.includes('<div id="root"') ||
+    content.includes('Thingtime');
   const ok = response.ok && shellDetected;
 
   return {
@@ -30,7 +30,7 @@ const getFrontendStatus = async (origin: string): Promise<BasicServiceHealthStat
     targetOrigin: origin,
     responseMs,
     statusCode: response.status,
-    bytes: html.length,
+    bytes: content.length,
     shellDetected
   };
 };

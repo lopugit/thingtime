@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 
 // Public view-count telemetry (separate from useFeedEngagement, which trains
@@ -66,7 +67,7 @@ export const useViewTracking = (): UseViewTrackingResult => {
         // fall through to fetch
       }
     }
-    fetch('/api/v1/things/views', {
+    return fetch('/api/v1/things/views', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
@@ -135,14 +136,14 @@ export const useViewTracking = (): UseViewTrackingResult => {
   }, [finishView]);
 
   React.useEffect(() => {
-    const interval = window.setInterval(() => {
+    const interval = activityInterval('timer:components/Feed/useViewTracking:1', 'use View Tracking', () => {
       // long-dwell cards flush mid-view so a wall-staring session still counts
       // (their dwell keeps accumulating server-side via later batches — no:
       // one event per pageview — so just close out anything past the cap)
       activeRef.current.forEach((active, thingId) => {
         if (Date.now() - active.startedAt >= DWELL_CAP_MS) finishView(thingId);
       });
-      flush();
+      return flush();
     }, FLUSH_INTERVAL_MS);
 
     const onVisibilityChange = () => {
@@ -155,12 +156,12 @@ export const useViewTracking = (): UseViewTrackingResult => {
       flush({ beacon: true });
     };
 
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', onPageHide);
+    activityEvents(document, 'events:components/Feed/useViewTracking', 'useViewTracking').addEventListener('visibilitychange', onVisibilityChange);
+    activityEvents(window, 'events:components/Feed/useViewTracking', 'useViewTracking').addEventListener('pagehide', onPageHide);
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', onPageHide);
+      clearActivityInterval(interval);
+      activityEvents(document, 'events:components/Feed/useViewTracking', 'useViewTracking').removeEventListener('visibilitychange', onVisibilityChange);
+      activityEvents(window, 'events:components/Feed/useViewTracking', 'useViewTracking').removeEventListener('pagehide', onPageHide);
       finishAll();
       flush();
     };

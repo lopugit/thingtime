@@ -6,7 +6,7 @@ const CONFETTI_COLORS = [
 	'#59bdff',
 	'#00b7ef',
 	'#ed1c24',
-	'#ffa3b1',
+	'#ffa9dd',
 	'#6f3198',
 	'#a8e61d',
 	'#ffc20e',

@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -15,7 +16,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
 	const dir = await mkdtemp(join(tmpdir(), 'thingtime-progress-qa-')), req = createRequire(root + '/remix/package.json');
 	try {
 		await createRequire(req.resolve('tsx/package.json'))('esbuild').build({ entryPoints: [join(root, 'remix/scripts/editable-sync-progress.browser.tsx')], bundle: true, format: 'esm', platform: 'browser',
-			tsconfig: join(root, 'remix/tsconfig.json'), outfile: join(dir, 'fixture.js'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.png': 'dataurl', '.svg': 'dataurl' }, logLevel: 'error' });
+			tsconfig: join(root, 'remix/tsconfig.json'), outfile: join(dir, 'fixture.js'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.png': 'dataurl', '.svg': 'dataurl', '.wasm': 'file' }, logLevel: 'error' });
 		const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: dir, TT_PROGRESS_WORKER: dir, TT_PROGRESS_EVIDENCE: evidence,
 			...(process.env.TT_PLAYWRIGHT_MODULE ? { TT_PLAYWRIGHT_MODULE: process.env.TT_PLAYWRIGHT_MODULE } : {}) };
 		await verifyAccountBackupIsolation(port, env);
@@ -46,6 +47,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
                 await section.screenshot({path:join(evidence,`recovery-${width}.png`)});
             }
             await page.setViewportSize({width:1440,height:1000});
+            await enableCurrentPageBuilder(page);
             await section.getByRole('button',{name:'Edit layout',exact:true}).click();
             await page.locator('[data-block-id="sync-priority-readiness-status"]').click();
             await page.getByRole('combobox',{name:'Select block',exact:true}).selectOption('sync-priority-readiness-status');
@@ -90,6 +92,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		await page.getByText('Saved priorities loaded.', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Remove priority Deep', exact: true }).click();
 		await page.getByRole('button', { name: 'Remove priority Deep', exact: true }).waitFor({ state: 'hidden' });
+		await enableCurrentPageBuilder(page);
 		await page.locator('[data-settings-document="file-sync-upload-priorities"]').getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.locator('[data-block-id="priority-title"]').click();
 		for (const [id, text] of [['priority-title', 'Upload priorities'], ['priority-row-label', 'Priority {item.position}: {item.path}'], ['priority-up', 'Move up']]) {
@@ -122,6 +125,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		await page.getByText('file-39.txt', { exact: true }).first().waitFor();
 		await page.getByRole('button', { name: 'Previous items', exact: true }).click();
 		await page.getByRole('button', { name: 'Expand Documents', exact: true }).waitFor();
+		await enableCurrentPageBuilder(page);
 		await page.locator('[data-settings-document="file-sync-progress"]').getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.locator('[data-block-id="sync-node-name"]').first().click();
 		for (const [id, text] of [['sync-node-name', 'Item: {item.name}'], ['sync-node-counts', 'Counts: {item.counts}'], ['sync-node-icon', '{item.icon}'], ['sync-folder-toggle', '{item.toggle}']]) {

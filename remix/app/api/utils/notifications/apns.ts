@@ -12,6 +12,8 @@ type ApnsConfig = { keyId: string; teamId: string; privateKey: string };
 type PushEnvelope = EmitNotificationInput & { notificationId: string };
 
 const ACTIONS: Record<string, string> = {
+  'chat-message': 'sent you a message',
+  'chat-request': 'sent you a message request',
   'friend-request': 'sent you a friend request',
   'friend-accepted': 'accepted your friend request',
   'new-follower': 'followed you',
@@ -61,6 +63,7 @@ const providerToken = (config: ApnsConfig): string => {
 };
 
 export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'> & Partial<Pick<EmitNotificationInput, 'type' | 'href'>>): string => {
+  if (notification.type === 'chat-message' || notification.type === 'chat-request') return safeInternalHref(notification.href) || '/messages';
   if (notification.type === 'lopu-reminder') return safeInternalHref(notification.href) || '/settings';
   if (notification.type === 'lopu-message') return safeInternalHref(notification.href) || '/lopu';
   if (notification.type === 'recording-reminder') return safeInternalHref(notification.href) || '/lopu/recordings';
@@ -211,3 +214,19 @@ export const sendLiveActivityPush = async (
   if (!config) return { status: 503, reason: 'Unconfigured' };
   return sendDevice(providerToken(config), device, payload, activityId, 'liveactivity');
 };
+
+/** One pre-authorized registration only. Never calls user fan-out. */
+export const createCanonicalDeviceAlertSender = (deps = {
+  token: () => { const config = apnsConfig(); return config ? providerToken(config) : null; },
+  send: sendDevice,
+  remove: removePushDeviceById
+}) => async (device: PushDevice, notification: {notificationId: string; title: string; message: string; sound: string | null}) => {
+  if (notification.sound !== null && !/^(default|tt-[a-f0-9]{64}\.caf)$/.test(notification.sound)) throw new Error('Invalid prepared alert sound');
+  const token = deps.token();
+  if (!token) return {status: 'unconfigured' as const};
+  const payload = {aps: {alert: {title: clampPreview(notification.title) || 'Thingtime', body: clampPreview(notification.message) || ''}, ...(notification.sound ? {sound: notification.sound} : {}), 'thread-id': notification.notificationId}, notificationId: notification.notificationId, type: 'device-alert', url: '/things'};
+  const result = await deps.send(token, device, payload, notification.notificationId);
+  if (result.status === 410 || ['BadDeviceToken', 'Unregistered'].includes(result.reason || '')) await deps.remove(device.id).catch(() => {});
+  return {status: result.status === 200 ? 'provider-accepted' as const : 'rejected' as const, reason: result.reason && APNS_REASONS.has(result.reason) ? result.reason : null};
+};
+export const sendCanonicalDeviceAlert = createCanonicalDeviceAlertSender();

@@ -1,3 +1,4 @@
+import { observeScheduledPeerEvent } from '../automation/scheduledRunContext';
 import { createHash, createHmac, createPrivateKey, createPublicKey, sign, timingSafeEqual, verify } from 'node:crypto';
 
 import { getDeploymentDataEnvironment, type DeploymentDataEnvironment } from '../deployment/dataEnvironment';
@@ -385,7 +386,7 @@ export const signedPeerNdjsonResponse = (
 	lines: Iterable<Record<string, unknown>> | AsyncIterable<Record<string, unknown>>
 ) => {
 	async function* signedLines() {
-		for await (const line of lines) yield signedPeerStreamEvent(identity, origin, dataEnvironment, line);
+		for await (const line of lines) { observeScheduledPeerEvent(line); yield signedPeerStreamEvent(identity, origin, dataEnvironment, line); }
 	}
 	return ndjsonResponse(signedLines());
 };

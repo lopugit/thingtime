@@ -2,12 +2,16 @@ import React from 'react';
 import { Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 import { useCharacters, invalidateCharacters } from './useCharacters';
 import { characterRequest } from './characterClient';
+import { normalizeCharacterUsername } from '~/api/utils/auth/characterCore';
 import { useLopu } from '~/components/Lopu/useLopu';
 
 export function CharactersSettings() {
   const { roster, error, refresh } = useCharacters();
   const lopu = useLopu();
   const [displayName, setDisplayName] = React.useState('');
+  const [username, setUsername] = React.useState('');
+  const [usernameError, setUsernameError] = React.useState('');
+  const [createError, setCreateError] = React.useState('');
   const [loginMode, setLoginMode] = React.useState('switch');
   const [password, setPassword] = React.useState('');
   const [requestId, setRequestId] = React.useState(() => crypto.randomUUID());
@@ -18,13 +22,18 @@ export function CharactersSettings() {
   const run = async (input: Record<string, unknown>) => {
     if (busy) return;
     setBusy(true);
+    if (input.operation === 'create') setCreateError('');
     try {
       const result = await characterRequest(input);
       if (input.operation === 'select') { window.location.reload(); return; }
-      if (input.operation === 'create') { setPassword(''); setDisplayName(''); setRequestId(crypto.randomUUID()); }
+      if (input.operation === 'create') { setPassword(''); setDisplayName(''); setUsername(''); setUsernameError(''); setRequestId(crypto.randomUUID()); }
       invalidateCharacters(); lopu({ title: input.operation === 'create' ? 'Character created' : 'Character updated', status: 'success' });
       return result;
-    } catch (err) { lopu({ title: 'Character change failed', description: err instanceof Error ? err.message : 'Please try again', status: 'error' }); }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Please try again';
+      if (input.operation === 'create') setCreateError(message);
+      else lopu({ title: 'Character change failed', description: message, status: 'error' });
+    }
     finally { setBusy(false); }
   };
   return <Box minW={0}>
@@ -34,18 +43,26 @@ export function CharactersSettings() {
     {roster?.activeCharacterId && <Button mb={4} maxW="100%" whiteSpace="normal" height="auto" py={2} overflowWrap="anywhere" isDisabled={busy} onClick={() => run({ operation: 'select', characterId: null })}>Return this session to {roster.principal.displayName || roster.principal.username}</Button>}
     {roster && !roster.canManage && <Text>Sign in to your owning account to create or manage Characters. This login can act only as {roster.principal.displayName || roster.principal.username}.</Text>}
     {roster?.canManage && <>
-      <Box as="form" border="1px solid var(--tt-border, #ececef)" borderRadius="12px" p={4} mb={5} onSubmit={event => { event.preventDefault(); void run({ operation: 'create', requestId, displayName, loginMode, ...(loginMode === 'password' ? { password } : {}) }); }}>
+      <Box as="form" border="1px solid var(--tt-border, #ececef)" borderRadius="12px" p={4} mb={5} onSubmit={event => { event.preventDefault(); void run({ operation: 'create', requestId, displayName, username, loginMode, ...(loginMode === 'password' ? { password } : {}) }); }}>
         <Text fontWeight={600} mb={3}>Create a Character</Text>
         <Text as="label" htmlFor="character-display-name" fontSize="sm">Display name</Text>
-        <Input id="character-display-name" value={displayName} onChange={e => setDisplayName(e.target.value)} mb={3} required />
+        <Input id="character-display-name" value={displayName} onChange={e => setDisplayName(e.target.value)} mb={3} required isDisabled={busy} />
+        <Text as="label" htmlFor="character-username" fontSize="sm">Username (optional)</Text>
+        <Input id="character-username" value={username} autoCapitalize="none" autoCorrect="off" spellCheck={false} isDisabled={busy}
+          aria-describedby={`character-username-help${usernameError ? ' character-username-error' : ''}`} aria-invalid={!!usernameError}
+          onChange={event => { setUsername(event.target.value); setUsernameError(''); }}
+          onBlur={() => setUsernameError(normalizeCharacterUsername(username) === null ? 'Start with a letter or number; use letters, numbers, dots, underscores or hyphens.' : '')} />
+        <Text id="character-username-help" fontSize="sm" mt={1} mb={3}>Choose a public login ID, such as thingtime-platform. Leave blank to generate one. Uppercase letters become lowercase.</Text>
+        {usernameError && <Text id="character-username-error" role="alert" color="var(--tt-error, #b42318)" fontSize="sm" mb={3}>{usernameError}</Text>}
         <Text as="label" htmlFor="character-login-mode" fontSize="sm">Sign-in method</Text>
-        <Select id="character-login-mode" value={loginMode} onChange={e => setLoginMode(e.target.value)} mb={3}>
+        <Select id="character-login-mode" isDisabled={busy} value={loginMode} onChange={e => setLoginMode(e.target.value)} mb={3}>
           <option value="switch">Switch only — no password login</option>
           <option value="inherit">Use my current account password</option>
           <option value="password">Separate password — suitable for an agent</option>
         </Select>
-        {loginMode === 'password' && <><Text as="label" htmlFor="character-password" fontSize="sm">Character password</Text><Input id="character-password" type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required mb={3} /></>}
-        <Button type="submit" isLoading={busy} isDisabled={!displayName.trim()}>Create Character</Button>
+        {loginMode === 'password' && <><Text as="label" htmlFor="character-password" fontSize="sm">Character password</Text><Input id="character-password" isDisabled={busy} type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required mb={3} /></>}
+        {createError && <Text role="alert" mb={3} color="var(--tt-error, #b42318)" overflowWrap="anywhere">{createError}</Text>}
+        <Button type="submit" isLoading={busy} isDisabled={!displayName.trim() || normalizeCharacterUsername(username) === null}>Create Character</Button>
       </Box>
       <Flex direction="column" gap={3}>
         {roster.characters.map(character => <CharacterRow key={character.user.id} character={character} busy={busy} run={run} />)}

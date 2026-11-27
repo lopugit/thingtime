@@ -3,31 +3,75 @@ const { fork } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const children = new WeakMap();
+class TransferWorkerDisconnected extends Error {
+    constructor() {
+        super('Sync transport unavailable.');
+        this.code = 'ECONNRESET';
+    }
+}
 function transferProcess(governor) {
-    let state = children.get(governor);
-    if (state) { state.child.send({ kind: 'policy', policy: governor.policy }); return state; }
+    const previous = children.get(governor);
+    if (previous?.available()) {
+        clearTimeout(previous.idle);
+        return previous;
+    }
+    previous?.retire();
     // Electron's executable supports Node mode; use a minimal environment and
     // private IPC. No owner cookies or app tokens are copied into the child.
-    const child = fork(path.join(__dirname, 'folder-transfer-worker.cjs'), [], {
-        env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced'
+    let child;
+    try {
+        child = fork(path.join(__dirname, 'folder-transfer-worker.cjs'), [], {
+            env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced'
+        });
+    } catch {
+        throw new TransferWorkerDisconnected();
+    }
+    const state = {
+        pending: new Map(), idle: null, closed: false,
+        available: () => !state.closed && child.connected && !child.killed,
+        retire: () => {
+            if (state.closed) return;
+            state.closed = true;
+            clearTimeout(state.idle);
+            if (children.get(governor) === state) {
+                children.delete(governor);
+                governor.onPolicyChange = undefined;
+                governor.clearTransport();
+            }
+            for (const finish of state.pending.values()) finish({ disconnected: true });
+            if (!child.killed && child.exitCode == null && child.signalCode == null) child.kill();
+        },
+        send: message => {
+            if (!state.available()) { state.retire(); return; }
+            try {
+                child.send(message, error => { if (error) state.retire(); });
+            } catch {
+                state.retire();
+            }
+        }
+    };
+    children.set(governor, state);
+    governor.onPolicyChange = () => state.send({
+        kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond
     });
-    state = { child, pending: new Map(), idle: null }; children.set(governor, state);
+    child.on('error', state.retire);
+    child.on('disconnect', state.retire);
+    child.on('exit', state.retire);
     child.on('message', async message => {
+        if (state.closed) return;
         if (message.kind === 'authority') {
-            let accepted = false, target;
-            try { const pending = state.pending.get(message.id); if (pending) { target = await pending.check(message.phase); accepted = state.pending.has(message.id); } } catch { }
-            if (child.connected) child.send({ kind: 'authority-reply', ticket: message.ticket, accepted, ...(target ? { target } : {}) });
+            let accepted = false, retry = false, target;
+            try { const pending = state.pending.get(message.id); if (pending) { target = await pending.check(message.phase); accepted = state.pending.has(message.id); } } catch (error) { retry = error?.code === 'SYNC_DOWNLOAD_RETRY'; }
+            state.send({ kind: 'authority-reply', ticket: message.ticket, accepted, ...(retry ? { retry: true } : {}), ...(accepted && target ? { target } : {}) });
             return;
         }
         if (message.kind === 'resources') {
-            governor.transport = message.resources;
-            governor.sample('transport-process', message.resources.cpuPercent);
+            if (children.get(governor) === state) governor.observeTransport(message.resources);
             return;
         }
         if (message.kind === 'reply') state.pending.get(message.id)?.(message);
     });
-    child.on('exit', () => { children.delete(governor); clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
-    child.send({ kind: 'policy', policy: governor.policy }); return state;
+    return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {
     if (!governor) {
@@ -49,14 +93,15 @@ async function governedFetch(governor, fetchUpload, target, options, check = () 
     governor.pending = (governor.pending ?? 0) + 1;
     let state;
     try { state = transferProcess(governor); } catch (error) { governor.pending--; throw error; }
-    const id = randomUUID(); clearTimeout(state.idle);
+    const id = randomUUID();
     return new Promise((resolve, reject) => {
-        const cancel = () => { if (state.child.connected) state.child.send({ kind: 'cancel', id }); finish({ error: 'cancelled' }); };
+        const cancel = () => { finish({ error: 'cancelled' }); state.send({ kind: 'cancel', id }); };
         const finish = message => {
             if (!state.pending.has(id)) return;
             state.pending.delete(id); governor.pending--; options.signal.removeEventListener('abort', cancel);
-            if (!state.pending.size) { state.idle = setTimeout(() => state.child.kill(), 1000); state.idle.unref(); }
+            if (!state.closed && !state.pending.size) { state.idle = setTimeout(state.retire, 1000); state.idle.unref(); }
             if (options.signal.aborted) { reject(options.signal.reason); return; }
+            if (message.disconnected) { reject(new TransferWorkerDisconnected()); return; }
             if (message.error) { const error = new Error('Sync transport unavailable.'); error.code = message.code ?? 'ECONNRESET'; reject(error); return; }
             if (message.bytes) { resolve({ bytes: message.bytes, sha256: message.sha256 }); return; }
             if (message.digest) { resolve(message.digest); return; }
@@ -64,7 +109,9 @@ async function governedFetch(governor, fetchUpload, target, options, check = () 
         };
         finish.check = async phase => { options.signal.throwIfAborted(); await check(); const target = phase === 'dispatch' ? await options.refreshTarget?.() : undefined; options.signal.throwIfAborted(); return target; };
         state.pending.set(id, finish); options.signal.addEventListener('abort', cancel, { once: true });
-        state.child.send({ kind: options._hash ? 'hash' : options._get ? 'get' : 'put', id, url: String(target), headers: options.headers, bytes: options.body, ...(options._get ?? {}) }, error => { if (error) finish({ error: 'transport' }); });
+        governor.onPolicyChange();
+        if (!state.pending.has(id)) return;
+        state.send({ kind: options._hash ? 'hash' : options._get ? 'get' : 'put', id, url: String(target), headers: options.headers, bytes: options.body, ...(options._get ?? {}) });
         if (options.signal.aborted) cancel();
     });
 }
@@ -77,4 +124,4 @@ async function governedDownload(governor, target, signal, check, refreshTarget) 
     return governedFetch(governor, globalThis.fetch, target.url, { signal, headers: target.headers,
         refreshTarget, _get: { offset: target.offset, length: target.length, size: target.size, expiresAt: target.expiresAt } }, check);
 }
-module.exports = { governedFetch, governedHash, governedDownload };
+module.exports = { TransferWorkerDisconnected, governedFetch, governedHash, governedDownload };

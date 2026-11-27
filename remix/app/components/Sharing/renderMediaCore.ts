@@ -57,32 +57,33 @@ const isUnquotedCssUrl = (value: string): boolean => {
 // Parse CSS values, not arbitrary text. Quoted strings/comments and URLs on
 // other origins cannot smuggle a nested url(...) into the sharing context.
 // Collect first so malformed or over-budget values grant/transform nothing.
-export const mapCssMediaUrls = (value: string, mediaUrl: MediaUrl): string => {
-	if (value.length > 65536 || !value.includes('(')) return value;
+export const mapCssMediaUrls = (value: string, mediaUrl: MediaUrl, options: { stored?: boolean; signal?: AbortSignal } = {}): string => {
+	if ((!options.stored && value.length > 65536) || !value.includes('(')) return value;
 	try {
 		const parsed = valueParser(value);
 		const candidates: Array<{ value: string; replace: (value: string) => void }> = [];
 		const stringNode = (node: valueParser.Node, value: string): valueParser.StringNode => ({ type: 'string', sourceIndex: node.sourceIndex, sourceEndIndex: node.sourceEndIndex, quote: '"', value: cssQuote(value) });
 		let visited = 0;
-		const walk = (nodes: valueParser.Node[], depth: number, imageSet = false): void => {
-			if (depth > 32) throw new Error('CSS depth limit');
-			for (const [index, node] of nodes.entries()) {
-				if (++visited > 2048 || ('unclosed' in node && node.unclosed)) throw new Error('Invalid or oversized CSS');
-				if (node.type === 'string' && imageSet) candidates.push({ value: node.value, replace: (value) => { nodes[index] = stringNode(node, value); } });
-				if (node.type !== 'function') continue;
-				const name = cssFunctionName(nodes, index);
-				if (name === 'url') {
-					visited += node.nodes.length;
-					if (visited > 2048 || node.nodes.some((part) => 'unclosed' in part && part.unclosed)) throw new Error('Invalid or oversized CSS');
-					const parts = node.nodes.filter((part) => part.type !== 'space');
-					const part = parts[0];
-					const raw = valueParser.stringify(node.nodes);
-					const argument = parts.length === 1 && part?.type === 'string' ? part.value : isUnquotedCssUrl(raw) ? raw : null;
-					if (argument !== null) candidates.push({ value: argument, replace: (value) => { node.nodes = [stringNode(node, value)]; } });
-				} else walk(node.nodes, depth + 1, name === 'image-set' || name === '-webkit-image-set');
-			}
-		};
-		walk(parsed.nodes, 0);
+		const stack = [{ nodes: parsed.nodes, entries: parsed.nodes.entries(), depth: 0, imageSet: false }];
+		while (stack.length) {
+			const frame = stack[stack.length - 1];
+			if (!options.stored && frame.depth > 32) throw new Error('CSS depth limit');
+			const next = frame.entries.next();
+			if (next.done) { stack.pop(); continue; }
+			const [index, node] = next.value;
+			options.signal?.throwIfAborted();
+			if ((!options.stored && ++visited > 2048) || ('unclosed' in node && node.unclosed)) throw new Error('Invalid or oversized CSS');
+			if (node.type === 'string' && frame.imageSet) candidates.push({ value: node.value, replace: (value) => { frame.nodes[index] = stringNode(node, value); } });
+			if (node.type !== 'function') continue;
+			const name = cssFunctionName(frame.nodes, index);
+			if (name === 'url') {
+				visited += node.nodes.length;
+				if ((!options.stored && visited > 2048) || node.nodes.some((part) => 'unclosed' in part && part.unclosed)) throw new Error('Invalid or oversized CSS');
+				const parts = node.nodes.filter((part) => part.type !== 'space'), part = parts[0], raw = valueParser.stringify(node.nodes);
+				const argument = parts.length === 1 && part?.type === 'string' ? part.value : isUnquotedCssUrl(raw) ? raw : null;
+				if (argument !== null) candidates.push({ value: argument, replace: (value) => { node.nodes = [stringNode(node, value)]; } });
+			} else stack.push({ nodes: node.nodes, entries: node.nodes.entries(), depth: frame.depth + 1, imageSet: name === 'image-set' || name === '-webkit-image-set' });
+		}
 		let changed = false;
 		for (const candidate of candidates) {
 			const decoded = cssUnescape(candidate.value);
@@ -92,7 +93,7 @@ export const mapCssMediaUrls = (value: string, mediaUrl: MediaUrl): string => {
 			changed = true;
 		}
 		return changed ? parsed.toString() : value;
-	} catch { return value; }
+	} catch (error) { if (options.stored) throw error; return value; }
 };
 
 export const mapStyleMediaUrls = <T>(style: T, mediaUrl: MediaUrl): T => {

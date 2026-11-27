@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityManager } from '~/activity/activityManager';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -6,6 +7,7 @@ import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 
 import { readDeviceDetailCache, readDeviceListCache, writeDeviceDetailCache, writeDeviceListCache } from './deviceCache';
 import { createDeviceRuntimeState, deviceActionPolicy, reconcileDeviceCommand } from './deviceCore';
+import { readDeviceResources } from './deviceResourceMetrics';
 import type { DeviceActionControl, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type {
 	DeviceActionKind,
@@ -379,6 +381,7 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 	const allCapabilities = [...device.capabilities, ...device.connectors.flatMap((connector) => connector.capabilities)];
 	return {
 		id: device.id,
+		rootFolderId: device.rootFolderId,
 		name: device.name || 'Computer',
 		platform: device.platform,
 		// The cloud projection proves the paired node exists, but does not expose
@@ -445,6 +448,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			spotify: device.state?.spotify,
 			chromeYouTube: device.state?.chromeYouTube,
 			powerTimers: device.state?.powerTimers,
+			resources: readDeviceResources(device.state?.resources),
 			battery: device.state?.battery
 				? {
 					...device.state.battery,
@@ -966,8 +970,8 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 	useEffect(() => {
 		if (!active) return;
 		void refreshList();
-		const timer = window.setInterval(() => void refreshList(), LIST_REFRESH_MS);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Devices/useDeviceStore:1', 'Device list', () => refreshList(), LIST_REFRESH_MS);
+		return () => clearActivityInterval(timer);
 	}, [active, refreshList]);
 
 	useEffect(() => {
@@ -977,6 +981,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 
 	useEffect(() => {
 		if (!active || !ownerId || !selectedDeviceId) return;
+		return activityManager.register({id:'device.events',title:'Device live events',kind:'event',detail:'Long-polls only the selected device. Disabling aborts the active request and its retry loop.'}, () => {
 		const controller = new AbortController();
 		let cancelled = false;
 		let cursor = readEventCursor(ownerId, selectedDeviceId);
@@ -1040,6 +1045,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 			cancelled = true;
 			controller.abort();
 		};
+		});
 	}, [active, api, notifyError, ownerId, refreshDevice, selectedDeviceId]);
 
 	const visibleStore = store.ownerId === ownerId ? store : seedStore(ownerId, selectedDeviceId);

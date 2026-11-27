@@ -34,10 +34,11 @@ test('activation during or after service shutdown cannot create another window',
  }
 });
 
-test('quit waits for browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
- const browser = gate(), oauth = gate(), database = gate();
+test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
+ const passwords = gate(), browser = gate(), oauth = gate(), database = gate();
  const calls=[];
  const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+  process: {platform: 'linux'}, passwordProvider: {close: async()=>{calls.push('passwords'); await passwords.promise;}},
   agentBrowsersPromise: Promise.resolve({close:async()=>{calls.push('browser'); await browser.promise;}}),
   globalThis:{[Symbol.for('thingtime.chatgpt-plan.close')]:async()=>{calls.push('oauth'); await oauth.promise;}},
   localRuntime:{stop:async()=>{calls.push('database'); await database.promise;}},
@@ -45,11 +46,12 @@ test('quit waits for browser cleanup, OAuth shutdown and Mongo shutdown as one b
  });
  let done=false; pending.then(()=>{done=true;});
  await new Promise(resolve=>setImmediate(resolve));
- assert.deepEqual(calls.sort(),['browser','oauth']);
+ assert.deepEqual(calls.sort(),['browser','oauth','passwords']);
  browser.finish(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
  oauth.finish(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
  assert.ok(calls.includes('database'));
- database.finish(); await pending; assert.equal(done,true);
+ database.finish(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
+ passwords.finish(); await pending; assert.equal(done,true);
  assert.doesNotMatch(source,/closingAgentBrowsers/);
  assert.match(source,/if \(desktopServicesClosing\) throw new Error\('Thingtime is closing/);
 });
@@ -57,6 +59,7 @@ test('quit waits for browser cleanup, OAuth shutdown and Mongo shutdown as one b
 test('browser cleanup failure still waits for local database cleanup', async () => {
  const database=gate(); let warned=false;
  const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+  process: {platform: 'darwin'},
   agentBrowsersPromise:Promise.resolve({close:async()=>{throw new Error('fixture');}}),
   globalThis:{},Symbol,localRuntime:{stop:()=>database.promise},console:{warn:()=>{warned=true;}}
  });

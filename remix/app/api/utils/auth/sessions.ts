@@ -17,12 +17,18 @@ export type SessionDoc = {
   // revocable the same way
   // 'device-pairing'/'watch-pairing'/'device' — native device handshakes and the long-lived
   // credential it upgrades into, revocable the same way
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  // 'file-sync-transfer' — no credential of its own; binds the exact issuing
+  // browser and paired device sessions to one existing upload reservation.
+  // A file-sync-photo-run can mint only exact original reservations for its current private Photos backup.
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'file-sync-transfer' | 'file-sync-photo-run' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection' | 'chatgpt-mcp-mutation' | 'chatgpt-mcp-mutation-chunk';
   secureVaultKey?: Binary;
   meta?: Record<string, any>;
 };
 
 export type CreateSessionOptions = {
+  // A signed one-time authorization request can supply its preallocated ID so
+  // repeated consent submissions collide on the existing unique jti index.
+  jti?: string;
   expiresAt?: Date | null;
   purpose?: SessionDoc['purpose'];
   meta?: Record<string, any>;
@@ -34,7 +40,7 @@ export type CreateSessionOptions = {
 export const createSession = async (userId: string, options: CreateSessionOptions = {}): Promise<SessionDoc> => {
   const now = new Date();
   const session: SessionDoc = {
-    jti: crypto.randomUUID(),
+    jti: options.jti ?? crypto.randomUUID(),
     userId,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
     createdAt: now,

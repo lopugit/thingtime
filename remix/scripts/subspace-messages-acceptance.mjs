@@ -95,7 +95,8 @@ try {
   const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.origin, origin, 'Manifest must describe this isolated origin');
   const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0',
-    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1' };
+    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1',
+    'api.things': '1.42.0', 'api.things-update': '1.13.0' };
   for (const [feature, minimum] of Object.entries(requirements)) {
     const actual = manifest.features[feature]?.version?.split('.').map(Number);
     const required = minimum.split('.').map(Number);
@@ -255,6 +256,58 @@ try {
     assert.deepEqual(projected.thing.crystal.richText, richText);
     if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${region}-rich-post-projection.json`), JSON.stringify(projected, null, 2));
   }
+  const renderTemplate = { tag: 'p', props: { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, children: ['{text}'] };
+  const savedRenderer = (await api('/api/v1/things', { cookie: owner.cookie, body: {
+    thingtime: ['component'], acl: ['tt:all'], crystal: { name: 'Acceptance text render Component', componentKey: 'render-acceptance-' + randomUUID(), version: 1, args: [], render: renderTemplate }
+  } })).data.thing;
+  assert(savedRenderer?.id, 'Saved render Component must exist through the real API');
+  const textFixtures = [
+    { key: 'saved-component', crystal: { renderComponent: { id: savedRenderer.id }, text: 'Saved Component renders safely <strong>as text</strong>\nSecond persisted line' } },
+    { key: 'embedded-component', crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'Screenshot payload renders through an explicit embedded Component' } },
+    { key: 'typed-post-component', thingtime: ['post'], crystal: { type: 'text', renderComponent: { id: savedRenderer.id }, text: 'A real typed Post retains its saved Component' } },
+    { key: 'typed-comment-component', thingtime: ['post', 'comment'], targetId: post.id, crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'A rich Comment retains its embedded Component' } },
+    { key: 'nested-post-component', thingtime: ['post'], crystal: { type: 'thingtime', renderComponent: { id: savedRenderer.id }, text: 'The explicit outer Component wins over nested post data', thing: { note: 'Nested data must not select this presentation' } } }
+  ];
+  for (const fixture of textFixtures) {
+    const result = (await api('/api/v1/things', { cookie: owner.cookie, body: {
+      thingtime: fixture.thingtime || ['data'], crystal: fixture.crystal, acl: ['tt:all'], ...(fixture.targetId ? { targetId: fixture.targetId } : {})
+    } })).data;
+    const created = result.thing || result.post;
+    assert(created?.id, 'Explicit Component fixture must be created through the real API');
+    fixture.id = created.id;
+    const readback = (await api(`/api/v1/things?id=${created.id}`, { cookie: owner.cookie })).data.thing;
+    assert.equal(readback.crystal.text, fixture.crystal.text, `${fixture.key}: typed content must survive creation`);
+    if (fixture.crystal.renderComponent.id) assert.deepEqual(readback.crystal.renderComponent, fixture.crystal.renderComponent, `${fixture.key}: saved pointer must survive creation`);
+    else assert.deepEqual(readback.crystal.renderComponent?.render, renderTemplate, `${fixture.key}: embedded render tree must survive creation`);
+    fixture.crystal = readback.crystal;
+    fixture.embeds = {};
+    for (const region of ['feed', 'sidebar']) {
+      fixture.embeds[region] = (await addEmbed(created.id, region)).embed.id;
+      const projected = (await readEmbeds(owner, region)).embeds.find(row => row.id === fixture.embeds[region]);
+      assert.deepEqual(projected?.thing?.crystal, fixture.crystal, `${fixture.key}/${region}: persisted renderer payload must survive projection`);
+      if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${fixture.key}-${region}-projection.json`), JSON.stringify(projected, null, 2));
+    }
+  }
+  // Reproduce the screenshot with an already-saved typed Post, not an object
+  // carrying a coincidentally similar `type` field in the free-form data schema.
+  const beforeRepair = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  await api('/api/v1/things', { method: 'PATCH', cookie: owner.cookie, body: {
+    id: post.id, expectedUpdatedAt: beforeRepair.updatedAt, crystal: { renderComponent: { id: savedRenderer.id } }
+  } });
+  const repaired = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  assert.deepEqual(repaired.crystal, { ...beforeRepair.crystal, renderComponent: { id: savedRenderer.id } }, 'Repair must retain the complete original Post content');
+  for (const field of ['author', 'acl', 'visibility', 'thingtime', 'targetId', 'folderId']) assert.deepEqual(repaired[field], beforeRepair[field], `Repair must preserve ${field}`);
+  await api('/api/v1/things/update', { cookie: owner.cookie, body: { id: post.id, crystal: { title: 'Post title edited after renderer repair' } } });
+  const edited = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  assert.equal(edited.crystal.title, 'Post title edited after renderer repair', 'Ordinary Post edit must actually be saved');
+  assert.deepEqual(edited.crystal.renderComponent, { id: savedRenderer.id }, 'Ordinary Post edits must not strip the saved renderer');
+  assert.deepEqual(edited.crystal.richText, richText, 'Ordinary Post edits must preserve the original rich text');
+  for (const region of ['feed', 'sidebar']) {
+    const projection = (await readEmbeds(owner, region)).embeds.find(row => row.id === richPostEmbeds[region]);
+    assert.deepEqual(projection.thing.crystal, edited.crystal, `${region}: repaired Post projection must retain its renderer and content`);
+    if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `repaired-existing-post-${region}-projection.json`), JSON.stringify(projection, null, 2));
+  }
+  textFixtures.push({ key: 'repaired-existing-post', id: post.id, crystal: edited.crystal, embeds: richPostEmbeds });
   // More than one page proves batching is not a product count cap.
   for (let n = 0; n < 21; n++) await addEmbed(embedded.id);
   const firstPage = await readEmbeds(member);
@@ -273,7 +326,7 @@ try {
     const webOrigin = `http://127.0.0.1:${ports.web}`;
     await ready(vite, webOrigin);
     const fixture = join(dir, 'browser-fixture.json');
-    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, richPostEmbeds, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
+    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, richPostEmbeds, textFixtures, savedRendererCrystal: savedRenderer.crystal, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
     const ui = start(process.execPath, ['scripts/subspace-messages-acceptance.mjs', '--browser-worker', fixture], {
       PLAYWRIGHT_MODULE: process.env.PLAYWRIGHT_MODULE,
       SUBSPACE_BROWSER_EXECUTABLE: process.env.SUBSPACE_BROWSER_EXECUTABLE,
@@ -339,9 +392,47 @@ async function browserAcceptance() {
   const viewGroup = () => page.getByRole('group', { name: 'Subspace view', exact: true });
   const mode = name => viewGroup().getByRole('button', { name, exact: true });
   const commentsToggle = () => page.getByRole('checkbox', { name: 'Automatically expand all comments', exact: true });
+  const assertControlGeometry = async label => {
+    const bounds = await viewGroup().boundingBox();
+    const viewportWidth = await page.evaluate(() => innerWidth);
+    const geometry = await page.evaluate(() => {
+      const target = document.querySelector('[role="group"][aria-label="Subspace view"]');
+      const ancestors = [];
+      let node = target;
+      for (let depth = 0; node && depth < 12; depth++, node = node.parentElement) {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        ancestors.push({ tag: node.tagName, id: node.id, className: typeof node.className === 'string' ? node.className : '',
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height, scrollLeft: node.scrollLeft,
+          scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, overflowX: style.overflowX, transform: style.transform });
+      }
+      return { scrollX, viewportLeft: visualViewport?.offsetLeft, ancestors };
+    });
+    if (bounds && (bounds.x < -1 || bounds.x + bounds.width > viewportWidth + 1)) {
+      await writeFile(join(out, `${label}-geometry.json`), JSON.stringify({ bounds, viewportWidth, ...geometry }, null, 2));
+    }
+    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= viewportWidth + 1,
+      `${label}: controls escape viewport (${JSON.stringify(bounds)}, viewport ${viewportWidth}, ${JSON.stringify(geometry)})`);
+  };
   const openSpace = async space => {
     await page.goto(fixture.origin + '/s/' + space.slug, { waitUntil: 'domcontentloaded' });
     await viewGroup().waitFor({ timeout: 60000 });
+  };
+  const pageBuilder = page.getByRole('button', { name: 'Builder on current page', exact: true });
+  const togglePageBuilder = async active => {
+    await page.getByRole('button', { name: 'Open menu', exact: true }).click();
+    await pageBuilder.waitFor();
+    assert.equal(await pageBuilder.getAttribute('aria-pressed'), String(!active));
+    await pageBuilder.press('Enter');
+    await page.getByRole('button', { name: 'Open menu', exact: true }).waitFor();
+  };
+  const assertLayoutControls = async active => {
+    for (const key of ['subspace-view-controls', 'subspace-display-feed', 'subspace-display-sidebar']) {
+      const host = page.locator(`[data-settings-document="${key}"]`);
+      await host.waitFor();
+      const control = host.getByRole('button', { name: 'Edit layout', exact: true });
+      await control.waitFor({ state: active ? 'visible' : 'detached' });
+    }
   };
   const assertMode = async name => { assert.equal(await mode(name).getAttribute('aria-pressed'), 'true', `${name} must be selected`); };
   const measure = async label => {
@@ -354,8 +445,7 @@ async function browserAcceptance() {
       window.scrollTo(0, max);
     });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: horizontal overflow`);
-    const bounds = await viewGroup().boundingBox();
-    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= await page.evaluate(() => innerWidth) + 1, `${label}: controls escape viewport`);
+    await assertControlGeometry(label);
     await page.screenshot({ path: join(out, label + '.png'), fullPage: true });
     await page.evaluate(() => window.scrollTo(0, 0));
   };
@@ -384,15 +474,102 @@ async function browserAcceptance() {
     await openSpace(fixture.space);
     await assertMode('Posts');
     await page.getByText('Subspace acceptance discussion', { exact: true }).first().waitFor({ timeout: 30000 });
+    for (const width of [390, 1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      await assertControlGeometry(`view-controls-${width}-posts`);
+      await mode('Messages').click();
+      await assertMode('Messages');
+      await assertControlGeometry(`view-controls-${width}-messages`);
+      await mode('Posts').click();
+      await assertMode('Posts');
+      await assertControlGeometry(`view-controls-${width}-posts-restored`);
+    }
     const sidebar = page.getByTestId('subspace-sidebar-embeds');
     await sidebar.getByText('Embedded acceptance component', { exact: true }).first().waitFor({ timeout: 30000 });
     const sidebarRead = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=sidebar')).json(), fixture.space.id);
     assert(sidebarRead.embeds.some(row => row.thing?.id === fixture.embeddedThingId), 'Sidebar source must match the real API projection');
     assert(await sidebar.locator('article').count() > 0, 'Sidebar must render actual repeated Thing cards');
-    await sidebar.getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
-    await page.getByTestId('subspace-feed-embeds').getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
-    await page.screenshot({ path: join(out, 'rich-post-embedded-feed-sidebar.png'), fullPage: true });
-    await note('Ordinary Editor.js post rendered in feed and sidebar with independent API evidence');
+    const assertTextEmbeds = async () => {
+      for (const region of ['feed', 'sidebar']) {
+        const host = page.getByTestId(`subspace-${region}-embeds`);
+        for (const textFixture of fixture.textFixtures) {
+          const rendered = host.locator('article').locator('p, blockquote').filter({ hasText: textFixture.crystal.text });
+          await rendered.waitFor({ timeout: 30000 });
+          assert.equal(await rendered.count(), 1, `${region}: Component content must render in one paragraph`);
+          assert.equal(await rendered.locator('strong').count(), 0, 'Plain text must never execute markup');
+          const cardIndex = await host.locator('article').evaluateAll((cards, text) => cards.findIndex(card => card.textContent.includes(text)), textFixture.crystal.text);
+          assert(cardIndex >= 0, 'Rendered Component must have an inspectable Thing card');
+          const card = host.locator('article').nth(cardIndex);
+          await card.getByRole('button', { name: 'Show the Thingtime view 🌀', exact: true }).click();
+          await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).waitFor();
+          // Typed Posts have more fields than the inspector's first page.
+          // Expand the ordinary data view before inspecting its metadata.
+          if (!await card.getByText('renderComponent', { exact: true }).count()) {
+            const more = card.getByRole('button', { name: 'Load more', exact: true }).first();
+            if (await more.count()) await more.click();
+          }
+          await card.getByText('renderComponent', { exact: true }).first().waitFor();
+          await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).click();
+          await rendered.waitFor();
+        }
+      }
+    };
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await assertTextEmbeds();
+      await assertLayoutControls(false);
+      await togglePageBuilder(true);
+      await assertLayoutControls(true);
+      await measure(`layout-builder-${viewport.width}`);
+      await togglePageBuilder(false);
+      await assertLayoutControls(false);
+      await measure(`plain-text-embeds-${viewport.width}`);
+    }
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await viewGroup().waitFor({ timeout: 30000 });
+    await assertTextEmbeds();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await note('Layout controls default off and follow the accessible page Builder toggle at desktop/mobile widths');
+    await note('Data, typed Posts, rich Comments and repaired existing Posts retain explicit saved/embedded Components; both regions render, toggle and reload at desktop/mobile widths');
+    const savedRendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
+    const changedTemplate = { ...fixture.savedRendererCrystal, render: { ...fixture.savedRendererCrystal.render, tag: 'blockquote' } };
+    const changedRenderer = await page.request.post(fixture.origin + '/api/v1/things/update', {
+      headers: { Origin: fixture.origin }, data: { id: savedRendererId, crystal: changedTemplate }
+    });
+    assert.equal(changedRenderer.status(), 200, 'Render Component template edits must use the real API');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await assertTextEmbeds();
+    for (const region of ['feed', 'sidebar']) {
+      await page.getByTestId(`subspace-${region}-embeds`).locator('blockquote').filter({ hasText: fixture.textFixtures[0].crystal.text }).waitFor();
+    }
+    await note('Saved Component source template edited independently through API; both existing embeds reload the changed block with unchanged data');
+    await setSession(fixture.memberCookie);
+    await openSpace(fixture.space);
+    await assertTextEmbeds();
+    const rendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
+    const setRendererAccess = async acl => {
+      const response = await page.request.post(fixture.origin + '/api/v1/things/update', {
+        headers: { Cookie: fixture.cookie, Origin: fixture.origin }, data: { id: rendererId, acl }
+      });
+      assert.equal(response.status(), 200, 'Owner must change the render Component ACL through the real API');
+    };
+    await setRendererAccess(['tt:user']);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    for (const region of ['feed', 'sidebar']) {
+      const host = page.getByTestId(`subspace-${region}-embeds`);
+      await host.getByText('This render Component is unavailable or invalid. Open the data view to inspect this Thing.', { exact: true }).first().waitFor({ timeout: 30000 });
+      const rendered = host.locator('article').locator('p, blockquote');
+      for (const textFixture of fixture.textFixtures) {
+        if (textFixture.crystal.renderComponent.id === rendererId) assert.equal(await rendered.filter({ hasText: textFixture.crystal.text }).count(), 0, `${textFixture.key}: revoked renderer must not retain cached output`);
+        else await rendered.filter({ hasText: textFixture.crystal.text }).waitFor();
+      }
+    }
+    await page.screenshot({ path: join(out, 'render-component-source-acl-revoked.png'), fullPage: true });
+    await setRendererAccess(['tt:all']);
+    await setSession(fixture.cookie);
+    await openSpace(fixture.space);
+    await assertTextEmbeds();
+    await note('Saved Component independent ACL revocation hides cached rendering from a member; embedded Component and data source remain accessible');
     await commentsToggle().check();
     await page.getByText('First saved subspace comment', { exact: true }).waitFor({ timeout: 30000 });
     const editor = page.locator('[contenteditable="true"]').first();
@@ -486,32 +663,81 @@ async function browserAcceptance() {
     assert.equal(removeResponse.status(), 200);
     const remaining = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=feed')).json(), fixture.space.id);
     assert(!remaining.embeds.some(row => row.id === added.embed.id), 'UI removal must persist via the real API');
+    const modLayout = page.locator('[data-settings-document="subspace-embed-feed"]');
+    await modLayout.getByRole('button', { name: 'Edit layout', exact: true }).waitFor({ state: 'detached' });
+    await togglePageBuilder(true);
     await editNestedText('subspace-embed-feed', 'embed-add', 'Add selected Thing');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Add selected Thing', exact: true }).waitFor({ timeout: 30000 });
     await note('Search picker and independent editable control persisted');
     await openSpace(fixture.space);
     await mode('Posts').click();
+    await togglePageBuilder(true);
     await editNestedText('subspace-display-feed', 'embed-card-title', '{item.name} · editable');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('link', { name: 'Embedded acceptance component · editable', exact: true }).waitFor({ timeout: 30000 });
+    await assertLayoutControls(false);
     await note('Repeated embedded Thing title independently edited, saved and reloaded');
     const controlsDocument = page.locator('[data-settings-document="subspace-view-controls"]');
+    await togglePageBuilder(true);
     await controlsDocument.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await controlsDocument.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
     await page.getByRole('combobox', { name: 'Select block', exact: true }).selectOption('subspace-expand-label');
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Expand comments automatically');
     await page.screenshot({ path: join(out, 'subspace-editable-view-blocks.png'), fullPage: true });
     await page.getByRole('button', { name: 'Close builder', exact: true }).click();
-    await controlsDocument.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await togglePageBuilder(false);
+    await controlsDocument.getByText('Expand all comments', { exact: true }).waitFor();
+    await controlsDocument.getByText('Expand comments automatically', { exact: true }).waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
+    await togglePageBuilder(true);
+    await controlsDocument.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    await controlsDocument.getByText('Expand comments automatically', { exact: true }).waitFor();
+    await controlsDocument.getByRole('button', { name: 'Save layout', exact: true }).press('Enter');
     await controlsDocument.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-    await controlsDocument.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+    await togglePageBuilder(false);
+    await controlsDocument.getByRole('button', { name: 'Done editing layout', exact: true }).waitFor({ state: 'detached' });
+    await controlsDocument.getByRole('button', { name: 'Open Builder inspector', exact: true }).waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByText('Expand comments automatically', { exact: true }).waitFor({ timeout: 30000 });
     assert.equal(await commentsToggle().isChecked(), true, 'Nested Builder label edit must preserve its independent checkbox action');
     await note('Nested view control edited, saved and reloaded');
+    await togglePageBuilder(true);
+    await page.getByTestId('subspace-mod-tools').click();
+    // The back link only exists after the router commits the intermediate page.
+    await page.getByRole('link', { name: `← Back to s/${fixture.space.slug}`, exact: true }).click();
+    await assertLayoutControls(false);
+    await note('Client navigation clears Builder mode on returning to the page');
+    await togglePageBuilder(true);
+    await setSession(fixture.memberCookie);
+    await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+    await page.getByTestId('subspace-mod-tools').waitFor({ state: 'detached' });
+    await assertLayoutControls(false);
+    await note('Account transition on the same URL clears Builder mode and moderator controls');
+    for (const [path, key, label] of [
+      ['/settings/connections#connector-confirmations', 'connector-confirmations', 'Edit layout'],
+      ['/connections', 'connections-provider-catalog', 'Edit provider cards']
+    ]) {
+      await page.goto(fixture.origin + path, { waitUntil: 'domcontentloaded' });
+      const host = page.locator(`[data-settings-document="${key}"]`);
+      await host.waitFor({ timeout: 60000 });
+      const edit = host.getByRole('button', { name: label, exact: true });
+      for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        await edit.waitFor({ state: 'detached' });
+        await togglePageBuilder(true);
+        await edit.waitFor();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${key}: horizontal overflow`);
+        await page.screenshot({ path: join(out, `${key}-builder-${viewport.width}.png`), fullPage: true });
+        await togglePageBuilder(false);
+        await edit.waitFor({ state: 'detached' });
+      }
+    }
+    await note('Settings and Connections layout controls use the same gate on desktop and mobile');
     assert.deepEqual(errors, [], 'Browser runtime errors');
-    await writeFile(join(out, 'browser-result.json'), JSON.stringify({ ok: true, desktopAndMobile: true, persistedViews: true, scopedComments: true, draftSwitching: true, realMessageSendRead: true, realEmbedAddRemove: true, browserNetworkDenied: true, errors }, null, 2));
+    await writeFile(join(out, 'browser-result.json'), JSON.stringify({ ok: true, desktopAndMobile: true, persistedViews: true, scopedComments: true, draftSwitching: true, realMessageSendRead: true, realEmbedAddRemove: true, explicitComponentEmbedRendering: true, explicitComponentDataToggle: true, browserNetworkDenied: true, errors }, null, 2));
     console.log(JSON.stringify({ ok: true, browser: true, evidenceDir: out, errors }));
   } catch (error) {
     await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }).catch(() => {});

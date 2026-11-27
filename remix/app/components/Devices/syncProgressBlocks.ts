@@ -1,6 +1,7 @@
 import { parseSyncResourceStatus } from '~/fileSync/resourceGovernor';
 import { parsePriorityReadiness } from '~/fileSync/priorityReadiness';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
+import type { SyncMode } from '~/fileSync/reconcile';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { syncProgressMetrics, type SyncProgressPage, type SyncProgressState, type SyncProgressTotals } from '~/fileSync/progressProjection';
 
@@ -10,6 +11,17 @@ const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock =
 const button = (id: string, text: string, operation: string, inputs: Record<string, unknown> = {}, props: Record<string, unknown> = {}): WebpageBlock =>
 	element(id, 'button', text, { type: 'button', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs }, ...props },
 		{ 'min-height': '40px', padding: '6px 10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%' });
+
+/** Separate editable details keep operation IDs out of the ordinary status. */
+export const syncRecoveryBlocks: WebpageBlock[] = [{ id: 'sync-recovery', type: 'element', tag: 'section',
+	props: { 'aria-label': 'Sync recovery details' }, css: { 'min-width': '0', 'overflow-wrap': 'anywhere' }, children: [
+		element('sync-recovery-status', 'p', '{sync.recoveryStatus}', {}, { 'font-size': '12px' }),
+		when('sync-recovery-reserved', 'sync.hasReservation', [
+			element('sync-recovery-operation', 'p', 'Operation: {sync.operationId}', {}, { 'font-size': '12px' }),
+			when('sync-recovery-file', 'sync.hasFileId', [element('sync-recovery-binding', 'p', 'File: {sync.fileId}', {}, { 'font-size': '12px' })]),
+			element('sync-recovery-effect', 'p', '{sync.effect}', {}, { 'font-size': '12px' })
+		])
+	] }];
 
 /** Every label, count, progress bar, control and repeated row field remains
  * an ordinary selectable Builder block. The document stores no runtime paths. */
@@ -77,7 +89,7 @@ export function syncProgressNodeDisplay(value: SyncProgressTotals, progress: For
 		counts: `${value.files.toLocaleString()} files · ${folders.toLocaleString()} ${value.kind === 'folder' && value.path ? 'subfolders' : 'folders'} · ${value.unchanged.toLocaleString()} unchanged · ${value.excluded.toLocaleString()} excluded`,
 		bytes: `${progressBytes(result.bytes)} / ${progressBytes(value.bytesTotal)} to copy · ${value.confirmedFiles.toLocaleString()} / ${value.transferFiles.toLocaleString()} files confirmed · ${progressBytes(value.indexedBytes)} indexed` };
 }
-export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '', prioritiesEnabled = false, prioritiesDisabled = false) {
+export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '', prioritiesEnabled = false, prioritiesDisabled = false, mode?: SyncMode) {
 	const rows: Record<string, unknown>[] = [];
 	const append = (parent: string, depth: number) => {
 		const branch = branches[parent]; if (!branch) return;
@@ -97,7 +109,11 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const liveIndex = progress?.indexState === 'indexing' || progress?.indexState === 'watching';
 	const growingTotal = liveIndex || progress?.totalFinal === false;
 	const stoppedIndex = (liveIndex || !hasIndex) && ['error', 'paused', 'cancelled'].includes(state);
-	const download = progress?.direction === 'download';
+	const hasUpload = !!progress?.directions?.upload.operations, hasDownload = !!progress?.directions?.download.operations;
+	const mixed = hasUpload && hasDownload;
+	const transfer = mixed || (!hasUpload && !hasDownload && mode === 'two-way' && !progress?.direction);
+	const download = hasDownload && !hasUpload || (!hasUpload && !hasDownload && (progress?.direction === 'download' || mode === 'download'));
+	const activeDownload = progress?.direction === 'download' || (!progress?.direction && download);
 	const preparation = progress?.preparation;
 	const preparationLabels: Record<NonNullable<ForegroundSyncProgress['preparation']>['phase'], string> = {
 		'validate-local': 'Validating device structure', 'read-remote': 'Reading cloud structure', 'validate-remote': 'Validating cloud structure',
@@ -108,16 +124,18 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}`
 		: liveIndex ? `${progress?.indexState === 'watching' ? 'Initial scan finished. Watching for new and changed files.' : 'Indexing while files transfer. Total still being discovered.'}${progress?.indexed === undefined ? '' : ` ${progress.indexed.toLocaleString()} index observations saved.`}`
 		: progress?.indexState === 'complete' && progress.totalFinal === false ? 'Initial scan finished. Preparing remaining indexed entries while files transfer.'
+		: hasIndex && state === 'running' && progress?.stage === 'scanning' && progress.indexed !== undefined
+			? `Current scan: ${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal !== undefined && progress.coverage !== 'partial' ? ` of ${progress.indexTotal.toLocaleString()}.` : '. Total still being discovered.'} Saved hierarchy remains visible below.`
 		: hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
 		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}.${preparation ? '' : ' Validating structure…'}`}`
 		: preparation ? 'Preparing saved index.'
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
-		: preparation ? `Preparing ${download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? `Verifying ${download ? 'downloaded' : 'uploaded'} files`
+		: preparation ? `Preparing ${transfer ? 'transfers' : download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? transfer ? 'Verifying files' : `Verifying ${download ? 'downloaded' : 'uploaded'} files`
 		: progress?.indexState === 'watching' && progress.confirmed === progress.total && !progress.path ? 'Waiting for new indexed files'
-		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : 'Uploading' : 'Waiting for the first indexed file';
-	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+		: progress?.stage === 'transferring' || hasIndex ? activeDownload ? 'Downloading' : progress?.direction === 'upload' ? 'Uploading' : transfer ? 'Transferring' : 'Uploading' : 'Waiting for the first indexed file';
+	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${transfer ? 'Transfer' : download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}${growingTotal ? ' · Based on files prepared so far' : ''}` : hasIndex ? 'Reading folder totals…' : 'Folder totals become available as files are indexed.',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,

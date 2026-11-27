@@ -2,8 +2,9 @@ import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { withLinkKeys } from '~/api/utils/things/things';
+import { readWebpageActivationCutoff, withLinkKeys } from '~/api/utils/things/things';
 import { resolveWebpage } from '~/api/utils/webpages/webpages';
+import { isPrivateActivationPage, parseWebpageActivation } from '~/schemas/webpageActivation';
 
 // GET /api/v1/webpages/resolve — resolve ONE webpage thing together with every
 // component thing its blocks reference (one batched query, no client N+1).
@@ -34,6 +35,15 @@ export const loader = async ({ request }: { request: Request }) => {
 
 	if (result.ok === false) {
 		return json({ ok: false, error: result.error }, { status: result.status });
+	}
+	const page = result.page;
+	if (params.get('id') && !params.get('key') && user?.accountKind === 'user' && !user.temporary && !user.isCharacter &&
+		page?.author?.id === user.id && isPrivateActivationPage(page.acl) && !page.crystal.siteRoute && !page.executionHeld) {
+		const binding = parseWebpageActivation(page.crystal.activationAction);
+		if (binding && typeof binding.cutoffTime === 'object') {
+			const activationSchedule = await readWebpageActivationCutoff({ id: user.id, username: user.username }, binding.cutoffTime);
+			return json({ ...result, activationSchedule }, { headers: { 'Cache-Control': 'private, no-store' } });
+		}
 	}
 	return json(result);
 };

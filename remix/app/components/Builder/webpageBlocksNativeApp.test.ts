@@ -24,9 +24,15 @@ const WORKSPACE_HTML = '<tt-service-workspace rootId="hq-root" name="Jim’s Mow
 // walks a flat tag/attribute/text tree — enough for the fixtures below, and
 // deliberately no more (the allowlist renderer, not this parser, is the
 // security boundary under test elsewhere).
-type FakeNode = { nodeType: number; textContent: string; tagName?: string; attributes?: { name: string; value: string }[]; style?: null; childNodes: FakeNode[] & { forEach: FakeNode[]['forEach'] } };
+type FakeNode = { nodeType: number; textContent: string; tagName?: string; attributes?: { name: string; value: string }[]; style?: null; childNodes: FakeNode[]; firstChild?: FakeNode; nextSibling?: FakeNode };
 const parseFragment = (html: string): FakeNode => {
-	const element = (tagName: string, attributes: { name: string; value: string }[] = []): FakeNode => ({ nodeType: 1, tagName, attributes, style: null, childNodes: [], get textContent() { return this.childNodes.map((child: FakeNode) => child.textContent).join(''); } } as FakeNode);
+	const element = (tagName: string, attributes: { name: string; value: string }[] = []): FakeNode => ({ nodeType: 1, tagName, attributes, style: null, childNodes: [], get textContent() { return this.childNodes.map(child => child.textContent).join(''); } });
+	const append = (parent: FakeNode, child: FakeNode) => {
+		const previous = parent.childNodes[parent.childNodes.length - 1];
+		if (previous) previous.nextSibling = child;
+		else parent.firstChild = child;
+		parent.childNodes.push(child);
+	};
 	const root = element('BODY');
 	const stack = [root];
 	const token = /<\/([a-zA-Z][\w-]*)\s*>|<([a-zA-Z][\w-]*)((?:\s+[\w-]+(?:="[^"]*")?)*)\s*(\/?)>|([^<]+)/g;
@@ -38,9 +44,9 @@ const parseFragment = (html: string): FakeNode => {
 		} else if (open) {
 			const attributes = [...(attrText || '').matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(([, name, value]) => ({ name, value: value ?? '' }));
 			const child = element(open.toUpperCase(), attributes);
-			parent.childNodes.push(child);
+			append(parent, child);
 			if (!selfClosing) stack.push(child);
-		} else if (text) parent.childNodes.push({ nodeType: 3, textContent: text, childNodes: [] as any });
+		} else if (text) append(parent, { nodeType: 3, textContent: text, childNodes: [] });
 	}
 	return root;
 };
@@ -70,9 +76,9 @@ const chromeFor = (seamlessMode?: BuilderChrome['seamlessMode']): BuilderChrome 
 	onMove: () => {}
 });
 
-const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | null; html?: string }) =>
+const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | null; html?: string; blocks?: WebpageBlock[]; signedIn?: boolean }) =>
 	withDom(() => {
-		const blocks: WebpageBlock[] = [{ id: 'service-1', type: 'html', html: props.html ?? WORKSPACE_HTML }];
+		const blocks: WebpageBlock[] = props.blocks ?? [{ id: 'service-1', type: 'html', html: props.html ?? WORKSPACE_HTML }];
 		const element = React.createElement(
 			ChakraProvider,
 			null,
@@ -90,7 +96,7 @@ const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | nul
 				})
 			})
 		);
-		const router = createMemoryRouter([{ id: 'root', path: '/', element }], { hydrationData: { loaderData: { root: { user: { id: 'owner' } } } } });
+		const router = createMemoryRouter([{ id: 'root', path: '/', element }], { hydrationData: { loaderData: { root: { user: props.signedIn === false ? null : { id: 'owner' } } } } });
 		try {
 			return renderToStaticMarkup(React.createElement(RouterProvider, { router }));
 		} finally {
@@ -148,4 +154,20 @@ test('the editor hint only appears for html blocks that carry a native app', () 
 	assert.equal(hasNativeApp('<tt-service-workspace/>'), true);
 	assert.equal(hasNativeApp('<tt-service-workspace-later></tt-service-workspace-later>'), false);
 	assert.deepEqual([...NATIVE_APP_TAGS], ['tt-service-workspace']);
+});
+
+test('expanded collections activate saved sources only on the live page', () => {
+	const blocks: WebpageBlock[] = [{
+		id: 'places-list', type: 'collection', tag: 'tt-collection',
+		props: { label: 'Favourite places', source: { action: 'read-places', inputs: {}, itemsPath: 'items' } },
+		children: [{ id: 'place-name', type: 'text', text: '{item.title}' }]
+	}];
+	// A signed-out live viewer receives the source access boundary rather than
+	// the silent empty success produced when NativeControlsEnabled is absent.
+	const live = renderPage({ blocks, interactive: true, signedIn: false });
+	assert.match(live, /Sign in to load these records/);
+	for (const chrome of [null, chromeFor('builder'), chromeFor('edit')]) {
+		const inert = renderPage({ blocks, interactive: chrome?.seamlessMode === 'edit', chrome, signedIn: false });
+		assert.doesNotMatch(inert, /Sign in to load these records/);
+	}
 });

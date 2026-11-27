@@ -121,6 +121,8 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 			if (doc.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
 			if (doc.thingtime.includes('webpage')) {
 				delete crystal.siteRoute;
+				// A saved automatic run is an owner opt-in, not a copied dependency.
+				delete crystal.activationAction;
 				crystal.forkOf = doc.shareId;
 			}
 			const boundFiles = [...files].filter(([source]) => targets.get(source) === doc.shareId).map(([, copied]) => copied);

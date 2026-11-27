@@ -1,7 +1,7 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
+import { SSO_HUB_PRODUCTION, SSO_HUB_DEVELOP } from './ssoHubOrigins.mjs';
 
-export const SSO_HUB_PRODUCTION = 'https://thingtime.com';
-export const SSO_HUB_DEVELOP = 'https://dev.thingtime.com';
+export { SSO_HUB_PRODUCTION, SSO_HUB_DEVELOP } from './ssoHubOrigins.mjs';
 export const SSO_HUB_CACHE_KEY = 'tt-sso-hub';
 
 export type SsoHubEnvironment = {

@@ -15,13 +15,59 @@ test('single-path inspection uses the same host account and origin fences', asyn
     assert.equal(f.calls.length, 1);
 });
 
+test('metadata-only stamp inspection retains the same host identity and exact path', async () => {
+    const f = fixture(), input = f.input({ action: 'inspect-stamp', rootId: randomUUID(), path: 'large.bin' });
+    const stamp = { path: input.path, id: 'inode', version: 'current', kind: 'file', size: 8_000_000_000 };
+    f.run(async (_method, request) => ({ ...request, roots: [], complete: true, stamp }));
+    assert.deepEqual((await f.host.request(f.event, input)).stamp, stamp);
+    assert.deepEqual(f.calls, [input]);
+    f.account('other');
+    await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+    assert.equal(f.calls.length, 1);
+});
+
+test('same-page capability refresh reads the selected origin once and keeps the hint out of native requests', async () => {
+    const f = fixture(); let version = '1.12.2', reads = 0;
+    f.host.capabilities = async context => {
+        reads++;
+        return { schemaVersion: 1, origin: context.apiOrigin, features: {
+            'api.devices-node-identity': { version: '1.0.0' }, 'api.files': { version }
+        } };
+    };
+    f.run(async (_method, request) => {
+        assert.equal(Object.hasOwn(request, 'refreshApiCapabilities'), false);
+        return { ...request, roots: [], capabilities: { fileAccessVersion: '1.22.0' } };
+    });
+    const context = refreshApiCapabilities => f.host.request(f.event, f.input({ action: 'context', origin: undefined,
+        ...(refreshApiCapabilities ? { refreshApiCapabilities: true } : {}) }));
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.12.2');
+    version = '1.13.0';
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.12.2');
+    assert.equal(reads, 1);
+    assert.equal((await context(true)).apiCapabilities.features['api.files'].version, '1.13.0');
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.13.0');
+    assert.equal(reads, 2);
+    await assert.rejects(f.host.request(f.event, f.input({ action: 'list', refreshApiCapabilities: true })));
+    await assert.rejects(f.host.request(f.event, f.input({ action: 'context', origin: undefined, refreshApiCapabilities: false })));
+    assert.equal(reads, 2);
+    f.account('other');
+    await assert.rejects(context(true));
+    assert.equal(reads, 2);
+});
+
 test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
-    for (const action of ['scan-stream', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard']) {
+    const operations = [
+        ...['scan-stream', 'scan-changes'].map(action => [action, 'one-way-supported']),
+        ...['scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard'].map(action => [action, 'backup-supported']),
+        ...['scan-capture', 'scan-status', 'scan-cancel'].map(action => [action, 'strict-async']),
+    ];
+    for (const [action, capturePolicy] of operations) {
         const f = fixture(), input = f.input({ action, rootId: randomUUID(), inventoryDeviceId: 'device',
-            capturePolicy: ['scan-stream', 'scan-changes'].includes(action) ? 'one-way-supported' : 'backup-supported', ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
+            capturePolicy, ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
         f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
         assert.equal((await f.host.request(f.event, input)).complete, true);
         assert.equal(f.calls[0].action, action);
+        assert.equal(f.calls[0].capturePolicy, capturePolicy);
         assert.equal(f.calls[0].ignoreRules, input.ignoreRules);
         assert.deepEqual(f.calls[0].excludedPaths, ['Library']);
         f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
@@ -293,6 +339,36 @@ test('server capability negotiation is anonymous, bounded, origin-bound and proj
     mode = 'bad-version'; assert.deepEqual((await readCapabilities(context, new AbortController().signal)).features, {});
 });
 
+test('native context projects remote sync capability without trusting malformed versions or foreign origins', async () => {
+    const f = fixture();
+    let origin = f.context.apiOrigin, version = '1.0.0';
+    f.context.window.webContents.session = { fetch: async (url, init) => {
+        assert.equal(url, `${f.context.apiOrigin}/.well-known/thingtime-capabilities.json`);
+        assert.equal(init.credentials, 'omit');
+        assert.equal(init.redirect, 'error');
+        return Response.json({ schemaVersion: 1, origin, features: {
+            'api.devices-node-identity': { version: '1.0.0' },
+            'api.devices-sync-control': { version, private: 'excluded' },
+            unrelated: { version: '1.0.0' }
+        } });
+    } };
+    f.host.capabilities = readCapabilities;
+    f.run(async (_method, request) => ({ ...request, roots: [] }));
+    const context = () => f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+    assert.deepEqual((await context()).apiCapabilities, { schemaVersion: 1, origin, features: {
+        'api.devices-node-identity': { version: '1.0.0' },
+        'api.devices-sync-control': { version: '1.0.0' }
+    } });
+    for (version of [undefined, '1.bad.0', '1.01.0', '1.0.0-beta', '1.0.0+private', 1]) {
+        f.host.invalidate();
+        assert.equal(Object.hasOwn((await context()).apiCapabilities.features, 'api.devices-sync-control'), false);
+    }
+    origin = 'https://other.test'; version = '1.0.0'; f.host.invalidate();
+    const dispatched = f.calls.length;
+    await assert.rejects(context());
+    assert.equal(f.calls.length, dispatched);
+});
+
 test('streamed bytes require final browser-account verification and exact range binding', async () => {
     const f = fixture(), bytes = new Uint8Array(2 * 1024 * 1024),
         input = f.input({ action: 'read-range', rootId: 'root', path: 'file', version: 'v1', offset: 0, length: bytes.length });
@@ -446,6 +522,16 @@ test('native identity retry crosses Electron as a plain fixed Error while author
     await assert.rejects(f.host.request(f.event, f.input()), error => error.name === 'Error' && error.message === marker);
 });
 
+test('volume reconnect markers require the exact trusted native code and fixed message', async () => {
+    const { ThingtimeNodeBridgeError } = require('../lib/thingtime-node-bridge.cjs');
+    for (const marker of ['[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+        '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.']) {
+        const f = fixture();
+        f.run(async () => { throw new ThingtimeNodeBridgeError('folder_volume_retry', marker); });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'inspect' })), error => error.name === 'Error' && error.message === marker);
+    }
+});
+
 test('authority drift wins over a concurrent native transport interruption and diagnostics never break a request', async () => {
     const { ThingtimeNodeBridgeError }=require('../lib/thingtime-node-bridge.cjs');
     const f=fixture(); f.host.diagnostic=()=>{throw Error('diagnostic sink unavailable');};
@@ -573,7 +659,8 @@ test('real upload-part path sums every repeated authorization and child native c
 
 test('resource policy preserves connection binding and scoped native CPU feedback; malformed policy never dispatches', async () => {
  const f = fixture(), rootId = randomUUID();
- const input = f.input({ action: 'scan-status', rootId, resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
+ // Governors share CPU samples by device. Isolate this fixture from transfer-worker tests.
+ const input = f.input({ action: 'scan-status', rootId, deviceId: randomUUID(), resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
  f.run(async (_method, request) => ({ ...request, roots: [], resources: { version: 1, cpuPercent: 60, cpuStatus: 'measured', indexingCpuPercent: 60, sourceCpuPercent: null } }));
  const result = await f.host.request(f.event, input);
  assert.deepEqual(f.calls[0].resourceLimits, input.resourceLimits); assert.equal(f.calls[0].resourceScope, 'connection');
@@ -582,4 +669,134 @@ test('resource policy preserves connection binding and scoped native CPU feedbac
  const before = f.calls.length;
  await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID(), resourceLimits: { transferConcurrency: 0 } })));
  assert.equal(f.calls.length, before);
+});
+
+test('rootless resources sample the active device governor without waiting for or changing its scoped transfer', async () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ const f = fixture(), deviceId = randomUUID();
+ const transfer = f.input({ action: 'scan-status', rootId: randomUUID(), deviceId, resourceScope: 'connection',
+    resourceLimits: { cpuPercent: 12, transferConcurrency: 2 },
+    deviceResourceLimits: { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 1_000_000, cpuPercent: 15 } });
+ const context = { apiOrigin: transfer.origin, ownerId: transfer.ownerId };
+ const resources = { version: 1, cpuStatus: 'measured', cpuPercent: 4, sourceCpuPercent: 4, memoryBytes: 4096,
+  effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 1, scanBytesPerSecond: 1234 };
+ let started, release;
+ const held = new Promise(resolve => { started = resolve; });
+ const finish = new Promise(resolve => { release = resolve; });
+ f.run(async (_method, request) => {
+  if (request.action === 'scan-status') { started(); await finish; }
+  return { ...request, roots: [], resources: { ...resources, measuredAt: Date.now() } };
+ });
+ const active = f.host.request(f.event, transfer);
+ try {
+  await held;
+  const read = { action: 'resources', deviceId }, governor = governorFor(read, context);
+  assert.ok(governor);
+  governor.observeTransport({ cpuPercent: 2, currentUploadBytesPerSecond: 125_000, currentDownloadBytesPerSecond: 0 });
+  const sample = await f.host.request(f.event, f.input(read));
+  assert.equal(sample.resources.currentUploadBytesPerSecond, 125_000);
+  assert.equal(sample.resources.currentDownloadBytesPerSecond, 0);
+  assert.deepEqual(sample.resources.cpuScopes.sort(), ['source-thread', 'transport-process']);
+  assert.equal(sample.resources.memoryBytes, 4096);
+  assert.equal(sample.resources.scanBytesPerSecond, 1234);
+  assert.equal(sample.resources.transferBytesPerSecond, 5_000_000);
+  assert.deepEqual(governor.policy, { cpuPercent: 12, transferConcurrency: 2 });
+  assert.equal(governorFor({ ...read, deviceId: randomUUID() }, context), null);
+  assert.equal(governorFor(read, { ...context, apiOrigin: 'https://other.invalid' }), null);
+  assert.equal(governorFor(read, { ...context, ownerId: 'other-owner' }), null);
+  assert.equal(f.calls.at(-1).deviceResourceLimits, undefined, 'read never writes device limits');
+ } finally { release(); await active; }
+});
+
+
+test('desktop context advertises rootless live resource sampling only on compatible native hosts', async () => {
+ for (const [fileAccessVersion, fileResourceLimitsVersion, expected] of [
+  ['1.15.0', '1.1.0', '1.1.0'], ['1.16.0', '1.1.0', '1.1.1'], ['1.18.0', '1.2.0', '1.2.0']
+ ]) {
+  const f = fixture();
+  f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion, fileResourceLimitsVersion } }));
+  const result = await f.host.request(f.event, f.input({ action: 'context' }));
+  assert.equal(result.capabilities.fileResourceLimitsVersion, expected);
+ }
+});
+
+test('desktop advertises the signed download recovery patch on compatible staging and server contracts', async () => {
+    const f = fixture();
+    f.run(async (_method, request) => ({ ...request, roots: [],
+        capabilities: { fileAccessVersion: '1.18.0', fileStagingVersion: '1.1.0', fileResourceLimitsVersion: '1.1.0' } }));
+    f.host.capabilities = async () => ({ schemaVersion: 1, origin: f.context.apiOrigin, features: {
+        'api.devices-node-identity': { version: '1.0.0' }, 'api.attachment-content': { version: '1.17.0' }
+    } });
+    const reply = await f.host.request(f.event, f.input({ action: 'context' }));
+    assert.equal(reply.capabilities.fileDownloadVersion, '1.0.1');
+});
+
+test('compound upload dispatch requires an independently negotiated native capability', async () => {
+ const f = fixture();
+ f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.19.0' } }));
+ await f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+ const before = f.calls.length;
+ await assert.rejects(f.host.request(f.event, f.input({ action: 'upload-single', rootId: randomUUID() })), /support/);
+ assert.equal(f.calls.length, before);
+});
+
+
+test('compound observations retain fresh host checks', async () => {
+ const f = fixture(), input = f.input({ action: 'observe-path', rootId: randomUUID(), path: 'nested/file', remainingMs: 30_000,
+  observation: { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' } });
+ f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
+ const result = await f.host.request(f.event, input);
+ assert.equal(result.complete, true); assert.equal(f.calls.length, 1); assert.ok(f.calls[0].remainingMs > 0 && f.calls[0].remainingMs <= 30_000);
+ f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
+ await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+});
+
+test('only the host-owned observation deadline defers a point hash', async () => {
+ const marker = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+ const observation = { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' };
+ for (const changedAccount of [false, true]) {
+  const f = fixture(), seen = []; let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  f.host.requestNative = async (_method, request, options = {}) => {
+   seen.push(request.action);
+   if (request.action === 'suspend') return {};
+   entered();
+   return await new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+   });
+  };
+  const pending = f.host.request(f.event, f.input({ action: 'observe-path', rootId: randomUUID(), path: 'large.bin',
+   observation, remainingMs: 80 }));
+  await started;
+  if (changedAccount) f.account('other');
+  await assert.rejects(pending, error => {
+   assert.equal(error.message, changedAccount ? 'Account mismatch' : marker); return true;
+  });
+  assert.deepEqual(seen, ['observe-path', 'suspend']);
+ }
+ const f = fixture(); let entered;
+ const started = new Promise(resolve => { entered = resolve; });
+ f.host.requestNative = async (_method, request, options = {}) => {
+  if (request.action === 'suspend') return {};
+  entered();
+  return await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+ };
+ const pending = f.host.request(f.event, f.input({ action: 'observe-path', rootId: randomUUID(), path: 'large.bin',
+  observation, remainingMs: 1000 }));
+ await started;
+ f.host.cancel(f.host.active, Error('User stopped this request.'));
+ await assert.rejects(pending, error => { assert.equal(error.message, 'User stopped this request.'); return true; });
+});
+
+
+test('compound observation queue delay consumes its original deadline before native dispatch', async () => {
+ const f = fixture(); let now = 0, release, entered;
+ const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { entered = resolve; });
+ f.host.now = () => now;
+ f.run(async (_method, request) => { entered(); await gate; return { ...request, roots: [] }; });
+ const first = f.host.request(f.event, f.input({ action: 'list' })); await started;
+ const queued = f.host.request(f.event, f.input({ action: 'observe-path', remainingMs: 10, rootId: randomUUID(), path: 'file' }));
+ const rejected = assert.rejects(queued);
+ now = 11; release(); await first; await rejected;
+ assert.equal(f.calls.length, 1);
 });

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { copyBoundedJson, type JsonValue } from '../../../utils/boundedJson.ts';
+import type { JsonValue } from '../../../utils/boundedJson.ts';
+import { copyTimelineContent } from '../../../timeline/contentJson.ts';
 import {
 	COMPONENT_BINDING_PREFIX,
 	componentBindingSnapshot,
@@ -31,7 +32,7 @@ const hash = (value: unknown) => {
 		return createHash('sha256')
 			.update(
 				JSON.stringify(
-					copyBoundedJson(value, { maxBytes: 16 * 1024 * 1024, maxDepth: 96, maxNodes: 800_000, sortKeys: true }, 'Component comparison')
+					copyTimelineContent(value, 'Component comparison', 4)
 				)
 			)
 			.digest('hex');
@@ -87,7 +88,9 @@ export async function recordedComponentVersions(things: any, ownerId: string, so
 	const entries = await readRecordedComponentEntries(
 		things,
 		ownerId,
-		sources.flatMap(({ event }) => event.dependencies)
+		sources.flatMap(({ event }) => event.dependencies),
+		undefined,
+		Infinity
 	);
 	return sources.map(({ event, content }) => {
 		const refs = webpageComponentRefs(content.crystal?.blocks);

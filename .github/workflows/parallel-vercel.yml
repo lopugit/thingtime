@@ -1,0 +1,12 @@
+name: Thingtime parallel test deployments
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: vars.THINGTIME_DEPLOYMENT_PROFILES_ENABLED == 'true'
+    uses: lopugit/thingtime/.github/workflows/parallel-vercel.yml@github-actions
+    secrets: inherit

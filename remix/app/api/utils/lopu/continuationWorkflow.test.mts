@@ -5,6 +5,12 @@ import { Binary } from 'mongodb';
 import { AI_TASK_KIND } from './backgroundTaskCore';
 
 let refuseChildAdmission = false;
+let gatewayOwnsDatabase = true;
+mock.module('../deployment/environmentGateway', { namedExports: {
+  requireGatewayDatabaseAccess: async () => { if (!gatewayOwnsDatabase) throw new Error('Gateway demoted'); },
+  withGatewayWork: async (work: () => Promise<unknown>) => work(),
+  runAdmittedGatewayWork: async (work: () => Promise<unknown>) => work()
+} });
 let existingTaskRead: ((row:any) => Promise<any>) | null = null;
 let missingTaskRead: (() => Promise<null>) | null = null;
 let rows: any[] = [],
@@ -97,6 +103,7 @@ mock.module('./backgroundTasks', {
 const { runLopuContinuation } = await import('./continuationWorkflow.server');
 const { runLopuPart } = await import('./continuationSteps.server');
 beforeEach(() => {
+	gatewayOwnsDatabase = true;
 	executions = 0; refuseChildAdmission=false; missingTaskRead=null; existingTaskRead=null;
 	liveSession = true;
 	stopDuringSleep = false;
@@ -279,4 +286,12 @@ test('refused child admission retires its unused reservation without replaying w
  assert.equal(rows[0].activeWorkerRequestId,undefined);
  assert.equal(rows[0].uniqueKeys,undefined);
  assert.equal(rows[0].cancelRequested,true);
+});
+
+test('deployment-pinned continuation refuses all database work after gateway demotion', async () => {
+  gatewayOwnsDatabase = false;
+  await assert.rejects(runLopuPart('root', null, 0), /Gateway demoted/);
+  assert.equal(executions, 0);
+  assert.equal(rows[0].workerStarted, undefined);
+  assert.equal(rows[0].cancelRequested, undefined);
 });

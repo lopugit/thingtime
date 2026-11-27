@@ -392,6 +392,7 @@ function attachQuitSignals(app, source = process) {
 async function stopOwnedProcessGroup(pid, { graceMs = 5000, killMs = 3000 } = {}) {
 	if (!pid) return;
 	if (!Number.isInteger(pid) || pid <= 1 || process.platform === 'win32') throw new Error('Cannot verify the development process group is stopped.');
+	if (!Number.isFinite(graceMs) || !Number.isFinite(killMs)) throw new Error('Development cleanup deadlines must be finite.');
 	const alive = () => {
 		try {
 			process.kill(-pid, 0);
@@ -408,16 +409,25 @@ async function stopOwnedProcessGroup(pid, { graceMs = 5000, killMs = 3000 } = {}
 			if (error.code !== 'ESRCH') throw error;
 		}
 	};
-	const wait = async (timeout) => {
+	const wait = async (timeout, reaping = false) => {
 		const deadline = Date.now() + timeout;
-		while (alive() && Date.now() < deadline) await sleep(50);
-		return !alive();
+		while (true) {
+			try {
+				if (!alive()) return true;
+			} catch (error) {
+				// macOS can report EPERM for a killed group containing only zombies.
+				// Wait for reaping after SIGKILL, but still require ESRCH before cleanup.
+				if (!reaping || process.platform !== 'darwin' || error.code !== 'EPERM' || Date.now() >= deadline) throw error;
+			}
+			if (Date.now() >= deadline) return false;
+			await sleep(50);
+		}
 	};
 	if (!alive()) return;
 	signal('SIGTERM');
 	if (await wait(graceMs)) return;
 	signal('SIGKILL');
-	if (!(await wait(killMs))) throw new Error('Development processes are still running; temporary data has been preserved.');
+	if (!(await wait(killMs, true))) throw new Error('Development processes are still running; temporary data has been preserved.');
 }
 module.exports = {
 	attachQuitSignals,

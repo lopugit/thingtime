@@ -9,6 +9,7 @@ import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { movedToTargetPosition, nudgeTargetId, useMediaReorder, type MediaReorderNudge } from '~/components/Media/useMediaReorder';
 import { attachmentDisplayName, attachmentMediaSrc, formatAttachmentBytes } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
+import { VideoPreview } from './VideoPreview';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
@@ -52,17 +53,13 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 		);
 	}
 	return (
-		<Box
-			as="video"
+		<VideoPreview
 			src={characterMediaUrl(attachmentMediaSrc(attachment), actor?.id)}
-			aria-label={`Preview of ${attachmentDisplayName(attachment)}`}
+			label={`Preview of ${attachmentDisplayName(attachment)}`}
 			width="100%"
 			height="100%"
 			objectFit="cover"
 			background="var(--tt-ink, #16161a)"
-			muted
-			playsInline
-			preload="metadata"
 		/>
 	);
 };

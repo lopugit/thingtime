@@ -22,6 +22,13 @@ const complete = await import('../app/routes/api/v1/attachments/uploads/complete
 const content = await import('../app/routes/api/v1/attachments/content/_content');
 const things = await import('../app/routes/api/v1/things/_things');
 const files = await import('../app/routes/api/v1/files/_files');
+const { createCloudFileService } = await import('../app/api/utils/files/files');
+const { readTimelineEntries } = await import('../app/api/utils/timeline/repository');
+const { getAttachmentFingerprint } = await import('../app/api/utils/attachments/attachments');
+const { getCurrentUser } = await import('../app/api/utils/auth/getCurrentUser');
+const { enforceRateLimit } = await import('../app/api/utils/rateLimit/enforce');
+const { readCloudInventory } = await import('../app/api/utils/files/inventory');
+const { cloudFolders } = await import('../app/api/utils/files/folders');
 const { handleLocalAttachmentStorageRequest } = await import('../app/api/utils/attachments/localAttachmentStorage');
 let cookie = '';
 const request = (path: string, body?: unknown) => new Request(base + path, { method: body === undefined ? 'GET' : 'POST',
@@ -69,10 +76,78 @@ const updated = (await call(files.action, '/api/v1/files', { ...commit, operatio
 const restored = (await call(files.action, '/api/v1/files', { ...commit, operationId: randomUUID(), expectedRevision: updated.revision })).data.file;
 assert.equal(restored.content.attachmentId, first.id); assert.equal(restored.content.size, 0);
 assert.deepEqual((await call(files.loader, '/api/v1/files?id=' + commit.id + '&operationId=' + commit.operationId)).data.receipt.file, committed);
+// Hold a real authenticated old POST after its first receipt read and before
+// byte verification. The terminal effect must commit under the same Timeline
+// identity so this late request cannot publish the original attachment.
+const raceUpload = (await call(uploads.action, '/api/v1/attachments/uploads', { ...input, requestId: randomUUID() })).data.upload;
+await call(complete.action, '/api/v1/attachments/uploads/complete', { uploadId: raceUpload.id });
+const raceFingerprint = (await call(content.loader, '/api/v1/attachments/content?id=' + raceUpload.id + '&fingerprint=1')).data;
+const race = { id: randomUUID(), operationId: randomUUID(), expectedRevision: null, name: 'fenced.txt', folderId: root.id,
+    attachmentId: raceUpload.id, contentVersion: raceFingerprint.version, trashed: false };
+let entered!: () => void, release!: () => void;
+const enteredGate = new Promise<void>(resolve => { entered = resolve; }), releaseGate = new Promise<void>(resolve => { release = resolve; });
+const slowService = createCloudFileService({ fingerprint: async (...args) => {
+    entered(); await releaseGate;
+    return getAttachmentFingerprint(...args);
+} });
+const slowFiles = files.createFilesHandlers({ getUser: getCurrentUser, limit: enforceRateLimit, service: slowService,
+    inventory: readCloudInventory, folders: cloudFolders });
+const late = slowFiles.action({ request: request('/api/v1/files', race) });
+await enteredGate;
+const terminal = { kind: 'terminal-no-effect', id: race.id, operationId: race.operationId, expectedRevision: null };
+assert.deepEqual((await call(files.action, '/api/v1/files', terminal)).data,
+    { ok: true, status: 'terminal', fence: terminal, replayed: false });
+release();
+const lateResponse = await late;
+assert.equal(lateResponse.status, 409);
+assert.equal((await lateResponse.json()).ok, false);
+assert.deepEqual((await call(files.loader, '/api/v1/files?id=' + race.id + '&operationId=' + race.operationId)).data.terminal, terminal);
+const absent = await files.loader({ request: request('/api/v1/files?id=' + race.id) });
+assert.equal(absent.status, 404);
+assert.equal((await call(content.loader, '/api/v1/attachments/content?id=' + raceUpload.id + '&fingerprint=1')).data.version, raceFingerprint.version);
+assert.deepEqual((await call(files.action, '/api/v1/files', terminal)).data,
+    { ok: true, status: 'terminal', fence: terminal, replayed: true });
+// Hold the older writer INSIDE its Mongo transaction after its canonical
+// receipt read returned absent. A competing fence must either win the shared
+// unique Timeline identity or serialize a retry; it cannot let both commit.
+const transactionalRace = { ...race, id: randomUUID(), operationId: randomUUID(), name: 'fenced-in-transaction.txt' };
+let innerEntered!: () => void, innerRelease!: () => void;
+const innerEnteredGate = new Promise<void>(resolve => { innerEntered = resolve; });
+const innerReleaseGate = new Promise<void>(resolve => { innerRelease = resolve; });
+let heldInner = false;
+const heldService = createCloudFileService({ entries: async (...args) => {
+    const rows = await readTimelineEntries(...args);
+    if (args[3] && !heldInner) { heldInner = true; innerEntered(); await innerReleaseGate; }
+    return rows;
+} });
+const heldFiles = files.createFilesHandlers({ getUser: getCurrentUser, limit: enforceRateLimit, service: heldService,
+    inventory: readCloudInventory, folders: cloudFolders });
+const inFlight = heldFiles.action({ request: request('/api/v1/files', transactionalRace) });
+await innerEnteredGate;
+const innerFence = { kind: 'terminal-no-effect', id: transactionalRace.id, operationId: transactionalRace.operationId, expectedRevision: null };
+assert.equal((await call(files.action, '/api/v1/files', innerFence)).data.status, 'terminal');
+innerRelease();
+const inFlightResponse = await inFlight;
+assert.notEqual(inFlightResponse.status, 200, 'a writer with an older snapshot cannot publish after the fence');
+assert.equal((await inFlightResponse.json()).ok, false);
+const lateRetry = await files.action({ request: request('/api/v1/files', transactionalRace) });
+assert.equal(lateRetry.status, 409, 'an old writer must refuse an occupied terminal identity');
+assert.equal((await files.loader({ request: request('/api/v1/files?id=' + transactionalRace.id) })).status, 404);
+assert.deepEqual((await call(files.loader, '/api/v1/files?id=' + transactionalRace.id + '&operationId=' + transactionalRace.operationId)).data.terminal, innerFence);
+const completeFirst = (await call(files.action, '/api/v1/files', { kind: 'terminal-no-effect', id: commit.id,
+    operationId: commit.operationId, expectedRevision: null })).data;
+assert.equal(completeFirst.status, 'complete');
+assert.deepEqual(completeFirst.receipt.file, committed);
+assert.deepEqual((await call(files.loader, '/api/v1/files?id=' + commit.id)).data.file, restored);
 const anonymous = new Request(base + '/api/v1/attachments/content?id=' + first.id + '&fingerprint=1');
 assert.notEqual((await content.loader({ request: anonymous })).status, 200);
+const anonymousFence = new Request(base + '/api/v1/files', { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify(terminal) });
+assert.equal((await files.action({ request: anonymousFence })).status, 401);
+const crossOriginFence = new Request(base + '/api/v1/files', { method: 'POST', headers: { Origin: 'https://unrelated.invalid', Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(terminal) });
+assert.equal((await files.action({ request: crossOriginFence })).status, 403);
 console.log(JSON.stringify({ cloudInventoryPagesProof: true, emptyFileProof: true,
     checks: ['real-session-upload-permission', 'Mongo-zero-reservation-finalization', 'same-request-one-object', 'stored-zero-byte-download',
-        'verified-zero-fingerprint', 'file-commit-replay', 'empty-path-observation', 'conditional-empty-restore', 'immutable-receipt', 'anonymous-refusal'],
+        'verified-zero-fingerprint', 'file-commit-replay', 'empty-path-observation', 'conditional-empty-restore', 'immutable-receipt',
+        'terminal-fence-late-POST-race', 'terminal-fence-overlapping-transactions', 'terminal-replay', 'complete-first-replay', 'anonymous-refusal', 'cross-origin-refusal'],
     boundary: 'Production Request handlers, Mongo replica and durable local object adapter; not live S3 or installed-device acceptance' }));
 process.exit(0);

@@ -1,3 +1,4 @@
+import { userStoragePendingStateIsTrusted, userStoragePendingMongoExpression, USER_STORAGE_PENDING_FIELDS } from '../storage/storagePending.ts';
 import { createHash } from 'node:crypto';
 
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry.ts';
@@ -29,6 +30,7 @@ export const USER_SUBSCRIPTION_ROOT_KEYS = [
 ] as const;
 
 export const USER_SUBSCRIPTION_CRYSTAL_KEYS = [
+	...USER_STORAGE_PENDING_FIELDS,
 	'quotaKind',
 	'subjectType',
 	'subjectId',
@@ -113,7 +115,8 @@ const userSubscriptionIdentityIsTrusted = (doc: any, subjectId: string, requireE
 	doc.crystal.quotaKind === 'subscription' &&
 	doc.crystal.subjectType === 'user' &&
 	doc.crystal.subjectId === subjectId &&
-	tierAssignmentShapeIsTrusted(doc.crystal);
+	tierAssignmentShapeIsTrusted(doc.crystal) &&
+	userStoragePendingStateIsTrusted(doc.crystal);
 
 export const userSubscriptionLedgerEnvelopeIsTrusted = (doc: any, subjectId: string): boolean =>
 	userSubscriptionIdentityIsTrusted(doc, subjectId, true);
@@ -151,6 +154,7 @@ export const userSubscriptionLedgerEnvelopeIssues = (doc: any, subjectId: string
 	check('root.updatedAt', validDate(doc.updatedAt));
 	if (!isPlainObject(doc.crystal)) return [...issues, 'crystal.object'];
 	const c = doc.crystal;
+	check('crystal.storagePending', userStoragePendingStateIsTrusted(c));
 	check('crystal.fields', hasOnlyKeys(c, USER_SUBSCRIPTION_CRYSTAL_KEYS));
 	check('crystal.quotaKind', c.quotaKind === 'subscription');
 	check('crystal.subjectType', c.subjectType === 'user');
@@ -207,6 +211,7 @@ const userSubscriptionLedgerMongoMatch = (subjectId: string, envelopeVersion: nu
 		{
 			$expr: {
 				$and: [
+					userStoragePendingMongoExpression,
 					objectKeysSubsetExpression('$$ROOT', USER_SUBSCRIPTION_ROOT_KEYS),
 					objectKeysSubsetExpression('$crystal', USER_SUBSCRIPTION_CRYSTAL_KEYS)
 				]

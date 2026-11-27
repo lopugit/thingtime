@@ -11,12 +11,15 @@ import {
 } from './Providers/Chakra/createEmotionCache';
 import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
+import { PersistedThingMenuLoaderContext } from './components/Thingtime/ContextMenu/PersistedThingContextMenu';
 import { bindRootIdentityChannel, rootIdentity } from './utils/rootIdentity';
 import {
   clearStaleChunkReloadGuard,
   reloadForStaleChunk,
   STALE_CHUNK_GUARD_RESET_MS
 } from './utils/staleChunkRecovery';
+
+const loadPersistedThingMenu = () => import('./components/Thingtime/ContextMenu/PersistedThingMenuController');
 
 try {
   window.process = window.process || ({ env: {} } as any);
@@ -73,7 +76,9 @@ if (!root) {
 createRoot(root).render(
   <React.StrictMode>
     <ClientCacheProvider>
-      <RouterProvider router={router} />
+      <PersistedThingMenuLoaderContext.Provider value={loadPersistedThingMenu}>
+        <RouterProvider router={router} />
+      </PersistedThingMenuLoaderContext.Provider>
     </ClientCacheProvider>
   </React.StrictMode>
 );

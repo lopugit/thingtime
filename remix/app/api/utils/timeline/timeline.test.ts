@@ -341,3 +341,102 @@ test('notes share the page byte budget: a page that would overflow ends earlier 
 	} while (before !== null);
 	assert.deepEqual(seen, ['big-2', 'big-1', 'big-0']);
 });
+
+test('broad Data revisions retain every ordered value beyond old content and envelope node ceilings', async () => {
+ const h = harness();
+ const rows = Array.from({ length: 200_001 }, (_, index) => index);
+ const source = { shareId: 'broad-data', ownerId: 'user-1', thingtime: ['data'], crystal: { rows }, tags: [], extended: null };
+ const capture = { id: 'broad-create', operationId: 'broad-create-op', actorId: source.ownerId, source: 'api' as const, now: new Date('2026-11-06T00:00:00.000Z') };
+ const created = prepareThingMutation(null, source, capture)!;
+ assert.equal(created.event.after?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ await h.append(created.event);
+ await storeTimelineSnapshotParts(h.things, created.parts, h.session, capture.now);
+ assert.deepEqual((await readTimelineSnapshot(h.things, source.ownerId, created.event.id, 'after', created.event.after))?.value, thingContentSnapshot(source)?.value);
+ assert.equal(h.charge(), thingStorageSizeBytes(source));
+ // Dense zeros fit the byte window but exceed the event's200k-node envelope:
+ // structural breadth must select parts instead of rejecting valid content.
+ const next = { ...source, timelineHeadId: capture.id, crystal: { rows: Array.from({ length: 250_001 }, (_, index) => index % 2) } };
+ const updated = prepareThingMutation(source, next, { ...capture, id: 'broad-update', operationId: 'broad-update-op' })!;
+ assert.equal(updated.event.before?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ assert.equal(updated.event.after?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ assert.ok(Buffer.byteLength(JSON.stringify(updated.event)) < 4096);
+ const chargedBeforeUpdate = h.charge();
+ await h.append(updated.event);
+ assert.equal(h.charge() - chargedBeforeUpdate, thingStorageSizeBytes(source) + thingStorageSizeBytes(next), 'update retains and accounts both exact payloads');
+ await storeTimelineSnapshotParts(h.things, updated.parts, h.session, capture.now);
+ for (const [side, expected] of [['before', source], ['after', next]] as const) {
+  const restored = await readTimelineSnapshot(h.things, source.ownerId, updated.event.id, side, updated.event[side]);
+  assert.deepEqual(restored, thingContentSnapshot(expected));
+ }
+ const count = h.rows().length;
+ await storeTimelineSnapshotParts(h.things, updated.parts, h.session, capture.now);
+ assert.equal(h.rows().length, count, 'stable part identities make retry idempotent');
+ const invalid: any = { ...next, crystal: { rows: [...rows] } }; invalid.crystal.rows.push(invalid.crystal);
+ assert.throws(() => prepareThingMutation(next, invalid, { ...capture, id: 'invalid-broad' }), /cycles/);
+ assert.equal(h.rows().length, count, 'invalid content fails in planning before any partial history writes');
+});
+
+test('valid content depth uses parts instead of the inline control-envelope depth budget', async () => {
+ const h = harness(); let nested: any = { text: 'deep retained content' };
+ for (let index = 0; index < 120; index++) nested = { child: nested };
+ const source = { shareId: 'deep-content', ownerId: 'user-1', thingtime: ['data'], crystal: { nested }, tags: [] };
+ const capture = { id: 'deep-create', operationId: 'deep-op', actorId: source.ownerId, source: 'api' as const, now: new Date('2026-11-06T00:00:00.000Z') };
+ const prepared = prepareThingMutation(null, source, capture)!;
+ assert.equal(prepared.event.after?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ await h.append(prepared.event); await storeTimelineSnapshotParts(h.things, prepared.parts, h.session, capture.now);
+ assert.deepEqual(await readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), thingContentSnapshot(source));
+ assert.equal(h.charge(), thingStorageSizeBytes(source));
+});
+
+test('public version export, checkout and comparison reconstruct broad and deep content without changing current history', async () => {
+ const { createExportVersionService } = await import('./exportVersion.ts');
+ const { createBranchCheckoutService } = await import('./branchCheckout.ts');
+ const { createVersionService } = await import('./versions.ts');
+ const { parseBranchMergePreview } = await import('../../../timeline/branchMerge.ts');
+ const { branchCheckoutRequest, parseBranchCheckout } = await import('../../../timeline/branchCheckout.ts');
+ const { timelineBranchHeadId } = await import('../../../timeline/branches.ts');
+ const { versionContent, mergeVersionValues, versionContentEquals } = await import('../../../timeline/versions.ts');
+ const { parsePublishedVersionPreview } = await import('../../../timeline/publishedVersion.ts');
+ let nested: any = { text: 'original' }; for (let index = 0; index < 120; index++) nested = { child: nested };
+ for (const [name, crystal] of [['broad', { rows: Array.from({ length: 200_001 }, (_, index) => index), text: 'x'.repeat(5 * 1024 * 1024) }], ['deep', { nested }]] as const) {
+  const h = harness(), date = '2026-11-06T00:00:00.000Z';
+  const source = { shareId: `public-${name}`, ownerId: 'user-1', thingtime: ['data'], crystal, tags: [], extended: null };
+  const capture = { id: `${name}-create`, operationId: `${name}-create-op`, actorId: source.ownerId, source: 'api' as const, now: new Date(date) };
+  const created = prepareThingMutation(null, source, capture)!;
+  await h.append(created.event); await storeTimelineSnapshotParts(h.things, created.parts, h.session, capture.now);
+  const before = { ...source, timelineHeadId: capture.id };
+  const current = { ...source, crystal: { ...crystal, changed: true } };
+  const updated = prepareThingMutation(before, current, { ...capture, id: `${name}-update`, operationId: `${name}-update-op` })!;
+  await h.append(updated.event); await storeTimelineSnapshotParts(h.things, updated.parts, h.session, capture.now);
+  const expectedOld = versionContent(thingContentSnapshot(source)), expectedCurrent = versionContent(thingContentSnapshot(current));
+  const exporter = createExportVersionService({ collection: async () => h.things as any, notes: async () => [], names: async () => [] });
+  const count = h.rows().length, charged = h.charge();
+  for (const [event, expected] of [[created.event, expectedOld], [updated.event, expectedCurrent]] as const) {
+   const exported = await exporter(source.ownerId, event.id);
+   assert.deepEqual(exported?.content.value, expected);
+   assert.equal(versionContentEquals(exported?.content.value, expected), true);
+  }
+  const branchId = 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5';
+  const target = { branch: { formatVersion: 1 as const, id: branchId, ownerId: source.ownerId, name: 'Wide Data', createdAt: date }, head: { formatVersion: 1 as const, id: timelineBranchHeadId(branchId, source.shareId), branchId, ownerId: source.ownerId, thingId: source.shareId, eventId: updated.event.id, revision: 1, createdAt: date, updatedAt: date } };
+  const request = branchCheckoutRequest(target);
+  const checkoutService = createBranchCheckoutService({ collection: async () => h.things as any, branch: async () => target });
+  const result = await checkoutService(source.ownerId, request);
+  assert.deepEqual(parseBranchCheckout(result.checkout, source.ownerId, request).snapshot.value, expectedCurrent);
+  const merged = mergeVersionValues(expectedCurrent, expectedCurrent, expectedOld);
+  assert.equal(versionContentEquals(merged.value, expectedOld), true); assert.equal(merged.conflicts.length, 0);
+  const snapshot = (value: any) => ({ adapter: 'thing-content', version: 1, value });
+  const preview = { eventId: created.event.id, thingId: source.shareId, mode: 'restore', expectedHeadId: updated.event.id, current: snapshot(expectedCurrent), incoming: snapshot(expectedOld), result: snapshot(merged.value), baseEventId: null, conflicts: [] };
+  const versionRequest = { command: 'preview-version', eventId: created.event.id, mode: 'restore', choices: {}, expectedHeadId: updated.event.id } as const;
+  const versionService = createVersionService({ collection: async () => h.things as any, find: async () => ({ ...current, timelineHeadId: updated.event.id }) as any });
+  const compared = await versionService(source.ownerId, versionRequest);
+  assert.ok('preview' in compared);
+  const parsed = parsePublishedVersionPreview(compared.preview, created.event.id, source.shareId, versionRequest);
+  const branchPreview = parseBranchMergePreview({ ...target, incomingEventId: created.event.id, baseEventId: created.event.id, current: preview.current, incoming: preview.incoming, result: preview.result, conflicts: [] }, source.ownerId, { command: 'preview-branch-merge', branchId, thingId: source.shareId, eventId: created.event.id, expectedHeadId: updated.event.id, expectedRevision: 1, choices: {} });
+  assert.equal(versionContentEquals(branchPreview.current.value, expectedCurrent), true);
+  assert.equal(versionContentEquals(parsed.incoming.value, expectedOld), true);
+  assert.equal(versionContentEquals(parsed.current!.value, expectedCurrent), true);
+  assert.equal(h.rows().length, count); assert.equal(h.charge(), charged, 'read-only reconstruction never writes or changes retained-byte accounting');
+  await storeTimelineSnapshotParts(h.things, updated.parts, h.session, capture.now);
+  assert.equal(h.rows().length, count);
+ }
+});

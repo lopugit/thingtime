@@ -153,13 +153,13 @@ test('invalid source authority and identity collisions fail before starting stor
 });
 
 test('archive folder placement fences deletion and refuses foreign, missing and app folders', async () => {
-  for (const mode of ['valid', 'missing', 'foreign', 'app', 'raced']) {
+  for (const mode of ['valid', 'builder', 'mixed', 'missing', 'foreign', 'app', 'raced']) {
     const { state, deps } = harness(); const manifest = fixture();
-    const folder = { shareId: 'destination', ownerId: mode === 'foreign' ? 'another-owner' : 'importer', thingtime: ['folder'], updatedAt: new Date(at), ...(mode === 'app' ? { appId: 'app' } : {}) };
+    const folder = { shareId: 'destination', ownerId: mode === 'foreign' ? 'another-owner' : 'importer', thingtime: mode === 'builder' ? ['folder', 'builder-thing'] : mode === 'mixed' ? ['folder', 'post', 'builder-thing'] : ['folder'], updatedAt: new Date(at), ...(mode === 'app' ? { appId: 'app' } : {}) };
     if (mode !== 'missing') state.records.set(folder.shareId, folder);
     if (mode === 'raced') state.lockMatches = 0;
     const run = createTransferChatArchive('importer', manifest, 'chat', { ...empty(), folderId: folder.shareId }, deps);
-    if (mode === 'valid') {
+    if (mode === 'valid' || mode === 'builder') {
       await run; assert.equal(state.committed[0].folderId, folder.shareId);
       assert.match(state.locks[0].update.$set.folderMutationToken, /^[a-f0-9-]{36}$/);
       assert.equal(state.locks[0].update.$set.updatedAt, undefined);

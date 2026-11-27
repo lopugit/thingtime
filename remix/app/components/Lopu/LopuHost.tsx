@@ -1,3 +1,4 @@
+import { LopuAiDefaultsSettings } from './LopuCredentialSettings';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { LopuDictationSettings } from './LopuDictationSettings';
@@ -158,11 +159,12 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 // providers above the catalog.
 const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerId: string | null; providerName: string | null; vaultProviders: LopuVaultProvider[] }) => {
 	const { catalog, hasCatalog, providerId, providerName, vaultProviders } = props;
-	const { settings, setModelChoice } = useLopuSettings();
+	const settings = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot).settings;
+  const setModelChoice = (choice: { model: string | null; effort: string | null; speed: string | null }) => setLopuSettings({ ...choice, providerId: null });
 	const [menuOpen, setMenuOpen] = React.useState(false);
 	const menuRef = useOutsideTapClose<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
 
-	const choice = resolveLopuModelChoice(catalog, settings);
+	const choice = resolveLopuModelChoice(catalog, { ...settings, speed: settings.speed === 'fast' || settings.speed === 'normal' ? settings.speed : null });
 	const model = findLopuCatalogModel(catalog, choice.model);
 	const label = providerName ?? model?.label ?? (choice.model ? choice.model : catalog.models.length ? 'No model' : 'Auto');
 	const optionSx = (selected: boolean, disabled: boolean) => ({
@@ -296,7 +298,6 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerI
 										return;
 									}
 									// a catalog pick also leaves the chat's own provider
-									if (providerId) setLopuSettings({ providerId: null });
 									setModelChoice({ model: entry.id, effort: preferredLopuEffort(entry, catalog.defaults.effort), speed: null });
 									setMenuOpen(false);
 								}}
@@ -351,19 +352,14 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerI
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice, setDockMode, setAttachCurrentPage, setManagement } =
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setSpokenReplies, setTranscribe, setDirectVoice, setDockMode, setAttachCurrentPage, setManagement } =
 		useLopuSettings();
-	const { catalog, hasCatalog } = useLopuModelCatalog(true);
-	const choice = resolveLopuModelChoice(catalog, settings);
-	const chosenModel = findLopuCatalogModel(catalog, choice.model);
-	const offersFast = !!chosenModel?.speeds.includes('fast');
-
 	return (
 		<>
 			{renderRow(
-				'Floating Lopu 🦄',
-				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show the floating Lopu bubble" />,
-				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens Lopu either way)'
+				'Floating Lopu icon',
+				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show floating Lopu icon" />,
+				'Show a draggable shortcut on other pages. You can always open Lopu from navigation.'
 			)}
 			{renderRow(
 				'Window docking',
@@ -411,46 +407,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				<Switch isChecked={settings.directVoice} onChange={(event) => setDirectVoice(event.target.checked)} aria-label="Direct voice" />,
 				'Voice mode streams your microphone straight to the chat’s own Secure Vault provider when it offers realtime speech (xAI Grok Voice); otherwise the standard path runs'
 			)}
-			{renderRow(
-				'Preferred model',
-				<Select
-					size="xs"
-					maxWidth="220px"
-					value={settings.model ?? ''}
-					aria-label="Preferred model"
-					onChange={(event) => {
-						const model = findLopuCatalogModel(catalog, event.target.value);
-						setModelChoice({ model: model?.id ?? null, effort: preferredLopuEffort(model, catalog.defaults.effort), speed: null });
-					}}
-				>
-					<option value="">Catalog default{catalog.defaults.model ? ` (${findLopuCatalogModel(catalog, catalog.defaults.model)?.label ?? catalog.defaults.model})` : ''}</option>
-					{catalog.models.map((model) => (
-						<option key={model.id} value={model.id} disabled={!model.available}>
-							{model.label}
-							{model.available ? '' : model.enabled ? ` — needs ${model.provider} key` : ' — disabled'}
-						</option>
-					))}
-				</Select>,
-				hasCatalog ? 'Which model Lopu thinks with by default; the composer can still change it per turn' : 'Loading the model catalog…'
-			)}
-			{!!chosenModel?.efforts.length &&
-				renderRow(
-					'Reasoning effort',
-					<Select size="xs" maxWidth="220px" value={choice.effort ?? ''} aria-label="Reasoning effort" onChange={(event) => setEffort(event.target.value || null)}>
-						{chosenModel.efforts.map((effort) => (
-							<option key={effort} value={effort}>
-								{describeLopuEffort(effort)}
-							</option>
-						))}
-					</Select>,
-					'Deeper effort thinks longer before answering'
-				)}
-			{offersFast &&
-				renderRow(
-					'Fast mode ⚡',
-					<Switch isChecked={choice.speed === 'fast'} onChange={(event) => setSpeed(event.target.checked ? 'fast' : 'normal')} aria-label="Fast mode" />,
-					'Trade a little depth for snappier replies'
-				)}
+			<LopuAiDefaultsSettings />
 		</>
 	);
 };
@@ -483,7 +440,7 @@ export const LopuHost = () => {
 	// hides the bubble only — the window still follows `open` (the navbar
 	// 🦄 toggles it)
 	const hiddenOnPath = isLopuHostHiddenOnPath(pathname);
-	const showLauncher = !hiddenOnPath && (settings.launcher || minimised);
+	const showLauncher = !hiddenOnPath && settings.launcher;
 	const showWindow = !hiddenOnPath && open && !minimised;
 	const showSheet = showWindow && isMobile;
 	const showFrame = showWindow && !isMobile;

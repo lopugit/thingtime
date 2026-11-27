@@ -2,6 +2,7 @@ import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import {
 	requestMobileFolders,
 	supportsMobileStaging,
+	assertNativeSymbolicLinkRequest,
 	supportsNativeCloudStaging,
 	type FolderRequest,
 	type FolderResult,
@@ -38,6 +39,7 @@ export async function stageMobileCopy(
 	};
 	const send = async (input: FolderRequest) => {
 		signal.throwIfAborted();
+		assertNativeSymbolicLinkRequest(input, bridge);
 		const result = await request(transfer.scope.ownerId, input, signal);
 		signal.throwIfAborted();
 		if (!result.staging) throw Error('Missing native staging progress.');

@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '../../http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json, readJsonBody, type JsonBodyBudget } from '../../http';
 import { getCurrentUser } from '../auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
 import { resolveWatchDevice } from '../watch/watchPairing';
@@ -73,7 +73,7 @@ const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', '
 const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import', 'file', 'file-import']);
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean; bodyBudget?: JsonBodyBudget },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -102,7 +102,7 @@ export const createAttachmentMutationAction = (
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
-			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
+			const body = await dependencies.readBody(request, options.bodyBudget ?? ATTACHMENT_JSON_BODY_BYTES);
 			// File/media uploads are withheld per SCOPE from new accounts until an
 			// admin grants them (auth/users.ts userPublicUploadsEnabled /
 			// userPrivateUploadsEnabled): the requested purpose decides which flag
@@ -137,7 +137,8 @@ export const createAttachmentMutationAction = (
 			const result = await options.service(user.id, body);
 			if (result.ok === false) {
 				const { status, ...bodyResult } = result;
-				return json(bodyResult, { status });
+				return json(bodyResult, { status,
+          ...(result.retryable && result.code === 'upload_initializing' ? { headers: { 'Retry-After': '30' } } : {}) });
 			}
 			return json(result);
 		});

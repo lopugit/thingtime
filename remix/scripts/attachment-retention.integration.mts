@@ -31,11 +31,12 @@ const request = (path: string, body?: unknown, auth = true) =>
 		headers: { Origin: base, 'Content-Type': 'application/json', ...(auth ? { Cookie: cookie } : {}) },
 		...(body === undefined ? {} : { body: JSON.stringify(body) })
 	});
+const fixtureUsername = 'retain-' + randomUUID().slice(0, 8);
 const registration = await register({
 	request: request(
 		'/api/v1/auth/register',
 		{
-			username: 'retain-' + randomUUID().slice(0, 8),
+			username: fixtureUsername,
 			password: randomUUID() + '-Fixture!',
 			email: randomUUID() + '@example.invalid'
 		},
@@ -145,6 +146,19 @@ assert.equal((await service.remove(owner, { id: first.id })).ok, true);
 assert.equal(deletes, 1, 'Delete retry cannot repeat storage or refund');
 await service.remove(owner, { id: second.id });
 assert.deepEqual(await getUserStorageUsage(owner), initialUsage, 'Exact canonical quota refund after permanent deletion');
+const secondAccount = await register({ request: request('/api/v1/auth/register', {
+  username: 'dedup-' + randomUUID().slice(0, 8), password: randomUUID() + '-Fixture!', email: randomUUID() + '@example.invalid'
+}, false) } as any);
+assert.equal(secondAccount.status, 200);
+const { runAttachmentDedupFixture, runAttachmentDedupRoutes } = await import('./attachment-dedup.fixture.mts');
+const otherCookie = secondAccount.headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
+const dedup = await runAttachmentDedupFixture(actual, base, owner, (await secondAccount.json()).user.id);
+const { action: approveUpload } = await import('../app/routes/api/v1/admin/users/public-uploads/_public-uploads');
+process.env.ADMIN_USERNAMES = fixtureUsername;
+const approval = await approveUpload({ request: request('/api/v1/admin/users/public-uploads', { userId: owner, enabled: true, scope: 'private' }) } as any);
+assert.equal(approval.status, 200);
+delete process.env.ADMIN_USERNAMES;
+dedup.push(...await runAttachmentDedupRoutes(base, owner, cookie, otherCookie));
 console.log(
 	JSON.stringify({
 		attachmentRetentionProof: true,
@@ -158,9 +172,10 @@ console.log(
 			'expiry-purge-fence',
 			'no-double-charge',
 			'deferred-no-refund',
-			'exact-once-refund'
+			'exact-once-refund',
+      ...dedup
 		],
-		boundary: 'Production handlers, attachment store and Mongo transactions; synthetic object transport and expiry clock, no live provider/UI claim'
+		boundary: 'Production handlers, attachment store and Mongo transactions; real local private object transport for dedup and synthetic retention timing; no live S3 or installed UI claim'
 	})
 );
 process.exit(0);

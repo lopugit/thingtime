@@ -244,7 +244,7 @@ private enum ThingtimeNodeBridge {
             service.stage(input, source: source) { data in reply.finish(data) }
         } else if batching {
             guard request.method == "folder-sync.request", case .object(let fields) = request.parameters,
-                  fields["action"] == .string("upload-batch") else {
+                  [JSONValue.string("upload-batch"), .string("upload-single")].contains(fields["action"] ?? .null) else {
                 connection.invalidate(); write(.failure(id: request.id, code: "invalid_request", message: "Invalid folder batch.")); return
             }
             let duplex = NodeBatchDuplex(input: .standardInput, output: .standardOutput)

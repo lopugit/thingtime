@@ -4,7 +4,8 @@ import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUserWithStorage } from '../auth/users';
 import type { PublicUser } from '../auth/users';
-import { getSessionsCollection } from '../mongodb/collections';
+import { sharedThingsCount, storeSessionSharedThings, type SharedThingsSource } from './sharedThings';
+import { getHomeThingsCollection, withHomeMongoTransaction, getSessionsCollection } from '../mongodb/collections';
 import { appAllowsTokenAudience, appIsRevoked, findAppByClientId } from './apps';
 import { sandboxPublicUser } from './sandbox';
 import { sessionScopes } from './scopes';
@@ -43,6 +44,7 @@ export type AppTokenGrant = {
   expiresAt: Date;
   scopes: AppScopeId[];
   sharedThings: string[];
+  sharedThingCount: number;
 };
 
 export const issueAppToken = async (
@@ -50,13 +52,18 @@ export const issueAppToken = async (
   clientId: string,
   origin: string,
   scopes: AppScopeId[],
-  sharedThings: string[] = []
+  sharedThings: SharedThingsSource = []
 ): Promise<AppTokenGrant> => {
   const expiresAt = new Date(Date.now() + APP_TOKEN_TTL_MS);
-  const session = await createSession(userId, {
-    purpose: 'app',
-    expiresAt,
-    meta: { clientId, origin, scopes, sharedThings }
+  const count = sharedThingsCount(sharedThings);
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid selected sharing count');
+  const session = await withHomeMongoTransaction(async transaction => {
+    const created = await createSession(userId, {
+      purpose: 'app', expiresAt, session: transaction,
+      meta: { clientId, origin, scopes, sharedThingsVersion: 1, sharedThingCount: count }
+    });
+    await storeSessionSharedThings(await getHomeThingsCollection(), userId, created.jti, expiresAt, sharedThings, transaction);
+    return created;
   });
   const token = await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' });
 
@@ -73,7 +80,7 @@ export const issueAppToken = async (
     .toArray();
 	await sessions.updateMany({ ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } }, { $set: { revokedAt: new Date() } });
 
-  return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings };
+  return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings: Array.isArray(sharedThings) ? [...sharedThings] : [], sharedThingCount: count };
 };
 
 export type AppTokenContext = {
@@ -83,6 +90,8 @@ export type AppTokenContext = {
   jti: string;
   scopes: AppScopeId[];
   sharedThings: string[];
+  sharedThingCount: number;
+  sharedThingsRelational: boolean;
   // true for sandbox tokens (purpose 'app-sandbox', apps/sandbox.ts): the
   // user is synthetic, the clientId may be unregistered, and app-data written
   // under it is TTL-reaped. Routes that touch real per-user state must branch
@@ -129,13 +138,15 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
       jti: claims.jti,
       scopes: sessionScopes(session.meta),
       sharedThings: [],
+      sharedThingCount: 0,
+      sharedThingsRelational: false,
       sandbox: true,
       sandboxSpace: typeof session.meta?.space === 'string' ? session.meta.space : null
     };
   }
 
   const app = await findAppByClientId(clientId);
-  if (!app || !appAllowsTokenAudience(app, origin)) return null;
+  if (!app || !(await appAllowsTokenAudience(app, origin))) return null;
   // Admin suspension: a revoked app's tokens die here even if the session
   // sweep hasn't caught them yet.
   if (appIsRevoked(app)) return null;
@@ -143,7 +154,11 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   const user = await findUserById(claims.sub);
   if (!user || (!serviceAccountAuthenticationAllowed(user) || !(await characterAccountLive(user)))) return null;
 
-	const sharedThings = Array.isArray(session.meta?.sharedThings) ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string') : [];
+  if (session.meta?.sharedThingsVersion !== undefined && session.meta.sharedThingsVersion !== 1) return null;
+  const sharedThingsRelational = session.meta?.sharedThingsVersion === 1;
+  const sharedThings = !sharedThingsRelational && Array.isArray(session.meta?.sharedThings) ? session.meta.sharedThings.filter((id: unknown): id is string => typeof id === 'string') : [];
+  const count = sharedThingsRelational ? session.meta.sharedThingCount : sharedThings.length;
+  if (!Number.isSafeInteger(count) || count < 0) return null;
 
   return {
 		user: await toPublicUserWithStorage(user),
@@ -151,6 +166,6 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
     origin,
     jti: claims.jti,
     scopes: sessionScopes(session.meta),
-    sharedThings
+    sharedThings, sharedThingCount: count, sharedThingsRelational
   };
 };

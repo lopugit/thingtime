@@ -2,11 +2,11 @@ import { literalAttachmentId, mapCssMediaUrls, isRenderMediaStyleProp } from './
 
 // Root-only component render metadata. References change a rendered URL, never
 // authorize it: normal composition discovery and attachment ACLs still apply.
-export const copiedMediaRefs = (value: unknown): Map<string, string> => {
+export const copiedMediaRefs = (value: unknown, stored = false): Map<string, string> => {
 	const refs = new Map<string, string>();
 	if (!Array.isArray(value)) return refs;
 	const valid = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id);
-	for (const pair of value.slice(0, 512)) {
+	for (const pair of stored ? value : value.slice(0, 512)) {
 		if (Array.isArray(pair) && valid(pair[0]) && valid(pair[1]) && !refs.has(pair[0])) refs.set(pair[0], pair[1]);
 	}
 	return refs;

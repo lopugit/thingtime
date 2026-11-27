@@ -1,3 +1,6 @@
+import { assertDeviceOperation, deviceMongoOptions, pauseDevicePolling, type DeviceOperationOptions } from './devicePolling';
+import {resolveDeviceMedia} from './deviceAlertMedia';
+import {notificationDoc,SYSTEM_NOTIFICATION_ACTOR} from '../notifications/notifications';
 import { normalizeDeviceScriptResult, type DeviceScriptResult } from './deviceScript';
 import { normalizeFilesystemInput, normalizeFilesystemResult, type FilesystemResult } from './deviceFilesystemCore';
 import { randomBytes } from 'node:crypto';
@@ -28,7 +31,7 @@ import { DEVICE_CONNECTOR_FRESHNESS_MS, appendDeviceEvent, deviceConnectorIsFres
 
 export const DEVICE_COMMAND_LEASE_MS = 30_000;
 export const DEVICE_COMMAND_HEARTBEAT_INTERVAL_MS = 10_000;
-const DEVICE_COMMAND_TERMINAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+export const DEVICE_COMMAND_TERMINAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PENDING_COMMANDS_PER_DEVICE = 512;
 const MAX_PENDING_COMMAND_BYTES_PER_DEVICE = 1024 * 1024;
 const MAX_COMMANDS_PAGE = 200;
@@ -158,7 +161,7 @@ type PreparedCommand = {
 const prepareCommand = (
 	ownerId: string,
 	input: CreateCommandInput,
-	options: { shareId?: string; requiresApproval?: boolean } = {}
+	options: { shareId?: string; requiresApproval?: boolean; deliveryChannel?: 'apns';alertRequestHash?:string } = {}
 ): DeviceFail | PreparedCommand => {
 	const deviceId = bounded(input?.deviceId, 160);
 	const requestId = normalizeRequestId(input?.requestId);
@@ -173,7 +176,7 @@ const prepareCommand = (
 		return deviceFail(400, 'requiresApproval must be a boolean');
 	}
 	const requiresApproval = deviceCommandRequiresApproval(kind, options.requiresApproval ?? input?.requiresApproval === true);
-	const payload = { kind, input: normalizedInput.input, requiresApproval };
+	const payload = { kind, input: normalizedInput.input, requiresApproval,...(options.deliveryChannel?{deliveryChannel:options.deliveryChannel}:{}) };
 	const payloadHash = devicePayloadHash(payload);
 	const controlBytes = deviceControlEventLogicalBytes(payload);
 	const commandKey = deviceHash('command', ownerId, deviceId, requestId);
@@ -188,6 +191,8 @@ const prepareCommand = (
 			control: true,
 			crystal: {
 				deviceCommandKey: commandKey,
+				...(options.deliveryChannel?{deliveryChannel:options.deliveryChannel}:{}),
+				...(options.alertRequestHash?{alertRequestHash:options.alertRequestHash}:{}),
 				requestId,
 				payloadHash,
 				controlBytes,
@@ -216,16 +221,25 @@ const reconcileCommand = (existing: any, payloadHash: string): DeviceFail | { ok
 
 export const createDeviceCommand = async (
 	ownerId: string,
-	input: CreateCommandInput
+	input: CreateCommandInput,
+	options:{deliveryChannel?:'apns';alertRequestHash?:string}={}
 ): Promise<DeviceFail | { ok: true; command: PublicDeviceCommand; idempotent: boolean }> => {
-	let prepared = prepareCommand(ownerId, input);
+	if(!input||typeof input!=='object'||Array.isArray(input))return deviceFail(400,'A typed command is required');
+	if(options.deliveryChannel&&input.kind!=='notification.show')return deviceFail(400,'Only notification.show supports targeted push');
+	let prepared = prepareCommand(ownerId, input,options);
 	if (prepared.ok === false) return prepared;
+	if(['notification.show','media.play','media.prepare'].includes(String(input.kind))){
+	 const resolved=await resolveDeviceMedia(ownerId,String(input.deviceId),String(input.kind),prepared.doc.crystal.input);
+	 if(resolved.ok===false)return resolved;input={...input,input:resolved.input};prepared=prepareCommand(ownerId,input,options);
+	 if(prepared.ok===false)return prepared;
+	}
 	const deviceId = String(prepared.doc.targetId);
 	const device = await deviceExistsForOwner(ownerId, deviceId);
 	if (!device) return deviceFail(404, 'Device not found');
 	const permissionMode = normalizeDevicePermissionMode(device.crystal?.permissionMode);
 	if (permissionMode === 'deny') return deviceFail(403, 'This account has denied remote actions for this device');
 	prepared = prepareCommand(ownerId, input, {
+		...options,
 		shareId: String(prepared.doc.shareId),
 		requiresApproval: deviceCommandRequiresApproval(prepared.doc.crystal.kind, permissionMode === 'ask-every-time' || input.requiresApproval === true)
 	});
@@ -300,6 +314,10 @@ export const createDeviceCommand = async (
 			if (!currentDevice || (!connectorId && !deviceSupportsCommand(prepared.doc.crystal.kind, currentDevice.crystal?.capabilities))) {
 				throw Object.assign(new Error('device_capability_policy_changed'), { status: 409 });
 			}
+			if(['notification.show','media.play','media.prepare'].includes(prepared.doc.crystal.kind)){
+			 const media=await resolveDeviceMedia(ownerId,deviceId,prepared.doc.crystal.kind,prepared.doc.crystal.input,session);
+			 if(media.ok===false)throw Object.assign(new Error(media.error),{status:media.status});
+			}
 			const currentPermissionMode = normalizeDevicePermissionMode(currentDevice.crystal?.permissionMode);
 			if (currentPermissionMode === 'deny') throw Object.assign(new Error('device_permission_policy_denied'), { status: 403 });
 			const currentRequiresApproval = deviceCommandRequiresApproval(
@@ -373,6 +391,12 @@ export const createDeviceCommand = async (
 				approval.crystal.approvalPendingSlot = await reservePendingApprovalSlot(things, ownerId, deviceId, new Date(), session);
 			}
 			await things.insertOne(prepared.doc, { session });
+			if(prepared.doc.crystal.kind==='notification.show'){
+			 const history=notificationDoc({recipientId:ownerId,type:'device-alert',actor:SYSTEM_NOTIFICATION_ACTOR,targetId:deviceId,title:prepared.doc.crystal.input.title,preview:prepared.doc.crystal.input.message,detail:prepared.doc.crystal.input.message,href:`/things?device=${encodeURIComponent(deviceId)}`},new Date());
+			 prepared.doc.crystal.notificationId=history.shareId;
+			 await things.insertOne({...history,sourceDeviceId:deviceId,sourceCommandId:commandId},{session});
+			 await things.updateOne({shareId:commandId,ownerId,thingtime:'device-command'} as any,{$set:{'crystal.notificationId':history.shareId}},{session});
+			}
 			if (approval) await things.insertOne(approval, { session });
 			await appendDeviceEvent(
 				{
@@ -404,6 +428,7 @@ export const createDeviceCommand = async (
 			}
 		});
 	} catch (error: any) {
+		if(error?.status===404)return deviceFail(404,'Approved uploaded media is no longer available');
 		if (error?.status === 409 || error?.message === 'device_connector_policy_changed' || error?.message === 'device_capability_policy_changed') {
 			return deviceFail(409, 'The device capability, connector snapshot, or permission setting changed; retry command creation');
 		}
@@ -445,11 +470,12 @@ export const listDeviceCommands = async (
 
 const leaseHash = (leaseId: string): string => deviceHash('lease', leaseId);
 
-const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, deviceId: string, command: any, now: Date): Promise<boolean> => {
+const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, deviceId: string, command: any, now: Date, options: DeviceOperationOptions = {}): Promise<boolean> => {
 	const expiresAt = command.crystal?.leaseExpiresAt ? new Date(command.crystal.leaseExpiresAt) : null;
 	if (!expiresAt || !Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() > now.getTime()) return false;
 	let changed = false;
 	await withHomeMongoTransaction(async (session) => {
+		assertDeviceOperation(options);
 		const result = await things.updateOne(
 			{
 				_id: command._id,
@@ -470,7 +496,7 @@ const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, devi
 					updatedAt: now
 				}
 			},
-			{ session }
+			{ ...deviceMongoOptions(options), session }
 		);
 		if (!result.modifiedCount) return;
 		changed = true;
@@ -485,11 +511,12 @@ const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, devi
 			},
 			session
 		);
+		assertDeviceOperation(options);
 	});
 	return changed;
 };
 
-const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string): Promise<void> => {
+const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string, options: DeviceOperationOptions): Promise<void> => {
 	const things = await getHomeThingsCollection();
 	const now = new Date();
 	const expired = await things
@@ -499,12 +526,12 @@ const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string): 
 			targetId: deviceId,
 			'crystal.status': { $in: ['claimed', 'running', 'needs-approval'] },
 			'crystal.leaseExpiresAt': { $lte: now }
-		} as any)
+		} as any, deviceMongoOptions(options))
 		.sort({ 'crystal.leaseExpiresAt': 1 })
 		.limit(25)
 		.toArray();
 	for (const command of expired as any[]) {
-		await markOneExpiredLeaseNeedsReview(things, ownerId, deviceId, command, now);
+		await markOneExpiredLeaseNeedsReview(things, ownerId, deviceId, command, now, options);
 	}
 };
 
@@ -513,27 +540,34 @@ export type NodeDeviceCommand = PublicDeviceCommand & { leaseId: string };
 export const claimNextDeviceCommand = async (
 	ownerId: string,
 	deviceId: string,
-	waitMsValue: unknown
+	waitMsValue: unknown,
+	options: DeviceOperationOptions = {}
 ): Promise<DeviceFail | { ok: true; command: NodeDeviceCommand | null; serverTime: string }> => {
-	if (!(await deviceExistsForOwner(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	const budget = { ...options, deadlineAt: options.deadlineAt ?? Date.now() + 25_000 };
+	assertDeviceOperation(budget);
+	if (!(await deviceExistsForOwner(ownerId, deviceId, undefined, budget))) return deviceFail(404, 'Device not found');
 	const waitMs = Math.max(0, Math.min(20_000, Math.floor(Number(waitMsValue) || 0)));
 	const deadline = Date.now() + waitMs;
 	const things = await getHomeThingsCollection();
+	const queuedFilter = {
+		thingtime: 'device-command', ownerId, targetId: deviceId,
+		'crystal.status': 'queued', 'crystal.deliveryChannel': { $ne: 'apns' },
+		$or: [{ 'crystal.requiresApproval': { $ne: true } }, { 'crystal.approvalState': 'approved' }]
+	};
 	for (;;) {
-		await markExpiredLeasesNeedsReview(ownerId, deviceId);
+		assertDeviceOperation(budget);
+		await markExpiredLeasesNeedsReview(ownerId, deviceId, budget);
 		const leaseId = randomBytes(24).toString('base64url');
 		const now = new Date();
 		const leaseExpiresAt = new Date(now.getTime() + DEVICE_COMMAND_LEASE_MS);
 		let claimed: any = null;
-		await withHomeMongoTransaction(async (session) => {
+		// Retain cross-instance polling and its delivery latency, but idle queues
+		// need only an indexed read, never a no-effect MongoDB transaction.
+		const candidate = await things.findOne(queuedFilter, { ...deviceMongoOptions(budget), projection: { _id: 1 } });
+		if (candidate) await withHomeMongoTransaction(async (session) => {
+			assertDeviceOperation(budget);
 			claimed = await things.findOneAndUpdate(
-				{
-					thingtime: 'device-command',
-					ownerId,
-					targetId: deviceId,
-					'crystal.status': 'queued',
-					$or: [{ 'crystal.requiresApproval': { $ne: true } }, { 'crystal.approvalState': 'approved' }]
-				} as any,
+				queuedFilter,
 				{
 					$set: {
 						'crystal.status': 'claimed',
@@ -543,7 +577,7 @@ export const claimNextDeviceCommand = async (
 						updatedAt: now
 					}
 				},
-				{ sort: { createdAt: 1, shareId: 1 }, returnDocument: 'after', session }
+				{ ...deviceMongoOptions(budget), sort: { createdAt: 1, shareId: 1 }, returnDocument: 'after', session }
 			);
 			if (!claimed) return;
 			await appendDeviceEvent(
@@ -557,10 +591,11 @@ export const claimNextDeviceCommand = async (
 				},
 				session
 			);
+			assertDeviceOperation(budget);
 		});
 		if (claimed) return { ok: true, command: { ...publicDeviceCommand(claimed), input: claimed.crystal.input, leaseId }, serverTime: new Date().toISOString() };
 		if (Date.now() >= deadline) return { ok: true, command: null, serverTime: new Date().toISOString() };
-		await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(1, deadline - Date.now()))));
+		await pauseDevicePolling(Math.min(500, Math.max(1, deadline - Date.now())), budget);
 	}
 };
 
@@ -981,6 +1016,12 @@ export const listDeviceApprovals = async (
 	return { ok: true, approvals: docs.map(publicApproval) };
 };
 
+const resumeApprovedDevicePush=async(ownerId:string,approval:any)=>{
+ if(approval?.crystal?.status!=='approved'||approval.crystal.kind!=='command-dispatch')return;
+ const command=await(await getHomeThingsCollection()).findOne({thingtime:'device-command',ownerId,targetId:String(approval.targetId),shareId:String(approval.crystal.commandId),'crystal.deliveryChannel':'apns'} as any);
+ if(command)await(await import('./deviceAlerts')).dispatchDeviceAlertPush(ownerId,String(approval.targetId),String(approval.crystal.commandId));
+};
+
 export const decideDeviceApproval = async (
 	ownerId: string,
 	input: { approvalId?: unknown; decision?: unknown }
@@ -991,7 +1032,7 @@ export const decideDeviceApproval = async (
 	const things = await getHomeThingsCollection();
 	const approval = await things.findOne({ shareId: approvalId, thingtime: 'device-approval', ownerId } as any);
 	if (!approval) return deviceFail(404, 'Approval not found');
-	if (approval.crystal?.status === decision) return { ok: true, approval: publicApproval(approval), idempotent: true };
+	if (approval.crystal?.status === decision) {await resumeApprovedDevicePush(ownerId,approval);return { ok: true, approval: publicApproval(approval), idempotent: true };}
 	if (approval.crystal?.status !== 'pending') return deviceFail(409, 'This approval already has a different final decision');
 	if (approval.crystal?.expiresAt && new Date(approval.crystal.expiresAt).getTime() <= Date.now()) {
 		await expirePendingApprovals(ownerId, String(approval.targetId));
@@ -1091,6 +1132,7 @@ export const decideDeviceApproval = async (
 		if (error?.message !== 'approval_decision_race' && error?.message !== 'approval_command_race') throw error;
 		const current = await things.findOne({ shareId: approvalId, thingtime: 'device-approval', ownerId } as any);
 		if (current?.crystal?.status === decision) {
+			await resumeApprovedDevicePush(ownerId,current);
 			return { ok: true, approval: publicApproval(current), idempotent: true };
 		}
 		if (current?.crystal?.status === 'pending') {
@@ -1098,6 +1140,7 @@ export const decideDeviceApproval = async (
 		}
 		return deviceFail(409, 'This approval changed, expired, or its command is no longer awaiting this decision');
 	}
+	await resumeApprovedDevicePush(ownerId,updated);
 	return { ok: true, approval: publicApproval(updated), idempotent: false };
 };
 

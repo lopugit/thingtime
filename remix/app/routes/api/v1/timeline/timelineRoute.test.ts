@@ -165,11 +165,11 @@ test('named-branch preview is read-only and uses the same private actor and sour
 });
 
 
-test('branch comparison replies are capped before sending an oversized preview', async () => {
+test('branch comparison replies preserve materialized content beyond the old envelope allowance', async () => {
  const command = { command: 'preview-branch-merge', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page-1', eventId: 'saved', expectedHeadId: 'head', expectedRevision: 1, choices: {} };
  const handlers = createTimelineHandlers({ user: async () => ({ id: 'user-1' } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }), branchMerge: async () => ({ ok: true, preview: { content: 'x'.repeat(4 * 1024 * 1024) } } as any) });
  const result = await handlers.action({ request: request('POST', 'ownerId=user-1&dataPlane=home', command) });
- assert.equal(result.status, 413); assert.equal(result.headers.get('Cache-Control'), 'private, no-store'); assert.match((await result.json()).error, /too large/);
+ assert.equal(result.status, 200); assert.equal(result.headers.get('Cache-Control'), 'private, no-store'); assert.equal((await result.json()).preview.content.length, 4 * 1024 * 1024);
 });
 
 
@@ -185,7 +185,7 @@ test('branch checkout uses private actor/source gates and never dispatches a mut
  h.state.owner = 'user-1'; h.state.plane = 'custom'; assert.equal((await h.handlers.action({ request: request('POST', query, command) })).status, 409);
  assert.equal(h.calls.filter(call => call[0] === 'branchCheckout').length, 1);
  const oversized = createTimelineHandlers({ user: async () => ({ id: 'user-1' } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }), branchCheckout: async () => ({ ok: true, checkout: { content: 'x'.repeat(4 * 1024 * 1024) } } as any) });
- assert.equal((await oversized.action({ request: request('POST', query, command) })).status, 413);
+ assert.equal((await oversized.action({ request: request('POST', query, command) })).status, 200);
 });
 
 
@@ -408,7 +408,7 @@ test('version export is an exact private GET with its own allowance that never f
 	const base = { user: async () => ({ id: 'user-1' } as any), limit: async () => ({ allowed: true } as any), discovery: (ownerId: string) => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }) };
 	const oversized = createTimelineHandlers({ ...base, exportVersion: async () => ({ ...exportFixture(), content: { adapter: 'thing-content', version: 1, value: { crystal: { text: 'x'.repeat(4 * 1024 * 1024) } } } } as any) });
 	const big = await oversized.loader({ request: request('GET', query) });
-	assert.equal(big.status, 413); assert.equal(big.headers.get('Cache-Control'), 'private, no-store'); const bigBody = await big.json(); assert.match(bigBody.error, /too large to export/); assert.equal(bigBody.code, 'storage_invariant');
+	assert.equal(big.status, 200); assert.equal(big.headers.get('Cache-Control'), 'private, no-store'); const bigBody = await big.json(); assert.equal(bigBody.export.content.value.crystal.text.length, 4 * 1024 * 1024);
 	const refusing = createTimelineHandlers({ ...base, exportVersion: async () => { throw new StorageMutationError(422, 'storage_invariant', 'Only saved versions can be exported.'); } });
 	const effect = await refusing.loader({ request: request('GET', query) });
 	assert.equal(effect.status, 422); assert.deepEqual(await effect.json(), { ok: false, error: 'Only saved versions can be exported.', code: 'storage_invariant' });

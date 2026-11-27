@@ -1,9 +1,16 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
+import { loadMapboxSourcePages } from './Maps/mapboxSource';
+import { loadCollectionPages, type CollectionSource } from './collectionSource';
+import { MAP_POINTS_SOURCE_REQUIREMENTS } from '~/schemas/authoredControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { ownsAuthoredControl } from './authoredControlOwnership';
+import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -18,10 +25,11 @@ import { useCharacterScope } from '~/components/Characters/CharacterScope';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { consumeLiveSourceStream, validateLiveSourceStream, type LiveSourceStreamBinding } from './liveSourceStream';
 import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
+import { parseSourceInputArgument, type SourceInputValue } from '~/schemas/sourceInputs';
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
-import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { createTemplateResolver, defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
 // The ONE live-component path. A component thing renders live in exactly
@@ -54,7 +62,10 @@ import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache 
 
 export type ThingSourceBinding = {
 	action: string;
-	inputs?: Record<string, string | number | boolean>;
+	inputs?: Record<string, SourceInputValue>;
+	// Opt in filter/view inputs whose changes may keep the previous result
+	// mounted while the next authorized read is pending. Target IDs stay exact.
+	retainOnInputChange?: string[];
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
 	stream?: LiveSourceStreamBinding;
@@ -62,9 +73,20 @@ export type ThingSourceBinding = {
 
 export type ThingSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
 
+export function resolveThingSourceInputs(inputs: ThingSourceBinding['inputs'], scope: Record<string, unknown>) {
+	const resolve = createTemplateResolver();
+	return Object.fromEntries(Object.entries(inputs || {}).flatMap(([name, input]) => {
+		const value = resolve(typeof input === 'object' ? parseSourceInputArgument(input) : input, scope);
+		return typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? [[name, value]] : [];
+	}));
+}
+
 export type ThingSourceScope = {
 	result: unknown;
 	state: ThingSourceState;
+	refreshing: boolean;
+	// Internal draft boundary: excludes only explicitly retained filter inputs.
+	targetIdentity: string;
 	error: string | null;
 	last: unknown;
 	viewer: unknown;
@@ -78,7 +100,12 @@ export const useThingSource = ({
 	source,
 	cacheId,
 	argValues,
-	interactive
+	interactive,
+	loadAllPages = false,
+	cursorPages,
+	collectionMinimum,
+	resolvedInputs = false,
+	executionHeld = false
 }: {
 	source: ThingSourceBinding | null | undefined;
 	// namespaces the localStorage cache line under the runtime's pageId — a
@@ -86,44 +113,64 @@ export const useThingSource = ({
 	cacheId: string;
 	argValues: Record<string, unknown>;
 	interactive: boolean;
+	// Map overlays consume every page, using the same delegated read/cache boundary.
+	loadAllPages?: boolean;
+	cursorPages?: CollectionSource;
+	collectionMinimum?: string;
+	resolvedInputs?: boolean;
+	executionHeld?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
 	const api = useApi();
 	const dataPlane = useDataPlane();
 	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const sourceKey = JSON.stringify(source || null);
+	const sourceKey = JSON.stringify(cursorPages ? { source, cursorPages, collectionMinimum } : loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
 	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
-	// inputs interpolate {arg} tokens against the args and {query.x} against
-	// the URL — the same substitution the template itself gets
-	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
-	const inputs = React.useMemo(() => {
-		if (!source?.inputs) return {};
-		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
-		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
-	}, [inputsKey]);
-	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
-	const initial = React.useMemo(
-		() => ({
+	// Only the resolved inputs identify a read. Selecting an unrelated panel
+	// or marker leaves this source, its existing result, and its cache intact.
+	const resolved = source?.inputs && !resolvedInputs
+		? resolveThingSourceInputs(source.inputs, { ...argValues, query: runtime.query })
+		: source?.inputs;
+	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
+	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
+	// Only explicitly designated filter/view inputs may retain a result across
+	// URL changes. An item/task ID remains part of the protected target by
+	// default, so opening another record cannot paint the old record's controls.
+	const retain = new Set(Array.isArray(source?.retainOnInputChange)
+		? source.retainOnInputChange.filter((name) => typeof name === 'string' && !/id$/i.test(name))
+		: []);
+	const targetInputs = Object.fromEntries(Object.entries(inputs).filter(([name]) => !retain.has(name)));
+	const sourceIdentity = JSON.stringify([sourceKey, targetInputs, cacheId, dataPlane, character?.id || null, held]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null, held]);
+	const initial = React.useMemo(() => {
+		const cached = active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
+			? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
+			: undefined;
+		return {
 			identity: runtime.identity,
+			sourceIdentity,
 			binding,
-			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
-				: undefined,
-			error: null as string | null
-		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
-	);
+			status: (!active ? 'inert' : !canRun ? 'signed-out' : cached === undefined ? 'loading' : 'ok') as ThingSourceState,
+			result: cached,
+			error: null as string | null,
+			refreshing: active && canRun
+		};
+	}, [runtime.identity, sourceIdentity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]);
 	const [storedState, setState] = React.useState(initial);
+	const carry = (current: typeof initial): typeof initial =>
+		current.identity === runtime.identity && current.sourceIdentity === sourceIdentity && current.result !== undefined && initial.result === undefined
+			? { ...initial, result: current.result, status: 'ok', refreshing: true }
+			: initial;
 	// A new target must never render the preceding target's controls, even
 	// during the render before the effect starts its replacement request.
-	const state = storedState.identity === runtime.identity && storedState.binding === binding ? storedState : initial;
+	const state = storedState.identity === runtime.identity && storedState.binding === binding ? storedState : carry(storedState);
 	const currentIdentity = React.useRef({ identity: runtime.identity, binding });
 	currentIdentity.current = { identity: runtime.identity, binding };
 	const manual = source?.refresh === 'manual';
@@ -140,15 +187,15 @@ export const useThingSource = ({
 	const [tick, setTick] = React.useState(0);
 	React.useEffect(() => {
 		if (!intervalMs || !interactive || !canRun) return;
-		const handle = window.setInterval(() => setTick((current) => current + 1), intervalMs);
-		return () => window.clearInterval(handle);
+		const handle = activityInterval('timer:components/Builder/liveComponent:1', 'Live component refresh', () => setTick((current) => current + 1), intervalMs, { local: true });
+		return () => clearActivityInterval(handle);
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
 	// A manual refetch explicitly reconnects a live stream; action runs do not.
-	const runVersion = source?.refresh === 'live' ? runtime.refreshVersion + local * 1_000_000_007 : manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
-	// Action reports replace runtime.load; that cache is only used by action
-	// sources. A live stream keeps its connection until explicit refresh.
-	const sourceLoader = source?.refresh === 'live' ? null : runtime.load;
+	const runVersion = (source?.refresh === 'live' || manual ? runtime.refreshVersion : runtime.version + tick * 1_000_003) + local * 1_000_000_007;
+	// Automatic sources subscribe to the versioned shared loader. Manual
+	// sources read the current loader when mounted, rebound, or refetched.
+	const automaticLoader = !manual && source?.refresh !== 'live' ? runtime.load : null;
 	const signedIn = runtime.viewer.signedIn;
 	const viewerId = runtime.viewer.id;
 	const pageId = runtime.pageId;
@@ -163,7 +210,7 @@ export const useThingSource = ({
 			// Shared-page action execution has its own stored-root authority and
 			// must never inherit this viewer's private session through a stream.
 			if (runtime.sharedRun || !signedIn || !liveSourceValid || !liveStream) {
-				setState({ identity: runtime.identity, binding, status: runtime.sharedRun ? 'inert' : 'error', result: undefined, error: runtime.sharedRun ? null : 'Live source is unavailable' });
+				setState({ ...initial, status: runtime.sharedRun ? 'inert' : 'error', result: undefined, error: runtime.sharedRun ? null : 'Live source is unavailable', refreshing: false });
 				return;
 			}
 			const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
@@ -183,17 +230,18 @@ export const useThingSource = ({
 			const receiveSnapshot = (result: unknown) => {
 				if (stale()) return;
 				writeSourceCache(viewerId, pageId, cacheId, result, binding);
-				setState({ identity: runtime.identity, binding, status: 'ok', result, error: null });
+				setState({ ...initial, status: 'ok', result, error: null, refreshing: false });
 				backoff = 500;
 			};
 			const revoke = () => {
 				forbidden = true;
 				clearSourceCache(viewerId, pageId, cacheId);
-				if (!stale()) setState({ identity: runtime.identity, binding, status: 'signed-out', result: undefined, error: 'Live source access is no longer available' });
+				if (!stale()) setState({ ...initial, status: 'signed-out', result: undefined, error: 'Live source access is no longer available', refreshing: false });
 			};
-			setState((current) => current.identity === runtime.identity && current.binding === binding
-				? { ...current, error: null, ...(current.result === undefined ? { status: 'loading' as ThingSourceState } : {}) }
-				: initial);
+			setState((current) => {
+				const next = current.identity === runtime.identity && current.binding === binding ? current : carry(current);
+				return { ...next, error: null, refreshing: true, status: next.result === undefined ? 'loading' : 'ok' };
+			});
 			void (async () => {
 				try {
 					await requireThingtimeCapability(liveStream.feature, liveStream.minimumVersion);
@@ -210,7 +258,7 @@ export const useThingSource = ({
 							});
 						} catch (error: any) {
 							if (stale() || controller.signal.aborted || error?.terminal || forbidden) break;
-							setState((current) => current.identity === runtime.identity && current.binding === binding ? { ...current, error: 'Live source disconnected; reconnecting' } : current);
+							setState((current) => current.identity === runtime.identity && current.binding === binding ? { ...current, refreshing: true, error: 'Live source disconnected; reconnecting' } : current);
 						}
 						if (!stale() && !controller.signal.aborted && !forbidden) {
 							await pause(backoff);
@@ -221,7 +269,7 @@ export const useThingSource = ({
 					if (!stale() && !controller.signal.aborted) {
 						const failure = sourceFailure(error, false);
 						setState((current) => current.identity === runtime.identity && current.binding === binding
-							? { ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }
+								? { ...current, status: failure.clear || current.result === undefined ? failure.status : 'ok', error: failure.error, refreshing: false, ...(failure.clear ? { result: undefined } : {}) }
 							: current);
 					}
 				}
@@ -236,33 +284,47 @@ export const useThingSource = ({
 		// Install card to "Loading…" on each tick unmounts the button under the
 		// pointer); install itself re-resolves the page, so nothing is stale
 		setState((current) => {
-			if (current.identity !== runtime.identity || current.binding !== binding) return initial;
-			return (current.result === undefined && current.status !== 'not-installed') || current.status === 'signed-out' || current.status === 'inert'
-				? { ...current, status: 'loading' }
-				: current;
+			const next = current.identity === runtime.identity && current.binding === binding ? current : carry(current);
+			return next.status === 'not-installed' ? next : { ...next, refreshing: true, status: next.result === undefined ? 'loading' : 'ok' };
 		});
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			if (failure.clear) clearSourceCache(viewerId, pageId, cacheId);
-			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }));
+			const clear = failure.clear;
+			if (clear) clearSourceCache(viewerId, pageId, cacheId);
+			setState((current) => current.identity === runtime.identity && current.binding === binding
+				? { ...current, status: clear || current.result === undefined ? failure.status : 'ok', error: failure.error, refreshing: false, ...(clear ? { result: undefined } : {}) }
+				: current);
 		};
 
 		(async () => {
 			try {
-				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await sourceLoader!(shareKey, () =>
+				const run = (cursor?: string) => {
+					const pageInputs = cursor ? { ...inputs, [cursorPages?.cursorInput || 'cursor']: cursor } : inputs;
+					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
+					return runtime.load(shareKey, () =>
 					runtime.sharedRun
-						? runtime.sharedRun(source.action, inputs)
-						: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' })
-				);
+						? runtime.sharedRun(source.action, pageInputs)
+						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
+					) as Promise<any>;
+				};
+				if (cursorPages) {
+					await requireThingtimeCapability('api.webpages-resolve', collectionMinimum || MAP_POINTS_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+					await requireThingtimeCapability('api.actions-run', MAP_POINTS_SOURCE_REQUIREMENTS['api.actions-run']);
+					if (stale()) return;
+				}
+				const response: any = cursorPages ? await loadCollectionPages(cursorPages, run, stale, inputs[cursorPages.cursorInput]) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
+					if (stale()) return;
+					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
+					setState({ ...initial, status: 'ok', result: page.result, error: null, refreshing: false });
+				}) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
 						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
 						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null, binding);
 					}
-					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
+				setState({ ...initial, status: 'ok', result: response.result ?? null, error: null, refreshing: false });
 				} else {
 					fail(response);
 				}
@@ -274,14 +336,14 @@ export const useThingSource = ({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; only action sources subscribe to the version-keyed sourceLoader
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; manual sources use the current shared loader without subscribing to Action reports
 	}, [
 		active,
 		signedIn,
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		sourceLoader,
+		automaticLoader,
 		viewerId,
 		sourceKey,
 		inputsKey,
@@ -291,13 +353,16 @@ export const useThingSource = ({
 		binding,
 		dataPlane,
 		character?.id,
-		liveSourceValid
+		liveSourceValid,
+		loadAllPages
 	]);
 
 	const scope = React.useMemo<ThingSourceScope>(
 		() => ({
 			result: active && canRun ? state.result : undefined,
 			state: interactive ? state.status : 'inert',
+			refreshing: active && canRun && state.refreshing,
+			targetIdentity: sourceIdentity,
 			error: state.error,
 			last: runtime.last,
 			viewer: runtime.viewer,
@@ -306,7 +371,7 @@ export const useThingSource = ({
 			installAvailable: !!runtime.install,
 			hasSource: !!source
 		}),
-		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, runtime.install, source, interactive, active, canRun]
+		[state, sourceIdentity, runtime.last, runtime.viewer, runtime.query, runtime.installing, runtime.install, source, interactive, active, canRun]
 	);
 	const refetch = React.useCallback(() => setLocal((current) => current + 1), []);
 	return { scope, refetch };
@@ -339,38 +404,61 @@ export const useComponentArgValues = (
 export const LiveTemplate = ({
 	render,
 	scope,
+	argumentKey,
 	resolved: alreadyResolved = false,
 	interactive,
 	onUnowned,
 	confirm,
 	onDoubleClickCapture,
+	executionHeld = false,
 	children
 }: {
 	render: unknown;
 	resolved?: boolean;
 	scope: Record<string, unknown>;
+	argumentKey?: string;
 	interactive: boolean;
 	onUnowned?: TtActionUnownedHandler;
 	confirm?: TtActionConfirmHandler;
 	onDoubleClickCapture?: (event: React.MouseEvent) => void;
+	executionHeld?: boolean;
 	children?: React.ReactNode;
 }) => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
+	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
 	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
 		Object.entries(scope).filter(
-			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page'].includes(key)
+			([key]) => !['result', 'state', 'refreshing', 'targetIdentity', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page'].includes(key)
 		)
 	);
-	// Explicit navigation starts a new component draft; source refreshes do not.
-	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
-	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
-	const active = local.identity === identity ? local : { identity, values: {} };
-	const [pending, setPending] = React.useState<{ identity: string; action: string | null }>({ identity, action: null });
+	// A query visit stays in this page and must not remount its inputs or
+	// selection. Page, viewer, component, and argument changes still retire drafts.
+	const draftKey = JSON.stringify([user?.id, runtime.pageId, scope.targetIdentity, alreadyResolved ? null : render, instanceIdentity ?? baseScope, argumentKey]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
+	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
+	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
+	const active = local.identity === identity ? local : { identity, values: {}, outcome: undefined };
+	const [pending, setPending] = React.useState<{ identity: object; action: string | null }>({ identity, action: null });
+	React.useEffect(() => { if (held) setPending({ identity, action: null }); }, [held, identity]);
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const onLocal = (input: Record<string, unknown>) => {
+		// Native adapters may retain a callback across an async event.
+		if (heldRef.current) return;
+		if (input.op === 'query' && input.scope === 'page') {
+			runtime.setPageQuery(input.params, false, input.clearSelection);
+			return;
+		}
+		if (input.scope === 'page' && (input.op === 'toggle-member' || input.op === 'clear-selection')) {
+			runtime.updatePageSelection(input);
+			return;
+		}
 		if (input.op === 'query' || input.op === 'back') {
 			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
 				navigate(-1);
@@ -404,6 +492,8 @@ export const LiveTemplate = ({
 		}));
 	};
 	const onTtAction = useTtActionClicks({
+		identity,
+		executionHeld: held,
 		onUnowned,
 		confirm,
 		onLocal,
@@ -411,32 +501,38 @@ export const LiveTemplate = ({
 		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome }))
 	});
 	const pendingAction = pending.identity === identity ? pending.action : null;
-	const liveScope = { ...scope, ...active.values, page: { id: runtime.pageId }, pending: pendingAction !== null, pendingAction };
-	const scopeKey = JSON.stringify(liveScope);
+	const onComponentAction = interactive ? (event: React.MouseEvent) => {
+		if (!(event.target as Element).closest?.('[data-tt-native-upload], [data-tt-discussion]')) onTtAction(event);
+	} : undefined;
+	const { page: inheritedPage, ...inheritedScope } = scope;
+	const collections = (inheritedPage as { collections?: unknown } | undefined)?.collections;
+	const page = React.useMemo(() => ({ id: runtime.pageId, selection: runtime.selection, ...(collections ? { collections } : {}) }),
+		[runtime.pageId, runtime.selection, collections]);
+	const serialScope = { ...inheritedScope, ...active.values, pending: pendingAction !== null, pendingAction };
+	const liveScope = { ...serialScope, page };
+	const scopeKey = JSON.stringify(serialScope);
 	const resolved = React.useMemo(
 		() => (render ? (alreadyResolved ? render : resolveTemplate(render, liveScope)) : null),
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
-		[render, scopeKey, alreadyResolved]
+		[render, scopeKey, alreadyResolved, page]
 	);
 	if (!resolved) return null;
 	return (
-		<NativeControlsEnabled.Provider key={identity} value={interactive}>
+		<ContentExecutionBoundary held={executionHeld}>
+		<NativeControlsEnabled.Provider key={`${runtime.identity.key}:${draftKey}`} value={interactive}>
 			<ComponentDragBoundary>
 			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
 				<ComponentDataScope.Provider value={liveScope}>
 					<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
 						<Box
-							onClickCapture={
-								interactive
-									? (event) => {
-											if (!(event.target as Element).closest?.('[data-tt-native-upload], [data-tt-discussion]')) onTtAction(event);
-									  }
-									: undefined
-							}
+							onClickCapture={onComponentAction}
+							onMouseDownCapture={onComponentAction}
+							onContextMenuCapture={onComponentAction}
 							onChangeCapture={
 								interactive
 									? (event) => {
 											const field = event.target as HTMLInputElement;
+											if (!ownsAuthoredControl(event.currentTarget, field)) return;
 											if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
 											try {
 												const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
@@ -456,27 +552,7 @@ export const LiveTemplate = ({
 							}
 							onKeyDownCapture={
 								interactive
-									? (event) => {
-											const field = event.target as HTMLInputElement;
-											if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-											if (
-												event.key !== 'Enter' ||
-												event.nativeEvent.isComposing ||
-												field.tagName !== 'INPUT' ||
-												['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
-											)
-												return;
-											const group = field.closest('fieldset') || event.currentTarget;
-											const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-											if (submit) {
-												const action = submit.getAttribute('data-tt-action');
-												const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-												if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-													event.preventDefault();
-													submit.click();
-												}
-											}
-									  }
+										? (event) => clickTtActionForEnter(event)
 									: undefined
 							}
 							onDoubleClickCapture={onDoubleClickCapture}
@@ -496,5 +572,6 @@ export const LiveTemplate = ({
 			</ComponentLocalControl.Provider>
 			</ComponentDragBoundary>
 		</NativeControlsEnabled.Provider>
+		</ContentExecutionBoundary>
 	);
 };

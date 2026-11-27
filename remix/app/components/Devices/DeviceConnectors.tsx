@@ -3,17 +3,11 @@ import React, { memo } from 'react';
 import { Box, Flex, Select, Text } from '@chakra-ui/react';
 import { MessageSquarePlus, Plug, TriangleAlert } from 'lucide-react';
 
-import type { DeviceConnector, DeviceConnectorStatus } from './deviceTypes';
+import type { DeviceConnector } from './deviceTypes';
+import { deviceConnectorPresentation } from './deviceStatusPresentation';
 import { DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton } from './DeviceStateGrid';
-
-const connectorTone = (status: DeviceConnectorStatus): 'positive' | 'warning' | 'negative' | 'neutral' => {
-	if (status === 'ready') return 'positive';
-	if (status === 'connecting' || status === 'degraded' || status === 'update-required') return 'warning';
-	if (status === 'error') return 'negative';
-	return 'neutral';
-};
 
 export type DeviceConnectorsProps = {
 	deviceId: string;
@@ -88,12 +82,12 @@ export const DeviceConnectors = memo(({ deviceId, connectors, now, controlFor, o
 									<Text fontSize="12px" fontWeight={700} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
 										{connector.label || connector.kind}
 									</Text>
-									<DeviceStatusPill label={connector.status} tone={connectorTone(connector.status)} />
+									<DeviceStatusPill {...deviceConnectorPresentation(connector.status, connector.lastSeenAt, now)} />
 								</Flex>
 								<Text color="var(--tt-muted, #71717a)" fontSize="10px" marginTop={0.5}>
 									{connector.kind}
 									{connector.version ? ` · v${connector.version}` : ''}
-									{connector.lastSeenAt ? ` · ${formatDeviceLastSeen(connector.lastSeenAt, now)}` : ''}
+									{connector.lastSeenAt && connector.status !== 'degraded' ? ` · ${formatDeviceLastSeen(connector.lastSeenAt, now)}` : ''}
 								</Text>
 							</Box>
 						</Flex>
@@ -116,7 +110,7 @@ export const DeviceConnectors = memo(({ deviceId, connectors, now, controlFor, o
 							</Text>
 						)}
 
-						{connector.lastError ? (
+						{connector.lastError && connector.lastError.code !== 'connector-degraded' ? (
 							<Flex alignItems="center" color="var(--tt-danger, #dc2626)" fontSize="10px" gap={1.5} marginTop={2}>
 								<TriangleAlert aria-hidden size={12} />
 								{connector.lastError.code}

@@ -107,3 +107,19 @@ test('installed menu inventory preserves icon-bearing snapshots above the defaul
  assert.ok(negotiated.includes('api.actions-run@1.8.0'));
  assert.ok(negotiated.includes('api.devices@1.12.0'));
 });
+
+test('child preparation negotiates URI-expression support before transport and advertises the actual evaluator version', async () => {
+ let calls = 0;
+ const transport = (async (_url, init) => {
+  calls++;
+  assert.equal(JSON.parse(String(init?.body)).executionVersion, '1.40.0');
+  return Response.json({ok:true,status:'prepared'});
+ }) as typeof fetch;
+ const unsupported = createBrowserActionHost(() => 'actor', transport, async (feature, minimum) => {
+  if(feature === 'api.actions-run' && !capabilitySatisfies('1.39.0',minimum)) throw new Error('URI expressions unavailable');
+ });
+ await assert.rejects(unsupported.prepare('child', {}, 'actor', signal()), /URI expressions unavailable/);
+ assert.equal(calls, 0);
+ await createBrowserActionHost(() => 'actor', transport, async () => {}).prepare('child', {}, 'actor', signal());
+ assert.equal(calls, 1);
+});

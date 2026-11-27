@@ -92,7 +92,8 @@ export function parseBackupItem(input: unknown): BackupItem {
 	exact(v.snapshot, ['adapter', 'version', 'value']);
 	if (
 		!integer(v.ordinal) ||
-		!identifier(v.thingId) ||
+		!(identifier(v.thingId) || (typeof v.thingId === 'string' && v.snapshot.adapter === 'backup-reference-coverage' && v.snapshot.version === 1 && /^~\.backup-coverage:[0-9a-f-]{36}:[0-9]{16}$/.test(v.thingId))) ||
+		(v.snapshot.adapter === 'backup-reference-coverage' && !/^~\.backup-coverage:[0-9a-f-]{36}:[0-9]{16}$/.test(v.thingId)) ||
 		!identifier(v.revision) ||
 		!identifier(v.snapshot.adapter) ||
 		!integer(v.snapshot.version) ||
@@ -109,6 +110,17 @@ export function parseBackupItem(input: unknown): BackupItem {
 		}
 	}
 	return v;
+}
+/** Reserved archive metadata is outside canonical Thing IDs (sanitizeShareId
+ * rejects the dot in this namespace). Its identity binds the snapshot and page sequence;
+ * it must never become a restored user Thing. Older readers reject this new
+ * adapter/namespace rather than silently treating evidence as user content. */
+export function nextBackupCoveragePage(item: BackupItem, snapshotId: string, expectedPage: number): number {
+	if (item.snapshot.adapter !== 'backup-reference-coverage') return expectedPage;
+	if (!backupId(snapshotId) || item.snapshot.version !== 1 || item.content !== null ||
+		item.thingId !== `~.backup-coverage:${snapshotId}:${String(expectedPage).padStart(16, '0')}` ||
+		(item.snapshot.value as any)?.page !== expectedPage) throw Error('Backup coverage identity or page sequence changed');
+	return expectedPage + 1;
 }
 export function parseBackupPage(input: unknown): BackupPage {
 	const v = JSON.parse(backupJson(input));

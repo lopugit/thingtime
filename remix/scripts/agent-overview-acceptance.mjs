@@ -311,7 +311,7 @@ try {
 	apiServer = start(process.execPath, ['.output/server/index.mjs']);
 	await ready(apiServer);
 	const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
-	assert.equal(manifest.features?.['api.agent-overview']?.version, '2.0.0', 'Origin must advertise the current agent overview capability');
+	assert.equal(manifest.features?.['api.agent-overview']?.version, '2.2.0', 'Origin must advertise the current agent overview capability');
 	const registered = await api('/api/v1/auth/register', { method: 'POST', body: { username, email: `${username}@example.invalid`, password, displayName: 'Disposable Overview Tester' }, status: 200 });
 	cookies = cookiePairs(registered.response);
 	assert(cookies.length, 'Disposable registration must return an authenticated session cookie');

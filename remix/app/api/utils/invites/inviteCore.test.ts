@@ -28,7 +28,7 @@ test('profile suggestions cannot carry ACL separators or privileges', () => {
 });
 test('invites and invite-aware signup have explicit capability contracts', () => {
 	const manifest = thingtimeCapabilityManifest('https://thingtime.example');
-	assert.equal(manifest.features['api.auth-invites'].version, '2.1.0');
+	assert.equal(manifest.features['api.auth-invites'].version, '2.2.0');
 	assert.ok(capabilitySatisfies(manifest.features['api.auth-register'].version, '1.3.0'));
 	assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
 	assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
@@ -53,4 +53,21 @@ test('PNG invite clients require compatible thumbnail payload capabilities', () 
   assert.equal(capabilitySatisfies(newer, minimum), true);
   for (const unavailable of [undefined, old, breaking]) assert.equal(capabilitySatisfies(unavailable, minimum), false);
  }
+});
+
+test('creator profile suggestions are independently optional, but supplied values stay validated', () => {
+	assert.deepEqual(inviteProfile({}, { optional: true }), { username: '', displayName: '' });
+	assert.deepEqual(inviteProfile({ username: '  ', displayName: ' ' }, { optional: true }), { username: '', displayName: '' });
+	assert.deepEqual(inviteProfile({ username: ' Friend.One ' }, { optional: true }), { username: 'friend.one', displayName: '' });
+	assert.deepEqual(inviteProfile({ displayName: ' Friend ' }, { optional: true }), { username: '', displayName: 'Friend' });
+	for (const input of [{ username: 'x/write' }, { username: 'x' }, { username: 42 }, { username: null }, { displayName: {} }, { displayName: 'a'.repeat(101) }])
+		assert.throws(() => inviteProfile(input, { optional: true }));
+	assert.throws(() => inviteProfile({}));
+});
+
+test('optional creator profiles require the newer invite capability', () => {
+	assert.equal(capabilitySatisfies('2.1.0', '2.2.0'), false);
+	assert.equal(capabilitySatisfies('2.2.0', '2.2.0'), true);
+	assert.equal(capabilitySatisfies('2.3.0', '2.2.0'), true);
+	assert.equal(capabilitySatisfies('3.0.0', '2.2.0'), false);
 });

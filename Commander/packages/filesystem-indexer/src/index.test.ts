@@ -48,6 +48,35 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
+  it('survives a real EPIPE, rejects all in-flight requests, and replaces the worker', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/closed-stdin-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-broken-pipe.sqlite3',
+      prefixArguments: [fixture],
+      requestTimeoutMs: 3_000,
+    });
+    try {
+      // The fixture acknowledges only after closing its read end, but remains alive.
+      const firstWorker = await client.status();
+      const failed = client.query({ query: 'x'.repeat(128 * 1_024) });
+      const alsoPending = client.status();
+      const results = await Promise.allSettled([failed, alsoPending]);
+      expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+      for (const result of results) {
+        if (result.status === 'rejected') expect(result.reason).toMatchObject({ code: 'EPIPE' });
+      }
+      const replacement = await client.status();
+      expect(replacement).toMatchObject({ schemaVersion: 1 });
+      expect(replacement.totalRecords).not.toBe(firstWorker.totalRecords);
+    } finally {
+      await client.close();
+    }
+  });
+
   it('coalesces overlapping index requests into one worker operation', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({
@@ -132,7 +161,10 @@ describe('FileSystemIndexerClient', () => {
   });
 
   it('does not cancel an unlimited catalogue read when interactive queries change', async () => {
-    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/slow-query-indexer.mjs');
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/slow-query-indexer.mjs',
+    );
     const client = new FileSystemIndexerClient({
       binaryPath: process.execPath,
       databasePath: '/tmp/test-index-catalogue.sqlite3',
@@ -150,6 +182,34 @@ describe('FileSystemIndexerClient', () => {
       });
       await expect(active).resolves.toMatchObject({ records: [{ name: 'active.txt' }] });
       await expect(latest).resolves.toMatchObject({ records: [{ name: 'latest.txt' }] });
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+describe('reader policy lifecycle', () => {
+  it('restores the scoped policy before serving a query after a timed-out reader restarts', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/policy-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/scoped-reader.sqlite3',
+      prefixArguments: [fixture],
+      // Include fresh Node startup under the same load as the full native build.
+      requestTimeoutMs: 2_000,
+    });
+    try {
+      await client.readPolicy({ sources: [{ id: 'filesystem:/tmp', root: '/tmp', kinds: ['file'] }] });
+      await expect(client.query({ query: 'eligible' })).resolves.toMatchObject({
+        records: [{ name: 'eligible.txt' }],
+      });
+      await expect(client.query({ query: 'force-timeout' })).rejects.toThrow('timed out');
+      await expect(client.query({ query: 'eligible' })).resolves.toMatchObject({
+        records: [{ name: 'eligible.txt' }],
+      });
     } finally {
       await client.close();
     }

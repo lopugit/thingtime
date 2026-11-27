@@ -42,3 +42,11 @@ test('missing, deleted, shared, foreign and rebound comments cannot leak text', 
 	assert.equal(projectRecordingTranscript('owner', 'audio', [], new Map()), null);
 	assert.equal(projectRecordingTranscript('owner', 'audio', ['a'], new Map([['a', comment('x'.repeat(60_001))]])), null);
 });
+
+test('relational inherited transcript children preserve private parent boundary', () => {
+ const parent = { ...owned, shareId: 'watch-upload-test', thingtime: ['post'], tags: ['apple-watch'] };
+ const child = { ...attachment, targetId: parent.shareId, attachmentPurpose: 'post', acl: ['tt:user', '-tt:inherit'], aclBaseline: ['tt:inherit'], aclBaselineVersion: 1, aclGeneration: 'g', aclEntryCount: 0 };
+ assert.equal(canReadRecordingTranscript('owner', child, parent), true);
+ assert.equal(canReadRecordingTranscript('owner', { ...child, aclEntryCount: 1 }, parent), false);
+ assert.equal(canReadRecordingTranscript('owner', child, { ...parent, acl: ['tt:all'] }), false);
+});

@@ -11,13 +11,13 @@ class BrowserDriver {
     if (!page || page.isClosed()) throw new Error('The task page is no longer available.');
     return page;
   }
-  async launch({ executable, root, build, environment }) {
+  async launch({ executable, root, build, environment, headless = true, logger }) {
     if (this.browser) throw new Error('This task already has a browser.');
     const { default: puppeteer } = await import('puppeteer-core');
     const downloads = path.join(root, 'downloads');
     await fs.mkdir(downloads, { recursive: true, mode: 0o700 });
-    this.browser = await puppeteer.launch({ executablePath: executable, headless: true, pipe: true,
-      userDataDir: path.join(root, 'profile'), ...(environment ? { env: environment } : {}),
+    this.browser = await puppeteer.launch({ executablePath: executable, headless, pipe: true,
+      userDataDir: path.join(root, 'profile'), ...(environment ? { env: environment } : {}), ...(logger ? { logger } : {}),
       args: ['--no-proxy-server', '--disable-background-networking'],
       handleSIGINT: false, handleSIGHUP: false, handleSIGTERM: false,
       defaultViewport: { width: 1280, height: 800 }, timeout: 30000 });

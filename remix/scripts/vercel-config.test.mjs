@@ -34,13 +34,27 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const applicationHeaders = routes.find(route => route.src === '/(?:.*)' && route.continue === true);
+	for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+		assert(cspSources(applicationHeaders.headers['Content-Security-Policy'], 'connect-src').includes(hub), `Emitted application policy must allow the FedCM authority ${hub}`);
+	}
+	assert.ok(routes.indexOf(applicationHeaders) < routes.findIndex(route => route.handle === 'filesystem'));
+	const credentialReview = routes.find(route => route.src && new RegExp(route.src).test('/credentials/import/') &&
+		route.headers?.['X-Frame-Options'] === 'DENY');
+	assert.equal(credentialReview?.continue, true);
+	assert.deepEqual(cspSources(credentialReview.headers['Content-Security-Policy'], 'frame-ancestors'), ["'none'"]);
+	assert.ok(routes.indexOf(credentialReview) > routes.indexOf(applicationHeaders));
+	assert.ok(routes.indexOf(credentialReview) < routes.findIndex(route => route.handle === 'filesystem'));
+
 	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
 	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
 	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
 	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
 	assert.match(mediaWorkerCsp, /connect-src 'none'/);
 	assert.match(mediaWorkerCsp, /worker-src 'none'/);
-	assert.ok(!mediaWorkerCsp.includes('unsafe-eval'));
+	assert.ok(!mediaWorkerCsp.includes("'unsafe-eval'"));
+	assert.match(mediaWorkerCsp, /script-src 'self' 'wasm-unsafe-eval'/);
+	assert.ok(!prodCsp.includes('wasm-unsafe-eval'));
 	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
 	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
 	assert.equal(draft.headers['Cache-Control'], 'no-store');
@@ -59,6 +73,54 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	}
 });
 
+test('browser page loads take the static shell while unfurlers keep server-generated metadata', async (t) => {
+	const { isBrowserOnlyRoute, isBrowserUserAgent } = await import('./app-shell-routing.mjs');
+	const root = await fs.mkdtemp(join(tmpdir(), 'thingtime-shell-routes-'));
+	t.after(() => fs.rm(root, { recursive: true, force: true }));
+	const output = join(root, '.vercel/output');
+	await fs.mkdir(join(output, 'functions/__server.func'), { recursive: true });
+	await fs.writeFile(join(output, 'config.json'), JSON.stringify({ routes: [{ handle: 'filesystem' }, { src: '/api/(?:.*)', dest: '/api/[...]' }, { src: '/(?:.*)', dest: '/__server' }] }));
+	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
+	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
+	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const at = (predicate) => routes.findIndex(predicate);
+	const browserRoot = at(route => route.src === '^/$' && isBrowserOnlyRoute(route));
+	const socialRoot = at(route => route.src === '^/$' && route.dest === '/__server');
+	const browserShell = at(route => route.src === '^/(?:.*)$' && isBrowserOnlyRoute(route));
+	const socialCard = at(route => route.src === '^/social-card$');
+	const socialPages = at(route => route.src === '^/(?:.*)$' && route.dest === '/__server');
+	const api = at(route => route.src === '/api/(?:.*)');
+	assert.ok(browserRoot !== -1 && browserRoot < socialRoot, 'browser homepage loads must be matched before the social controller');
+	assert.ok(browserShell > api && browserShell > socialCard && browserShell < socialPages, 'browser pages sit after API and card routes, before social pages');
+	for (const index of [browserRoot, browserShell]) {
+		assert.equal(routes[index].dest, '/index.html');
+		assert.equal(routes[index].headers['Cache-Control'], 'private, no-store, max-age=0, must-revalidate');
+	}
+
+	const browsers = [
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15',
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0',
+		'Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Thingtime/1.0 Chrome/142.0.0.0 Electron/39.0.0 Safari/537.36'
+	];
+	const unfurlers = [
+		'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.4 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0',
+		'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
+		'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+		'LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)',
+		'WhatsApp/2.23.20.0',
+		'TelegramBot (like TwitterBot)',
+		'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)',
+		'curl/8.7.1',
+		'',
+		undefined
+	];
+	for (const ua of browsers) assert.equal(isBrowserUserAgent(ua), true, `browser: ${ua}`);
+	for (const ua of unfurlers) assert.equal(isBrowserUserAgent(ua), false, `unfurler: ${ua}`);
+});
+
 test('Vercel cron path and schedule pairs are unique', () => {
 	const crons = vercelConfig.crons ?? [];
 	const cronKeys = crons.map(({ path, schedule }) => `${path}\u0000${schedule}`);
@@ -66,30 +128,32 @@ test('Vercel cron path and schedule pairs are unique', () => {
 	assert.equal(new Set(cronKeys).size, cronKeys.length, 'vercel.json must not register the same cron path and schedule twice');
 });
 
-test('recording processing, attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
+test('scheduled processing, cleanup, sync, and notification jobs are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
-		{ path: '/api/v1/auth/invites/expire', schedule: '11 * * * *' },
+		{ path: '/api/v1/auth/invites/expire', schedule: '11 0 * * *' },
 		{
 			path: '/api/v1/lopu/recordings/run',
-			schedule: '*/5 * * * *'
+			schedule: '5 1 * * *'
 		},
 		{
 			path: '/api/v1/attachments/cleanup',
-			schedule: '17 * * * *'
+			schedule: '17 2 * * *'
 		},
 		{
 			path: '/api/v1/moderation/sweep',
-			schedule: '29 * * * *'
+			schedule: '29 3 * * *'
 		},
 		{
 			path: '/api/v1/peers/sync',
-			schedule: '*/5 * * * *'
+			schedule: '5 4 * * *'
 		},
 		{
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
 		},
-		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' },
+		{ path: '/api/v1/backups/run', schedule: '5 5 * * *' },
+		{ path: '/api/v1/devices/observations/cleanup', schedule: '15 6 * * *' }
 	]);
 });
 
@@ -100,6 +164,16 @@ const cspSources = (csp, name) =>
 		.find((s) => s.startsWith(name + ' '))
 		.split(/\s+/)
 		.slice(1);
+test('FedCM can reach the built-in production and preview authorities without broadening other directives', () => {
+	for (const policy of [prodCsp, devCsp]) {
+		const connections = cspSources(policy, 'connect-src');
+		for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+			assert(connections.includes(hub), `Missing FedCM authority ${hub}`);
+			for (const directive of ['script-src', 'frame-src', 'form-action']) assert(!cspSources(policy, directive).includes(hub));
+		}
+		for (const forbidden of ['*', 'https:', 'https://*.thingtime.com', 'https://*.vercel.app']) assert(!connections.includes(forbidden));
+	}
+});
 test('native Maps can load under the deployed policy without broad script or eval exceptions', () => {
 	const scripts = cspSources(prodCsp, 'script-src');
 	assert.deepEqual(scripts, [
@@ -115,9 +189,13 @@ test('native Maps can load under the deployed policy without broad script or eva
 			'https://maps.googleapis.com',
 			'https://mapsresources-pa.googleapis.com',
 			'https://maps.gstatic.com',
-			'https://csi.gstatic.com'
+			'https://csi.gstatic.com',
+			'https://api.mapbox.com',
+			'https://events.mapbox.com'
 		])
 			assert(cspSources(policy, 'connect-src').includes(host));
+		assert(!cspSources(policy, 'script-src').includes('https://api.mapbox.com'));
+		assert(cspSources(policy, 'worker-src').includes('blob:'));
 	}
 });
 

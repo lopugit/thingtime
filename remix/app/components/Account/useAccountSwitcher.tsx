@@ -1,3 +1,4 @@
+import type { ImagePresentation } from '../Media/imagePresentation';
 import React from 'react';
 
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -13,6 +14,7 @@ import { getUserMention } from '~/utils/userIdentity';
 const ROSTER_CACHE_KEY = 'tt-accounts-roster';
 
 export type SwitcherAccountUser = {
+  avatarPresentation?: ImagePresentation;
   id: string;
   username: string;
   displayName?: string | null;

@@ -225,3 +225,75 @@ test('self projection exposes managed ids and linked fallbacks separately; publi
 	assert.equal(shownOnOwnProfile.hideEmailOnProfile, false);
 	assert.equal(Object.prototype.hasOwnProperty.call(toPublicProfile({ ...doc, meta: { hideEmailOnProfile: false } }), 'email'), false);
 });
+
+test('presentation-only changes retain managed media; source replacements and explicit resets clear saved presentation', async () => {
+	const presentation = { zoom: 150, attributes: { alt: 'A rainbow', decoding: 'async' }, css: { opacity: '0.8' } };
+	const existing = canonicalUser();
+	const thing = { ...existing, crystal: { ...existing.crystal, avatarPresentation: presentation } };
+	const edited = createHarness({ thing });
+	assert.equal((await edited.update('user-1', { avatarPresentation: { ...presentation, zoom: 125 } })).ok, true);
+	assert.deepEqual(edited.updates[0].update.$set['crystal.avatarPresentation'], { ...presentation, zoom: 125 });
+	assert.equal(edited.reconciliations.length, 0);
+	assert.equal(edited.updates[0].update.$set.avatarAttachmentId, undefined);
+
+	const replaced = createHarness({ thing });
+	assert.equal((await replaced.update('user-1', { avatarAttachmentId: 'avatar-next' })).ok, true);
+	assert.equal(replaced.updates[0].update.$set['crystal.avatarPresentation'], null);
+	const reset = createHarness({ thing });
+	assert.equal((await reset.update('user-1', { avatarPresentation: null })).ok, true);
+	assert.equal(reset.updates[0].update.$set['crystal.avatarPresentation'], null);
+});
+
+test('presentation cannot bind a missing source or override image requests and rejects CSS network fetches', async () => {
+	const missing = createHarness();
+	assert.equal((await missing.update('user-1', { bannerPresentation: { zoom: 150 } })).ok, false);
+	assert.equal(missing.updates.length, 0);
+	for (const avatarPresentation of [
+		{ attributes: { src: 'https://outside.example/collect.png' } },
+		{ attributes: { srcset: 'https://outside.example/collect.png' } },
+		{ attributes: { onerror: 'alert(1)' } },
+		{ attributes: { loading: 'fast' } },
+		{ css: { background: 'image-set("https://outside.example/collect.png" 1x)' } },
+		{ css: { background: String.raw`u\72l(https://outside.example/collect.png)` } }
+	]) {
+		const harness = createHarness();
+		const result = await harness.update('user-1', { avatarPresentation });
+		assert.equal(result.ok, false);
+		assert.equal(harness.transactions(), 0);
+	}
+});
+
+test('public profile projects valid presentation only beside a real source', () => {
+	const user = {
+		_id: 'user-1', username: 'lopu', createdAt: now,
+		bannerUrl: 'https://images.example/banner.jpg', bannerPresentation: { fit: 'contain', anchorY: 35 }
+	};
+	assert.deepEqual(toPublicProfile(user).bannerPresentation, user.bannerPresentation);
+	assert.equal(toPublicProfile({ ...user, bannerUrl: null }).bannerPresentation, undefined);
+	assert.equal(toPublicProfile({ ...user, bannerPresentation: { attributes: { src: 'https://untrusted.example/image.png' } } }).bannerPresentation, undefined);
+});
+
+test('an editor cannot apply or reset presentation on a concurrently replaced source', async () => {
+	const oldUrl = 'https://images.example/banner-a.png';
+	const replacement = 'https://images.example/banner-b.png';
+	const existing = canonicalUser();
+	const thing = { ...existing, crystal: { ...existing.crystal, bannerUrl: replacement } };
+	for (const bannerPresentation of [{ zoom: 140 }, null]) {
+		const stale = createHarness({ thing });
+		assert.deepEqual(await stale.update('user-1', { bannerPresentation, bannerPresentationSource: oldUrl }), {
+			ok: false, status: 409, error: 'Profile image changed while it was being edited'
+		});
+		assert.equal(stale.updates.length, 0);
+		assert.equal(stale.reconciliations.length, 0);
+	}
+	const matched = createHarness({ thing });
+	assert.equal((await matched.update('user-1', { bannerPresentation: { zoom: 140 }, bannerPresentationSource: replacement })).ok, true);
+	assert.deepEqual(matched.updates[0].update.$set['crystal.bannerPresentation'], { zoom: 140 });
+	assert.equal(matched.reconciliations.length, 0);
+
+	const managed = createHarness();
+	assert.equal((await managed.update('user-1', {
+		avatarPresentation: { zoom: 90 }, avatarPresentationSource: '/api/v1/attachments/content?id=avatar-old'
+	})).ok, true);
+	assert.equal(managed.reconciliations.length, 0);
+});

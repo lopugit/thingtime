@@ -27,6 +27,21 @@ test('indexing with unknown totals remains indeterminate and stopped state is ex
 	assert.match(stopped.uploadDescription, /Cancelled.*3 \/ 9/);
 });
 
+test('a current backup scan count takes precedence over the retained hierarchy summary', () => {
+	const saved = { path: '', kind: 'folder' as const, files: 5751, folders: 234, indexedBytes: 1700, excluded: 0, unchanged: 0,
+		operations: 465, confirmed: 465, transferFiles: 397, confirmedFiles: 397, bytesTotal: 1700, bytesConfirmed: 380 };
+	const branches = { '': { history: [], busy: false, page: { parent: saved, rows: [], after: null, next: null } } };
+	const current = { stage: 'scanning' as const, confirmed: 0, total: 0, indexed: 5985, coverage: 'partial' as const, skipped: 0 };
+	const live = syncProgressDisplay(branches, current, 'running', true).sync;
+	assert.match(live.indexDescription, /Current scan: 5,985 entries indexed.*Total still being discovered/);
+	assert.match(live.indexDescription, /Saved hierarchy remains visible below/);
+	assert.doesNotMatch(live.indexDescription, /5,751 files and 234 folders indexed/);
+	assert.match(live.folderSummary, /5,751 files.*234 folders/, 'the saved tree remains available separately');
+	assert.match(syncProgressDisplay({}, current, 'running', false).sync.indexDescription, /5,985 entries indexed.*still being discovered/);
+	assert.match(syncProgressDisplay(branches, { stage: 'complete', confirmed: 0, total: 0 }, 'complete', true).sync.indexDescription,
+		/5,751 files and 234 folders indexed/);
+});
+
 test('preparation identifies its actual phase and counts separately from uploaded receipts', () => {
 	const progress = { stage: 'scanning' as const, indexed: 1000, indexTotal: 1000, confirmed: 0, total: 0,
 		preparation: { phase: 'cloud' as const, completed: 128, total: 900 } };
@@ -144,4 +159,17 @@ test('resource status keeps effective fields individually editable and distingui
  const unknown = syncResourceStatusDisplay({ ...progress, resources: { ...progress.resources, cpuPercent: null, cpuStatus: 'unavailable' } }, 'running').syncResources;
  assert.match(unknown.cpu, /unavailable/); assert.doesNotMatch(unknown.cpu, /0%/);
  assert.match(syncResourceStatusDisplay(undefined, 'running').syncResources.transfers, /unavailable/);
+});
+
+test('a completed download keeps its durable direction after active samples end', () => {
+	const directions = {
+		upload: { operations: 0, confirmed: 0, bytesTotal: '0', bytesConfirmed: '0' },
+		download: { operations: 2, confirmed: 2, bytesTotal: '12', bytesConfirmed: '12' },
+	};
+	const result = syncProgressDisplay({}, { stage: 'complete', total: 2, confirmed: 2, directions }, 'complete', true).sync;
+	assert.equal(result.transferTitle, '2. Download files and folders');
+	assert.match(result.uploadDescription, /Complete.*2 \/ 2 operations confirmed/);
+	const provisional = syncProgressDisplay({}, { stage: 'checking', total: 0, confirmed: 0, totalFinal: false }, 'running', false, '', '', false, false, 'two-way').sync;
+	assert.equal(provisional.transferTitle, '2. Transfer files and folders');
+	assert.match(provisional.uploadDescription, /Total may grow/);
 });

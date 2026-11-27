@@ -3,10 +3,11 @@ import { FONT_SIZE_UNITS, SIZE_LIMITS, STYLE_PALETTE, sanitizeStyleTokens, style
 import type { FontKey, TextStyleTokens } from './styleTokens';
 import { makeEditorPanelMovable, makeEditorPanelResizable } from './floatingEditorPanel';
 
-let closeActive: (() => void) | undefined;
+const activeDialogs = new WeakMap<Document, () => void>();
 
-/** A single shared picker with live document previews and an explicit Save/Cancel boundary. */
+/** One picker per owning document, with live previews and an explicit Save/Cancel boundary. */
 export const openStyleDialog = ({
+	ownerDocument = globalThis.document,
 	initial,
 	apply,
 	preview: previewDocument,
@@ -17,6 +18,7 @@ export const openStyleDialog = ({
 	restoreFocus,
 	emPixels = 16
 }: {
+	ownerDocument?: Document;
 	initial: TextStyleTokens;
 	apply: (tokens: TextStyleTokens, clearExisting: boolean) => void;
 	preview?: (tokens: TextStyleTokens, clearExisting: boolean) => void;
@@ -27,7 +29,10 @@ export const openStyleDialog = ({
 	restoreFocus?: () => void;
 	emPixels?: number;
 }): (() => void) => {
-	closeActive?.();
+	const document = ownerDocument;
+	const window = document.defaultView;
+	if (!window || !document.body) return () => {};
+	activeDialogs.get(document)?.();
 	let draft = { ...initial };
 	let clearExisting = false;
 	let colourTarget: 'color' | 'background' = 'color';
@@ -81,7 +86,14 @@ export const openStyleDialog = ({
 	const q = <T extends HTMLElement = HTMLElement>(selector: string) => dialog.querySelector<T>(selector)!;
 	q('[data-title]').textContent = title;
 	q('[data-alignment]').hidden = !alignment;
-	q<HTMLSelectElement>('[data-unit]').replaceChildren(...FONT_SIZE_UNITS.map((unit) => new Option(unit, unit)));
+	q<HTMLSelectElement>('[data-unit]').replaceChildren(
+		...FONT_SIZE_UNITS.map((unit) => {
+			const option = document.createElement('option');
+			option.value = unit;
+			option.textContent = unit;
+			return option;
+		})
+	);
 	const format = q<HTMLSelectElement>('[data-format]');
 	const input = q<HTMLInputElement>('[data-colour]');
 	const size = q<HTMLInputElement>('[data-size]');
@@ -146,7 +158,7 @@ export const openStyleDialog = ({
 		const probe = document.createElement('span');
 		probe.style.color = token || 'hsl(320 100% 50%)';
 		dialog.append(probe);
-		colour = parseColor(token || '') || parseColor(getComputedStyle(probe).color) || hslToRgba(320, 100, 50, 1);
+		colour = parseColor(token || '') || parseColor(window.getComputedStyle(probe).color) || hslToRgba(320, 100, 50, 1);
 		probe.remove();
 		[hue, saturation, lightness] = rgbaToHsl(colour);
 		syncColour();
@@ -274,7 +286,7 @@ export const openStyleDialog = ({
 		const pixels: Record<string, number> = {
 			px: 1,
 			em: emPixels,
-			rem: parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
+			rem: parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16,
 			pt: 4 / 3,
 			'%': emPixels / 100
 		};
@@ -326,15 +338,17 @@ export const openStyleDialog = ({
 				previewDraft();
 			})
 	);
+	let closed = false;
 	const close = () => {
-		if (!dialog.isConnected) return;
-		if (!saved && previewed) cancel?.();
+		if (closed) return;
+		closed = true;
+		if (!saved && previewed && dialog.isConnected) cancel?.();
 		cleanupResize();
 		cleanupMove();
-		dialog.close();
+		if (dialog.isConnected) dialog.close();
 		dialog.remove();
 		window.visualViewport?.removeEventListener('resize', resize);
-		if (closeActive === close) closeActive = undefined;
+		if (activeDialogs.get(document) === close) activeDialogs.delete(document);
 		if (restoreFocus) restoreFocus();
 		else if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
 	};
@@ -372,6 +386,6 @@ export const openStyleDialog = ({
 	window.visualViewport?.addEventListener('resize', resize);
 	loadDraft();
 	initialized = true;
-	closeActive = close;
+	activeDialogs.set(document, close);
 	return close;
 };

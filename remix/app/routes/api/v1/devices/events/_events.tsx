@@ -1,9 +1,11 @@
+import { withMongoRequestBudget } from '~/api/utils/mongodb/requestBudget';
+import { pauseDevicePolling } from '~/api/utils/devices/devicePolling';
 import { json } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { listDeviceEvents } from '~/api/utils/devices/devices';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-export const loader = async ({ request }: { request: Request }) => {
+export const loader = async ({ request }: { request: Request }) => withMongoRequestBudget(request.signal, 25_000, async () => {
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	const limit = await enforceRateLimit(request, 'devices.events', `user:${user.id}`);
@@ -13,10 +15,11 @@ export const loader = async ({ request }: { request: Request }) => {
 	const cursor = params.get('cursor');
 	const waitMs = Math.max(0, Math.min(20_000, Math.floor(Number(params.get('waitMs')) || 0)));
 	const deadline = Date.now() + waitMs;
-	let result = await listDeviceEvents(user.id, deviceId, cursor, params.get('limit'));
+	const options = { signal: request.signal, deadlineAt: deadline + 5_000 };
+	let result = await listDeviceEvents(user.id, deviceId, cursor, params.get('limit'), options);
 	while (result.ok && result.events.length === 0 && Date.now() < deadline) {
-		await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(1, deadline - Date.now()))));
-		result = await listDeviceEvents(user.id, deviceId, cursor, params.get('limit'));
+		await pauseDevicePolling(Math.min(500, Math.max(1, deadline - Date.now())), options);
+		result = await listDeviceEvents(user.id, deviceId, cursor, params.get('limit'), options);
 	}
 	if (result.ok === false) return json(result, { status: result.status });
 	const encoder = new TextEncoder();
@@ -35,4 +38,4 @@ export const loader = async ({ request }: { request: Request }) => {
 			'X-Accel-Buffering': 'no'
 		}
 	});
-};
+});

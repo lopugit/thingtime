@@ -52,3 +52,19 @@ test('menu links allow real destinations but reject executable or malformed prot
   for (const href of ['/things?q=hello%20world', '#details', 'https://thingtime.test/thing/123', 'mailto:hello@example.test']) assert.equal(safeMenuHref(href), href);
   for (const href of ['javascript:alert(1)', 'data:text/html,test', '//evil.test', '/\\evil.test', 'java\nscript:alert(1)', ' /things']) assert.equal(safeMenuHref(href), undefined);
 });
+
+test('app search and kind/view chips preserve the current container through back and reload', () => {
+  let params = new URLSearchParams('folder=app-a&kind=all');
+  const history = [params];
+  for (const patch of [{ q: 'shared name' }, { kind: 'webpage' as const }, { view: 'list' as const }, { display: 'preview' as const }, { sort: 'name' as const }, { group: 'kind' as const }]) {
+    params = writeThingsLocation(params, { ...readThingsLocation(params), ...patch });
+    history.push(params);
+    assert.equal(params.get('folder'), 'app-a');
+    assert.equal(params.get('q'), 'shared name');
+  }
+  for (const entry of history.slice(1).reverse()) {
+    const reloaded = new URLSearchParams(entry.toString());
+    assert.equal(reloaded.get('folder'), 'app-a');
+    assert.equal(readThingsLocation(reloaded).q, 'shared name');
+  }
+});

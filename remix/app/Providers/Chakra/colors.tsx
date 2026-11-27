@@ -78,6 +78,7 @@ export const colors = {
     muted: 'var(--tt-muted, #9a9aa6)',
     faint: 'var(--tt-faint, #b6b6c0)',
     border: 'var(--tt-border, #ececef)',
+    focusBorder: 'var(--tt-focus-border, #d63384)',
     borderLight: 'var(--tt-border-light, #f0f0f2)',
     surface: 'var(--tt-surface, #fafafb)',
     surfaceAlt: 'var(--tt-surface-alt, #f5f5f7)',

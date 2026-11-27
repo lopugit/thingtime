@@ -89,7 +89,6 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			try {
 				const result = await deps.exportVersion(auth.user.id, eventId);
 				if (!result) return response({ ok: false, error: 'Version not found' }, 404);
-				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This version is too large to export in one file. It remains retained in your account.', code: 'storage_invariant' }, 413);
 				return response({ ok: true, export: result });
 			} catch (error) {
 				if (error instanceof StorageMutationError) return response({ ok: false, error: error.message, code: error.code }, error.status);
@@ -169,19 +168,16 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			if (recovery) return response({ ok: true, entry: await deps.recoverOutcome(auth.user.id, recovery) });
 			if (branchCheckout) {
 				const result = await deps.branchCheckout(auth.user.id, branchCheckout);
-				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This branch is too large to edit in one request.' }, 413);
 				return response(result);
 			}
 			if (branchMerge) {
 				const result = await deps.branchMerge(auth.user.id, branchMerge);
-				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This branch comparison is too large to display in one request.' }, 413);
 				return response(result);
 			}
 			if (branch) return response(await deps.branch(auth.user.id, branch));
 			if (versionName) return response(await deps.versionName(auth.user.id, versionName));
 			if (!version) return response({ ok: true, entry: await deps.push(auth.user.id, event!) });
 			const result = await deps.version(auth.user.id, version);
-			if (version.command === 'preview-version' && new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This comparison is too large to display in one request. Open the version data separately.' }, 413);
 			return response(result);
 		}
 		catch (error) {

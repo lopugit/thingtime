@@ -1,3 +1,4 @@
+import type { ImagePresentation } from '~/components/Media/imagePresentation';
 import type { PostThingReference } from './postThingReferences';
 import type { ThingsThing } from '../Things/thingsCore';
 // Client-side shapes for the feed / algorithms / profile APIs. These mirror the
@@ -19,6 +20,8 @@ export type PublicProfile = {
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  avatarPresentation?: ImagePresentation;
+  bannerPresentation?: ImagePresentation;
   createdAt: string;
 };
 
@@ -33,6 +36,7 @@ export type FeedAuthor = {
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  avatarPresentation?: ImagePresentation;
   external?: boolean;
   externalUrl?: string | null;
 };

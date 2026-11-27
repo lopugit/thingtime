@@ -155,7 +155,7 @@ export const LocalNodeSetupCard = ({
 			{registered ? (
 				<Flex align="center" color="var(--tt-muted, #71717a)" fontSize="10px" gap={1.5} marginTop={3}>
 					<FolderPlus aria-hidden size={13} />
-					Folder paths remain in a private file on this Mac; your account receives only an opaque id and folder name.
+					Review approved folders on this Mac in Folders & sync configs.
 				</Flex>
 			) : null}
 			{registered ? (

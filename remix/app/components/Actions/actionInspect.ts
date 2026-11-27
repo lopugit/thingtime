@@ -90,6 +90,7 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	}
 	if (op === 'lookup') return `Send query to ${String(step.provider)} using your Vault credential${guard}`;
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
+	if (op === 'things.ensure') return `Reuse or create a ${schema} thing by key${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
 	if (op === 'things.search') {
 		const scope = step.scope === 'public' ? 'public' : step.scope === 'system' ? 'the platform’s' : 'your';
@@ -132,8 +133,8 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 		if (step.op === 'http.request') { need('http.request'); const endpoint = actionHttpEndpoint(step.method, step.path); if (endpoint) endpoints.add(endpoint); }
 		const schema = typeof step.schema === 'string' ? step.schema : null;
 		if (step.op === 'lookup') { need('lookup'); if (typeof step.provider === 'string') providers.add(step.provider); }
-		if (step.op === 'things.create') need('things.create', schema);
-		if (step.op === 'things.get' || step.op === 'things.search') need('things.read', schema);
+		if (step.op === 'things.create' || step.op === 'things.ensure') need('things.create', schema);
+		if (step.op === 'things.get' || step.op === 'things.search' || step.op === 'things.ensure') need('things.read', schema);
 		if (step.op === 'things.update') need('things.update');
 		if (step.op === 'things.delete') need('things.delete');
 		if (step.op === 'actions.invoke' || step.op === 'each') {

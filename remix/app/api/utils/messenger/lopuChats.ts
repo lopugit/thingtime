@@ -98,6 +98,7 @@ export type LopuChatState = LopuChatSettings & { turns: number; lastModel: strin
 export type LopuChatSettingsInput = { accessMode?: unknown; management?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
+	deviceTranscript?: true;
 	model?: unknown;
 	effort?: unknown;
 	speed?: unknown;
@@ -396,12 +397,13 @@ const resolveLopuChat = async (viewerId: string, chatId: unknown): Promise<ChatA
 
 // Re-checks membership INSIDE the write transaction (sendMessage does the
 // same): a concurrent delete must not resurrect a row into a dead chat.
-const assertLopuChatLive = async (things: any, chat: any, member: any, viewerId: string, session: any): Promise<void> => {
+const assertLopuChatLive = async (things: any, chat: any, member: any, viewerId: string, session: any, expectedProviderId?: string): Promise<void> => {
 	const [freshChat, freshMember] = await Promise.all([
 		things.findOne({ shareId: chat.shareId, thingtime: 'chat' } as any, { session }),
 		things.findOne({ shareId: member.shareId, thingtime: 'chat-member', ownerId: viewerId } as any, { session })
 	]);
-	if (!freshChat || !freshMember || freshMember.crystal?.state !== 'active') throw new Error('lopu_membership_changed');
+	if (!freshChat || !freshMember || freshMember.crystal?.state !== 'active' ||
+		(expectedProviderId !== undefined && (freshChat.ownerId !== viewerId || freshChat.crystal?.lopu?.providerId !== expectedProviderId || freshChat.crystal?.lopu?.archived === true))) throw new Error('lopu_membership_changed');
 };
 
 const isDuplicateWrite = (error: any): boolean => error?.code === 11000 || !!error?.errorLabels?.includes?.('UnknownTransactionCommitResult');
@@ -439,20 +441,26 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 // ── chats ──
 
+export const stableLopuChatId = (viewerId: string, key: string) =>
+	`${LOPU_CHAT_SHARE_ID_PREFIX}${createHash('sha256').update(`${viewerId}:${key}`).digest('hex')}`;
+
 export const createLopuChat = async (
 	viewerId: string,
 	input: LopuChatSettingsInput & { title?: unknown } = {},
-	identity?: { creationKey: string },
+	identity?: { creationKey: string; transcriptProviderId?: string },
 	ownedPlan?: OwnedPlanAdmission | null
 ): Promise<LopuChatResult> => {
-	const stableId = identity ? `${LOPU_CHAT_SHARE_ID_PREFIX}${createHash('sha256').update(`${viewerId}:${identity.creationKey}`).digest('hex')}` : null;
+	const stableId = identity ? stableLopuChatId(viewerId, identity.creationKey) : null;
 	if (stableId) { const existing = await getLopuChat(viewerId, stableId); if (existing.ok) return existing; }
 	const wantsTitle = input.title !== undefined && input.title !== null && input.title !== '';
 	const title = wantsTitle ? boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS) : null;
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
 	const normalized = normalizeLopuChatSettings(input);
 	if (normalized.ok === false) return normalized;
-	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
+	// Device transcript import records its opaque connection name on a newly
+	// created chat. It cannot give that pin inference or tool authority.
+	const transcriptPin = identity?.creationKey.startsWith('device-turn:') && identity.transcriptProviderId === normalized.settings.providerId;
+	const foreignProvider = transcriptPin ? null : await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
 	if (foreignProvider) return foreignProvider;
 
 	const things = await getThingsCollection();
@@ -622,7 +630,7 @@ export const deleteLopuChat = async (viewerId: string, chatId: unknown): Promise
 // under the same id is a 409 — the sendMessage rule.
 export const persistLopuUserTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean; continuation?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean; continuation?: boolean; expectedProviderId?: string }
 ): Promise<LopuUserTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -647,7 +655,7 @@ export const persistLopuUserTurn = async (
 	try {
 		const transact = attachmentIds.length ? withHomeMongoTransaction : withMessengerStorageTransaction;
 		await transact(async (session) => {
-			await assertLopuChatLive(things, chat, member, viewerId, session);
+			await assertLopuChatLive(things, chat, member, viewerId, session, input.expectedProviderId);
 			for (const row of rows) await insertMessengerThing(things, row as any, { session });
 			if (attachmentIds.length) await createReadyAttachmentMessageInsertHook(attachmentIds)(rows[0] as any, session);
 			if (!input.unread) await updateMessengerThing(
@@ -705,7 +713,7 @@ export const splitLopuAssistantSegments = (text: string, toolCalls: unknown) => 
 // chat's lastMessage preview and bumps crystal.lopu.turns / lastModel.
 export const persistLopuAssistantTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean; readReferences?: LopuReadReference[] }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean; readReferences?: LopuReadReference[]; expectedProviderId?: string }
 ): Promise<LopuAssistantTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -741,7 +749,7 @@ export const persistLopuAssistantTurn = async (
 	const last = rows[rows.length - 1]!;
 	try {
 		await withMessengerStorageTransaction(async (session) => {
-			await assertLopuChatLive(things, chat, member, viewerId, session);
+			await assertLopuChatLive(things, chat, member, viewerId, session, input.expectedProviderId);
 			for (const row of rows) await insertMessengerThing(things, row as any, { session });
 			if (!input.unread) await updateMessengerThing(
 				things,
@@ -814,6 +822,25 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
   const readReferences = decodeLopuReadReferences(privateRow);
 
 	return { ok: true, ...folded, readReferences, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
+};
+
+/** Exact same account/chat/provider receipt for device transcript recovery. */
+export const readLopuDeviceTurn = async (viewerId: string, chatId: string, providerId: string, requestId: string, text: string) => {
+	const access = await resolveLopuChat(viewerId, chatId);
+	if ('ok' in access && access.ok === false) return access;
+	const { chat } = access as ChatAccess;
+	if (chat.ownerId !== viewerId || chat.crystal?.lopu?.providerId !== providerId || chat.crystal?.lopu?.archived === true)
+		return fail(409, 'The device conversation changed.');
+	const things = await getThingsCollection();
+	const userRows = await turnRows(things, chatId, requestId, 'user');
+	if (!userRows.length) return { ok: true as const, receipt: null };
+	if (userRows.some(row => row.ownerId !== viewerId || row.crystal?.deletedAt) || userRows.map(row => row.crystal?.text).join('') !== text.trim())
+		return fail(409, 'That device turn has different text.');
+	const assistantRows = await turnRows(things, chatId, requestId, 'assistant');
+	if (!assistantRows.length || assistantRows.some(row => row.ownerId !== viewerId || row.crystal?.deletedAt))
+		return fail(409, 'That device turn was not fully saved.');
+	const { messages } = await projectMessages(viewerId, chatId, assistantRows, { withThreadCounts: false });
+	return { ok: true as const, receipt: { chatId, userMessageId: String(userRows[0].shareId), messages, answer: assistantRows.map(row => row.crystal?.text).join('') } };
 };
 
 /** Only the latest persisted assistant boundary can authorize recovery. */

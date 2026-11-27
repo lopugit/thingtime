@@ -1,3 +1,4 @@
+import {resolveAiPreferredAnthropicChoice,resolveAiPreferredOpenAiChoice,type AiWorkflowBaseModel} from './prConflictResolverModelWaterfallCore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -59,4 +60,36 @@ test('an Admin save persists the validated order and becomes the outage fallback
   assert.deepEqual(await store.setWaterfall(waterfall, 'admin-123'), waterfall);
   assert.deepEqual(persisted, { waterfall: [...waterfall], updatedBy: 'admin-123' });
   assert.deepEqual(await store.getWaterfall(), waterfall);
+});
+
+
+test('live discovered tiers survive save/read/runtime and removed tiers clamp without changing the model',async()=>{
+ let stored:unknown=['default'];
+ let models:AiWorkflowBaseModel[]=[{id:'claude-opus-9-9',label:'Future Claude',provider:'anthropic',efforts:['low','high'],speeds:['normal']},{id:'claude-opus-5-5',label:'Opus',provider:'anthropic',efforts:['low','medium','high','xhigh','max'],speeds:['normal']},{id:'gpt-6-astra',label:'Astra',provider:'openai',efforts:['high'],speeds:['normal']}];
+ const store=createPrConflictResolverModelWaterfallStore({readStoredWaterfall:async()=>stored,writeStoredWaterfall:async(value)=>{stored=value;},readModelCatalog:async()=>models});
+ const order=['claude-opus-9-9:high','claude-opus-5-5:max','gpt-6-astra:high'];
+ assert.deepEqual(await store.setWaterfall(order,'admin'),order);assert.deepEqual(await store.getWaterfall(),order);
+ let snapshot=await store.getSnapshot();assert.equal(resolveAiPreferredAnthropicChoice(snapshot,'fallback').id,'claude-opus-9-9:high');assert.equal(resolveAiPreferredOpenAiChoice(snapshot)?.id,'gpt-6-astra:high');
+ models=models.map(model=>model.id==='claude-opus-9-9'?{...model,efforts:['low']}:model);
+ snapshot=await store.getSnapshot();assert.equal(resolveAiPreferredAnthropicChoice(snapshot,'fallback').model,'claude-opus-9-9');assert.equal(resolveAiPreferredAnthropicChoice(snapshot,'fallback').effort,null);
+ await assert.rejects(store.setWaterfall(order,'admin'),/unknown model/);
+ assert.deepEqual(stored,order,'A fresh read never rewrites the saved preference');
+ models=models.map(model=>model.id==='claude-opus-5-5'?{...model,efforts:[]}:model);
+ stored=['claude-opus-5-5:max'];snapshot=await store.getSnapshot();assert.equal(resolveAiPreferredAnthropicChoice(snapshot,'fallback').id,'claude-opus-5-5');
+});
+
+test('concurrent reads return their local model/preference pair and outage fallback caches the whole pair',async()=>{
+ let reads=0;
+ const releases:((value:any)=>void)[]=[];
+ const store=createPrConflictResolverModelWaterfallStore({
+  readStoredWaterfall:async()=>[++reads===1?'claude-opus-9-9:high':'claude-opus-8-8:low'],
+  readModelCatalog:()=>new Promise(resolve=>{releases.push(resolve);}),writeStoredWaterfall:async()=>{}
+ });
+ const a=store.getSnapshot(),b=store.getSnapshot();
+ releases[1]([{id:'claude-opus-8-8',label:'B',provider:'anthropic',efforts:['low'],speeds:['normal']}]);
+ const second=await b;
+ releases[0]([{id:'claude-opus-9-9',label:'A',provider:'anthropic',efforts:['high'],speeds:['normal']}]);
+ const first=await a;
+ assert.equal(resolveAiPreferredAnthropicChoice(first,'fallback').id,'claude-opus-9-9:high');
+ assert.equal(resolveAiPreferredAnthropicChoice(second,'fallback').id,'claude-opus-8-8:low');
 });

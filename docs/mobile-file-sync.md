@@ -1,5 +1,9 @@
 # Mobile devices and file synchronization
 
+The unified folder editor, multiple sync configs, background recovery, activity
+and shared-content storage contract are described in
+[Device folders and sync configs](device-sync-configs.md).
+
 Status: implementation in progress. This document tracks the full requested
 outcome: add iOS and Android devices in Things like the Mac app, and provide
 Drive/Photos/Resilio-style file synchronization across Mac and mobile. The
@@ -4075,3 +4079,112 @@ If pause persistence fails, current work still stops and automatic restart stays
 blocked in this process until explicit Resume. The error states that reopening
 may resume work when the pause could not be saved. Other connections and accounts
 retain their own state.
+
+## POSIX symbolic-link file versions
+
+`api.files` 1.9.0 and `api.file-sync-batches` 1.3.0 preserve optional
+`symbolicLink: { format: "posix-symlink-v1", targetBase64 }` on file sources,
+canonical File Things and Timeline versions. Links use individual canonical file
+operations rather than the bulk upload optimization; bulk observations preserve
+their metadata, and existing regular-file digest formats remain unchanged. The attachment payload is exactly
+raw POSIX `readlink` target bytes. Canonical base64 preserves non-UTF8 targets;
+empty targets, NUL bytes and unknown metadata fields are refused. Relative,
+absolute, outside-root and dangling targets remain inert: sync never reads or
+writes the referenced item. The server checks metadata against the ready
+attachment's exact size and multipart fingerprint before binding it.
+
+A symbolic link differs from an ordinary file containing the same bytes.
+Regular-to-link and link-to-regular changes therefore reconcile normally;
+reviewing and restoring a historical link carries its original metadata under
+the current revision and immutable operation guards. Native link I/O requires
+Mac fileAccess 1.17.0 and fileSymbolicLinks 1.0.0. New tagged uploads negotiate
+the new server contract before opening source bytes or granting an upload.
+Older server capabilities remain insufficient, even if the route exists.
+
+The popup-free Mac acceptance uses fresh synthetic roots, a disposable replica
+and the actual compiled Nitro middleware. Build with
+`NITRO_PRESET=node_middleware pnpm --dir remix run build:server`, build the
+`MacFolderSyncFixture` target, then run
+`pnpm --dir remix run test:files:mac-paged`. Its runner owns the middleware HTTP
+listener, signs only a temporary test executable and removes its test storage.
+Checks include equal-payload kind transitions, dangling/non-UTF8 links, target
+integrity refusal, outside-target preservation and Timeline restore after a
+native restart. This is adapter/API evidence, not installed-app or unsupported
+physical-filesystem acceptance.
+
+## Mac strict inventory capture
+
+The app-owned Mac runner negotiates native folder access 1.18.0 before using
+the `strict-async` capture policy. `scan-capture` starts a scoped native job
+and returns its ID, generation, and state. Each `scan-status` request can
+return a provisional count for progress. Only a complete status includes an
+inventory descriptor, which the runner uses with the existing paged import.
+`scan-cancel` cancels the exact job. Older native versions retain the existing
+synchronous capture protocol.
+
+Two-way sync uses the existing strict Swift scan, which keeps rows private
+through authorization and a final replay of root and entry stamps. If a file
+changes, the grant is revoked, or the job is cancelled, reconciliation cannot
+use the partial inventory to infer deletions. The runner records the exact capture ID before dispatch. If cancellation
+cannot be confirmed, Pause or Resume retries cleanup for that same ID and
+original folder settings before replacing it. The scan continues independently
+of the short control request deadlines under the existing monitored job
+lifetime and device resource policy. Commander continues to handle best-effort
+backup and one-way streaming. Using its discovery for strict two-way capture
+requires proving namespace completeness before publishing a generation.
+
+## Two-way transfers while indexing
+
+A connection with deletion propagation off can use both the native shared
+indexer feed and the cloud index feed when the device supports streaming.
+Both source cursors are durable and independent. A feed entry is a hint;
+the runner verifies the current source version and exact destination path
+against live observations and the last sealed agreement before starting a
+copy. New folders can be created first, so their eligible children can
+follow without waiting for the whole folder. A child whose ancestor has no
+sealed agreement or confirmed early creation waits for strict reconciliation.
+
+Only new items and one-sided regular-file edits with an unchanged destination
+use this path. Missing previous destinations, links, ambiguous paths and
+competing edits wait for the complete inventories. The early pass never
+infers deletion from a missing feed entry. Transfers use the existing upload
+and native publication guards, resource controls, and durable operation IDs.
+Confirmed copies carry their source and destination stamps into strict planning
+and checkpoint verification; they do not publish a checkpoint on their own.
+The folder progress view includes these receipts after strict planning without
+counting the same discovered path twice. Totals stay provisional through
+strict discovery, and the transfer heading follows the saved directions after
+the live byte sample ends.
+
+## Bounded compound Mac upload transport — 2026-11-06
+
+Native `fileSingleUploadVersion` 1.0.0 independently negotiates the
+`upload-single` byte transport. It does not advertise iOS/Android multipart or
+background-upload support. A regular nonempty file eligible for the existing
+`MobileFolderBulkReader.maximumFileBytes` processing window can use the compound
+path; larger files, multipart files, symbolic links, empty files, older/missing
+capabilities and custom mutation policies retain the existing paths. This is a
+processing window, not a product file-size limit.
+
+The original single-file journal reservation, upload request and operation IDs
+remain authoritative. The native request keeps fresh identity checks at entry
+and exit. It strongly reopens and hashes the source before emission, after
+emission before PUT, after PUT, and after stored-fingerprint verification;
+coordinated descriptors do not survive a callback. Local grant and current
+network/power conditions are checked around every callback and during a long
+PUT. Electron verifies the current account, frame/endpoint generation, exact
+private configuration owner/revision/canonical data and resource policy before
+uploading/completing, monitors authority during PUT, and uses the shared
+governed hash/transfer worker. Lost PUT replies retain unknown traffic and verify
+the same attachment; retries retain request identity. Existing upload approval,
+accounting and abandoned-attachment cleanup remain in their canonical APIs.
+
+The compound result binds attachment ID, stored version, size and fingerprint;
+it never publishes a file or calls `/files/batches`. The shared single-file
+executor checks that proof and then invokes its unchanged guarded `/files`
+commit and `beforeFilePublication` hook. A source/authority/proof failure cannot
+reach that hook. Accepted file receipts are looked up before source work on a
+retry. Source replacement, truncation/growth, stored-proof mismatch, custom
+policy fallback and capability compatibility have focused native/host/client
+coverage. Synthetic transport coverage remains separate from signed installed
+acceptance and measured upload latency.

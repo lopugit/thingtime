@@ -1,3 +1,5 @@
+import { evaluatedAcl, prepareRelationalAcls } from './relationalAcl';
+import { groupIdsOf } from '../users/social';
 import { createHash } from 'node:crypto';
 
 import { getPostViewsCollection, getThingsCollection } from '../mongodb/collections';
@@ -83,9 +85,11 @@ export const viewerKeyFor = (
 const viewableByViewer = (doc: any, viewer: AclViewer & { friendIds?: ReadonlySet<string> }): boolean => {
   const ownerId = String(doc.ownerId || '');
   if (viewer?.id && viewer.id === ownerId) return true;
-  const acl: string[] = Array.isArray(doc.acl) && doc.acl.length
+  const relational = doc.aclGeneration ? evaluatedAcl(doc, viewer) : null;
+  if (doc.aclGeneration && !relational) return false;
+  const acl: string[] = relational || (Array.isArray(doc.acl) && doc.acl.length
     ? doc.acl
-    : aclFromVisibility(doc.visibility) || [ACL_ALL];
+    : aclFromVisibility(doc.visibility) || [ACL_ALL]);
   if (acl.includes(ACL_INHERIT)) return false;
   return aclAllows(acl, viewer, ownerId);
 };
@@ -114,11 +118,12 @@ export const recordPostViews = async (
   const things = await getThingsCollection();
   const docs = await things
     .find({ shareId: { $in: events.map((event) => event.id) } } as any)
-    .project({ shareId: 1, ownerId: 1, acl: 1, visibility: 1, thingtime: 1, kind: 1 })
+    .project({ shareId: 1, ownerId: 1, acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1, visibility: 1, thingtime: 1, kind: 1 })
     .toArray();
   const aclViewer: AclViewer = viewer?.id
-    ? { id: viewer.id, username: viewer.username || null, friendIds: friendIds || new Set() }
+    ? { id: viewer.id, username: viewer.username || null, friendIds: friendIds || new Set(), groupIds: await groupIdsOf(viewer.id) }
     : null;
+  await prepareRelationalAcls(things, docs as any, aclViewer);
   const viewable = new Map<string, any>();
   for (const doc of docs as any[]) {
     const isPost = (Array.isArray(doc.thingtime) && doc.thingtime.includes('post')) || doc.kind === 'post';

@@ -1,3 +1,4 @@
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 import { createAttachmentMutationAction, attachmentPostOnlyLoader } from '~/api/utils/attachments/attachmentResponses';
 import { linkAttachment } from '~/api/utils/attachments/attachments';
 
@@ -8,6 +9,7 @@ import { linkAttachment } from '~/api/utils/attachments/attachments';
 // media consumes no Thingtime object storage, matching the legacy image-URL
 // flow it replaces.
 export const action = createAttachmentMutationAction({
+	bodyBudget: JSON_BODY_WITHOUT_APPLICATION_LIMIT,
 	rateKey: 'attachments.link',
 	service: linkAttachment
 });

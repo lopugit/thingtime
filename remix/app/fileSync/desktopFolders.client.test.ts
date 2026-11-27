@@ -3,9 +3,22 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { uploadBatchDigest } from './uploadBatch';
 import { createDesktopFolderHost } from './desktopFolders.client';
+import { NativePathObservationUnavailable } from './nativePathObservation';
 import { mobileFolderSource } from './mobileFolders.client';
 const origin = 'https://sync.test';
 const rootId = '00000000-0000-4000-8000-000000000001';
+test('desktop stamp inspection requires compatible Mac 1.22 and a bound metadata reply', async () => {
+	for (const version of ['1.21.0', '2.0.0', '1.22.0']) {
+		const f = fixture(), stamp = { path: 'large.bin', id: 'inode', version: 'current', kind: 'file', size: 8_000_000_000 };
+		f.patch({ capabilities: { fileAccessVersion: version }, conditions: { network: 'wifi', charging: true }, rootId, path: stamp.path, stamp, complete: true });
+		if (version === '2.0.0') { await assert.rejects(f.create(), /account, device or sync server changed/); continue; }
+		const host = await f.create();
+		const request = { action: 'inspect-stamp' as const, rootId, path: stamp.path };
+		if (version === '1.22.0') assert.deepEqual((await host.request('owner', request, f.lifetime.signal)).inspectedStamp, stamp);
+		else await assert.rejects(host.request('owner', request, f.lifetime.signal), /inspect current file stamps/);
+		assert.equal(f.calls.filter(call => call.action === 'inspect-stamp').length, version === '1.22.0' ? 1 : 0);
+	}
+});
 test('desktop folder failures show fixed compatibility guidance and hide arbitrary native details', async () => {
 	const unsupported = 'The selected server does not support this version of folder sync.';
 	for (const message of [unsupported,
@@ -125,6 +138,67 @@ test('desktop context binds capabilities, origin and every native reply to the h
 	f.patch({ apiCapabilities: { schemaVersion: 1, origin: 'https://other.test', features: {} } });
 	await assert.rejects(host.authorizeDevice('owner', 'device', f.lifetime.signal));
 });
+
+test('a failed minor capability check refreshes its bound context once before accepting a deployment', async () => {
+	const f = fixture();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	await Promise.all([
+		host.requireCapability('api.files', '1.13.0'),
+		host.requireCapability('api.files', '1.13.0')
+	]);
+	assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+	await host.requireCapability('api.files', '1.13.0');
+	assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+});
+
+test('authorization queued behind a refresh succeeds without restoring an older manifest', async () => {
+	const f = fixture();
+	const oldManifest = { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } };
+	f.patch({ apiCapabilities: oldManifest });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	f.hold();
+	const refreshed = host.requireCapability('api.files', '1.13.0');
+	const authorized = host.authorizeDevice('owner', 'device', f.lifetime.signal);
+	for (let attempts = 0; attempts < 20 && f.calls.length < 2; attempts++) await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls[1]?.refreshApiCapabilities, true);
+	f.release();
+	// Model a verified ordinary context reply that still carries the older
+	// public snapshot. Its authorization is usable, but cannot roll back 1.13.
+	f.patch({ apiCapabilities: oldManifest });
+	for (let attempts = 0; attempts < 20 && f.calls.length < 3; attempts++) await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls[2]?.action, 'context');
+	assert.equal(f.calls[2]?.refreshApiCapabilities, undefined);
+	f.release();
+	await Promise.all([refreshed, authorized]);
+	await host.requireCapability('api.files', '1.13.0');
+	assert.equal(f.calls.filter(call => call.refreshApiCapabilities === true).length, 1);
+});
+
+test('capability refresh preserves old, breaking and changed-authority refusals', async () => {
+	for (const returnedVersion of ['1.12.2', '2.0.0']) {
+		const f = fixture();
+		f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+		const host = await f.create();
+		f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: returnedVersion } } } });
+		await assert.rejects(host.requireCapability('api.files', '1.13.0'), /Thingtime capability api.files is incompatible/);
+		assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+	}
+	const f = fixture();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	f.hold();
+	const pending = host.requireCapability('api.files', '1.13.0');
+	for (let attempts = 0; attempts < 20 && !f.calls.some(call => call.action === 'context' && call.refreshApiCapabilities === true); attempts++)
+		await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls.some(call => call.action === 'context' && call.refreshApiCapabilities === true), true);
+	f.current(false);
+	f.release();
+	await assert.rejects(pending, /Identity changed/);
+});
 test('desktop remaps only pinned authenticated API requests and never lends cookies to signed upload URLs', async () => {
 	const f = fixture(),
 		host = await f.create();
@@ -237,6 +311,9 @@ test('desktop excluded scans fail before dispatch on an older native host', asyn
 test('fixed native verification and shutdown waits survive IPC redaction; arbitrary and authority failures remain terminal', async () => {
  const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
  for (const marker of ['[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.',
+  '[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+  '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.',
+  '[folder_download_retry] Folder download is temporarily unavailable. Retry after reconnecting.',
   '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
   '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.']) {
  for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
@@ -264,6 +341,29 @@ test('fixed native verification and shutdown waits survive IPC redaction; arbitr
    });
   }
  }
+ }
+});
+
+test('only exact bounded observation deadline becomes deferred path evidence', async () => {
+ const marker = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+ for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
+  `private-prefix ${marker}`, `${marker} private-suffix`]) {
+  const bridge = { folderSyncRequest: async (input: any) => {
+   if (input.action === 'observe-path' || input.action === 'list') throw Error(message);
+   return { ...input, origin, roots: [], conditions: { network: 'wifi', charging: true }, capabilities: { fileAccessVersion: '1.21.0' },
+    apiCapabilities: { schemaVersion: 1, origin, features: {} } };
+  } };
+  const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge,
+   signal: new AbortController().signal, rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+  await assert.rejects(host.request('owner', { action: 'observe-path', rootId, path: 'large.bin',
+   observation: { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' },
+   remainingMs: 30_000 }, new AbortController().signal), error => {
+    assert.equal(error instanceof NativePathObservationUnavailable, message === marker || message.startsWith('Error invoking remote method'));
+    return true;
+   });
+  await assert.rejects(host.request('owner', { action: 'list' }, new AbortController().signal), error => {
+   assert.equal(error instanceof NativePathObservationUnavailable, false); return true;
+  });
  }
 });
 
@@ -443,4 +543,13 @@ test('resource policy negotiates native support, binds connection scope and cons
  const sent = f.calls.find(value => value.action === 'scan');
  assert.deepEqual(sent.resourceLimits, resourcePolicy.resourceLimits); assert.equal(sent.resourceScope, 'connection');
  assert.equal(observed.length, 1);
+});
+
+test('device-wide runner budgets require both current native access and scanner contracts', async () => {
+ const resourcePolicy = { resourceScope: 'connection', deviceResourceLimits: () => ({ transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }), observe() {} };
+ for (const capabilities of [ { platform: 'macos', fileAccessVersion: '1.15.0', fileResourceLimitsVersion: '1.1.0' }, { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.0.0' } ]) {
+  const f = fixture(); f.patch({ capabilities, conditions: { network: 'wifi', charging: true } }); await assert.rejects(f.create(resourcePolicy), /device-wide sync resource limits/);
+ }
+ const f = fixture(); f.patch({ capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' }, conditions: { network: 'wifi', charging: true } });
+ const host = await f.create(resourcePolicy); await host.request('owner', { action: 'list' }, f.lifetime.signal);
 });

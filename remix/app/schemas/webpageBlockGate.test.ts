@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_WEBPAGE_HTML_CHARS, validateThingtimeCrystal } from './registry.ts';
+import { validateThingtimeCrystal } from './registry.ts';
 
 // The Figma-layer block fields (css / tag / html, media + html block types):
 // custom styling round-trips through the write gate while the classic css/url
@@ -112,10 +112,25 @@ test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 't2', type: 'text', text: 'hi', tag: 'iframe' }]).ok, false);
 });
 
-test('html payloads are bounded', () => {
-	assert.equal(page([{ id: 'h1', type: 'html', html: 'a'.repeat(MAX_WEBPAGE_HTML_CHARS + 1) }]).ok, false);
-	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, false);
-	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(MAX_WEBPAGE_HTML_CHARS + 1) }]).ok, false);
+test('HTML source remains complete and empty HTML is a valid editable placeholder', () => {
+	assert.equal(page([{ id: 'h1', type: 'html', html: 'a'.repeat(22_000) }]).ok, true);
+	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, true);
+	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(22_000) }]).ok, true);
+});
+
+test('empty, null and cleared optional Builder values save without losing content', () => {
+	for (const empty of ['', null, undefined]) {
+		const blocks = okBlocks(page([
+			{ id: 'text', type: 'text', text: empty, html: empty, css: empty, href: empty, maxWidth: empty === '' ? undefined : empty },
+			{ id: 'html', type: 'html', html: empty },
+			{ id: 'media', type: 'media', src: empty, alt: empty },
+			{ id: 'container', type: 'container', children: empty === '' ? undefined : empty }
+		]));
+		assert.equal(blocks[0].text, ''); assert.equal(blocks[1].html, '');
+		assert.equal(blocks[2].src, ''); assert.deepEqual(blocks[3].children, []);
+	}
+	const text = 'Long editable text 🌈\n'.repeat(1500);
+	assert.equal(okBlocks(page([{ id: 'long-text', type: 'text', text }]))[0].text, text);
 });
 
 // previewBg is drawn on /p/<id>, where the viewer is not the author, so it has
@@ -177,6 +192,48 @@ test('a component block keeps a well-formed source binding and refuses malformed
 	if (suiteKey.ok) assert.equal(suiteKey.crystal.suiteKey, 'pokeworld');
 });
 
+test('ordinary webpage blocks can bind a passive source without changing source input rules', () => {
+	const source = { action: 'read-settings', passive: true, inputs: { selected: '{query.selected}' } };
+	const valid = validateThingtimeCrystal(['webpage'], { name: 'Passive page', blocks: [
+		{ id: 'settings', type: 'element', tag: 'main', source, children: [
+			{ id: 'active', type: 'element', tag: 'section', source: { action: 'read-rows' } }
+		] }
+	] });
+	assert.ok(valid.ok);
+	const [block] = valid.crystal.blocks as Array<{ source: unknown; children: Array<{ source: unknown }> }>;
+	assert.deepEqual(block.source, source);
+	assert.deepEqual(block.children[0].source, { action: 'read-rows' });
+	for (const invalid of [
+		{ id: 'invalid', type: 'element', source: { ...source, passive: 'true' } },
+		{ id: 'invalid', type: 'element', source: { ...source, inputs: { selected: {} } } },
+		{ id: 'invalid', type: 'component', component: 'existing', source }
+	]) assert.equal(validateThingtimeCrystal(['webpage'], { name: 'Invalid', blocks: [invalid] }).ok, false);
+});
+
+test('source inputs accept only scalar values and explicit ttArg paths', () => {
+	const inputs = { selected: { ttArg: 'query.selection', fallback: 'defaultSelection' }, page: { ttArg: 'query.page-size' }, show: true };
+	const block = (inputs: Record<string, unknown>) => ({ id: 'list', type: 'element', tag: 'section', args: { defaultSelection: 'default' }, source: { action: 'read-rows', inputs } });
+	assert.deepEqual(okBlocks(page([block(inputs)]))[0].source.inputs, inputs);
+	const validComponent = validateThingtimeCrystal(['component'], { name: 'Bound component', render: { tag: 'div' }, source: { action: 'read-rows', inputs } });
+	assert.ok(validComponent.ok);
+	assert.deepEqual((validComponent.crystal.source as { inputs: unknown }).inputs, inputs);
+	for (const selected of [
+		['query.selection'], { ttMap: { arg: 'query.selection' } }, { ttArg: 'query.selection', ttEach: {} },
+		{ ttArg: 'query[selection]' }, { ttArg: 'query..selection' }, { ttArg: 'query.constructor.selection' },
+		{ ttArg: 'query.selection', fallback: 'query.__proto__' }, { ttArg: 'query.selection', fallback: 1 }
+	]) assert.equal(page([block({ selected })]).ok, false);
+});
+
+test('source retention opts in only existing non-ID input names and survives saved block validation', () => {
+	const source = { action: 'read-overview', inputs: { statuses: { ttArg: 'query.statuses' }, projectIds: { ttArg: 'query.projectIds' }, taskId: { ttArg: 'query.taskId' } },
+		retainOnInputChange: ['statuses', 'projectIds'] };
+	const valid = okBlocks(page([{ id: 'board', type: 'element', tag: 'section', source }]));
+	assert.deepEqual(valid[0].source.retainOnInputChange, ['statuses', 'projectIds']);
+	for (const retained of [['taskId'], ['missing'], ['statuses', 'statuses'], ['__proto__'], ['statuses.bad'], [1], 'statuses']) {
+		assert.equal(page([{ id: 'bad', type: 'element', tag: 'section', source: { ...source, retainOnInputChange: retained } }]).ok, false);
+	}
+});
+
 
 test('live sources preserve registered adapter contracts and reject arbitrary authenticated destinations', () => {
   const stream = { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' };
@@ -185,4 +242,17 @@ test('live sources preserve registered adapter contracts and reject arbitrary au
   assert.deepEqual(valid[0].source.stream, stream);
   assert.equal(valid[0].source.refresh, 'live');
   for (const candidate of [undefined, {}, { ...stream, path: '/api/v1/auth/me' }, { ...stream, path: 'https://example.invalid/' }, { ...stream, feature: 'api.things' }, { ...stream, minimumVersion: '3.0.0' }]) assert.equal(make(candidate).ok, false);
+});
+
+test('named cursor collections require a passive ordinary source and validate all paths', () => {
+	const collection = { as: 'details', groupBy: 'target.id', cursorPath: 'meta.next', cursorInput: 'after', itemKey: 'id' };
+	const source = { action: 'load-details', passive: true, collection };
+	const block = { id: 'scope', type: 'element', tag: 'div' };
+	assert.deepEqual(okBlocks(page([{ ...block, source }]))[0].source, source);
+	for (const invalid of [
+		{ ...source, passive: false }, { ...source, refresh: 'live' },
+		{ ...source, collection: { ...collection, as: 'constructor' } },
+		{ ...source, collection: { ...collection, groupBy: 'target.__proto__' } },
+		{ ...source, collection: { ...collection, cursorInput: 'nested.after' } }
+	]) assert.equal(page([{ ...block, source: invalid }]).ok, false);
 });

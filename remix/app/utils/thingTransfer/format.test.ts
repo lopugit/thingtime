@@ -70,7 +70,7 @@ test('files use numbered paths and bounded checksummed manifests, never display 
   const value = fixture();
   value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', name: 'photo.png', mime: 'image/png', bytes: 12, sha256: 'a'.repeat(64), title: 'Photo 🥰', description: 'First\nSecond', filenamePreview: 'Friendly filename' });
   assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
-  for (const patch of [{ title: 'bad\nline' }, { description: 'bad\u0000control' }, { filenamePreview: 'x'.repeat(256) }, { nsfw: false }, { detectedContentType: 'image/png' }]) {
+  for (const patch of [{ title: 'bad\nline' }, { description: 'bad\u0000control' }, { nsfw: false }, { detectedContentType: 'image/png' }]) {
     assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], ...patch }] }));
   }
   for (const path of ['../photo', '/etc/file', 'files/../file', 'files\\photo', 'https://example.com/photo', 'files/000001']) {
@@ -85,4 +85,15 @@ test('malformed JSON and excessive record counts fail without a partial result',
   const value = fixture();
   value.things = Array(TRANSFER_LIMITS.things + 1).fill(value.things[0]);
   assert.throws(() => validateTransfer(value), /number of Things/);
+});
+
+test('portable metadata roundtrips long shared names, annotations, URLs and tags within archive framing', () => {
+ const value = fixture();
+ value.things[1].tags = Array.from({ length: 30 }, (_, index) => `tag-${index}-${'long'.repeat(200)}`);
+ const metadata = { name: `  ${'original'.repeat(150)}.custom  `, title: 'title'.repeat(300), description: 'description\n'.repeat(300), filenamePreview: 'shown'.repeat(300) };
+ metadata.description = metadata.description.trim();
+ value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', mime: 'application/octet-stream', bytes: 0, sha256: 'a'.repeat(64), ...metadata });
+ value.links = [{ id: 'long-link', targetId: 'data', url: `https://example.test/${'path'.repeat(1000)}.png`, mediaKind: 'image', title: metadata.title }];
+ value.attachmentOrder = ['file', 'long-link'];
+ assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
 });

@@ -11,6 +11,8 @@ import { makeEditorPanelResizable } from './floatingEditorPanel';
 
 /** Keep editing chrome outside the document's width and mirror it for right-aligned text. */
 export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any) => {
+	const document = holder.ownerDocument,
+		window = document.defaultView!;
 	let frame = 0;
 	const panels = new Map<HTMLElement, () => void>();
 	const sync = () => {
@@ -100,7 +102,7 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		});
 	};
 	const schedule = () => {
-		if (!frame) frame = requestAnimationFrame(sync);
+		if (!frame) frame = window.requestAnimationFrame(sync);
 	};
 	const observer = new MutationObserver(schedule);
 	observer.observe(holder.closest('.ttBlockFrame') ?? holder.closest('.tt-editor-session') ?? holder, {
@@ -122,7 +124,7 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 	return () => {
 		observer.disconnect();
 		resize.disconnect();
-		cancelAnimationFrame(frame);
+		window.cancelAnimationFrame(frame);
 		panels.forEach((cleanup) => cleanup());
 		document.removeEventListener('selectionchange', schedule);
 		holder.removeEventListener('pointerup', schedule);

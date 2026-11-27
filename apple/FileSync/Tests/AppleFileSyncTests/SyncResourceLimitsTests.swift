@@ -5,6 +5,20 @@ import XCTest
 @testable import AppleFileSync
 
 final class SyncResourceLimitsTests: XCTestCase {
+    func testDeviceDefaultsAndSharedScanBudgetCancellation() async throws {
+        let policy = DeviceSyncResourcePolicy()
+        XCTAssertEqual(policy.scanBytesPerSecond, 625000); XCTAssertEqual(policy.transferBytesPerSecond, 625000); XCTAssertEqual(policy.cpuPercent, 15)
+        let budget = SyncScanBudget(bytesPerSecond: 1000), started = ProcessInfo.processInfo.systemUptime
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<2 { group.addTask { try budget.pace(100) } }
+            try await group.waitForAll()
+        }
+        XCTAssertGreaterThanOrEqual(ProcessInfo.processInfo.systemUptime - started, 0.19)
+        budget.setRate(0.001)
+        let task = Task.detached { try budget.pace(1000) }; task.cancel()
+        do { try await task.value; XCTFail("scan wait ignored cancellation") } catch { XCTAssertTrue(error is CancellationError) }
+        budget.setRate(1000000); try budget.pace(1)
+    }
     func testClosedNativePolicyAndExactIEEE754Fields() throws {
         let value = try SyncResourceLimits(uploadBytesPerSecond: 312.5, downloadBytesPerSecond: 1e-7, transferConcurrency: 2, indexingConcurrency: 3, cpuPercent: 1)
         XCTAssertEqual(value.canonicalFields, ["4073880000000000", "3e7ad7f29abcaf48", "4000000000000000", "4008000000000000", "3ff0000000000000"])

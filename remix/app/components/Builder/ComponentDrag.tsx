@@ -1,5 +1,5 @@
 import React from 'react';
-import { NativeControlsEnabled } from './NativeComponentControls';
+import { NativeControlsEnabled, ComponentDisplayOnly } from './NativeComponentControls';
 import { componentDragData, componentDropInputs, type ComponentDragData } from './componentDragInputs';
 
 const DragContext = React.createContext<React.MutableRefObject<ComponentDragData | null> | null>(null);
@@ -15,7 +15,8 @@ export function ComponentDragBoundary({ children, resetKey }: { children: React.
 }
 
 export function ComponentDragSource({ group, inputs, disabled, className, children }: Record<string, unknown> & { children: React.ReactNode }) {
-	const enabled = React.useContext(NativeControlsEnabled);
+	const displayOnly = React.useContext(ComponentDisplayOnly);
+	const enabled = React.useContext(NativeControlsEnabled) && !displayOnly;
 	const drag = React.useContext(DragContext);
 	return (
 		<div
@@ -52,7 +53,8 @@ export function ComponentDropTarget({
 	children,
 	...props
 }: Record<string, unknown> & { children: React.ReactNode }) {
-	const enabled = React.useContext(NativeControlsEnabled);
+	const displayOnly = React.useContext(ComponentDisplayOnly);
+	const enabled = React.useContext(NativeControlsEnabled) && !displayOnly;
 	const drag = React.useContext(DragContext);
 	const button = React.useRef<HTMLButtonElement>(null);
 	const [active, setActive] = React.useState(false);
@@ -99,7 +101,7 @@ export function ComponentDropTarget({
 				hidden
 				aria-hidden="true"
 				tabIndex={-1}
-				data-tt-action={typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
+				data-tt-action={!displayOnly && typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
 			/>
 		</div>
 	);

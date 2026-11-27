@@ -1,3 +1,4 @@
+import { syncRunDirections } from './directionalProgress';
 import type { PriorityReadiness } from './priorityReadiness';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import type { InventoryIdentity } from './inventoryJournal';
@@ -25,6 +26,15 @@ import type { TransferActivity } from './transferActivity';
 export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
 
 export type ForegroundSyncProgress = {
+	/** A durable, path-free wait reason for the exact connection. */
+	message?: string;
+	waiting?: boolean;
+	photoDownload?: { fraction: number };
+	photoQueue?: { pending: number; unavailable: number };
+	photoAccess?: 'full' | 'limited';
+	backgroundTransfer?: 'queued' | 'foreground-only';
+	directions?: import('./directionalProgress').SyncDirectionalTotals;
+	statisticsObservedAt?: number;
 	resources?: import('./resourceGovernor').SyncResourceStatus;
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
@@ -49,11 +59,14 @@ export type ForegroundSyncProgress = {
 	preparation?: { phase: 'validate-local' | 'read-remote' | 'validate-remote' | 'index-plan' | 'plan' | 'review' | 'operations' | 'cloud'; completed?: number; total?: number };
 };
 export type ForegroundSyncInput = {
+	/** Optional PhotoKit-specific native queue; durable file publication stays here. */
+	deferredUploads?: { publishPhotos?: true; skipLookahead?: true; queued(count: number, scheduled?: boolean): void };
 	currentScope(): SyncScope;
 	readConfiguration(): Promise<unknown>;
 	authorizeDevice(): Promise<void>;
 	/** Fresh native composite request; preserves the same authorization boundary. */
 	authorizeContext?(): Promise<SyncConditions>;
+	observeLocal?(path: string, parent: string, saved: SavedFileSyncConfiguration): Promise<{ conditions: SyncConditions; entries: (SyncEntry | null)[] }>;
 	/** Trusted native adapter: IO authenticates independently; mutation policy stays fresh. Source construction performs no IO. */
 	nativeOperationGuards?: true;
 	/** Explicit negotiated bounded operation, never inferred from cloud metadata. */
@@ -62,18 +75,21 @@ export type ForegroundSyncInput = {
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */
-	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
+	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Origin-negotiated durable remote revisions, using the same run cursor contract. */
 	streamRemoteChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Set only by the native adapter with exact path inspection and staging. */
 	streamCloudChanges?: boolean;
 	scanLocalPages?(options?: {
+		observationPurpose?: 'plan' | 'checkpoint';
 		resume?(capture: import('./nativeInventory').NativeBackupCapture): Promise<import('./nativeInventory').NativeInventoryResume>;
 		retainCaptureUntilHandoff?: boolean;
 	}): AsyncIterable<LocalInventoryPage>;
 	beginLocalImport?(purpose: 'initial' | 'review'): Promise<InventoryIdentity>;
 	releaseLocalImport?(inventory: InventoryIdentity): Promise<void>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
+	/** Mac 1.22 current metadata for upload sources only; never a byte digest. */
+	inspectLocalStamp?(path: string): Promise<Pick<SyncEntry, 'path' | 'id' | 'version' | 'kind' | 'size'> | null>;
 	inventory(): Promise<CloudInventory>;
 	inventoryPages?(options?: { signal?: AbortSignal }): AsyncIterable<CloudInventoryPage>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;
@@ -100,7 +116,7 @@ export async function runForegroundCloudSync(
 	input: ForegroundSyncInput,
 	signal: AbortSignal
 ) {
-	const { configuration, approved, check, authorize, scan, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, approved, check, authorize, scan, readLocal, readLocalUploadSource, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
@@ -250,9 +266,11 @@ export async function runForegroundCloudSync(
 		}
 	}
 	let confirmedCount = run.operations.filter((op) => op.confirmed).length;
+ let directionTotals = syncRunDirections(run.operations);
 	const report = (value: SyncRun, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
 		confirmedCount = value.operations.filter((op) => op.confirmed).length;
-		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length });
+  directionTotals = syncRunDirections(value.operations);
+		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length, directions: directionTotals, totalFinal: true });
 	};
 	const port = createCloudSyncPort(
 		run,
@@ -266,16 +284,17 @@ export async function runForegroundCloudSync(
 				report(value);
 			},
 			readLocal,
+			readLocalUploadSource,
 			openSource,
 			localTarget,
 			signal,
 			transfer: input.transfer,
-			progress: (path, bytes, size) => {
+			progress: (path, bytes, size, direction) => {
 				check();
 				input.progress({
 					stage: retain ? 'retaining' : 'transferring',
 					confirmed: confirmedCount,
-					total: run.operations.length,
+					total: run.operations.length, directions: directionTotals, totalFinal: true, direction,
 					path,
 					bytes,
 					size

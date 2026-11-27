@@ -7,6 +7,9 @@ test('Nitro smoke accepts honest readiness and migration-required contracts', ()
 	assert.equal(nitroHealthResponseIsConsistent(ready), true);
 	const degraded = { ...ready, ok: false, state: 'degraded', storageAccounting: { ...ready.storageAccounting, state: 'migration-required' } };
 	assert.equal(nitroHealthResponseIsConsistent(degraded), true);
+	const recovering = { ...degraded, storageAccounting: { ...ready.storageAccounting, state: 'recovering' } };
+	assert.equal(nitroHealthResponseIsConsistent(recovering), true);
+	assert.equal(nitroHealthResponseIsConsistent({ ...recovering, ok: true }), false);
 	for (const invalid of [null, {}, { ...ready, ok: false }, { ...degraded, ok: true }, { ...ready, state: 'degraded' }, { ...ready, storageAccounting: null }, { ...ready, state: 'unavailable' }]) {
 		assert.equal(nitroHealthResponseIsConsistent(invalid), false);
 	}

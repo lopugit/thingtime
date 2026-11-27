@@ -1,5 +1,5 @@
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
-import { HTML_MARKUP_DROP_TAGS as DROP_TAGS } from '../Kinds/htmlRenderPolicy';
+import { authoredHtmlPropName, HTML_MAX_DEPTH, HTML_MAX_NODES, HTML_MARKUP_DROP_TAGS as DROP_TAGS } from '../Kinds/htmlRenderPolicy';
 
 // Browser-side HTML → HtmlThingNode parser for builder blocks that carry
 // authored markup (rich WYSIWYG text, raw html blocks). This is a STRUCTURE
@@ -22,7 +22,7 @@ const styleTextToObject = (el: HTMLElement): Record<string, string> | undefined 
 	return Object.keys(out).length ? out : undefined;
 };
 
-const elementToNode = (el: Element): HtmlThingNode | null => {
+const elementToNode = (el: Element, depth: number, state: { count: number }): HtmlThingNode | null => {
 	const tag = el.tagName.toLowerCase();
 	if (DROP_TAGS.has(tag)) return null;
 	const props: Record<string, unknown> = {};
@@ -34,20 +34,11 @@ const elementToNode = (el: Element): HtmlThingNode | null => {
 		// a page's html block runs with the VIEWER's click, not the author's
 		if (name.startsWith('data-tt-')) continue;
 		if (name.startsWith('on')) continue;
-		props[name] = attr.value;
+		props[authoredHtmlPropName(name)] = attr.value;
 	}
 	const style = styleTextToObject(el as HTMLElement);
 	if (style) props.style = style;
-	const children: HtmlThingNode[] = [];
-	el.childNodes.forEach((child) => {
-		if (child.nodeType === Node.TEXT_NODE) {
-			const text = child.textContent || '';
-			if (text) children.push(text);
-		} else if (child.nodeType === Node.ELEMENT_NODE) {
-			const node = elementToNode(child as Element);
-			if (node !== null) children.push(node);
-		}
-	});
+	const children = childNodes(el, depth + 1, state);
 	return {
 		tag,
 		...(Object.keys(props).length ? { props } : {}),
@@ -55,25 +46,31 @@ const elementToNode = (el: Element): HtmlThingNode | null => {
 	};
 };
 
+function childNodes(parent: ParentNode, depth: number, state: { count: number }): HtmlThingNode[] {
+ if (depth > HTML_MAX_DEPTH) return [];
+ const children: HtmlThingNode[] = [];
+ for (let child = parent.firstChild; child && state.count < HTML_MAX_NODES; child = child.nextSibling) {
+  if (child.nodeType === Node.TEXT_NODE) {
+   const text = child.textContent || '';
+   if (text) { state.count++; children.push(text); }
+  } else if (child.nodeType === Node.ELEMENT_NODE) {
+   if (DROP_TAGS.has((child as Element).tagName.toLowerCase())) continue;
+   state.count++;
+   const node = elementToNode(child as Element, depth, state);
+   if (node !== null) children.push(node);
+  }
+ }
+ return children;
+}
+
 export const htmlToNode = (html: string): HtmlThingNode | null => {
-	if (!html || typeof window === 'undefined' || typeof DOMParser === 'undefined') return null;
-	try {
-		const doc = new DOMParser().parseFromString(html, 'text/html');
-		const body = doc.body;
-		if (!body) return null;
-		const children: HtmlThingNode[] = [];
-		body.childNodes.forEach((child) => {
-			if (child.nodeType === Node.TEXT_NODE) {
-				const text = child.textContent || '';
-				if (text) children.push(text);
-			} else if (child.nodeType === Node.ELEMENT_NODE) {
-				const node = elementToNode(child as Element);
-				if (node !== null) children.push(node);
-			}
-		});
-		if (!children.length) return null;
-		return { tag: 'div', children };
-	} catch {
-		return null;
-	}
+ if (!html || typeof DOMParser === 'undefined') return null;
+ try {
+  const document = new DOMParser().parseFromString(html, 'text/html');
+  if (!document.body) return null;
+  const children = childNodes(document.body, 1, { count: 1 });
+  return children.length ? { tag: 'div', children } : null;
+ } catch {
+  return null;
+ }
 };

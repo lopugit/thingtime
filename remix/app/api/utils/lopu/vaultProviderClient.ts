@@ -1,3 +1,4 @@
+import { createAnthropicApiKeyClient } from '../ai/anthropicApiKey';
 import { createClaudeOAuthClient, type runClaudeOAuth } from '../ai/claudeOAuth';
 // The one place Thingtime dials a user's own AI provider (design note §1.3):
 // the SSRF guard (server allowlist → fresh public DNS → private-range check),
@@ -20,6 +21,7 @@ import { ChatGPTPlanError, RESOURCE as CHATGPT_PLAN_RESOURCE } from '../ai/chatg
 
 import {
 	defaultVaultProviderModel,
+	validateAnthropicApiKey,
 	isBlockedLopuProviderHostname,
 	LOPU_PROVIDER_TEMPLATES,
 	type LopuProviderEffort,
@@ -142,6 +144,9 @@ export const resolveVaultProviderClientConfig = async (
 	}
 	const model = resolveVaultTurnModel(provider.model, options.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
+	if (provider.provider === 'anthropic-api-key') {
+  try { validateAnthropicApiKey(provider.token); } catch { throw vaultGuardError('Use an Anthropic Console API key, not a Claude Code setup token.'); }
+ }
 	const safe = await assertSafeProviderEndpoint(provider.endpoint);
 	return {
 		transport: vaultProviderTransport(provider.provider),
@@ -215,7 +220,7 @@ export const buildPlainCompletionRequest = (
 ): { url: string; headers: Record<string, string>; body: Record<string, unknown> } => {
 	const { effort, speed } = input;
 	const active = effort && effort !== 'none' ? effort : null;
-	if (provider.provider === 'anthropic') throw new Error('Claude uses the OAuth runtime, not an HTTP API-key request.');
+	if (provider.provider === 'anthropic' || provider.provider === 'anthropic-api-key') throw new Error('Claude uses its selected SDK transport, not this HTTP request builder.');
 	if (provider.provider === 'google') {
 		return {
 			url: joinEndpoint(endpoint, `models/${encodeURIComponent(input.model)}:generateContent`),
@@ -246,9 +251,10 @@ export const buildPlainCompletionRequest = (
 // may answer with a content array (Mistral's thinking chunks ride beside the
 // text) — only the text parts count.
 export const extractPlainCompletionText = (kind: LopuProviderKind, result: any): string | null => {
-	if (kind === 'anthropic') {
-		const text = result?.content?.find((item: any) => item?.type === 'text')?.text;
-		return typeof text === 'string' ? text : null;
+	if (kind === 'anthropic' || kind === 'anthropic-api-key') {
+		const blocks = result?.content;
+		const texts = Array.isArray(blocks) ? blocks.filter((item: any) => item?.type === 'text' && typeof item.text === 'string').map((item: any) => item.text) : [];
+		return texts.length ? texts.join('') : null;
 	}
 	if (kind === 'google') {
 		const parts = result?.candidates?.[0]?.content?.parts;
@@ -274,7 +280,7 @@ export type VaultProviderUsage = { inputTokens: number; outputTokens: number; ca
 const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
 
 export const extractPlainCompletionUsage = (kind: LopuProviderKind, result: any): VaultProviderUsage | null => {
-	if (kind === 'anthropic') {
+	if (kind === 'anthropic' || kind === 'anthropic-api-key') {
 		const usage = result?.usage;
 		if (!usage || typeof usage !== 'object') return null;
 		const cacheRead = count(usage.cache_read_input_tokens);
@@ -318,6 +324,31 @@ export const callVaultProviderCompletion = async (provider: LopuVaultProviderRec
     if (!text?.trim()) throw new Error('Claude OAuth returned no text.');
     return { text: text.trim(), model, usage: extractPlainCompletionUsage('anthropic', result) };
   }
+ if (provider.provider === 'anthropic-api-key') {
+  validateAnthropicApiKey(provider.token);
+  const safe = await (input.assertEndpoint ?? assertSafeProviderEndpoint)(provider.endpoint);
+  const client = createAnthropicApiKeyClient({ apiKey: provider.token, baseURL: safe.endpoint,
+   fetch: createGuardedProviderFetch(input.fetchImpl), timeout: LOPU_PROVIDER_TIMEOUT_MS, maxRetries: 0 });
+  const request = { model, system: input.system,
+   messages: [...input.history, { role: 'user' as const, content: input.prompt }], max_tokens: input.maxTokens ?? 4096,
+   ...(input.effort && input.effort !== 'none' ? { output_config: { effort: input.effort as any } } : {})
+  };
+  let result;
+  try {
+   result = input.speed === 'fast'
+    ? await client.beta.messages.create({ ...request, speed: 'fast', betas: ['fast-mode-2026-02-01'] }, { signal: input.signal })
+    : await client.messages.create(request, { signal: input.signal });
+  } catch (error) {
+   input.signal?.throwIfAborted();
+   // Preserve the existing explicit waterfall policy without exposing SDK bodies.
+   const status = (error as { status?: number }).status;
+   if (status || (error as Error).name === 'APIConnectionError' || (error as Error).name === 'APIConnectionTimeoutError') throw new AiTransportFailure(status);
+   throw error;
+  }
+  const text = extractPlainCompletionText('anthropic-api-key', result);
+  if (!text?.trim()) throw new Error('Anthropic returned no text.');
+  return { text: text.trim(), model: result.model, usage: extractPlainCompletionUsage('anthropic-api-key', result) };
+ }
 	const safe = await (input.assertEndpoint ?? assertSafeProviderEndpoint)(provider.endpoint);
 	const request = buildPlainCompletionRequest(provider, safe.endpoint, {
 		system: input.system,

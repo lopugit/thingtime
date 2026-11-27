@@ -23,7 +23,7 @@ test('lost replies resume the same run after reload; changed reviewed settings a
 	const original = await f.journal().read(scope);
 	await f.reload();
 	f.condition('cellular');
-	await assert.rejects(runForegroundCloudSync(saved, scope, f.input(), new AbortController().signal), /selected network/);
+	await assert.rejects(runForegroundCloudSync(saved, scope, f.input(), new AbortController().signal), /Waiting for Wi-Fi/);
 	assert.equal(f.creates(), 1);
 	f.condition('wifi');
 	const done = await runForegroundCloudSync(saved, scope, f.input(), new AbortController().signal);

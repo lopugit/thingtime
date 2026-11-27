@@ -4,12 +4,16 @@ export const ADMIN_TABS = [
   { slug: 'moderation', label: 'Moderation' },
   { slug: 'tiers', label: 'Tiers' },
   { slug: 'ci-control', label: 'CI Control' },
+  { slug: 'mongodb-connections', label: 'MongoDB connections' },
+  { slug: 'preview-retention', label: 'Preview retention' },
+  { slug: 'deployment-profiles', label: 'Deployment profiles' },
   { slug: 'external-integrations', label: 'External integrations' },
   { slug: 'marketing', label: 'Marketing' },
   { slug: 'ai-providers', label: 'AI Providers' },
   { slug: 'lopu', label: 'Lopu' },
   { slug: 'platform', label: 'Platform' },
-  { slug: 'access', label: 'Access & limits' }
+  { slug: 'access', label: 'Access & limits' },
+  { slug: 'automation', label: 'Automation' }
 ] as const;
 
 export type AdminTabSlug = (typeof ADMIN_TABS)[number]['slug'];
