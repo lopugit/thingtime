@@ -13,6 +13,16 @@ final class CommanderUtilityWindow: NSWindow {
     collectionBehavior.insert(.fullScreenNone)
   }
 
+  // Dismissing a launcher on one display must not hand key status to Settings
+  // or Processes on another; see CommanderKeyWindowHandoff.
+  override var canBecomeKey: Bool {
+    super.canBecomeKey && CommanderKeyWindowHandoff.allowsAutomaticKey(self)
+  }
+
+  override var canBecomeMain: Bool {
+    super.canBecomeMain && CommanderKeyWindowHandoff.allowsAutomaticKey(self)
+  }
+
   // The green traffic-light button and macOS keyboard/menu commands must use
   // the same desktop maximize behavior as our web titlebar.
   override func toggleFullScreen(_ sender: Any?) {

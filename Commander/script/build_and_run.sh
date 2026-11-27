@@ -15,6 +15,7 @@ MIN_SYSTEM_VERSION="14.0"
 # app.  Local development is available as an explicit opt-in below.
 SIGNING_MODE="${COMMANDER_SIGNING_MODE:-distribution}"
 SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-}"
+DEVELOPMENT_IDENTITY_SUFFIX="${COMMANDER_DEVELOPMENT_IDENTITY_SUFFIX:-9BTZ4XB356}"
 SIGNING_TIMESTAMP_ARGS=()
 NOTARIZATION_MODE="${COMMANDER_NOTARIZATION_MODE:-local}"
 NOTARY_PROFILE="${COMMANDER_NOTARY_PROFILE:-Commander Notarization}"
@@ -51,6 +52,15 @@ default_developer_id_identity() {
     | /usr/bin/head -n 1
 }
 
+# Development builds keep one stable Apple Development identity so macOS
+# privacy grants survive rebuilds. Match it by certificate suffix rather than
+# committing the account name it was issued to.
+default_development_identity() {
+  /usr/bin/security find-identity -v -p codesigning \
+    | /usr/bin/sed -nE 's/.*"(Apple Development: [^"]+ \('"$DEVELOPMENT_IDENTITY_SUFFIX"'\))".*/\1/p' \
+    | /usr/bin/head -n 1
+}
+
 resolve_signing_configuration() {
   case "$SIGNING_MODE" in
     distribution)
@@ -75,7 +85,12 @@ resolve_signing_configuration() {
       ;;
     development)
       if [[ -z "$SIGNING_IDENTITY" ]]; then
-        SIGNING_IDENTITY="Apple Development: lopudesigns@gmail.com (9BTZ4XB356)"
+        SIGNING_IDENTITY="$(default_development_identity)"
+      fi
+      if [[ -z "$SIGNING_IDENTITY" ]]; then
+        echo "Commander development builds need the Apple Development identity ($DEVELOPMENT_IDENTITY_SUFFIX)." >&2
+        echo "Install it or set COMMANDER_SIGNING_IDENTITY explicitly." >&2
+        exit 1
       fi
       SIGNING_TIMESTAMP_ARGS=(--timestamp=none)
       ;;
