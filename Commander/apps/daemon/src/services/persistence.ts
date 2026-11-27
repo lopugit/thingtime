@@ -219,6 +219,10 @@ export class PersistentStore {
     const account = this.#state.accounts.find((item) => item.id === id);
     if (!account) throw new Error('Account not found');
     this.#state.settings.activeAccountId = id;
+    if (account.environment) {
+      this.#state.settings.thingtimeBaseUrl = account.environment.baseUrl;
+      this.#state.settings.thingtimeClientId = account.environment.clientId;
+    }
     await this.#persist();
     return structuredClone(account);
   }
