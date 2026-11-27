@@ -17352,10 +17352,10 @@
     "semantic_hash": "8ee68b644ecaa10deb721592c0bcb40a"
   },
   "remix/app/components/Watch/WatchPendingApprovals.tsx": {
-    "mtime": 1795769038.7799757,
-    "seen": 1795774701.58831,
-    "ast_hash": "854875c8ddd88ca78e04378c0069db67",
-    "semantic_hash": "854875c8ddd88ca78e04378c0069db67"
+    "mtime": 1795781835.1805944,
+    "seen": 1795781945.236466,
+    "ast_hash": "f22cf2c1d132392857c48ea657e31120",
+    "semantic_hash": ""
   },
   "remix/app/components/Watch/watchApprovalCapabilities.test.ts": {
     "mtime": 1795769038.784135,
@@ -17382,16 +17382,16 @@
     "semantic_hash": "2b88c335c7df620943ccee27a6573b9a"
   },
   "remix/app/components/Watch/watchPendingCore.test.ts": {
-    "mtime": 1795769038.786129,
-    "seen": 1795774701.588314,
-    "ast_hash": "3275c6198437271e3da1c9176c46afaf",
-    "semantic_hash": "3275c6198437271e3da1c9176c46afaf"
+    "mtime": 1795781835.1807272,
+    "seen": 1795781945.2366452,
+    "ast_hash": "e6941bbf1292d629046f851146ddb4ab",
+    "semantic_hash": ""
   },
   "remix/app/components/Watch/watchPendingCore.ts": {
-    "mtime": 1795769038.7865365,
-    "seen": 1795774701.588314,
-    "ast_hash": "09d9ad4e1aa740574c9a5f5ab9392bc9",
-    "semantic_hash": "09d9ad4e1aa740574c9a5f5ab9392bc9"
+    "mtime": 1795781835.1808176,
+    "seen": 1795781945.236646,
+    "ast_hash": "aa11fb79fd982d4c2e3203b10ef783bb",
+    "semantic_hash": ""
   },
   "remix/app/components/Welcome/welcomeSections.tsx": {
     "mtime": 1795769038.7876236,
