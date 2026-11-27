@@ -68,12 +68,23 @@ than 1,000 deliveries a day.
 
 ### M3 — shorten time in flight
 
+- Done 2026-11-27: the MongoDB pool's idle timeout was 60 s, and
+  `attachDatabasePool` (from `@vercel/functions` 3.9.7) holds the instance open
+  through `waitUntil` for idle timeout + 100 ms after every connection checkout.
+  Any database call more often than once a minute therefore kept a 2 GB
+  instance billed all day: 59.9 GB-hr on 26 Nov from only ~9K invocations. Now
+  5 s, as Vercel's pooling guide suggests. Measured first: requests that skip the
+  database (`/api/v1/teapot`) answer in 60–180 ms, and a single settings read in
+  60–360 ms even after 90 s idle. The slow cases are the endpoints' own work,
+  for example `health/nitro` at ~2.8 s and webhook bursts. The gateway
+  self-check averages 63 ms.
 - Close the stale pre-#1557 browser tab that keeps `chats/updates` open (7 s
   each).
 - Replace remaining long-polls with short reads plus client-triggered refresh.
-- Find why simple reads take over a second while Vercel and Atlas are both in
-  Sydney: check the Atlas tier's throttling, sequential round trips, and the
-  per-request auth and gateway work. Every second saved is 2 GB-seconds.
+- Speed up the slow endpoints themselves: `health/nitro` storage readiness
+  (~2.8 s, run by the storage monitor workflow 183 times a day), `auth/me`
+  (P75 1.6 s for signed-in users) and `things` (1.1 s). Every second saved is
+  2 GB-seconds.
 - Target: under 30 GB-hr a day (about $0.45).
 
 ### M4 — leave per-second memory billing if M1–M3 fall short
