@@ -9738,8 +9738,8 @@
     "semantic_hash": "36b3a0bb55280aa677559c2bbaa8cfd5"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1795769952.6967561,
-    "seen": 1795770248.254655,
+    "mtime": 1795770968.9273686,
+    "seen": 1795771179.201903,
     "ast_hash": "615a8211e957bb8b48a95608d031dd0b",
     "semantic_hash": ""
   },
@@ -9924,8 +9924,8 @@
     "semantic_hash": "3f62d2d94369fb004954d93e640de971"
   },
   "remix/app/api/utils/mongodb/status.test.ts": {
-    "mtime": 1795769954.592125,
-    "seen": 1795770248.256004,
+    "mtime": 1795770968.9277787,
+    "seen": 1795771179.2033658,
     "ast_hash": "05632f787bec42a843fcfa73d2cf4369",
     "semantic_hash": ""
   },
@@ -10350,10 +10350,10 @@
     "semantic_hash": "2c40e1063a5ffe9cb9450e3665c65192"
   },
   "remix/app/api/utils/storage/userStorageReadiness.ts": {
-    "mtime": 1795496223.0320816,
-    "seen": 1795599508.6916952,
+    "mtime": 1795771593.1295154,
+    "seen": 1795771789.504782,
     "ast_hash": "a78c5b9f098cbeef8a8dbd27d14b88ce",
-    "semantic_hash": "a78c5b9f098cbeef8a8dbd27d14b88ce"
+    "semantic_hash": ""
   },
   "remix/app/api/utils/storage/userStorageRecovery.test.ts": {
     "mtime": 1795496223.0332866,
@@ -26844,9 +26844,9 @@
     "semantic_hash": "539e657c1b6d5f582770abf95e3d5b7f"
   },
   "PLAN/README.md": {
-    "mtime": 1795673647.0823042,
-    "seen": 1795673770.25207,
-    "ast_hash": "75af21aa5887a5d0af41af23218cf634",
+    "mtime": 1795771624.1476414,
+    "seen": 1795771789.6206641,
+    "ast_hash": "9aa3823a4115394cab03238ac9c8b7ff",
     "semantic_hash": ""
   },
   "PLAN/accessibility-and-language-readiness-roadmap.md": {
@@ -29100,8 +29100,8 @@
     "semantic_hash": "5935a79a6033f4540a084131c4badb54"
   },
   "TESTING.md": {
-    "mtime": 1795770088.753655,
-    "seen": 1795770248.400959,
+    "mtime": 1795771593.102696,
+    "seen": 1795771789.633016,
     "ast_hash": "8919f4444a337b9bc207263f646ab70a",
     "semantic_hash": ""
   },
@@ -29880,8 +29880,8 @@
     "semantic_hash": "a0f092e7daf77051d12c99fda93258b6"
   },
   "docs/environment-api-gateway.md": {
-    "mtime": 1795769957.7985103,
-    "seen": 1795770248.405837,
+    "mtime": 1795770968.908859,
+    "seen": 1795771179.373284,
     "ast_hash": "d5ada89f5150744a36fd8e75489c790d",
     "semantic_hash": ""
   },
@@ -30192,8 +30192,8 @@
     "semantic_hash": "206103177ef24727b10304e655440e4c"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1795770098.7794938,
-    "seen": 1795770248.408187,
+    "mtime": 1795771593.1275525,
+    "seen": 1795771789.63891,
     "ast_hash": "97eb24a022addeff3e458a71cd20c46b",
     "semantic_hash": ""
   },
@@ -38388,10 +38388,10 @@
     "semantic_hash": "6de010caf23d47d0086d528ce84dc7af"
   },
   "remix/app/api/utils/devices/deviceDiagnostics.ts": {
-    "mtime": 1795496223.1660597,
-    "seen": 1795599508.6913111,
+    "mtime": 1795771593.1289315,
+    "seen": 1795771789.488095,
     "ast_hash": "15a8f2b477bd299f1f80c8f54f1a1f3b",
-    "semantic_hash": "15a8f2b477bd299f1f80c8f54f1a1f3b"
+    "semantic_hash": ""
   },
   "remix/app/components/Things/DeviceDebugPage.tsx": {
     "mtime": 1795496223.2407813,
@@ -45312,9 +45312,15 @@
     "semantic_hash": ""
   },
   "PLAN/vercel-memory-and-ci-webhooks.md": {
-    "mtime": 1795770095.5985868,
-    "seen": 1795770248.388316,
+    "mtime": 1795771593.0992215,
+    "seen": 1795771789.6214662,
     "ast_hash": "ce89469836c9043b7b0247dc0bcdd47d",
+    "semantic_hash": ""
+  },
+  "PLAN/cloudflare-workers-migration.md": {
+    "mtime": 1795771635.8893752,
+    "seen": 1795771789.6207948,
+    "ast_hash": "f3abe8a76fbf91d4423b76a606aca098",
     "semantic_hash": ""
   }
 }
