@@ -152,6 +152,10 @@ cache eviction. Clients with a positive `maxIdleTimeMS` attach to Vercel's
 supported pool helper so Fluid can keep the invocation alive through the idle
 timeout. This retires idle application sockets; it does not claim to close all
 monitoring sockets or turn a frozen legacy deployment into a cooperative peer.
+The helper extends the invocation by the idle timeout + 100 ms after every
+connection checkout, and Fluid bills the instance's full memory for that time,
+so the home pool keeps it at 5 s (`HOME_POOL_MAX_IDLE_MS`). At 60 s, traffic
+more often than once a minute kept a 2 GB instance billed all day.
 
 ## Rollout and environment mapping
 
