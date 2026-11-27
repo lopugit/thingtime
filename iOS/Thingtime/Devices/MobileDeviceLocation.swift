@@ -109,6 +109,14 @@ final class MobileDeviceLocation {
     private let now: () -> Date
     private let appIsActive: () -> Bool
     private let send: (MobileDeviceLocationObservation, Scope, @escaping () throws -> Void) async throws -> Void
+    /// Decides whether background location may run for an origin and reports
+    /// the answer to `decide`, which may be called later. The app asks the
+    /// administrator's `iphone.location` Automation switch.
+    typealias AutomationGate = @MainActor (_ origin: URL, _ decide: @escaping @MainActor (Bool) -> Void) -> Void
+    static let automationSwitchGate: AutomationGate = { origin, decide in
+        Task { @MainActor in decide(await ThingtimeAutomationSwitches.shared.isEnabled("iphone.location", origin: origin)) }
+    }
+    private let automationGate: AutomationGate
     private var binding: Binding?
     private var scope: Scope? { binding?.scope }
     private var generation = UUID()
@@ -130,13 +138,16 @@ final class MobileDeviceLocation {
         }, save: { scope in
             if let scope, let data = try? JSONEncoder().encode(scope) { UserDefaults.standard.set(data, forKey: key) }
             else { UserDefaults.standard.removeObject(forKey: key) }
-        }, send: { observation, scope, check in try await transport.send(observation, scope: scope, check: check) })
+        }, send: { observation, scope, check in try await transport.send(observation, scope: scope, check: check) },
+           automationGate: MobileDeviceLocation.automationSwitchGate)
     }
     init(driver: MobileLocationDriving, outbox: MobileDeviceLocationOutbox, load: @escaping () -> Binding?,
          save: @escaping (Binding?) -> Void, now: @escaping () -> Date = Date.init,
          appIsActive: @escaping () -> Bool = { UIApplication.shared.applicationState == .active },
-         send: @escaping (MobileDeviceLocationObservation, Scope, @escaping () throws -> Void) async throws -> Void) {
+         send: @escaping (MobileDeviceLocationObservation, Scope, @escaping () throws -> Void) async throws -> Void,
+         automationGate: @escaping AutomationGate = { _, decide in decide(true) }) {
         self.driver = driver; self.outbox = outbox; self.load = load; self.save = save; self.now = now; self.appIsActive = appIsActive; self.send = send
+        self.automationGate = automationGate
         driver.received = { [weak self] locations in self?.receive(locations) }
         driver.authorizationChanged = { [weak self] in
             self?.reconcile()
@@ -223,8 +234,16 @@ final class MobileDeviceLocation {
             generation = UUID(); work?.cancel(); work = nil
             return
         }
-        driver.start(background: driver.authorization == .authorizedAlways)
-        flush()
+        // The administrator's Automation switch decides whether background
+        // location history runs at all; off (or unknown) keeps it stopped.
+        guard let origin = scope?.origin else { driver.stop(); return }
+        let token = generation
+        automationGate(origin) { [weak self] allowed in
+            guard let self, self.generation == token, !self.paused, self.scope?.origin == origin else { return }
+            guard allowed else { self.driver.stop(); return }
+            self.driver.start(background: self.driver.authorization == .authorizedAlways)
+            self.flush()
+        }
     }
     private func receive(_ locations: [CLLocation]) {
         guard !paused, var binding, binding.backgroundAuthorized, canUseLocation else { return }

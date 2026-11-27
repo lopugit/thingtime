@@ -65,7 +65,7 @@ export const useLocalDeviceBattery = (accountId: string | null | undefined, devi
 			}
 		};
 		void refresh();
-		const timer = activityInterval('timer:components/Devices/useLocalDeviceBattery:1', 'Device battery', () => refresh(), 15_000);
+		const timer = activityInterval('timer:components/Devices/useLocalDeviceBattery:1', 'Device battery', () => refresh(), 15_000, { local: true });
 		activityEvents(document, 'events:components/Devices/useLocalDeviceBattery', 'useLocalDeviceBattery').addEventListener('visibilitychange', refresh);
 		return () => {
 			active = false;

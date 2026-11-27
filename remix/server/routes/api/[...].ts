@@ -25,6 +25,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/admin/automation-switches': () => import('../../../app/routes/api/v1/admin/automation-switches/_automation-switches'),
   'v1/admin/job-schedules': () => import('../../../app/routes/api/v1/admin/job-schedules/_job-schedules'),
   'v1/admin/platform-reporting': () => import('../../../app/routes/api/v1/admin/platform-reporting/_platform-reporting'),
   'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
@@ -302,6 +303,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
   'v1/settings/connector-protections': () => import('../../../app/routes/api/v1/settings/connector-protections/_connector-protections'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
+  'v1/automation/switches': () => import('../../../app/routes/api/v1/automation/switches/_switches'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
 		import('../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'),

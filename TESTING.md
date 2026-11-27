@@ -1,3 +1,36 @@
+## Automation switches (Admin → Automation, 2026-11-25)
+
+- [ ] With every switch off (the default), open a signed-in page, keep using it
+  for 30 s and confirm the Network panel shows no repeating `/api/` requests;
+  each view still loads its data once when opened. Return to the tab and
+  confirm it does not refresh on its own.
+- [ ] Turn one web switch on (for example Notification badge) and confirm only
+  its requests resume, at once and then on their interval; turn it off and
+  confirm they stop without a reload.
+- [ ] Toggle a switch, reload Admin → Automation and confirm it read back from
+  the server. "Turn everything off" sets all 26 off. Sections start collapsed;
+  clicking a checkbox must not expand its section. Check 375 px width to the
+  bottom of the page.
+- [ ] `GET /api/v1/automation/switches` returns every switch, no `updatedBy`, and
+  `Cache-Control: public, max-age=60, s-maxage=300`. Unknown switch ids or
+  non-boolean values are refused by the admin POST.
+- [ ] A scheduled job whose switch is off returns 204 from a signed scheduler
+  request and does not claim its day.
+- [ ] Mac Thingtime Node: with `mac.node` off the log says remote commands and
+  status reports are off and no `devices/node/commands` requests are made;
+  turning it on applies after the Mac wakes or the node restarts.
+- [ ] iPhone: with `iphone.notifications` off, returning to the app does not call
+  the notifications refresh; with `iphone.location` off, background location
+  history stays stopped. Watch: with `watch.pairing` off, a pending code is
+  checked once and the message points to Check approval.
+- [ ] CI webhooks: with `ci.webhookDetail` off (the default), a signed
+  `workflow_job`, `deployment_status` or PR `labeled` delivery to
+  `/api/v1/integrations/github/webhook` returns 200 `accepted:false` and adds no
+  `ci-event` row; a PR `synchronize`, `push` or Feature Stack `workflow_run` is
+  still recorded (202). In Vercel Observability the webhook's P75 duration
+  drops to tens of milliseconds. Reconcile on Admin → CI Control still fills the
+  dashboard from GitHub.
+
 ## Builder cleared-field save regression
 
 - [ ] Edit nested Builder text (which clears its optional rich HTML), clear optional styling, then immediately Save. Verify the Timeline draft and server page retain the text, media references and remaining styling after reload. Repeat edits and Save; undefined optional object properties must not block history capture. Save empty text and HTML blocks, null/cleared optional fields, and text longer than 2,000 characters; exact-ID readback and reload must retain every block and the complete text. Invalid values, getters and undefined array entries must still be rejected without claiming a saved draft.
@@ -45,6 +78,10 @@
   of any existing validator and idempotent readiness. Denied `collMod` or failed
   readback must refuse migration before content changes. An outer transaction
   must preflight protection, never issue DDL inside that transaction.
+- Inside a request-budgeted transaction, read more than 101 matching documents
+  through a cursor (for example a device with many stale connectors posting
+  `devices/node/state`). The read must succeed on a real replica set, never fail
+  with `cannot set maxTimeMS on getMore command for a non-awaitData cursor`.
 - Verify the timestamp floor cannot be authored through generic writes or
   restored through backups, copies or Timeline. It must not appear in public
   content; a same-name field inside the user's crystal remains ordinary data.
@@ -6133,6 +6170,15 @@ halves.
 - [ ] Verify the installed Vercel pool adapter registers `waitUntil` through
   the configured idle timeout; distinguish this local adapter test from actual
   Fluid suspension and Atlas monitoring-socket observations.
+- [ ] Manifest edge cache (2026-11-26): on the live alias, a plain GET of
+  `/.well-known/thingtime-capabilities.json` returns `Cache-Control: private,
+  no-store` with no `Vercel-CDN-Cache-Control` or `CDN-Cache-Control` visible,
+  and a repeat shows `x-vercel-cache: HIT`. A conditional repeat with the
+  ETag must not invoke the function. After the next production deploy the
+  manifest names the new deployment at once (per-deployment cache key), and
+  the Observability `/__server` count stays far below the `/api/[...]` count.
+  `X-Forwarded-Host`/`X-Forwarded-Proto` overrides never change the returned
+  origin. Unit coverage: `server/handlers/thingtime-capabilities.test.ts`.
 
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
@@ -7324,6 +7370,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Idle Mac node cost: leave the installed app paired and unused for 5
+      minutes. Vercel Observability for `devices/node/commands` shows short
+      claims (no 20 s long-poll) about every 30 s, and the device still reads
+      as online. Send a device command: it is claimed within about 30 s, and
+      the node returns to long-polling while commands flow.
+      `devices/node/observations` uploads at most once every 5 minutes.
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
       The live transcript fills the message field without Chromium's `network`
@@ -10084,7 +10136,12 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 - [ ] With `navigator.onLine === false` but the isolated same-origin API reachable, open and reload a subspace: both embed regions load without synthetic refresh events. Foreground return revalidates once; offline background polls remain paused, and reconnect resumes ordinary polling. Keep the enforced browser/backend network boundary unchanged.
 - [ ] Open an existing Lopu conversation in two clients. Create another conversation and append a message in the other client: the first client's list and selected timeline update without reload or changing the selected conversation. Repeat in the floating Lopu window and Messenger.
-- [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
+- [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs make no polling requests at all. Cached content remains during failures.
+- [ ] Leave a visible tab untouched for over two minutes with the Network panel open: notifications, timeline, Messenger, Lopu and device polling stop completely. The first click, key press, scroll or touch refreshes at once and polling resumes. Password verification codes, running clocks and transfer speeds keep updating while you read without touching anything. Settings → Background activities shows paused network polls as "Paused until you use Thingtime again".
+- [ ] With no Lopu task running, Lopu checks for background tasks at most once a minute; start a reply and confirm task progress updates every few seconds until it finishes.
+- [ ] Load a long page and watch the Network panel: no `/api/v1/health/*` request is made until you scroll the footer into view, then each status row checks once. On a short page where the footer is already visible, the rows check straight away.
+- [ ] iOS: with the app open and untouched, no notification refresh happens every 30 seconds. Background the app, send yourself a notification, then return: the app refreshes on return, and a push received while open refreshes at once.
+- [ ] Load several pages in a browser and confirm the response has no `X-TT-Shell: social-meta` header (static shell, no function call). Request the same pages with a crawler or unfurler user-agent (for example `curl -A Twitterbot`) and confirm `X-TT-Shell: social-meta` with page-specific Open Graph tags. `/social-card`, `/robots.txt`, `/sitemap.xml` and `/.well-known/*` still reach the server for every client.
 - [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.
 - [ ] Run the hooks, Lopu UI, Lopu store, Messenger and root-data suites. Use the live browser as well: native browser timers require correctly bound callbacks, which Node timers alone do not prove.
 

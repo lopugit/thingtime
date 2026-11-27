@@ -818,10 +818,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
   }),
   endpoint({
-    id: 'environment-gateway', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'deployment',
+    id: 'environment-gateway', contractVersion: '1.3.1', featureVersion: '1.3.1', group: 'deployment',
     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
-    detail: 'Version 1.2.3 drains admitted database work, including shared initialization after its HTTP waiter cancels, and fences expired request scopes. Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. The optional parallel frontend uses a separately enrolled Vercel production workload identity to relay through the preview data authority. No secrets or database configuration are published.',
+    detail: 'Version 1.3.1 lets Vercel\'s own CDN, whose cache is keyed per deployment, keep a GET for one hour when the computed origin is exactly the routed HTTPS host (Vercel-CDN-Cache-Control: max-age=3600, never forwarded). Browsers and proxies in front of Vercel still receive private, no-store, so no cache can pin a previous alias owner, and the five-second ownership check reaches the current owner as an edge hit instead of a function call. A storable conditional GET returns the full body so the edge can keep it; other matching conditional requests still return 304. Version 1.2.3 drains admitted database work, including shared initialization after its HTTP waiter cancels, and fences expired request scopes. Version 1.2 supports GET/HEAD conditional ETags and OPTIONS for If-None-Match, with exact-origin cached-body validation. Browser capability reads cache successful results for 60 seconds; gateway ownership revalidates every five seconds and never serves stale authority. Server relays may use the platform automation secret only at the configured verified gateway origin. The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. A server-only Vercel protection credential is sent only to the validated gateway origin; it is removed from relayed requests and responses and never appears in the manifest. The optional parallel frontend uses a separately enrolled Vercel production workload identity to relay through the preview data authority. No secrets or database configuration are published.',
     auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET', 'HEAD', 'OPTIONS'],
 
     steps: ['Configure one stable alias and separate relay secret for each intended environment.', 'Negotiate api.environment-gateway 1.0.0 and the semantic operation being forwarded.', 'Compare the alias deploymentId with the local deployment identity before database access.'],
@@ -1109,6 +1109,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 409, description: 'Account changed or edit is stale.', body: { ok: false, error: 'Reload before saving.' } }
 		]
 	}),
+  endpoint({
+    id: 'automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'settings',
+    title: 'Automation switches', endpoint: '/api/v1/automation/switches', methods: ['GET'],
+    summary: 'Public on/off state of every automatic background feature: browser polling, desktop folder sync, the Mac Thingtime Node, iPhone and Watch background work, and server scheduled jobs.',
+    detail: 'Returns { ok, switches: { "<switch id>": boolean }, updatedAt }. Every registered switch is listed. Switches are off unless an administrator turned them on; clients treat a missing, unknown or unreadable switch as off and must not start repeating or scheduled work for it. A view still loads its data once when opened. The response is non-secret and CDN-cacheable for a few minutes (public, s-maxage=300), so read it at start and when the app returns to the foreground, never on a timer. A failed server read serves the last-known-good value or all-off.',
+    auth: { mode: 'none', description: 'Public, non-secret.' },
+    steps: ['GET once at start and on return to the app.', 'Run a repeating feature only while its switch is true.'],
+    requestExamples: [{ name: 'Read switches', description: 'Public read.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Everything off.', body: { ok: true, switches: { 'web.timeline': false, 'mac.node': false, 'scheduled.invites-expire': false }, updatedAt: null } }]
+  }),
+  endpoint({
+    id: 'admin-automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
+    title: 'Automation switch controls', endpoint: '/api/v1/admin/automation-switches', methods: ['GET', 'POST'],
+    summary: 'Read or change the administrator on/off switch of each automatic background feature.',
+    detail: 'GET returns { switches, updatedAt, updatedBy } read strictly from home settings (503 when unreadable). POST { changes: { "<switch id>": true | false } } changes one or more registered switches in one atomic update; unknown ids and non-boolean values are refused with 400. Requires a direct full administrator browser session on home storage, X-Thingtime-Expected-Actor, same-origin JSON. Scheduled job switches are the master on/off: a job runs only while its switch is on and its own schedule is enabled and due. Clients read changes through the public endpoint within its cache window.',
+    auth: { mode: 'session', description: 'Full administrator browser session on home storage.' },
+    steps: ['Negotiate api.admin-automation-switches 1.0.0.', 'GET the current switches.', 'POST the changed switches and read the returned state back.'],
+    requestExamples: [{ name: 'Turn timeline updates on', description: 'Administrator session.', method: 'POST', body: { changes: { 'web.timeline': true } } }],
+    responseExamples: [{ status: 200, description: 'Saved switches.', body: { ok: true, switches: { 'web.timeline': true }, updatedAt: '2026-11-25T12:00:00.000Z', updatedBy: 'admin-user-id' } }]
+  }),
   endpoint({
     id: 'admin-job-schedules', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
     title: 'Scheduled job controls', endpoint: '/api/v1/admin/job-schedules', methods: ['GET', 'POST'],
@@ -1754,12 +1774,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'github-ci-webhook',
+    // 1.1.0: high-volume CI detail (workflow_job, workflow_run other than
+    // Feature Stack runs, deployment, deployment_status, and PR actions other
+    // than opened/reopened/synchronize/closed/ready_for_review/converted_to_draft/edited)
+    // is answered 200 accepted:false without any write while the
+    // ci.webhookDetail automation switch is off (the default).
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'integrations',
     title: 'GitHub CI webhook',
     endpoint: '/api/v1/integrations/github/webhook',
     summary: 'Receive signed GitHub App events for the CI control plane.',
     detail:
-      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
+      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things. High-volume CI detail (job updates, workflow runs other than Feature Stack runs, deployments and PR label/assignee/review-request changes) is recorded only while the ci.webhookDetail automation switch is on; otherwise the verified delivery is answered 200 with accepted:false and nothing is written. Admin CI Reconcile reads current state from GitHub on demand.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
     methods: ['POST'],
 		steps: [
@@ -1777,6 +1803,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		],
     responseExamples: [
       { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
+      { status: 200, description: 'Verified CI detail skipped while ci.webhookDetail is off.', body: { ok: true, accepted: false, touched: [], ignoredReason: 'CI detail updates are off' } },
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
     ]
   }),

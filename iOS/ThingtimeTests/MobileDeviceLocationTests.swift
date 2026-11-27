@@ -63,6 +63,25 @@ final class MobileDeviceLocationTests: XCTestCase {
         await Task.yield(); XCTAssertEqual(uploads, 0)
         coordinator.disable(matching: scope); XCTAssertNil(saved)
     }
+    func testAutomationSwitchOffKeepsLocationStoppedAndADeferredOnStartsIt() async throws {
+        let driver = LocationDriverFixture()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var saved: MobileDeviceLocation.Binding?, uploads = 0
+        var pending: [(URL, @MainActor (Bool) -> Void)] = []
+        let coordinator = MobileDeviceLocation(driver: driver, outbox: .init(root: directory), load: { saved }, save: { saved = $0 },
+            send: { _, _, _ in uploads += 1 }, automationGate: { origin, decide in pending.append((origin, decide)) })
+        try coordinator.enable(scope, collectionId: collectionId)
+        XCTAssertTrue(driver.starts.isEmpty, "nothing starts before the switch answers")
+        XCTAssertEqual(pending.map(\.0), [scope.origin])
+        pending.removeFirst().1(false)
+        XCTAssertTrue(driver.starts.isEmpty, "an off switch keeps collection stopped")
+        driver.authorizationChanged?()
+        XCTAssertEqual(pending.count, 1)
+        pending.removeFirst().1(true)
+        XCTAssertEqual(driver.starts, [true], "an on switch starts collection")
+        coordinator.disable(matching: scope)
+    }
     func testOfflineRetryUsesOriginalObservationAndRemoteDisabledPolicyClearsApproval() async throws {
         let driver = LocationDriverFixture()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

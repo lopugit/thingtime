@@ -112,6 +112,43 @@ const upsert = async (
   options?: UpsertCiEntityOptions
 ) => upsertCiEntity(entity, { ...event, data }, options);
 
+// Pull request actions that change what the product shows or does: open and
+// closed state, new commits, draft state, and title/body/base edits (promotion
+// grouping). Label, assignee, review-request and auto-merge churn is detail.
+const PULL_REQUEST_STATE_ACTIONS = new Set([
+  'opened',
+  'reopened',
+  'synchronize',
+  'closed',
+  'ready_for_review',
+  'converted_to_draft',
+  'edited'
+]);
+const FEATURE_STACK_RUN_TITLE = /\bfeature-stack-run-[0-9a-f-]{36}\b/i;
+
+/**
+ * High-volume CI detail that only feeds the live dashboard: every job update,
+ * workflow run, deployment and PR label change. Measured on 25–26 Nov 2026
+ * this was ~99% of about 42,000 deliveries a day, each holding a 2 GB function
+ * for ~0.7–2 s. Feature Stack runs keep their workflow_run link.
+ */
+export const isCiWebhookDetailEvent = (eventType: string, payload: any): boolean => {
+  switch (eventType) {
+    case 'workflow_job':
+    case 'deployment':
+    case 'deployment_status':
+      return true;
+    case 'workflow_run': {
+      const run = payload?.workflow_run;
+      return !FEATURE_STACK_RUN_TITLE.test(safeString(run?.display_title ?? run?.name, 500));
+    }
+    case 'pull_request':
+      return !PULL_REQUEST_STATE_ACTIONS.has(safeString(payload?.action, 120));
+    default:
+      return false;
+  }
+};
+
 export const ingestGitHubWebhook = async (input: {
   eventType: string;
   deliveryId: string;

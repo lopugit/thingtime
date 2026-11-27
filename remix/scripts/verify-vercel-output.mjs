@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
+import { isBrowserOnlyRoute } from './app-shell-routing.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -221,7 +222,9 @@ if (!hasFilesystemRoute) {
 const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
-const rootIndex = routes.findIndex((route) => route.src === '^/$');
+const rootIndex = routes.findIndex((route) => route.src === '^/$' && !isBrowserOnlyRoute(route));
+const browserRootIndex = routes.findIndex((route) => route.src === '^/$' && isBrowserOnlyRoute(route));
+const browserShellIndex = routes.findIndex((route) => route.src === '^/(?:.*)$' && isBrowserOnlyRoute(route));
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
 const wellKnownDiscoveryIndex = routes.findIndex(
@@ -317,6 +320,23 @@ if (serverFallbackIndex !== -1) {
 	}
 	if (routes[socialMetaIndex]?.headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
 		throw new Error('Vercel output does not disable browser caching for public social HTML.');
+	}
+	// Browsers must take the static shell before the social controller, so page
+	// loads cost no function invocation; unfurlers still reach the controller.
+	for (const [name, index] of [
+		['browser root', browserRootIndex],
+		['browser shell', browserShellIndex]
+	]) {
+		const route = routes[index];
+		if (index === -1 || route.dest !== '/index.html' || route.headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
+			throw new Error(`Vercel output does not serve the ${name} route as the static, uncached shell.`);
+		}
+	}
+	if (browserRootIndex > rootIndex) {
+		throw new Error('Vercel output sends browser homepage loads to the social controller.');
+	}
+	if (browserShellIndex < apiIndex || browserShellIndex < filesystemIndex || browserShellIndex < socialCardIndex || browserShellIndex > socialMetaIndex) {
+		throw new Error('Vercel output orders the browser shell route outside the API, social card and social page boundaries.');
 	}
 	const cardHeaders = routes[socialCardIndex]?.headers;
 	if (

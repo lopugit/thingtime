@@ -13,7 +13,7 @@ export function useFormatClock(format: Record<string, unknown> | undefined, scop
 	React.useEffect(() => {
 		if (!running) return;
 		setNow(Date.now());
-		const timer = activityInterval('timer:components/Builder/useFormatClock:1', 'Running elapsed clocks', () => setNow(Date.now()), 1000);
+		const timer = activityInterval('timer:components/Builder/useFormatClock:1', 'Running elapsed clocks', () => setNow(Date.now()), 1000, { local: true });
 		return () => clearActivityInterval(timer);
 	}, [running, start, end]);
 	return now;

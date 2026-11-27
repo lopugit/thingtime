@@ -619,3 +619,24 @@ The Admin deployment profile editor uses separate editable blocks in
 `admin/ci/deployment-profiles` requires the active administrator, while
 `integrations/ci/deployment-profiles` is a purpose-bound, signed controller
 read. Register both through the API docs and Nitro catch-all.
+
+## Automation switches (Admin → Automation)
+
+One administrator on/off switch per automatic, repeating or scheduled feature;
+all are off unless turned on. See `TESTING.md` → "Automation switches".
+
+| Concern | Path |
+| --- | --- |
+| Switch catalogue, defaults, activity-id → switch mapping | `app/automation/automationSwitches.ts` |
+| Settings singleton store (`automation-switches`) | `app/api/utils/automation/automationSwitchesStore.ts` |
+| Public read (CDN-cached) | `app/routes/api/v1/automation/switches/_switches.tsx` (`api.automation-switches`) |
+| Admin read/save | `app/routes/api/v1/admin/automation-switches/_automation-switches.tsx` (`api.admin-automation-switches`) |
+| Browser enforcement | `app/automation/automationSwitchesClient.ts`, consumed by `app/activity/activityManager.ts` (`blocked`) and `app/hooks/backgroundRefresh.ts` (`blocked`) |
+| Scheduled jobs | `claimScheduledDay` in `app/api/utils/automation/jobSchedules.ts` checks `scheduled.<job id>` |
+| Admin UI (editable blocks) | `app/components/Admin/AutomationSwitchesSettings.tsx`, `automationSwitchBlocks.ts` |
+| Native readers | `iOS/Shared/ThingtimeAutomationSwitches.swift` (iPhone + Watch), `macos/ThingtimeNode/Sources/ThingtimeNodeCore/ThingtimeAutomationSwitches.swift` |
+
+When adding a new poller, register it through `activityInterval` or
+`subscribeBackgroundRefresh` (unlisted ids fall under `web.other`), or add a
+switch to the catalogue and check it before starting native or server loops.
+Tests: `npm --prefix remix run test:automation`.

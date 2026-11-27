@@ -22,19 +22,23 @@ export const ServiceStatus = ({
   label,
   linkPath,
   refreshLabel,
-  targetOrigin
+  targetOrigin,
+  enabled = true
 }: {
   endpoint: string;
   label: string;
   linkPath: string;
   refreshLabel: string;
   targetOrigin?: string;
+  /** False holds the request back (for example until the footer is on screen). */
+  enabled?: boolean;
 }) => {
   const [status, setStatus] = React.useState<BasicServiceHealthStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshTick, setRefreshTick] = React.useState(0);
 
   React.useEffect(() => {
+    if (!enabled) return;
     let isMounted = true;
     const xhr = new XMLHttpRequest();
 
@@ -75,7 +79,7 @@ export const ServiceStatus = ({
       isMounted = false;
       xhr.abort();
     };
-  }, [endpoint, refreshTick, targetOrigin]);
+  }, [endpoint, refreshTick, targetOrigin, enabled]);
 
   const refreshStatus = React.useCallback(() => {
     setStatus(null);
@@ -126,9 +130,10 @@ export const ServiceStatus = ({
   );
 };
 
-export const NitroStatus = ({ targetOrigin }: { targetOrigin?: string }) => {
+export const NitroStatus = ({ targetOrigin, enabled }: { targetOrigin?: string; enabled?: boolean }) => {
   return (
     <ServiceStatus
+      enabled={enabled}
       endpoint="/api/v1/health/nitro"
       label="Nitro API"
       linkPath="/api/v1/health/nitro"
@@ -138,9 +143,10 @@ export const NitroStatus = ({ targetOrigin }: { targetOrigin?: string }) => {
   );
 };
 
-export const FrontendStatus = ({ targetOrigin }: { targetOrigin?: string }) => {
+export const FrontendStatus = ({ targetOrigin, enabled }: { targetOrigin?: string; enabled?: boolean }) => {
   return (
     <ServiceStatus
+      enabled={enabled}
       endpoint="/api/v1/health/frontend"
       label="Frontend"
       linkPath="/"

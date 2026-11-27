@@ -9,10 +9,10 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
-test('combined gateway budget and handover corrections retain the conditional manifest contract', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.3.0');
+test('combined gateway budget and handover corrections retain the conditional manifest contract with per-deployment edge caching', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.environment-gateway'], '1.3.1');
   const feature = thingtimeCapabilityManifest('https://gateway.example').features['api.environment-gateway'];
-  assert.equal(feature.version, '1.3.0');
+  assert.equal(feature.version, '1.3.1');
   const endpoint = apiEndpointDocs.find(doc => doc.id === 'environment-gateway')!;
   assert.deepEqual(endpoint.methods, ['GET', 'HEAD', 'OPTIONS']);
 });
