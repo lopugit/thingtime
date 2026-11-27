@@ -181,6 +181,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-27: **A database call no longer keeps a 2 GB server billed for a
+  minute.** `attachDatabasePool` holds the Fluid instance open for the MongoDB
+  pool's idle timeout + 100 ms after every connection checkout, and the home
+  pool's timeout was 60 s. Any traffic more often than once a minute kept a 2 GB
+  instance billed all day: 59.9 GB-hr on 26 Nov from ~9K invocations. Now 5 s
+  (`HOME_POOL_MAX_IDLE_MS`), as Vercel's pooling guide suggests. Timing showed
+  the API itself is fast: `teapot` 60–180 ms, a single settings read 60–360 ms
+  even after 90 s idle. See
+  [`PLAN/vercel-memory-and-ci-webhooks.md`](../PLAN/vercel-memory-and-ci-webhooks.md).
+
 - 2026-11-26: **GitHub CI detail webhooks are skipped before any database
   work.** Job updates, workflow runs, deployments and PR label changes were about
   99% of ~42,000 GitHub deliveries a day, each holding a 2 GB function for
