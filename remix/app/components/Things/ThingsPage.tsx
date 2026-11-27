@@ -1338,15 +1338,21 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     lopuRef.current({ title: existing ? 'App updated' : 'App created', status: 'success' });
   }, [builderMode, builderAppDialog, rememberFolderMeta]);
 
-  const createBuilderPage = useCallback(async () => {
+  const creatingBuilderPage = useRef(false);
+  const createBuilderPage = useCallback(async (parentId: string | null) => {
+    if (creatingBuilderPage.current) return;
+    creatingBuilderPage.current = true;
     try {
-      const response = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: { name: 'Untitled page', version: 1, blocks: [] }, folderId, acl: ['tt:user'] });
+      const response = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: { name: 'Untitled page', version: 1, blocks: [] }, folderId: parentId, acl: ['tt:user'] });
+      if (!mounted.current) return;
       if (!response?.ok || !response?.thing?.id) throw new Error(response?.error || 'Could not create the page.');
       navigate(`/builder?page=${encodeURIComponent(response.thing.id)}`);
     } catch (failure) {
-      lopuRef.current({ title: 'Could not create the page', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+      if (mounted.current) lopuRef.current({ title: 'Could not create the page', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+    } finally {
+      creatingBuilderPage.current = false;
     }
-  }, [folderId, navigate]);
+  }, [mounted, navigate]);
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
     const url = `${window.location.origin}${thingShareLink(thing)}`;
@@ -1609,6 +1615,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   );
 
   // right-click the browse canvas (not an item): create/paste/arrange/select
+  const backgroundFolder = useRef<string | null>(null);
   const onBackgroundContextMenu = useCallback(
     (event: React.MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1619,10 +1626,11 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       setMenuThing(null);
       const column = target?.closest?.('[data-pin-parent]');
       const parent = column?.getAttribute('data-pin-parent');
+      backgroundFolder.current = parent == null ? folderId : parent || null;
       setMenuPinPath(parent !== undefined && parent !== null ? pathForFolder(parent || null) : currentPinPath);
       backgroundMenu.openAtPointer(event);
     },
-    [backgroundMenu.openAtPointer, currentPinPath, itemMenu.closeMenu, pathForFolder] // eslint-disable-line react-hooks/exhaustive-deps
+    [backgroundMenu.openAtPointer, currentPinPath, folderId, itemMenu.closeMenu, pathForFolder] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
 	const onDeviceContextMenu = useCallback((deviceId: string, event: React.MouseEvent) => {
@@ -1712,6 +1720,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         clipboardCount: clipboard?.ids.length || 0,
         itemCount: selectionOrderRef.current.length,
         allowCreation: !archiveOnly,
+        allowNewPage: !locationPicker,
         libraryNavigation: !locationPicker && !builderMode && !archiveOnly,
         sort,
         groupBy,
@@ -1739,6 +1748,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         case 'import':
           setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
           break;
+        case 'new-page':
+          void createBuilderPage(backgroundFolder.current);
+          break;
         case 'new-folder':
           openNewFolder(folderId);
           break;
@@ -1762,7 +1774,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [currentPinPath, menuPinPath, folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [createBuilderPage, currentPinPath, menuPinPath, folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -2052,7 +2064,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
                 {builderMode && !folderId ? <MenuItem onClick={() => setBuilderAppDialog('new')}>New app</MenuItem> : null}
-                {builderMode ? <MenuItem onClick={() => void createBuilderPage()}>New page</MenuItem> : null}
+                {!locationPicker ? <MenuItem onClick={() => void createBuilderPage(folderId)}>New page</MenuItem> : null}
                 {builderMode ? <MenuItem as={RouterLink} to="/components">New component</MenuItem> : null}
                 {builderMode ? <MenuItem as={RouterLink} to="/actions">New action</MenuItem> : null}
                 {!locationPicker && !builderMode && <MenuItem as={RouterLink} to="/things?lidar=1">LiDAR scan</MenuItem>}

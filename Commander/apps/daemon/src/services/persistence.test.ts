@@ -147,6 +147,53 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('preserves accounts and their exact credential identities through switches and restarts', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-session-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', temporary);
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      const original = {
+        id: 'original-user',
+        username: 'fixture',
+        scopes: [],
+        expiresAt: '2030-01-01',
+        environment: { baseUrl: 'https://thingtime.com', clientId: LEGACY_COMMANDER_THINGTIME_CLIENT_IDS[0] },
+      };
+      const development = {
+        ...original,
+        id: 'dev-user',
+        environment: {
+          baseUrl: 'https://dev.thingtime.com',
+          clientId: COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID,
+        },
+      };
+      await store.upsertAccount(original);
+      await store.upsertAccount(development);
+      await store.setActiveAccount(development.id);
+      let reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.snapshot().settings).toMatchObject({
+        activeAccountId: development.id,
+        thingtimeBaseUrl: development.environment.baseUrl,
+        thingtimeClientId: development.environment.clientId,
+      });
+      await reloaded.setActiveAccount(original.id);
+      reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.snapshot().accounts).toEqual([development, original]);
+      expect(reloaded.snapshot().settings).toMatchObject({
+        activeAccountId: original.id,
+        thingtimeBaseUrl: original.environment.baseUrl,
+      });
+      expect(reloaded.snapshot().accounts.find((account) => account.id === original.id)?.environment).toEqual(
+        original.environment,
+      );
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('reconciles a legacy account to its one exact Keychain environment without guessing ambiguity', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
