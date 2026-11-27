@@ -196,8 +196,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   - **Routing and fallback:** the router sends a `worker` group's endpoints to
     Cloudflare only if the API Worker's manifest lists them, and replays a
     refused or failed GET on Vercel. Vercel-only deployments are unchanged.
-  - **First endpoint:** `GET /api/v1/automation/switches` (`api.automation-switches`
-    1.0.0 on Cloudflare).
+  - **Endpoints:** `GET /api/v1/automation/switches` is served on Cloudflare.
+    `auth/me`, `auth/account-hints` and `marketing/publications` are marked, but
+    go to Vercel until the Worker has the JWT keys. The Cloudflare build reports
+    each endpoint's own version.
+  - **Safety:** the Worker runs with `NODE_ENV=production` and serves a route
+    only if it never reads a session (`sessionFree`) or the JWT keys are set.
+    Outside production mode the shared auth code would accept a public
+    development secret.
+  - **`discussionCursor`:** its development key is now created on first use, for
+    the same reason as the tracker.
 
 - 2026-11-27: **A Cloudflare router Worker sits in front of a test path on
   thingtime.com.** `cloudflare/router` sends each route group to Vercel or a

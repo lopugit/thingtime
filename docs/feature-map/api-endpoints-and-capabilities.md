@@ -16,7 +16,8 @@ privilege or business-data changes. Test `test:migrations`,
 API Worker (`cloudflare/api`) behind the thingtime.com router
 (`cloudflare/router`). To enable one:
 
-1. Add `cloudflare: { featureVersion, methods }` to its doc in `apiDocs.ts`.
+1. Add `cloudflare: { methods }` to its doc in `apiDocs.ts`, plus
+   `sessionFree: true` only if the handler never reads a session.
    `endpoint()` adds the "Cloudflare deployment" docs note.
 2. Run `npm --prefix cloudflare/api run generate`, then commit
    `src/routes.generated.ts`.
@@ -24,7 +25,7 @@ API Worker (`cloudflare/api`) behind the thingtime.com router
 The same handler and the shared pipeline
 (`app/api/utils/http/routeExecution.ts`, also used by Nitro's dispatcher) run on
 both runtimes. Never fork a handler for Cloudflare. A handler whose imports
-include a native module stays Vercel-only. MongoDB state for each runtime lives
+include a native module stays Vercel-only. The Worker serves a route only in production mode, and with the JWT keys unless it is `sessionFree`. MongoDB state for each runtime lives
 in `mongodb/runtimeState.ts`; Cloudflare runs it in a fixed pool of Durable
 Object shards. Run `npm --prefix cloudflare/api test`,
 `npm --prefix cloudflare/router test` and `test:api-capabilities`. See

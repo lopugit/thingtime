@@ -47,21 +47,32 @@ export type ApiEndpointDoc = {
    * Set when this endpoint's own handler also runs on the Cloudflare API Worker
    * (`cloudflare/api`), behind the thingtime.com router. The same source is
    * compiled for both runtimes, so Vercel-only deployments are unaffected.
-   * `featureVersion` versions the Cloudflare build of `api.<id>` in that
-   * Worker's capability manifest; `methods` lists what it serves there. The
-   * router sends anything else to Vercel.
+   * `methods` lists what Cloudflare serves; the router sends anything else to
+   * Vercel. The Cloudflare manifest reports the endpoint's own version unless
+   * `featureVersion` overrides it.
    */
   cloudflare?: ApiCloudflareSupport;
 };
 
 export type ApiCloudflareSupport = {
-  featureVersion: `${number}.${number}.${number}`;
   methods: ApiHttpMethod[];
+  /** Only when the Cloudflare build must differ; it defaults to the endpoint's own version (same code). */
+  featureVersion?: `${number}.${number}.${number}`;
+  /**
+   * The handler never reads a session or token, so the Worker may serve it
+   * without the JWT signing keys. Everything else is handed back to Vercel
+   * until the Worker has them (production mode refuses the dev fallback).
+   */
+  sessionFree?: true;
 };
 
-export const cloudflareSupportNote = (doc: Pick<ApiEndpointDoc, 'id' | 'cloudflare'>) =>
+/** The version the Cloudflare API Worker advertises for `api.<id>`. */
+export const cloudflareFeatureVersion = (doc: Pick<ApiEndpointDoc, 'cloudflare' | 'featureVersion'> & { contractVersion?: string }) =>
+  doc.cloudflare?.featureVersion ?? doc.featureVersion ?? doc.contractVersion ?? '1.0.0';
+
+export const cloudflareSupportNote = (doc: Pick<ApiEndpointDoc, 'id' | 'cloudflare' | 'featureVersion'> & { contractVersion?: string }) =>
   doc.cloudflare
-    ? `Cloudflare deployment: built for Cloudflare Workers support. The same handler also runs on the Cloudflare API Worker as api.${doc.id} ${doc.cloudflare.featureVersion} (${doc.cloudflare.methods.join(', ')}). The thingtime.com router prefers it when that route group is switched to Cloudflare and falls back to Vercel; Vercel-only deployments are unaffected.`
+    ? `Cloudflare deployment: built for Cloudflare Workers support. The same handler also runs on the Cloudflare API Worker as api.${doc.id} ${cloudflareFeatureVersion(doc)} (${doc.cloudflare.methods.join(', ')}). The thingtime.com router prefers it when that route group is switched to Cloudflare and falls back to Vercel; Vercel-only deployments are unaffected.`
     : null;
 
 export type ApiPlatformExamples = {
@@ -1134,7 +1145,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'settings',
-    cloudflare: { featureVersion: '1.0.0', methods: ['GET'] },
+    cloudflare: { methods: ['GET'], sessionFree: true },
     title: 'Automation switches', endpoint: '/api/v1/automation/switches', methods: ['GET'],
     summary: 'Public on/off state of every automatic background feature: browser polling, desktop folder sync, the Mac Thingtime Node, iPhone and Watch background work, and server scheduled jobs.',
     detail: 'Returns { ok, switches: { "<switch id>": boolean }, updatedAt }. Every registered switch is listed. Switches are off unless an administrator turned them on; clients treat a missing, unknown or unreadable switch as off and must not start repeating or scheduled work for it. A view still loads its data once when opened. The response is non-secret and CDN-cacheable for a few minutes (public, s-maxage=300), so read it at start and when the app returns to the foreground, never on a timer. A failed server read serves the last-known-good value or all-off.',
@@ -2480,7 +2491,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     contractVersion: '1.0.1',
     group: 'auth',
     title: 'Cross-deployment account hints',
-    endpoint: '/api/v1/auth/account-hints',
+    endpoint: '/api/v1/auth/account-hints', cloudflare: { methods: ['GET'] },
     summary: 'Accounts this browser is signed into on other Thingtime deployments, for the auto-login popup.',
     detail:
       'Every sign-in writes a { rosterId, origin } pointer into the Domain=.thingtime.com tt_hints cookie, ' +
@@ -4048,7 +4059,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.3.0',
     group: 'auth',
     title: 'Current user',
-    endpoint: '/api/v1/auth/me',
+    endpoint: '/api/v1/auth/me', cloudflare: { methods: ['GET'] },
     summary: 'Returns the authenticated public user or null.',
     detail:
       'Version1.3 lazily provisions the private hidden Debug default folder for full owners in the home data plane. Provisioning failures never fail authentication; diagnostics reports its own availability. An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
@@ -15207,7 +15218,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'marketing-publications', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'marketing',
     title: 'Marketing publish state',
-    endpoint: '/api/v1/marketing/publications',
+    endpoint: '/api/v1/marketing/publications', cloudflare: { methods: ['GET'] },
     summary: 'Which parts of the generated /marketing suite an admin has published — the read the client gates every marketing surface on.',
     detail:
       'Version 1.1 bounds public read work and adds freshness: live on successful reads. Dependency failure returns HTTP 503 with freshness: stale and cached public lists when available, or freshness: unavailable. Clients preserve cached content and show degraded status with Retry. Everything under /marketing (the hub, each category index, every generated page, each section inside a page, ' +

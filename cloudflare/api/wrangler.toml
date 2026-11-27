@@ -9,12 +9,16 @@ account_id = "c4c10efa6c608143e219a875305aa82c"
 workers_dev = false
 
 [vars]
-API_WORKER_VERSION = "1.0.0"
+API_WORKER_VERSION = "1.1.0"
+# Required: any other mode lets the shared auth code fall back to a public dev secret.
+NODE_ENV = "production"
 # MongoDB connection-pool shards (Durable Objects). Total connections are about
 # shards × (pool size + monitoring sockets), independent of traffic.
 POOL_SHARDS = "2"
 
-# Secrets (wrangler secret put): MONGODB_CONNECTION_STRING, MONGO_PASS.
+# Secrets (wrangler secret put): MONGODB_CONNECTION_STRING, MONGO_PASS, and for routes that
+# read a session the same JWT_PUBLIC_KEY / JWT_PRIVATE_KEY / JWT_KEY_ID / JWT_ISSUER / JWT_SECRET
+# as Vercel production. Until they are set, those routes are handed back to Vercel.
 
 [[durable_objects.bindings]]
 name = "MONGO_POOL"

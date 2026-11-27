@@ -11,13 +11,18 @@ reimplemented here.
    `cloudflare` entry to the endpoint's doc:
 
    ```ts
-   cloudflare: { featureVersion: '1.0.0', methods: ['GET'] },
+   cloudflare: { methods: ['GET'] },                    // reads a session: needs the JWT keys
+   cloudflare: { methods: ['GET'], sessionFree: true }, // never reads a session or token
    ```
 
-   `endpoint()` then adds a "Cloudflare deployment" note to the docs.
-   `featureVersion` versions the Cloudflare build of `api.<id>` in this
-   Worker's capability manifest. `methods` lists what Cloudflare serves; any
-   other method stays on Vercel.
+   - `endpoint()` adds a "Cloudflare deployment" note to the docs.
+   - The Cloudflare manifest reports the endpoint's own version, since it is the
+     same code. Add `featureVersion` only if the Cloudflare build must differ.
+   - `methods` lists what Cloudflare serves; any other method stays on Vercel.
+   - Mark `sessionFree: true` only when the handler and everything it calls
+     never read the auth cookie, a bearer token or account hints. For example,
+     `auth/account-hints` reads sessions even though its doc says
+     `auth: none`.
 2. **Generate the route list.** Run `npm run generate`. It writes
    `src/routes.generated.ts`, taking each handler's path from Nitro's route map
    (`remix/server/routes/api/[...].ts`). `npm run check` and `npm test` fail if
@@ -36,6 +41,36 @@ What runs on both runtimes, shared rather than copied:
   `server/routes/api/[...].ts` calls the same function.
 - **MongoDB access:** `remix/app/api/utils/mongodb/collections.ts`, with its
   per-runtime connection state in `runtimeState.ts`.
+
+## When the Worker serves a route
+
+`runtimeReadyFor()` in `src/serve.ts` decides this per route:
+
+- **Production mode always.** `NODE_ENV = "production"` is set in
+  `wrangler.toml`. In any other mode the shared auth code falls back to a public
+  development signing secret, and sessions could be forged.
+- **A database:** `MONGODB_CONNECTION_STRING` must be present.
+- **Signing keys, unless `sessionFree`:** the same `JWT_PUBLIC_KEY`,
+  `JWT_PRIVATE_KEY`, `JWT_KEY_ID`, `JWT_ISSUER` and legacy `JWT_SECRET` as Vercel
+  production. Vercel stores these as *sensitive*, so they cannot be read back
+  and copied automatically; the owner adds them with `wrangler secret put`.
+
+A route that isn't ready answers 421 with
+`x-thingtime-fallback-reason: runtime-not-configured`, and the router replays a
+GET on Vercel. Today `automation/switches` is served. `auth/me`,
+`auth/account-hints` and `marketing/publications` are marked, but go to Vercel
+until the JWT secrets are added.
+
+## Not on Cloudflare yet
+
+`things`, `notifications`, `timeline`, `devices`, `chats/updates` and
+`webpages/resolve` all build for Workers, but are not marked yet:
+
+- **Signed-in check first.** Each needs a parity check with a real signed-in
+  session through `/__cf/via/…` once the JWT secrets are set.
+- **Attachment links.** Anything that signs S3 links needs AWS credentials for
+  Cloudflare. Vercel gets them through its OIDC identity, which Workers don't
+  have.
 
 ## MongoDB connections: a fixed pool of shards
 
