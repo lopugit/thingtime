@@ -157,6 +157,16 @@
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default
       is off, and both windows retain independent queries. Exercise the configured pin/unpin shortcut and confirm the
       icon's active opacity follows native pinned state.
+- [ ] With two displays, pin a launcher on display A and click into another app on display B. With the pointer on B,
+      press Command-Space, run a per-command shortcut such as Command-E for Emoji & Symbols, choose Open from the
+      menu bar, and reopen Commander from Finder. Each must present a launcher on B; the pinned window must stay
+      where it is, keep its query, and never become key, and the menu bar and keyboard focus must not move to A. Paste
+      an emoji, press Escape, and run a Commander-only action from the B launcher: dismissing it must not hand focus
+      to the pinned window on A. With the pointer on A, Command-Space must still focus the pinned window there. Turn
+      off "Focus the most recent window on the current display" and confirm Command-Space returns to the most recent
+      window on any display while command shortcuts still use a separate launcher. Run
+      `swift test --package-path hosts/macos --filter LauncherWindowSelectionTests` from `Commander/`; its two-display
+      fixture skips explicitly on a single display.
 - [ ] Run an index while the launcher is visible. Keep scan labels and processed/indexed progress in Search Settings;
       the launcher footer retains its measured searchable-total/age summary, or explicitly unmeasured state when
       current eligibility has not been counted. Indexing must not interrupt typing or replace the search view.

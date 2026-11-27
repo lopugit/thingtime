@@ -42,7 +42,8 @@ portable from day one.
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
 - optional pinned launcher windows, a configurable pin shortcut, per-display recent-window focus, and a native
-  Open New Window action for keeping multiple independent Commander searches available;
+  Open New Window action for keeping multiple independent Commander searches available; a pinned window stays on
+  its own display, so the Commander hotkey, command shortcuts and dismissals elsewhere never move focus to it;
 - Finder-compatible drag-out from application/file search results using validated native file URLs, so a result can
   be dropped into Terminal, Finder, System Settings, or another macOS file target without browsing for it again;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, live Store browsing, and a
