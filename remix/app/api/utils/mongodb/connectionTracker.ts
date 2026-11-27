@@ -37,14 +37,17 @@ type Tracked = { source: MongoConnectionSource; pools: Map<string, { view: Mongo
 /** Listeners attach before connect. No URI, command, user identity or error payload is retained. */
 export const createConnectionTracker = (options: { now?: () => number; runtimeId?: string; deployment?: MongoConnectionSource['deployment'] } = {}) => {
   const now = options.now || Date.now;
-  const runtimeId = options.runtimeId || randomUUID();
+  // Created on first use, not at import: Cloudflare Workers refuse random
+  // values in global scope, and this module loads with every database import.
+  let runtimeIdValue = options.runtimeId;
+  const getRuntimeId = () => (runtimeIdValue ||= randomUUID());
   const deployment = options.deployment || connectionDeployment();
   const sources = new Map<string, Tracked>();
   const clients = new WeakMap<Emitter, Tracked>();
   const track = (client: Emitter, purpose: 'home' | 'custom', appName: string) => {
     const id = CONNECTION_SNAPSHOT_PREFIX + randomUUID();
     const source: MongoConnectionSource = {
-      id, runtimeId, startedAt: new Date(now()).toISOString(), observedAt: new Date(now()).toISOString(), freshness: 'current', purpose, status: 'connecting', appName,
+      id, runtimeId: getRuntimeId(), startedAt: new Date(now()).toISOString(), observedAt: new Date(now()).toISOString(), freshness: 'current', purpose, status: 'connecting', appName,
       reason: purpose === 'home' ? 'Shared home client for API identity, control and default content operations.' : 'Bounded cached client for a request-selected custom data plane; private endpoint details are withheld.',
       createdBy: 'Thingtime API runtime', deployment, featureUsage: [], pools: [], totals: { open: 0, checkedOut: 0, created: 0, closed: 0 }
     };
@@ -103,6 +106,6 @@ export const createConnectionTracker = (options: { now?: () => number; runtimeId
       totals: rows.reduce((sum, row) => ({ open: sum.open + row.open, checkedOut: sum.checkedOut + row.checkedOut, created: sum.created + row.created, closed: sum.closed + row.closed }), { open: 0, checkedOut: 0, created: 0, closed: 0 }) };
   });
   const pruneClosed = (ids: string[]) => { for (const id of ids) { const entry = sources.get(id); if (entry && (entry.source.status === 'closed' || entry.source.status === 'failed')) sources.delete(id); } };
-  return { runtimeId, track, snapshot, pruneClosed, recordAccess };
+  return { get runtimeId() { return getRuntimeId(); }, track, snapshot, pruneClosed, recordAccess };
 };
 export const mongoConnectionTracker = createConnectionTracker();

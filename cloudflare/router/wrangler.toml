@@ -1,0 +1,31 @@
+# thingtime.com router Worker. See README.md and PLAN/cloudflare-workers-migration.md.
+name = "thingtime-router"
+main = "src/index.js"
+# Keep at or below the runtime bundled with the pinned wrangler so `wrangler dev` matches production.
+compatibility_date = "2025-10-11"
+account_id = "c4c10efa6c608143e219a875305aa82c"
+workers_dev = false
+
+# Phase 1: only the test paths go through the router. Live traffic is
+# unaffected until a `thingtime.com/*` route is added here (the production switch).
+routes = [
+  { pattern = "thingtime.com/__cf/*", zone_name = "thingtime.com" }
+]
+
+[vars]
+ROUTER_VERSION = "1.1.0"
+
+# Cloudflare API Worker (cloudflare/api). Only endpoints in its capability
+# manifest go to it; everything else stays on Vercel.
+[[services]]
+binding = "API_WORKER"
+service = "thingtime-api"
+
+# Route table (key `route-table`), written by scripts/routes.mjs.
+[[kv_namespaces]]
+binding = "ROUTES"
+id = "d420235cbf1c4675b9c57579441e24df"
+
+[observability]
+enabled = true
+head_sampling_rate = 0.1
