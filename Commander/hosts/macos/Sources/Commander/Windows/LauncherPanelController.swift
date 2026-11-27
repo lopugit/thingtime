@@ -17,11 +17,13 @@ private final class CommanderPanel: NSPanel {
     mouseLocation: NSPoint
   )?
 
-  override var canBecomeKey: Bool { true }
+  // Another launcher's dismissal must not hand key status to this panel on a
+  // different display; see CommanderKeyWindowHandoff.
+  override var canBecomeKey: Bool { CommanderKeyWindowHandoff.allowsAutomaticKey(self) }
   // WKWebView only renders an active insertion caret when its window may be
   // main. This still behaves as a floating panel; it simply gives focused text
   // fields the normal macOS editing presentation.
-  override var canBecomeMain: Bool { true }
+  override var canBecomeMain: Bool { CommanderKeyWindowHandoff.allowsAutomaticKey(self) }
 
   var hasResizeSession: Bool { resizeSession != nil }
 
@@ -200,6 +202,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var commandPresentationItemID: String?
   private var commandPresentationFallback: Task<Void, Never>?
   private var requestedScreen: NSScreen?
+  /// The Commander window (for example a pinned launcher on another display)
+  /// that was key when this launcher was presented. Explicit dismissal returns
+  /// there instead of activating an older application.
+  private weak var returnWindow: NSWindow?
   private(set) var isPinned: Bool
   private var pinningEnabled: Bool
 
@@ -312,6 +318,11 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   private func present(reposition: Bool) {
+    if NSApp.isActive, let keyWindow = NSApp.keyWindow {
+      if keyWindow !== panel { returnWindow = keyWindow }
+    } else {
+      returnWindow = nil
+    }
     isPresented = true
     if reposition { center(on: requestedScreen) }
     requestedScreen = nil
@@ -328,6 +339,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
       applicationIsActive: NSApp.isActive,
       hasOtherKeyWindow: NSApp.keyWindow.map { $0 !== panel } ?? false
     )
+    let returnWindow = returnWindow.flatMap { $0 !== panel && $0.isVisible ? $0 : nil }
+    self.returnWindow = nil
     pendingShow = false
     pendingCommandItemID = nil
     showPending = false
@@ -335,8 +348,11 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     isPresented = false
     cancelCommandHotKeyPresentation()
     panel.cancelResizeSession()
-    panel.orderOut(nil)
-    if restoreTarget, let pasteTarget, !pasteTarget.isTerminated {
+    CommanderKeyWindowHandoff.orderOut(panel)
+    guard restoreTarget else { return }
+    if let returnWindow {
+      returnWindow.makeKeyAndOrderFront(nil)
+    } else if let pasteTarget, !pasteTarget.isTerminated {
       _ = pasteTarget.activate(options: [.activateAllWindows])
     }
   }
@@ -447,13 +463,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   var isVisible: Bool { panel.isVisible && isPresented }
 
-  var screenNumber: NSNumber? {
-    let screen = panel.screen ?? NSScreen.screens.max { left, right in
-      NSIntersectionRect(left.frame, panel.frame).width * NSIntersectionRect(left.frame, panel.frame).height
-        < NSIntersectionRect(right.frame, panel.frame).width * NSIntersectionRect(right.frame, panel.frame).height
-    }
-    return screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-  }
+  var screenNumber: Int? { panel.commanderScreenNumber }
 
   func setWindowMode(_ mode: LauncherWindowMode) {
     guard mode != windowMode else { return }

@@ -216,6 +216,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   only, so live traffic is unchanged. `/__cf/via/<path>` routes a real path
   through it. Phase 1 of `PLAN/cloudflare-workers-migration.md`.
 
+- 2026-11-27: **The health check and `auth/me` stop doing heavy work on every
+  call.** `health/nitro`'s storage readiness scans the whole `things`
+  collection (~2.8 s) and was cached for 30 s, while the storage monitor calls it
+  about 180 times a day. A `ready` result is now kept for 15 minutes; other
+  states are still re-checked after 30 s. `auth/me` opened a MongoDB transaction
+  on every call to make sure the hidden Debug folder exists. It now reads first
+  and opens a transaction only to create the folder.
+
 - 2026-11-27: **A database call no longer keeps a 2 GB server billed for a
   minute.** `attachDatabasePool` holds the Fluid instance open for the MongoDB
   pool's idle timeout + 100 ms after every connection checkout, and the home
@@ -391,6 +399,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   complete demo review-page metadata so its confirmation controls render.
   **Codex (AI)**
 
+- 2026-11-13: Tighten the Things folder tree, place selection beside the trailing
+  actions, and reveal full names on hover, keyboard focus and touch hold. Extend
+  the isolated browser acceptance runner with tree interaction checks and a
+  normal-networking option for disposable local test accounts. **Codex (AI)**
 
 - 2026-11-13: Extend the agent overview read adapter with task activity, open
   questions and reversible archive filtering. Preserve Builder controls and
@@ -1951,6 +1963,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Negotiate versioned device capabilities and include collection styles with
   full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
   [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+
+- 2026-10-18 — **Codex (AI)**: Make the macOS lease-heartbeat failure test wait
+  for renewal cancellation instead of a fixed 35 ms delay, resolving the
+  unsigned-source test failure that blocked the Gmail desktop release.
+
 - 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
 - 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
 - 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
