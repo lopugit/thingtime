@@ -1,50 +1,50 @@
 # Graph Report - sharp-shaw-2d5164  (2026-11-27)
 
 ## Corpus Check
-- 6015 files · ~13,243,743 words
+- 6024 files · ~13,247,088 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 119 file(s) not represented in the graph (top: (none) 36, .css 18, .entitlements 11)
+- Unclassified: 121 file(s) not represented in the graph (top: (none) 37, .css 18, .entitlements 11)
 
 ## Summary
-- 80658 nodes · 231246 edges · 2095 communities (1415 shown, 680 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 10503 edges (avg confidence: 0.87)
+- 80725 nodes · 231395 edges · 2052 communities (1387 shown, 665 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 10499 edges (avg confidence: 0.87)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d6fc7fd7`
+- Built from commit: `8f7a4b89`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - json
-- readLocalCache
+- useLopu
 - .performFolderRequest
 - ref_node_fs
 - things.ts
 - attachments.ts
 - useDrawer.tsx
 - DesktopChatRuntime
-- timelineRecords.ts
+- timeline-branch-merge.integration.mts
 - ref_react
-- backupJobs.ts
+- uploadBatch.ts
 - Action Thing v1 — design (declarative, capability-bounded)
 - SettingsContent.tsx
-- collections.ts
+- getHomeThingsCollection
 - Testing
 - ThingsPage.tsx
-- @chakra-ui/react
+- ref_lucide_react
 - getThingsCollection
 - subspaces.ts
 - WidgetConnection
 - remix/CHANGELOG.md
-- Cloud inventory stream
+- DeviceCredential
 - LongTextEditor.tsx
-- themeTryOnCore.ts
+- format.ts
 - PhotoLibraryReader
 - Foundation
 - claude-design-mockup-v2-fable/ds/react.js
-- RecoveryRelease
-- useApi.tsx
+- RecoveryComponent
+- thingmon.ts
 - thingtime-app/ds/react.js
 - thingtime-directions/ds/react.js
 - thingtime-landing-1a-classic-centered/ds/react.js
@@ -58,22 +58,22 @@
 - thingtime-launch-celebration/ds/react.js
 - DesignWorkspace.tsx
 - registry.ts
-- MobileSyncStaging
+- Codable
 - ThingtimeNodeController
 - FileSyncOwnerScope
 - useApi
 - test-agent-desktop-relay.cjs
 - folder-sync.cjs
-- google.ts
-- componentTemplate.ts
+- AdminDashboard.tsx
+- ConnectorRuntime
 - main.cjs
 - accounting.ts
-- uploadBatch.ts
-- routes.tsx
-- MobileFolderInventory
+- StorageMutationError
+- @chakra-ui/react
+- Sendable
 - SyncProgressViewer.tsx
-- ref_lucide_react
-- userVault.ts
+- DeviceDetailsDrawer.tsx
+- waterfallService.ts
 - reconcile.ts
 - scripts
 - peerDiscovery.ts
@@ -92,35 +92,35 @@
 - thingtime-landing-1g-magic-path-bar/ds/thingtime-bundle.js
 - thingtime-landing-1h-ultra-minimal-voxel/ds/thingtime-bundle.js
 - thingtime-launch-celebration/ds/thingtime-bundle.js
-- accountRestoreSteps.ts
-- setup.ts
-- MobileDeviceLocation
+- compositionMediaCore.ts
+- 3. One database: `thingtime` — and (almost) one collection
+- ActionDetailPage.tsx
 - verify-vercel-output.mjs
-- configuration.ts
+- prConflictResolverModelWaterfallCore.ts
 - remoteSyncProtocol.ts
-- SafeActionKind
+- SafeActionRequest
 - indexer/src/lib.rs
 - fail
 - NativeBackgroundPhotoUpload
 - domBridge.ts
-- thingmon.ts
+- API endpoints and capabilities
 - ThingtimeWatchStore
 - branding/_index.tsx
-- ControlPlaneScheduler
-- waterfallService.ts
+- LeasedCommand
+- runWithMongoEndpoint
 - AuthenticatorSetupInbox
 - .store
 - Attachments and media
-- PlatformProgram
+- webPlatform/types.ts
 - Error
 - ThingtimeAPIClient
 - publishing.ts
 - kindRenderers.tsx
 - MobileSyncConnections.tsx
-- getHomeThingsCollection
-- ScreenCaptureError
-- passwords/model.ts
-- method
+- recordingsWorker.ts
+- FakeScreenCaptureBackend
+- transfer.ts
+- programBuilders.ts
 - ComponentMapbox.tsx
 - chatTools.ts
 - WidgetAction
@@ -131,15 +131,14 @@
 - modelsCore.ts
 - TESTING.md — per-area manual test checklists
 - error
-- Sendable
-- MobileSyncTrash
+- Equatable
+- NativePhotoRunActivity
 - .main
 - org.json.JSONObject
 - local-runtime.cjs
 - indexing.ts
-- assert
 - connections/providers.ts
-- .events
+- webpageDemos.ts
 - error
 - error
 - error
@@ -152,46 +151,46 @@
 - error
 - error
 - ThingtimeWatchAttachmentUploader
-- moderationAdmin.ts
-- apps.ts
+- analyzeText.ts
+- getSessionsCollection
 - pagedRunJournal.ts
-- LopuRecordingUploads
+- ThingtimeWatchAPIClient
 - battle.ts
 - reporting.test.mts
 - ManagedFileReplica
-- ref_commander_protocol
-- NativeUploadPartRequest
+- Settings.tsx
+- useDeviceStore.ts
 - desktop.ts
-- landingSections.tsx
+- useThingtime
 - Feature To-Do README
 - NativePhotoExecutionLease
 - Mac download staging stream (2026-10-17)
-- ref_node_assert
-- View
+- generate-route-previews.mjs
+- ThingtimeWebView
 - IndexerError
-- behaviourSuites.ts
+- electronBridge.ts
 - worktree-ports.cjs
-- isFail
-- credentialVault.ts
-- deviceLiveAiCore.ts
+- LidarScanLibraryPage.tsx
+- moderationAdmin.ts
+- NativeUploadHttp.java
 - colors.tsx
-- PR #578 — App suites: Pokeworld + StarsAlign on Thingtime
-- plugin.ts
+- chatPrompt.ts
+- patTokens.ts
 - desktop-settings.cjs
 - ThingtimeNativeNotifications
 - quota.ts
 - core/src/lib.rs
 - logoVariants.ts
-- mail/model.ts
-- Auth, accounts and admin
+- useMail.ts
+- Password manager
 - ShareInbox
 - Synthetic personal recording runtime smoke
 - PhotoLibrary
 - mergeLanes
 - localAttachmentStorage.ts
 - verify-signed-app.mjs
-- devices.ts
-- ThingtimeWatchAPIClient
+- release-cache.cjs
+- ThingEntry
 - commitRootImpl
 - commitRootImpl
 - commitRootImpl
@@ -205,13 +204,13 @@
 - commitRootImpl
 - diffHydratedProperties
 - commitRootImpl
-- mediaPipeline.test.ts
-- ConnectorRuntime
-- dusted.ts
+- imagePipeline.test.ts
+- PhotoAutomationControls.tsx
+- snapquest.ts
 - AuthenticatorSetupBridge
-- LopuVoiceCaptures
+- workspaces.ts
 - dependencies
-- ChatGPTPlanRuntime
+- browserActionRuntime.ts
 - diffHydratedProperties
 - diffHydratedProperties
 - diffHydratedProperties
@@ -224,7 +223,7 @@
 - diffHydratedProperties
 - diffHydratedProperties
 - FileSyncIdentityAdmission
-- portableBackup.ts
+- ref_node_crypto
 - captureCommitPhaseError
 - captureCommitPhaseError
 - captureCommitPhaseError
@@ -236,7 +235,7 @@
 - captureCommitPhaseError
 - captureCommitPhaseError
 - captureCommitPhaseError
-- appSuites/index.ts
+- chats/reply/_reply.tsx
 - lopuChatStore.ts
 - captureCommitPhaseError
 - styleTokens.ts
@@ -245,14 +244,14 @@
 - ThingtimeWatchAudioRecorder
 - pokeworld/index.ts
 - agent-reporting-acceptance.mjs
-- deviceCommands.ts
+- PasswordProviderPhase
 - browserPasskey.ts
-- PasswordProviderError
-- catalog.test.ts
+- CredentialProviderViewController
+- marketing/types.ts
 - MobileDevicePairing
 - socialPreview.ts
 - acceptance-viewer.test.cjs
-- musing.ts
+- Devices/deviceCore.ts
 - ThingtimeNodeError
 - CommanderWebView
 - completeWork
@@ -268,15 +267,15 @@
 - completeWork
 - PR #1002 — Native mobile pairing and recoverable file sync core
 - thingmon/rules.ts
-- namespace.ts
+- SafeActionKind
 - sitemapCore.ts
 - timeline
-- RecoveryComponent
+- RecoveryCoreTests.swift
 - utils/mongodb/connectionInventory.ts
 - things-and-folders.md
-- garden.ts
+- dusted.ts
 - LiveAISyncCoordinator
-- Check
+- FolderBridge
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
@@ -289,22 +288,22 @@
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
 - "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"
-- reconcile.test.ts
-- backgroundTasks.ts
+- openaiProvider.ts
+- utils/environmentGateway.ts
 - migrationDiagnostics.ts
-- LopuChatActivityController
+- Coordinator
 - Mobile devices and file synchronization
 - socialCard.ts
 - ensure-dependencies.js
-- ProviderSession
-- platformReporting.ts
-- prConflictResolverModelWaterfallCore.ts
-- HttpExchange
-- build-local-app.mjs
-- NativeUploadHttp.java
+- deviceTypes.ts
+- requireAdmin
+- musing.ts
+- icons.test.ts
+- ref_node_child_process
+- chat.streaming.test.mts
 - devices/deviceCore.ts
 - marketing/catalog.ts
-- 🌈 Welcome 👋 to Thingtime 🦄 🧠
+- ProviderSession
 - source/support.js
 - claude-design-mockup-v2-fable/support.js
 - thingtime-app/support.js
@@ -317,23 +316,23 @@
 - thingtime-landing-1f-ecosystem-map/support.js
 - thingtime-landing-1g-magic-path-bar/support.js
 - thingtime-landing-1h-ultra-minimal-voxel/support.js
-- MobileDeviceDiagnostics
+- MobileDeviceDiagnosticEvent
 - DeviceScope
-- updown.ts
+- actionExpressions.ts
 - CommanderNativeBridge
-- pokeworld.test.ts
-- CredentialProviderViewController
-- morePackages.ts
+- PasswordProviderError
+- .frame
+- deviceStatusPresentation.ts
 - LauncherPanelController
-- webpageDemos.ts
+- behaviourSuites.ts
 - marketingPublicationsStore.tsx
 - LopuVoiceSessionController
 - ThingtimeWebDestination
-- NativePhotoRunActivity
-- appData.ts
-- deviceLiveAi.ts
-- Trusted developer ecosystem roadmap
-- .applicationDidFinishLaunching
+- createRuntime
+- GitHubReleaseCatalog
+- api/src/index.ts
+- .main
+- DeviceLocationService
 - pokeworld.ts
 - start
 - calculator.ts
@@ -344,7 +343,7 @@
 - SyncStagingTest
 - useAgentSession.ts
 - start
-- verification.ts
+- BrowserLeases
 - resources.rs
 - completeWork
 - install-local-app.mjs
@@ -371,12 +370,12 @@
 - mount
 - push
 - mount
-- apiDocs.ts
+- ref_node_assert
 - remix/package.json
 - graphify-cas.mjs
 - src/manifest.ts
 - marketing/_index.tsx
-- kindRenderersMedia.tsx
+- ExtensionsSettings.tsx
 - ShareInboxTests
 - native-lidar-scans.md
 - attachmentArchive.ts
@@ -393,22 +392,22 @@
 - scheduleUpdateOnFiber
 - scheduleUpdateOnFiber
 - Search and discovery agency roadmap
-- syncTaskRuntime.ts
+- TransferSpeedTrackers.tsx
 - PR 764 — portable Thing transfer
 - CommanderAppDelegate
 - filesystem-indexer/src/index.ts
-- Coordinator
-- NotificationsPage.tsx
-- providerProbe.ts
-- raycast-compat/src/store.ts
+- editable-sync-review.browser.tsx
+- branchwood.ts
+- Prepared
+- library/types.ts
 - constructor
-- ActivitySettings.tsx
+- vitest
 - constructor
-- chat.streaming.test.mts
+- account-restore-steps.integration.mts
 - start
 - NativePhotoBackupSummaries
 - start
-- api/package.json
+- deprecated/api/package.json
 - world.ts
 - constructor
 - components/EmojiPicker.tsx
@@ -425,7 +424,7 @@
 - mergeLanes
 - LiDARCaptureStore
 - constructor
-- ThingtimeMenuBarIconID
+- .applicationDidFinishLaunching
 - ChildReconciler
 - parse
 - parse
@@ -448,7 +447,7 @@
 - seed-fixture.mjs
 - backup-workspace.integration.mts
 - PhotoSourceIndexOutbox
-- UI shell, menus and design system
+- ScreenCaptureRawFrame
 - .main
 - constructor
 - MockScreens.tsx
@@ -461,7 +460,7 @@
 - constructor
 - starsalign.ts
 - .save
-- android.net.Uri
+- smarts/index.test.ts
 - updateDehydratedSuspenseComponent
 - updateDehydratedSuspenseComponent
 - updateDehydratedSuspenseComponent
@@ -473,14 +472,14 @@
 - updateDehydratedSuspenseComponent
 - updateDehydratedSuspenseComponent
 - updateDehydratedSuspenseComponent
-- thingtime.ts
+- ref_commander_protocol
 - conceptBits.tsx
 - .write
 - ShareComposerSession.swift
-- Launcher.tsx
+- nativeRequest
 - CommanderUtilityWindow
 - generate-thingmon-sprites.mjs
-- getSelectedImages
+- commanderTrim.tsx
 - INativeBridge
 - get
 - get
@@ -507,7 +506,7 @@
 - ChildReconciler
 - ChildReconciler
 - streaming.rs
-- @raycast/api
+- generators.ts
 - VERCEL_DEPLOYMENTS.md
 - constructor
 - querySafety.ts
@@ -520,10 +519,10 @@
 - ciControlRelocationCore.ts
 - constructor
 - tests/backup.rs
-- builderPages.test.ts
+- automationSwitches.ts
 - timeline-published-components.integration.mts
 - ApplicationResponsivenessService
-- raycastLocal.ts
+- PersistentStore
 - start
 - constructor
 - ConceptStories.tsx
@@ -536,12 +535,12 @@
 - thingtime-launch-celebration/support.js
 - CIControlDashboard.tsx
 - start
-- StorageMutationError
+- algorithms.ts
 - overviewCore.ts
 - mac-file-sync.integration.mts
 - start
 - core/src/main.rs
-- reporting.ts
+- window-zoom.test.cjs
 - generate-branding-assets.mjs
 - LiveAISyncCoordinatorTests
 - LiDARRecorder
@@ -564,20 +563,20 @@
 - dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay
 - Contracts and recovery
 - custom-drawer-acceptance.mjs
-- folder-transfer-worker.cjs
+- environment-gateway-acceptance.mjs
 - fileCrypto.ts
 - isObject
-- image-presentation-acceptance.mjs
+- getSelectedImages
 - isObject
 - brandScenes.ts
-- isObject
+- replace
 - MCP/package.json
 - isObject
-- LocalizedError
+- .run
 - isObject
-- MobileDeviceAlertActions
+- socialCardImages.test.ts
 - isObject
-- PasswordClient
+- router/src/index.js
 - isObject
 - file-export-host.cjs
 - isObject
@@ -585,37 +584,37 @@
 - isObject
 - stop
 - isObject
-- format.ts
+- platforms.test.ts
 - isObject
 - ServiceWorkspace.tsx
 - isObject
 - Web standards Builder app (2026-09-24)
-- indexCollectionsLifecycle.test.mts
+- PasswordCatalogItem
 - ciControl/store.ts
 - social-media.tsx
 - DaemonSupervisor
 - popHydrationState
 - mapbox.ts
 - mobileFolders.client.ts
-- Remaining acceptance
+- MCP/README.md
 - ClipboardPasteCoordinator
-- apiTests.ts
+- watchQuickApprovalTests.ts
 - constructor
-- ShareAcceptance
-- .summary
+- EditorHistory
+- shared-body-acceptance.mjs
 - Thingtime AI instructions
-- drafts.ts
-- createRuntime
-- BuilderDrawer.tsx
-- queryContract.ts
+- account-profile-backup.integration.mts
+- FileSystemIndexerClient
+- webpageBlocks.ts
+- Raw.tsx
 - magick-wasm NOTICE
-- createRuntime
-- deviceAlerts.ts
-- PasswordProviderRegistrationStart
+- ScreenCaptureKitSession
+- nativeFileIcons.ts
+- sync-web-standards.mjs
 - scripts
 - stop
 - stop
-- stop
+- initPlayback
 - stop
 - stop
 - musing.streaming.test.mts
@@ -627,50 +626,50 @@
 - stop
 - ThingtimeEmbedRuntime
 - SystemMetricsService
-- smarts/index.test.ts
+- plugin.ts
 - Things Page
 - desktop-ui/package.json
-- MobileFolderIgnoreRules
+- jobSchedules.ts
 - vaultEnvelope.ts
 - NativeFileUpload
 - LiDARTarArchive
 - Lease
-- deviceObservations.ts
+- mapboxOverlay.test.ts
 - PLAN/device-location-history.md
-- OfflineDocumentsProvider
-- passwords/passwords.ts
+- Foreground cloud downloads to offline folders
+- passwords/model.ts
 - MenuBarTelemetry
 - websiteIcons.ts
 - codexAppServer.ts
 - file-sync-folder-batches.integration.mts
 - AuthenticatorSetupSession
-- page-hook.js
-- waitlist.ts
+- deviceAlerts.test.mts
+- chatMedia.server.ts
 - PasswordSetupEditor
-- AI API costing — market analysis & research (August 2026)
-- utils/devices/deviceDiagnostics.ts
+- PR #308 — NSFW/TOS media moderation pipeline
+- .synchronize
 - verify-passkeys.mjs
 - Remote device files and brightness
-- .perform
-- Environment API gateways and index lifecycle
-- email/service.ts
+- webpages/seed.ts
+- file-sync-fingerprint.integration.mts
+- apns.ts
 - .inspect
 - org.junit.Test
 - structuredFields.ts
 - embed/runtime.ts
 - svgFixtures.ts
-- SchemasBrowsePage.tsx
+- localCache.ts
 - graphify-semantic.test.py
 - .make
-- CodexAppServerConnector
+- Shared Rust index and sync backend
 - Support agency and accountable remedy roadmap
 - connector-mutations-acceptance.mjs
 - SampleTree.tsx
-- tests.tsx
-- utils/nativeBridge.ts
+- apiTests.ts
+- nativeSyncTasks.client.ts
 - PR #1002 note — mobile pairing and recoverable file sync
 - Setup for Forks
-- voiceCaptureQueue.test.ts
+- VoiceCaptureQueue
 - throwException
 - throwException
 - throwException
@@ -684,9 +683,9 @@
 - throwException
 - Web standards Builder app
 - attachment-upload.cjs
-- .run
+- moderationSettingsCore.ts
 - PR 557 — Grow Thingtime's world-domination TODO garden
-- watchPairing.ts
+- connectionTracker.ts
 - media-cache-sw.mjs
 - AI Advice: Agents And Councils
 - .environment
@@ -709,21 +708,21 @@
 - .render
 - Google service actions
 - tests/inventory.rs
-- pageOps.ts
+- .start
 - Feature Stacks
 - application.cjs
 - scripts
 - PR 299 Performance Audit Findings, Notes and Fixes
-- things/thingStoragePolicy.ts
+- v1/things/_things.tsx
 - editorJsPopoverViewport.test.ts
 - devDependencies
 - Content-addressed Graphify snapshots
-- timeline-recovery.integration.mts
+- WidgetOAuthRequest
 - Unified Thing history and timeline browser baseline
-- Prepared
+- PasskeyMaterial
 - LiDARCaptureTests
-- icons.test.ts
-- .invalid
+- .summary
+- Check
 - incoming-share.test.cjs
 - browser-extension/manifest.json
 - test
@@ -740,92 +739,92 @@
 - test
 - ShareViewController
 - passwordEntryBlocks.ts
-- domFixtures.ts
-- editorJsValue.ts
-- Fixture
-- MailError
+- Thingtime browser extension
+- kindRenderersMedia.tsx
+- packs/index.ts
+- mongoConnectionInventoryBlocks.test.ts
 - apple/README.md
-- contract.ts
-- .synchronize
-- runOperation
+- namespace.ts
+- Thingtime production MongoDB: index storage audit and restructure
+- moveImageResultsToFinalDestination
 - .evidence
-- EditorHistory
+- editorJsHtml.ts
 - scripts
 - Validation — targeted native, API, web and Builder checks
-- app/fileSync: reconcile.ts three-way planning, execute.ts stable operations/receipt recovery and journal.client.ts browser queue
-- commentProjection.test.mts
-- requireAdmin
+- raycastLocal.ts
+- mapboxOverlay.ts
+- services/search.ts
 - editorJsBlockReorder.ts
-- mongoConnectionInventoryBlocks.ts
-- verify-lopu-actions.mts
+- thingParentPathsCore.ts
+- Trusted developer ecosystem roadmap
 - backup-worker.test.cjs
 - OAuthCallbackHandoffError
-- Preview retention and PR liveliness
+- queryContract.ts
 - Selected Ordinary Graph Execution Primitives
 - Community safety and accountable moderation roadmap
-- FixtureController
-- library/runtime.test.ts
-- workspaceAppComposition.ts
+- tests.tsx
+- optIn
+- ClientTests
 - android.content.Context
 - app
-- test-file-sync-transfer-admissions.mts
+- folder-transfer-worker.cjs
 - _data.js
 - mcp.tsx
 - PR #596 — Add native Apple Watch notifications
-- MacPhotosSyncTests
+- Local development and worktrees
 - tt-logo Custom Element
-- root.tsx
+- mongoConnectionInventoryBlocks.ts
 - runtime/package.json
 - graphify-semantic.py
 - Result: resilient media sharing and explicit Live Photo playback
 - Resumable Ordinary Graph Creation Primitive
 - Portable backup vault tooling
-- react-router
+- liveComponent.tsx
 - seo-social-metadata.md
-- PasskeyMaterial
+- catalogImport.ts
 - Pop3Reader
 - Thingtime Icon (SVG source, green/brown plus-cross pixel mark)
 - ChatGPT plan connections (local/self-hosted)
 - list
 - GlobalHotKeyRegistry
-- provider.ts
-- mail/localStore.ts
-- nodeRuntime.ts
+- mail/store.ts
+- cloudflare/api/package.json
+- mail-sync.test.cjs
 - activity-manager.test.cjs
-- .matching
-- backupDestinations.ts
+- ScreenCaptureError
+- editorBlockChrome.ts
 - CommanderSettingsTab
 - typecheck-ratchet.mjs
 - calcLength
-- thing.tsx
-- Thingtime Node for macOS
+- useApi.tsx
+- liveSessionDiscovery.ts
 - DocsLayout.tsx
 - builder-sdk.browser.tsx
 - Thingtime Pink Logo Master (SVG)
-- jsonlRpc.ts
+- FilterBuilder.tsx
 - compilerOptions
-- MacShareItemImporter
+- .save
 - api.tsx
 - daemon/package.json
 - app-locations.cjs
-- brandIdentity.ts
-- webpages/seed.ts
-- DeviceTelemetryCollector
-- mail/store.ts
-- ClientTests
+- passkeys.ts
+- ScreenCapture.swift
+- DeviceResourceSampler
+- apiTestRunner.ts
+- test-device-diagnostics.mts
 - Mobile Sync Connection Editor
 - bridge.c
-- backupJobs.test.mts
-- thing-metadata.integration.mts
-- generate-route-previews.mjs
-- MobileDeviceDiagnosticOutboxTests
+- verify-password-manager.mjs
+- Geo-distributing Thingtime — one URL, region-local speed, one source of truth
+- build
+- deviceDrawerPreferences.ts
 - timeline.integration.mts
-- Foreground cloud downloads to offline folders
+- Static analysis baselines and coverage
 - CommanderPanel
 - api/src/index.js
-- Where the code lives
+- numeric-summary-acceptance.mjs
 - Paged foreground conflict review (2026-10-19)
-- codexLocalHistory.ts
+- 56 — Unified Thing history and the timeline browser 🕰️
 - .make
 - LoopbackPortInspectorError
 - Thingtime Owned Email Architecture
@@ -834,16 +833,16 @@
 - timeline-quota.integration.mts
 - Personalization Agency and Accountable Memory
 - ordinary-restore.integration.mts
-- characters-acceptance.mjs
+- image-presentation-acceptance.mjs
 - queryBuilderState.ts
-- listQuery.ts
+- Hosting options and cost per call and per user
 - 03 — Auth: Login / Register / Sessions / JWT 🟢
 - credentialImportBlocks.ts
 - Execution Log
 - compilerOptions
 - content-vault.js
 - Commander/script/build_and_run.sh
-- vercel.tsx
+- deviceDrawerLayout.ts
 - docsCode.tsx
 - Token
 - BatchCallbackReply
@@ -852,9 +851,9 @@
 - Content provenance and correction roadmap
 - PR #710 — Verified vault credentials
 - commitPlacement
-- projectRegistry.ts
+- liveEventFixtures.ts
 - searchCache.ts
-- Map
+- authored-controls.browser.mjs
 - ReleasePackageTests
 - Remote Brightness and Files
 - emoji-picker-acceptance.mjs
@@ -863,9 +862,9 @@
 - calcLength
 - protocol/src/index.test.ts
 - lopuVoiceRealtime.test.ts
-- utils/timeline/versions.ts
+- timeline-recovery.integration.mts
 - calcLength
-- deviceFilesystemCore.ts
+- builder-entrypoint-acceptance.mjs
 - calcLength
 - calcLength
 - calcLength
@@ -882,26 +881,26 @@
 - mac
 - ChatGPT plan usage on a local or self-hosted runtime
 - rules
-- PR #755 — Independent files in shared app forks
+- 27 — Trusted developer ecosystem 🧩
 - chatGPTPlanBlocks.ts
 - analyzeAttachment.ts Orchestrator
 - PR 1272: iOS share destination for all offered content types
-- thingtimeSyncChannel.ts
+- SchemasPage.tsx
 - Unified Timeline
 - Editable record app primitives
 - 39 — Recording agency and intimate-data stewardship
-- timeline/sync.ts
+- contract.ts
 - createVaultController
 - Commander visual system
-- lopu-send.browser.tsx
+- .canDisconnect
 - compilerOptions
 - thingReplicas.client.ts
 - AWS/README.md
 - dependencies
-- agent-browser-native-dependencies.test.cjs
+- Thingtime Node for macOS
 - Thingtime Embed SDK
-- relationshipIndexLayout.ts
-- optIn
+- mapboxGrouping.test.ts
+- timelineExportDownload.ts
 - lopu/package.json
 - AI agency and accountable-assistance roadmap
 - Collaboration agency and shared-stewardship roadmap
@@ -915,12 +914,12 @@
 - Auth and Lopu AI
 - PR #719: shared CSS media context
 - Local-first agency and accountable-synchronization roadmap
-- ProcessUsageHistory
+- staleChunkRecovery.ts
 - 20 — Run actions from the component tester ⚡
 - PR #201 — Add private S3 post attachments with tier accounting
 - Header
 - ClosureMenuItem
-- MobileSyncTrash.swift: recoverable same-volume moves, exclusive restore and separately consented fileTrashVersion 1.2.0
+- nativeSyncVisibility.test.ts
 - verify-demo-apps.mjs
 - Real Browser Portable Transfer Acceptance
 - 30 — Resource-conscious reach 🌱
@@ -942,16 +941,16 @@
 - PR #212 — secure `develop`-target PR previews
 - PR 39: Add API self-documentation routes
 - PR #731: Lopu unified conversations, scheduled Things, attachments and discussions
-- deviceAlerts.test.mts
-- install-local-app.test.cjs
+- landingSections.tsx
+- FixtureController
 - bindingPatterns.test.ts
 - raycast-env.d.ts
 - editorJsKeyboard.ts
-- endpoint.ts
+- _endpoints.tsx
 - Youth safety and age-appropriate agency roadmap
-- definitions.test.mts
+- Ethical adoption baseline
 - initializePasswordWorkspace
-- partialJson.ts
+- PR 652 Commander App Ranking
 - Renderer port and origin recovery
 - 28 — Service continuity and recovery
 - 29 — Content provenance and correction integrity
@@ -968,7 +967,7 @@
 - commitPlacement
 - commitPlacement
 - commitPlacement
-- numericSummary.ts
+- Relational access entries
 - commitPlacement
 - commitPlacement
 - commitPlacement
@@ -976,10 +975,10 @@
 - commitPlacement
 - commitPlacement
 - commitPlacement
-- 56 — Unified Thing history and the timeline browser 🕰️
-- PR 190 — Per-feature develop to main promotion PRs with stacks
+- DeviceAudioControls.tsx
+- platformApis.ts
 - release-workflow-contract.test.cjs
-- build
+- Map
 - embed.tsx
 - Accessibility and language-readiness baseline
 - pr-1000-protection-2026-11-13/manifest.json
@@ -989,21 +988,21 @@
 - Account restore admission and review planning
 - PR #1397 — private device location history and alerts
 - PR 1451 — Resume interrupted iPhone Photos backups and stream newest-first batches
-- transferAdmissions.ts
+- cloudTransport.ts
 - PR #436 — Make Graphify output conflict-free
 - MongoDB
 - PR #707 — Shared root inheritance and read-only app use
-- ProviderIdentityTests
+- test-thing-pins-ui.mjs
 - musingDeadline.test.mts
 - entry.ts
-- Portable backup vault
-- appLifecycleCore.test.ts
-- JsonlRpcProcess
+- file-sync-batch-budget.integration.mts
+- Milestones
+- PR #755 — Independent files in shared app forks
 - DictationSilence
 - Creator sustainability and fair-value baseline
 - verify-app-suites.mjs
 - verify-app-storage.mjs
-- accountConfiguration.test.mts
+- run-api-tests.mts
 - Admin dashboard, subscription tiers & ownership links
 - Editable Mapbox Maps and Route Planning
 - 32 — Learning agency and knowledge stewardship 📚
@@ -1015,32 +1014,32 @@
 - 46 — Evidence agency and accountable product claims
 - 49 — Personalization agency and accountable memory
 - safeOrigin
-- archiveAvatarDownload.ts
-- desktop-oauth-login.mjs
+- timeline-folders.integration.mts
+- timeline-folders-large.integration.mts
 - SpeechCapture
-- library/catalog.ts
-- FilterBuilder.tsx
+- Technical Next Steps
+- BsonValueEditor.tsx
 - Resource-conscious reach baseline
 - Service continuity and recovery baseline
 - Change agency and humane product evolution roadmap
 - Evidence agency and accountable product claims roadmap
 - RawResults.tsx
-- Local media processing in reusable Components
+- iOS file-backed multipart upload path
 - Action Thing v1 Security Review
 - PR #665 — private Watch recording automation
 - PR #954 — Public schemas, uploads and Lopu instructions
 - incoming-sharing.md
-- DemoDetailPage.tsx
-- Thingtime performance audit
+- Change agency and humane product evolution baseline
+- PR #864 — Five creative builder demo app suites
 - auth/users.ts
 - editorJsRuntimeImports.ts
 - PR #232 — Add media galleries and managed profile attachments
-- ref_node_crypto
+- personal-recording-cli.mts
 - Thingtime Pink Icon (SVG source)
 - Thingtime Logo (SVG pixel-art wordmark source)
 - Sections.tsx
 - calcLength
-- browserModel.ts
+- timeline-notes.integration.mts
 - 23 — Data portability and graceful exit 🧳
 - 24 — Attention agency and calm use 🌿
 - 25 — Accessibility and language readiness 🌍
@@ -1053,28 +1052,28 @@
 - PR #650 — Persistent media, responsive images and AWS restore configurations
 - describeNativeComponentFrame
 - AI agency and accountable-assistance baseline
-- API endpoints and capabilities
+- README.md
 - Release Job
 - .project
-- .validate
-- .accepts
+- Android retained-version recovery development
+- timeline-components.integration.mts
 - Search and discovery agency baseline
-- personal-recording-worker.test.ts
-- Failure
+- verify-actions.mjs
+- verify-components.mjs
 - Follow-Up Notes From PR #16
 - /api/v1/things/reveal
 - PR #533 — Feature Stack progress heartbeats
-- Hosting options and cost per call and per user
+- Vercel cost reduction: getting back to $0.50–$2 a day
 - PR 867 — Seamless Lopu and Things controls
-- queryRunner.ts
+- deviceResourceMetrics.ts
 - ref_node_url
 - unlinkRetirement.test.mts
 - .dispatch
 - 19 — Anonymous participants in group chats 🕶️
-- timelineExportDownload.ts
-- PR #237 — Add media attachments across conversations
-- IndexingSettings.tsx
-- PR #909 — Add reusable DOM receivers to Web standards programs
+- timeline-versions.integration.mts
+- verify-webpages.mjs
+- 16 — Full-power app namespaces
+- page-hook.test.mjs
 - file-export-link-publisher.cjs
 - sameWorkspaceTarget
 - normalizedText
@@ -1085,80 +1084,80 @@
 - 26 — Community safety and accountable moderation 🛡️
 - Login.tsx
 - compilerOptions
-- liveActivityDelivery.test.mts
+- bundled-renderer.test.cjs
 - src/package.json
-- personalRecordingStore.test.mts
-- filesystemChanges.test.ts
+- server.mjs
+- PR #1047 — Editable live agent overview
 - ThingtimeWatchApprovalHandoff
 - ThingtimeAutomationSwitches
 - Automation agency and accountable-recurrence baseline
 - Joyful delight and play agency baseline
-- ApiTryIt.tsx
+- PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙
 - ThingtimeAutomationSwitches
 - cloudDestination.ts
 - PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section
-- mobile-sync-installed-fixture.mts
+- PR 190 — Per-feature develop to main promotion PRs with stacks
 - PR #312 — Media Thing pages and gallery layouts
 - PR 866 Isolated Remote Integration Runtime
 - PR #92 — Cross-tab sync for persisted Thingtime state
 - 05 — Authed DB Write (Create / Update / Delete) 🔴
-- vercel-build.mjs
+- 14 — Editor.js block drag/drop reordering 🟢
 - FullDiskAccessService
-- Thingtime marketing suite
+- Where things live
 - Thingtime Passwords XcodeGen Project
-- builder-entrypoint-acceptance.mjs
+- verify-subspaces.mjs
 - Favicon Import HTML
 - Thingtime Pixel-Block Rainbow Wordmark
 - thingtime-login.js
-- PR #1462: Drain retired gateway connections
-- .reuseDuration
+- Web standards Builder app
+- omniRequest.ts
 - Built Schema Platform
 - PR #315 — claude/fable-five-funtime — overnight feature build
 - PR #611 — Lopu toast position + `/notifications` history (`claude/lopu-toast-position-notifications-history`)
 - componentDidMount
 - PR 1364 — Authored rich fields, context menus and map marker controls
 - ai-waterfall-selector.md
-- Client entry points
+- googlePlaces.ts
 - Approved iOS download publication — 2026-10-17
 - Thing index consolidation — September 2026
-- syncJobJournal.ts scoped execution audit and saved-job preservation
+- devDependencies
 - PR #13 - Hydration, Vercel Status, and Deployment Hygiene
 - Contracts and boundaries
-- _deployments.tsx
+- 🦄 Handoff: Schema browser / builder / search-by-schema
 - PR #607 — Rich route-aware Thingtime link previews
 - PR #397 — Lopu CodeQL for every PR target
-- prConflictResolverModelWaterfallCore
+- Editable maps and routing
 - PR #635 — Complete Editor.js rich text styling
 - PR 767 — Unified Thing menus, native links and search history
 - PR #947 — History timeline / events browser + Evolution view design concepts
 - Brand Logo SEO PR Note
-- ConnectionState
-- dashboardFailure.ts
+- desktop-shutdown.test.cjs
+- resource-transfer-process.cjs
 - Gifted signup invitations
-- mail.test.ts
-- _template.tsx
-- API — per-request handler work
-- Marketplaces And App Store
-- 24 — Migration-safe continuous availability
-- platformReportingSettingsBlocks.ts
-- previewRetentionSettingsBlocks.ts
-- PR #1015 — Complete 1PUX imports and encrypted password attachments
-- NativePasswordConnectionController
+- mail-storage.integration.mts
+- vault-credentials.mjs
+- PR 747 — shared saved action contexts
+- PR #853 — Builder uploads, form saves, SDK docs and scoped lookups
+- seed-demo-app.mjs
+- timeline-themes.integration.mts
+- verify-messenger.mjs
+- strip-exif.ts
+- verify-pat-tokens.mjs
 - commanderShortcut.ts
 - messageNotifications.test.mts
 - SemanticRefresh
 - Subspaces Testing
-- Technical Next Steps
-- PR 1471 — saved sync receipt and scanner recovery
+- native-password-package.test.cjs
+- 24 — Migration-safe continuous availability
 - iOS
-- Mac paged transfer acceptance
+- permission-settings-locations.test.cjs
 - Support agency and accountable remedy baseline
-- Shared filesystem indexer
+- .encode
 - Guarded sync ancestor deferral and healthy startup timing
-- file-export-link-publisher.test.cjs
-- PR 1282: Keep Commander indexes fresh without interrupting search
+- Marketplaces And App Store
+- PR #1070 — Lopu defaults and per-chat AI credentials
 - PR #28 — Drawer-based nav revamp (branch `codex/service-account-api`)
-- Frontend — bundle size and code splitting
+- Confirmed findings not yet fixed
 - Lopu PR Manager
 - PR #427 — Overhaul web search and Commander results
 - PR #1534 — Branding: square logo, light/dark backgrounds, ten fun cuts
@@ -1171,25 +1170,25 @@
 - PR 893: Reusable record controls and browser Action composition
 - PR 894: Editable planner, address, and record workflows
 - Trigger and correction
-- accountInventory.ts
-- userPresence.ts
+- PR #1328 — Scoped native password delivery on Linux and Windows
+- PR1386 — Source reference coverage and notification history
 - LiDARCameraView
 - PR #64 — Add no-code MongoDB query workbench
-- PR #714 — Shared Data template controls
-- Change agency and humane product evolution baseline
-- Incoming shares
-- bulkWriteError.ts
+- PR #813: Feed algorithms, discovery and geographic queries
+- release-version.mjs
+- PR #183 — Add automatic AI rebase support for PRs and stacks
+- PR #875 — Integration builder pages
 - CI control-plane storage
-- Failure
+- PR #26 - Environment-Aware Footer Status Checks
 - Tiny UX And Product Polish
 - browser-extension/package.json
 - daemon/tsconfig.json
 - Image Modification DevLog - A more detailed changelog
-- PR 814 — Background AI execution and recovery
+- Social previews and search metadata
 - filesystem-indexer/tsconfig.json
 - protocol/tsconfig.json
 - raycast-compat/tsconfig.json
-- PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations
+- Native iOS TestFlight web URL
 - PR #790: signup invitations with gifted credits
 - anatomy
 - anatomy
@@ -1203,50 +1202,49 @@
 - anatomy
 - anatomy
 - anatomy
-- PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙
+- mediabunny
 - Thingtime iOS Agent Runbook
 - ReleaseVersionTest
 - PR #206 — Keep feature promotion running across historical Git failures
-- storageFailure.test.ts
+- routeExecution.ts
 - Native paged folder captures — 2026-10-18
 - Dedicated MongoDB connections and environment gateway defaults
-- PR #295 — third-party-app-integration: connect 3rd party apps
+- v1/passwords/passwords.test.ts
 - Service Account Provisioning API
 - PR 1496 — Render synced file media and open PDFs inside Thingtime
 - PR 1502: Reduce preview request costs and bound background work
 - Security Follow-Up - 2026-06-23
-- Recoverable Apple native Trash foundation — 2026-10-17
-- Round 2 — URL media as first-class linked attachments + moderation fixes
+- UploadXhr
+- repository
 - PR #200 — Document shared Preview runtime and Production isolation
 - 07 — Cross-tab sync for persisted thingtime state
 - PR #627: GitHub release catalogue and Recovery installer repair
 - main.tsx
-- 14 — Editor.js block drag/drop reordering 🟢
-- emojiSplash.ts
-- PR #210 — Promote the Actions control-plane rollup
+- Unified Things Collection
+- 1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md
+- Portable JSON and ZIP Transfer
 - background.test.mjs
 - PR #325 — Structural relationship uniqueness
 - thingtime.com router Worker
-- LauncherWindowMode
+- traversalTestCases.ts
 - CommanderCursorFixtureNavigationDelegate
 - PR #753 — Preserve public component audience boundaries
-- CloudTransportRuntime.authorizeMutation
 - PR #550 — Saved Feature Stack run controls
 - 842-codex-lopu-auto-continue-remove-lopu-task-caps.md
-- Image presentation for profile and subspace media
+- PR #383 — Fix Thingtime Recovery SwiftUI startup crash
 - PR 895 Editable Linked Records and Copy-Safe App Flows
 - PR #898 — JavaScript standards fixtures and browser availability
 - PR #983 Published Component Restoration
 - Verification and provenance
-- .content
+- XCTestCase
 - PR 1352 — empty attachment reads and mixed large-folder sync proof
-- mac-fixture-worker-trust.cjs
-- JsonRpcTransport
+- PR 1062 — Stream device file transfers as indexing produces entries
+- Precise collection paging and progressive maps
 - Displacement Gradient SVG
 - renderLoginButton
 - PR 1375: guarded compound Mac upload transport
 - verify-admin-subscriptions.mjs
-- Shared Rust index and sync backend
+- PR #65 — Everything is a thing: satellite collections collapse into things
 - Media uploads and attachment gallery
 - Integration Catalogue
 - PR 1045 — Subspace messages, saved views and moderated embeds
@@ -1254,25 +1252,14 @@
 - AI Era Value Moats Light Report
 - Public Connections Provider Icon Route
 - PackageDescription
-- PR #498 — Saved multi-target Feature Stacks
 - vault.test.mjs
-- Performance TODO
+- PR 811 — Shared System vault and OAuth-only Claude
 - PR #222 — Typecheck ratchet warning-only CI
 - Commander search core
-- PR #956 — Relational Timeline foundation
-- PR #482 — Make Thingtime MCP limitless, composable, and safe
 - PR 870 Functional Demo Forms and Controls
-- Marker
-- createEmotionCache.ts
-- attachmentCascadeCore.ts
-- values
-- 1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md
 - ShareItemProviderBridge
-- createGoogleMailOAuth
 - generate-social-card-font.mjs
 - build-bundle.sh script
-- browserPasswordFill.test.ts
-- websites.ts
 - PR #897 — Reusable web standards Builder catalogue and isolated demos
 - PR #1014 — Google login and Gmail actions
 - PR #1256: Add dedicated Password Manager and Chromium passkey provider
@@ -1282,43 +1269,29 @@
 - PR #163 — Fix worktree setup and unify AI instructions
 - PR #178 — Configurable PR conflict-resolver model waterfall
 - PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals
-- ios-folder-upload-policy.md
-- Editable maps and routing
+- recordingTranscripts.test.mts
+- deps
 - PR #505 — Admin CI Feature Stacks and opt-in PR previews
-- PR 1466 — iOS Photos background transfer hardening
 - PR #40 — Feed with personal doomscroll algorithms, full profiles + dedicated settings
 - Notification History
 - ThingtimeShare/build.sh
 - ThingtimeShare/test.sh
-- Database — index coverage and query shape
-- PR 1219: Custom drawer links and Commander attachments
 - PR 869 Remote Integration Examples
 - PR #876 — Franchise production verification fixes
 - PR #201 — Private S3 post attachments
-- PR #326 — Reopen the data-crystal namespace
-- Architecture — multi-node, cross-region and real-time
-- PR #1340: Device sync resource history
 - PR #705: Save system events and retain user history
 - Failure
 - PR #782 — Clear Feature Stack progress and Ask Lopu
-- CodingKeys
 - app/sessions.ts
 - demo-integrity.js
-- PR #964 — Help Lopu inspect Action contracts and recover from errors
-- PR #971 — Keep home History accessible across database selections
 - PR 816 — Lopu uploads, provider media, HTTP and mobile keyboard
-- PR 1463: Shared Archive and Restore in persisted Thing menus
 - Daily provider model availability
 - Develop-target Vercel PR previews
 - Personal Recording Worker Transport and HTTP Integration
 - Lopu Apple Watch Recording Automation
-- Confirmed findings not yet fixed
 - PR #984 — Show a page and its related Things in one Timeline history
-- PR #990 — Mac battery telemetry and full device Things page
-- PR #853 — Builder uploads, form saves, SDK docs and scoped lookups
 - Admin Preview Retention API
 - Core Thing Loops
-- network.ts
 - Public Accountability Systems
 - PR 722 iOS Voice Recording Things
 - Thingtime Prototype v1 Questionnaire
@@ -1327,34 +1300,24 @@
 - build-ios.sh
 - PR1052 — Commander Rust indexing and resilient Mac backup verification
 - scripts/build.sh
-- UploadXhr
+- 01 — MongoDB Connection Status ✅
 - UploadXhr
 - Account profile/preferences checkpoint — 2026-10-18
-- PR 1498: private device diagnostics and Photos metadata recovery
-- PR #875 — Integration builder pages
-- PR #978 — Preserve recorded component definitions in Timeline page versions
+- 02 — DB Populate / Seeding 🟡
+- 12 — Multi-emoji reactions, custom emoji picker, optimistic UI 🟢
 - Home-folder upload and two-step progress — 2026-10-19
-- deviceObservationRoutes.test.mts
+- 18 — Account invite links with optional profile prefill 🔗
 - Retention checkpoint — 2026-10-19
-- ensure-bcrypt-binding.js
-- UploadXhr
-- Installed iOS download and process-exit acceptance — 2026-10-17
-- UploadXhr
+- PR #1009 — Incoming mail accounts, proxy inboxes and cloud/local sync
 - normalizeCommanderThingtimeClientId
 - fuzzyTextScore
 - 1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md
-- PR 740 — shared-page load recovery and viewer isolation
-- PR #844 — Add page context and flexible docking to Lopu
+- PR 1064 — Upload Mac sync parts through the scoped desktop host
 - PR #899: Compose editable planner and themed collections
-- MobileFolderBridge.startInventoryCapture
-- PR1056 — Resume Mac backup imports across reconnects and restarts
-- macOS system sharing
-- 1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md
+- Device sync placement, parent paths and activity ownership
 - Subspaces Communities and Updown Votes
-- Thingtime paged backup and restore
-- repository
+- PR 1227 — Explicit render Components for Things
 - Fix Commander launch and icon beachballs
-- Local file-sync recovery details disclosure
 - Admin API
 - Linked Attachments
 - PR #513 — Admin CI refresh resilience
@@ -1363,31 +1326,28 @@
 - Thingtime Node
 - Component
 - Private Chat Archive
-- PR 57 — Share Thingtime through a single-file embed SDK
 - PR 816 Lopu Uploads Provider Attachments HTTP and Mobile Keyboard
 - Franchise Workspaces and Vault Environments
 - SearchHit
-- Canonical unlisted links and inherited audiences
-- PR1386 — Source reference coverage and notification history
-- PR 1489: Incremental Photos source index
 - Dedicated MongoDB connections and environment gateway defaults
 - Reviewed account file publication
 - Detached DOM Recipes and Boundaries
 - Application HTML Shell
 - Thingtime Isolated Map SDK Page
 - slow-query-indexer.mjs
-- Native paged folder captures — 2026-10-18
 - apiAcceptance
 - verify-app-namespaces.mjs
 - Black and White QR Code SVG
 - AI merge-conflict resolver
 - Shared app-data
 - Content-addressed Graphify snapshots
+- PR #489 — Add verified multi-target Feature Stacks to main
 - 15 — Anti-abuse: global storage budgets + verification gates
 - App-manager GUI: register an OAuth app
 - Lead Agent
 - Portable Backup Storage and Export
 - Commander.Host.csproj
+- PR #664 — Account-tier speed-test allowances
 - PNPM Workspace
 - .prettierrc.json
 - dev-parallel.sh
@@ -1410,21 +1370,23 @@
 - Inlined React 18.3.1 Runtime
 - thingtime-launch-celebration/ds/tt-elements.js
 - 🎉 Thingtime — launch celebration page
+- PR #886 — Demo apps adopt native dialogs, countdown and local controls
 - api.attachment-content
 - Editable Repeated Card Template
 - viewer.js
 - commander-indexer
+- PR #903 — Add reusable JavaScript language definitions
+- PR #977 — Edit named Timeline branches in the visual Builder
 - PR 1226: Match the final Add drawer row and expose its editable Thing template
 - PR 1394: avoid redundant guarded folder-echo verification
 - Private relational location observations
 - repository
 - PR #1484: Preserve a newer signed AutoFill companion
-- Bounded folder metadata validation — 2026-10-21
 - PR #389 — Load all Commander result icons without blocking
 - ciControl Satellite Collection
 - Social Card Renderer
 - System Things Model
-- Download All Attachments
+- openCommander.ts
 - PR #66 — Extended props, schema-less crystals + stranded email/password-reset/2FA port
 - Paired Desktop Node
 - PR 796 Mobile Sign-in and Invite Review
@@ -1434,13 +1396,8 @@
 - engines
 - Copy Nested Comments and Attachment Galleries
 - scripts
-- Closed host phase timing — 2026-10-21
-- platforms.test.ts
-- Home-folder upload and two-step progress — 2026-10-19
-- Resumable partial home backups — 2026-10-19
-- Local API fallback safety and incident cleanup
+- morePackages.ts
 - PR #987 Timeline Action Outcomes
-- Wide-folder cloud path observations
 - Credit indexing work to the shared scan budget
 - pnpm Workspace Configuration
 - ATTRIBUTION.md
@@ -1474,7 +1431,6 @@
 - "remix/node_modules/.pnpm/hoist-non-react-statics@3.3.2/node_modules/hoist-non-react-statics/dist/hoist-non-react-statics.cjs.js"
 - Thingtime Launch Celebration README
 - card
-- webPlatform/types.ts
 - Feed Thing Rendering
 - .eslintrc.json
 - Lopu CodeQL all branches workflow
@@ -1548,8 +1504,6 @@
 - ThingtimeWidgets/script/build-production-release.sh
 - ThingtimeWidgets/script/verify-production-bundle.sh
 - Platform-Compatible Audio Derivative
-- Home upload exclusions and hierarchical progress
-- Limitless MCP Lab
 - Canonical restore writers
 - Separately versioned streaming codec
 - Command retry identity and playback reauthorization
@@ -1796,6 +1750,9 @@
 - THINGTIME_PHOTO_BACKUP_TEST
 - THINGTIME_PHOTO_UI_AUTOMATION
 - THINGTIME_SYNC_INSTALLED_ACCEPTANCE
+- 22 — Everything is a thing: collapse the satellite collections
+- Unified Lopu Conversations, Scheduled Things and Discussions
+- Public Upload Approval
 - Synthetic Live Photo fixture
 - Isolated Chromium Driver
 - Canonical JWT and Current-User Resolution
@@ -2096,19 +2053,19 @@
 
 ## Import Cycles
 - 2-file cycle: `filesystem-indexer/crates/indexer/src/lib.rs -> filesystem-indexer/crates/indexer/src/read_policy.rs -> filesystem-indexer/crates/indexer/src/lib.rs`
-- 3-file cycle: `remix/app/api/utils/things/contentExecutionGate.ts -> remix/app/api/utils/timeline/repository.ts -> remix/app/api/utils/timeline/versionNames.ts -> remix/app/api/utils/things/contentExecutionGate.ts`
 - 3-file cycle: `remix/app/components/Feed/MentionAutocomplete.tsx -> remix/app/components/Profile/ProfilePage.tsx -> remix/app/components/Feed/PostComposer.tsx -> remix/app/components/Feed/MentionAutocomplete.tsx`
 - 3-file cycle: `remix/app/components/Builder/BlockStructureModal.tsx -> remix/app/components/Settings/SettingsDocumentHost.tsx -> remix/app/components/Builder/useBuilderChrome.tsx -> remix/app/components/Builder/BlockStructureModal.tsx`
 - 3-file cycle: `remix/app/components/Builder/Maps/ComponentMapbox.tsx -> remix/app/components/Builder/liveComponent.tsx -> remix/app/components/Kinds/HtmlThingRenderer.tsx -> remix/app/components/Builder/Maps/ComponentMapbox.tsx`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
+- 3-file cycle: `remix/app/api/utils/things/contentExecutionGate.ts -> remix/app/api/utils/timeline/repository.ts -> remix/app/api/utils/timeline/versionNames.ts -> remix/app/api/utils/things/contentExecutionGate.ts`
 - 4-file cycle: `remix/app/api/utils/timeline/exportVersion.ts -> remix/app/api/utils/timeline/versions.ts -> remix/app/api/utils/timeline/publishedComponents.ts -> remix/app/api/utils/timeline/service.ts -> remix/app/api/utils/timeline/exportVersion.ts`
-- 4-file cycle: `remix/app/api/utils/things/things.ts -> remix/app/api/utils/timeline/recordMutation.ts -> remix/app/api/utils/timeline/componentBindings.ts -> remix/app/api/utils/webpages/webpages.ts -> remix/app/api/utils/things/things.ts`
 - 4-file cycle: `remix/app/components/Attachments/PdfDocument.tsx -> remix/app/components/Kinds/HtmlThingRenderer.tsx -> remix/app/components/Builder/ComponentAttachments.tsx -> remix/app/components/Attachments/PostAttachments.tsx -> remix/app/components/Attachments/PdfDocument.tsx`
 - 4-file cycle: `remix/app/components/Feed/PostCard.tsx -> remix/app/components/Thingtime/ContextMenu/PersistedThingMenu.tsx -> remix/app/components/Things/ThingsDialogs.tsx -> remix/app/components/Things/ThingComments.tsx -> remix/app/components/Feed/PostCard.tsx`
-- 5-file cycle: `remix/app/api/utils/things/managedPlacement.ts -> remix/app/api/utils/timeline/recordMutation.ts -> remix/app/api/utils/timeline/componentBindings.ts -> remix/app/api/utils/webpages/webpages.ts -> remix/app/api/utils/things/things.ts -> remix/app/api/utils/things/managedPlacement.ts`
+- 4-file cycle: `remix/app/api/utils/things/things.ts -> remix/app/api/utils/timeline/recordMutation.ts -> remix/app/api/utils/timeline/componentBindings.ts -> remix/app/api/utils/webpages/webpages.ts -> remix/app/api/utils/things/things.ts`
 - 5-file cycle: `remix/app/components/Feed/MentionAutocomplete.tsx -> remix/app/components/Profile/ProfilePage.tsx -> remix/app/components/Feed/PostList.tsx -> remix/app/components/Feed/PostCard.tsx -> remix/app/components/Feed/PostComposer.tsx -> remix/app/components/Feed/MentionAutocomplete.tsx`
 - 5-file cycle: `remix/app/components/Feed/PostCard.tsx -> remix/app/components/Feed/PostLinkedThings.tsx -> remix/app/components/Thingtime/ContextMenu/PersistedThingMenu.tsx -> remix/app/components/Things/ThingsDialogs.tsx -> remix/app/components/Things/ThingComments.tsx -> remix/app/components/Feed/PostCard.tsx`
 - 5-file cycle: `remix/app/components/Builder/ComponentCollection.tsx -> remix/app/components/Kinds/HtmlThingRenderer.tsx -> remix/app/components/Builder/Maps/ComponentMapbox.tsx -> remix/app/components/Builder/liveComponent.tsx -> remix/app/components/Kinds/ChakraThingRenderer.tsx -> remix/app/components/Builder/ComponentCollection.tsx`
+- 5-file cycle: `remix/app/api/utils/things/managedPlacement.ts -> remix/app/api/utils/timeline/recordMutation.ts -> remix/app/api/utils/timeline/componentBindings.ts -> remix/app/api/utils/webpages/webpages.ts -> remix/app/api/utils/things/things.ts -> remix/app/api/utils/things/managedPlacement.ts`
 
 ## Hyperedges (group relationships)
 - **ACL inherit-chain resolution across read paths** — remix_app_api_utils_things_things_getthing, remix_app_api_utils_things_search_projectvisiblepage, remix_app_api_utils_things_things_listthings, remix_app_api_utils_things_things_batchedthinglookup, remix_app_api_utils_things_things_canviewinherited, prs_299_batched_lookup_pattern [EXTRACTED 0.85]
@@ -2497,51 +2454,51 @@
 - **Account snapshot capture and recovery checks** — testing_saved_themes_in_independent_snapshots, testing_account_profile_and_preferences_in_independent_snapshots, testing_real_account_profile_snapshot_integration [INFERRED 0.96]
 - **Builder Canvas Editing and Rendering Behavior** — testing_canvas_interaction, testing_inline_block_insertion, testing_inspector_arguments, testing_block_drag_reorder, testing_page_save_publish, testing_site_edit_mode, testing_inline_wysiwyg, testing_nested_block_selection, testing_grid_insert_order, testing_row_flex_layout, testing_custom_content_security, testing_image_upload_drop_paste, testing_media_inspector_fields, testing_spacing_shape_composers, testing_block_alignment, testing_rich_editor_component_args, testing_drawer_resize, testing_wysiwyg_view_parity, testing_inline_editor_full_features, testing_block_wrap_duplicate, testing_numeric_inspector_typing, testing_upload_and_rich_editor_edges [INFERRED 0.96]
 
-## Communities (2095 total, 680 thin omitted)
+## Communities (2052 total, 665 thin omitted)
 
 ### Community 0 - "json"
 Cohesion: 0.01
-Nodes (541): RFC-2324, Adding or changing an endpoint (all steps, in order), Where the code lives, Tests, json(), JSON_BODY_WITHOUT_APPLICATION_LIMIT, JsonBodyBudget, JsonInit (+533 more)
+Nodes (473): RFC-2324, Adding or changing an endpoint (all steps, in order), Where the code lives, Tests, json(), JSON_BODY_WITHOUT_APPLICATION_LIMIT, JsonInit, readJsonBody() (+465 more)
 
-### Community 1 - "readLocalCache"
+### Community 1 - "useLopu"
 Cohesion: 0.02
-Nodes (248): Evidence ledger, 4. Client, Chip(), describeProviderKey(), EMPTY_DEFAULTS, errorMessage(), KEY_STATE_MARKS, KEY_STATE_TONES (+240 more)
+Nodes (276): Everything is a Thing: shared actions and context menus, Fundamentals (read first), Personal saved library, 7. One notification: Lopu 🦄, Saved AI waterfall data, Key decisions, UI, Bugs found during verification (both fixed in this PR) (+268 more)
 
 ### Community 2 - ".performFolderRequest"
 Cohesion: 0.02
-Nodes (59): FileUploadPartSource, CommanderDevelopmentEnvironment, .enabled, .port, .root, Explicit History Exports, MobileSyncInstalledTests, Native Cloud Download Ranges (+51 more)
+Nodes (49): .payload, FileExportBridge, InventoryCaptureJob, .completedBackup, .descriptor, InventoryCaptureProgress, LegacyClientUpgrade, editing (+41 more)
 
 ### Community 3 - "ref_node_fs"
-Cohesion: 0.00
-Nodes (551): {build}, {chromium}, require, {verifyRegistrationResponse,verifyAuthenticationResponse}, {build}, {chromium}, extension, require (+543 more)
+Cohesion: 0.01
+Nodes (472): {build}, {chromium}, require, {verifyRegistrationResponse,verifyAuthenticationResponse}, {build}, {chromium}, extension, require (+464 more)
 
 ### Community 4 - "things.ts"
 Cohesion: 0.01
-Nodes (585): RFC-3339, RFC-9111, Account drafts and templates, Authorization helper, macOS incoming system shares, Post as a Character, Posts, comments and feed, Private Messenger notification delivery (+577 more)
+Nodes (704): RFC-3339, Account drafts and templates, Authorization helper, macOS incoming system shares, Post as a Character, Posts, comments and feed, Private Messenger notification delivery, Rules that bite (+696 more)
 
 ### Community 5 - "attachments.ts"
 Cohesion: 0.01
-Nodes (280): Builder uploads and Lopu file saves, Adversarial review round (12-agent workflow, 9 findings → 8 confirmed), Local attachment storage (laptop stand-in for the private bucket), AttachmentAccessViewer, AttachmentTargetAccessDependencies, attachmentTargetAclAllows(), AttachmentTargetAclDoc, canViewCommentAttachment() (+272 more)
+Nodes (306): attachmentStore.ts and attachmentCore.ts: AttachmentDoc, target limits, ordering, binding, public metadata and sanitization, imageVariants.ts: bounded width-selected WebP previews and in-memory cache, Where the code lives, Adversarial review round (12-agent workflow, 9 findings → 8 confirmed), Linked attachments (new), PR #496 — Composer toggle badges, linked (URL) attachments, edit-mode media, Round 1 — toggles, edit-add, rename, URL adder placement, Round 2 — URL media as first-class linked attachments + moderation fixes (+298 more)
 
 ### Community 6 - "useDrawer.tsx"
-Cohesion: 0.01
-Nodes (485): CheckIcon(), CloseIcon(), InfoIcon(), WarningIcon(), CheckIcon(), CloseIcon(), InfoIcon(), WarningIcon() (+477 more)
+Cohesion: 0.02
+Nodes (268): CheckIcon(), CloseIcon(), InfoIcon(), WarningIcon(), CheckIcon(), CloseIcon(), InfoIcon(), WarningIcon() (+260 more)
 
 ### Community 7 - "DesktopChatRuntime"
-Cohesion: 0.04
-Nodes (33): AccessibilityElementReference, DesktopChatAccessibilityBackend, DesktopChatAccessibilityConnector, DesktopChatAccessibilityError, actionUnavailable, ambiguousSelector, applicationNotRunning, backendFailure (+25 more)
+Cohesion: 0.03
+Nodes (51): AccessibilityChildrenPage, AccessibilityElementMetadata, AccessibilityElementReference, AccessibilityTextValue, DesktopChatAccessibilityBackend, DesktopChatAccessibilityCapabilities, DesktopChatAccessibilityConnector, DesktopChatAccessibilityError (+43 more)
 
-### Community 8 - "timelineRecords.ts"
-Cohesion: 0.04
-Nodes (110): Deleted Thing recovery — 2026-09-30, Implementation evidence — 2026-09-27 (in progress), Visual named-branch editing — 2026-09-28, Canonical records and authority, ACCOUNT_TIMELINE_KINDS, BACKUP_TIMELINE_RECORD_ADAPTER, backupTimelineIdentity(), BackupTimelineRecord (+102 more)
+### Community 8 - "timeline-branch-merge.integration.mts"
+Cohesion: 0.13
+Nodes (17): call(), checked, checkout, checkoutRequest, chosen, conflictRequest, divergentEdit, draft() (+9 more)
 
 ### Community 9 - "ref_react"
 Cohesion: 0.01
-Nodes (806): Admin Preview Retention Page, RFC-4122, Preview Retention and PR Liveliness, Device Sync and File Locations, Password Manager, passwords/icons.ts, Thingtime fields mod, Where the code lives (+798 more)
+Nodes (627): Admin Preview Retention Page, RFC-4122, Preview Retention and PR Liveliness, Prefilled incoming shares, Subspace messages and embedded Things, Device Sync and File Locations, Password Manager, Thingtime fields mod (+619 more)
 
-### Community 10 - "backupJobs.ts"
-Cohesion: 0.02
-Nodes (113): isFullAccountSessionPurpose(), Binding, bindings, internalAccountSession, withInternalAccountSession(), ordinaryReview(), createBackupDispatcher(), assertBackupHashReference() (+105 more)
+### Community 10 - "uploadBatch.ts"
+Cohesion: 0.04
+Nodes (106): attachmentIdForRequest(), service, admitBatchProvider, admitFolderRoot, BATCH_BUDGET, BATCH_PHASE_COST, chargeBatch, createBatchBudget() (+98 more)
 
 ### Community 11 - "Action Thing v1 — design (declarative, capability-bounded)"
 Cohesion: 0.10
@@ -2549,71 +2506,71 @@ Nodes (17): Action Thing v1 — design (declarative, capability-bounded), API fa
 
 ### Community 12 - "SettingsContent.tsx"
 Cohesion: 0.02
-Nodes (211): 🌈 Design refactor + runtime theming (branch `claude/vigilant-moser-3704e0`), Design sources, Known notes, Shareable themes + waitlist API (FUNDAMENTALS-compliant), Theming system, UI, PR 709 Shared Settings Views, PR 709: Shared settings views and Mac panel preferences (+203 more)
+Nodes (196): react-icons, @simplewebauthn/browser, AuditRow, emptyEndpoint(), EndpointRow, eyebrow, IntegrationManager(), IntegrationManagerScope() (+188 more)
 
-### Community 13 - "collections.ts"
+### Community 13 - "getHomeThingsCollection"
 Cohesion: 0.01
-Nodes (366): App Namespace and Storage Budget Model, Read-local Write-global Replica Set, Unified Things Collection, Geo-distributing Thingtime, Baselines, not estimates, API — caching and cache headers, API — per-request handler work, Architecture — multi-node, cross-region and real-time (+358 more)
+Nodes (560): Baselines, not estimates, 4. One MongoDB connection source, API — caching and cache headers, API — per-request handler work, Architecture — multi-node, cross-region and real-time, Database — connection lifecycle and cold start, Database — index coverage and query shape, Database — N+1 and per-item round trips (+552 more)
 
 ### Community 14 - "Testing"
 Cohesion: 0.01
-Nodes (423): API Tests, api.things-fork Capability, Admin AI Models Probe Endpoint, AI Models Endpoint, Lopu Voice Reply Endpoint, Post Views Endpoint, Custom Mongo Endpoint Isolation Test, Dedicated Entity Pages (+415 more)
+Nodes (438): api.attachment-archive Capability, API Tests, api.things-fork Capability, Admin AI Models Probe Endpoint, AI Models Endpoint, Lopu Voice Reply Endpoint, Post Views Endpoint, Custom Mongo Endpoint Isolation Test (+430 more)
 
 ### Community 15 - "ThingsPage.tsx"
 Cohesion: 0.02
-Nodes (277): File media presentation and PDF reading — 2026-11-13, fileMediaPresentation explicit embedded render Component, HtmlBlockElement PDF context preserving Builder selection and editing, PdfDocument narrow tt-pdf / tt-pdf-page adapter, pdfViewerBlocks individually editable PDF toolbar and canvas blocks, ThingFilePreview exact-bound attachment preview, /things page (Drive surface), Evidence ledger (+269 more)
+Nodes (319): Remote and stored files, /things page (Drive surface), Evidence ledger, Milestones, Inherited Thing actions, Saved AI waterfalls, requireThingtimeCapability, FILESYSTEM_MAX_BYTES (+311 more)
 
-### Community 16 - "@chakra-ui/react"
-Cohesion: 0.01
-Nodes (437): Key decisions, UI, @chakra-ui/react, pdfjs-dist, rxjs, userPresence(), ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS (+429 more)
+### Community 16 - "ref_lucide_react"
+Cohesion: 0.02
+Nodes (287): Incoming shares, Live Photo image/motion pairing, authorized presentation and preview fallbacks, Verified-empty post, comment and message original uploads, Adding a menu action (any Thing surface), Canonical Thing menus and shared verbs, ATTACHMENT_ARCHIVE_REQUIREMENTS, AttachmentAnnotatePopover(), AttachmentAnnotatePopoverProps (+279 more)
 
 ### Community 17 - "getThingsCollection"
 Cohesion: 0.02
-Nodes (329): Lopu Continuity and Native Activity Contracts, Evidence ledger, Repository evidence ledger, PR #174 — Thingtime Messenger platform, Data model, Debugging log (what bit us and how it ended), Endpoints (23; each = route file + `[...].ts` map + apiDocs entry — the docs entry IS the Nitro registration), PR #174 — Thingtime Messenger platform (`claude/thingtime-messenger-platform-c9c2b5`) (+321 more)
+Nodes (345): Lopu Continuity and Native Activity Contracts, Evidence ledger, PR #174 — Thingtime Messenger platform, Data model, Debugging log (what bit us and how it ended), Endpoints (23; each = route file + `[...].ts` map + apiDocs entry — the docs entry IS the Nitro registration), PR #174 — Thingtime Messenger platform (`claude/thingtime-messenger-platform-c9c2b5`), Verification (+337 more)
 
 ### Community 18 - "subspaces.ts"
 Cohesion: 0.02
-Nodes (281): Database — N+1 and per-item round trips, Data model (everything is a thing — FUNDAMENTALS §3), Known limits (stated, not hidden), Server, Subspaces 🪐 — Reddit-style communities + up/down votes 🔼, Verification, What shipped, sort() (+273 more)
+Nodes (373): Server, Verification, agentReporting(), coordinateReporting(), CoordinationRead, fail(), isPrivateCoordinationPost(), isSubspacePostAcl() (+365 more)
 
 ### Community 19 - "WidgetConnection"
-Cohesion: 0.04
-Nodes (43): ConnectionFailure, .errorDescription, invalidResponse, message, unauthorized, WidgetConnection, .shareContent, WidgetRedirectPolicy (+35 more)
+Cohesion: 0.03
+Nodes (52): WidgetActionInbox, WidgetEndpointCatalog, .activeID, .entries, WidgetEndpointChoice, .body, WidgetSnapshot, WidgetStore (+44 more)
 
 ### Community 20 - "remix/CHANGELOG.md"
 Cohesion: 0.00
-Nodes (497): Native Expand Links, Fork setup and verification, MongoDB connection inventory, Runtime and privacy, What the numbers establish, Production Storage Runtime Monitor Workflow, Thingtime iOS XcodeGen Project, PR 1004 Provider Model Availability and Admission Controls (+489 more)
+Nodes (539): Native Expand Links, Fork setup and verification, MongoDB connection inventory, Runtime and privacy, What the numbers establish, Production Storage Runtime Monitor Workflow, Thingtime iOS XcodeGen Project, PR 1004 Provider Model Availability and Admission Controls (+531 more)
 
-### Community 21 - "Cloud inventory stream"
-Cohesion: 0.15
-Nodes (13): Android installed History acceptance: real uploads, filtering, guarded restore and exact byte readback, Cloud inventory stream, fileSync/cloudInventoryPages.client.ts: bounded NDJSON decoder, Conflict retention: explicit capture plans, version-2 intent journal and immutable retention receipts, fileSync/fileVersions.ts: content identity, restore validation and reserved server retention receipts, inventoryQueue.ts: request-owned inventory queue, iOS transport receiver, docs/mobile-file-sync.md: sync acceptance and unfinished work ledger (+5 more)
+### Community 21 - "DeviceCredential"
+Cohesion: 0.04
+Nodes (24): CommandReportStatus, failed, succeeded, uncertain, PairingClaimProof, PairingClaimRequest, PairingClaimResponse, PairingDeviceDescriptor (+16 more)
 
 ### Community 22 - "LongTextEditor.tsx"
-Cohesion: 0.06
-Nodes (47): watchEditorBlockChrome(), EditorHistoryControls(), EditorHistoryHandle, HistoryAction, createOrderedEditorJsChangeQueue(), OrderedEditorJsChangeQueue, OrderedEditorJsChangeQueueOptions, SaveResult (+39 more)
+Cohesion: 0.04
+Nodes (70): captureComponentFormFields(), fields, flushComponentFormFields(), registerComponentFormField(), SavedFields, ComponentRichText(), Props, RichTextField() (+62 more)
 
-### Community 23 - "themeTryOnCore.ts"
-Cohesion: 0.23
-Nodes (12): asRun(), asSettings(), DEFAULT_THEME_SETTINGS, isWearingTryOn(), nextTryOnRun(), openTryOnRun(), restoredThemeSettings(), OWNER_THEME (+4 more)
+### Community 23 - "format.ts"
+Cohesion: 0.02
+Nodes (228): Retryable archive deletion and compensation — 2026-09-12, createListForkBoundMedia(), createListForkBoundMediaDocuments(), listForkBoundMedia, listForkBoundMediaDocuments, AttachmentPublicMetadata, canonicalLinkedAttachmentUrl(), orderAttachmentDocsByStoredSort() (+220 more)
 
 ### Community 24 - "PhotoLibraryReader"
 Cohesion: 0.03
-Nodes (54): Asset, Attempt, Deferred, DeferredCandidate, OrderedSelection, .checkpoint, PhotoBackupQueue, .attemptsDirectory (+46 more)
+Nodes (61): Asset, Attempt, Deferred, DeferredCandidate, OrderedSelection, .checkpoint, PhotoBackupQueue, .attemptsDirectory (+53 more)
 
 ### Community 25 - "Foundation"
 Cohesion: 0.02
-Nodes (59): ActivityKit, AppKit, ThingtimeBridgeScript, .lopuChatActivityVersion, .notificationsVersion, .platform, AppleFileSync, ApplicationServices (+51 more)
+Nodes (57): ActivityKit, AppKit, FileUploadPartSource, ThingtimeBridgeScript, .lopuChatActivityVersion, .notificationsVersion, .platform, AppleFileSync (+49 more)
 
 ### Community 26 - "claude-design-mockup-v2-fable/ds/react.js"
 Cohesion: 0.01
 Nodes (135): act(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+127 more)
 
-### Community 27 - "RecoveryRelease"
+### Community 27 - "RecoveryComponent"
 Cohesion: 0.03
-Nodes (66): ThingtimeRecoveryApp, .body, fail(), RecoveryBuildDate, built, .label, unavailable, RecoveryBuildMetadata (+58 more)
+Nodes (71): WidgetPreferences, ThingtimeRecoveryApp, .body, fail(), RecoveryBuildDate, built, .label, unavailable (+63 more)
 
-### Community 28 - "useApi.tsx"
-Cohesion: 0.02
-Nodes (241): Shared navigation and Builder controls, Working design mapped to the existing core, 1 · Design system alignment, 3 · Catalog eviction, Debugging log (bugs found via GUI QA, all fixed in-branch), Native SECTION registry (commits ee5599fd6 → 6ad68f728), Notes / follow-ups, PR #485 — Design system alignment + block-based Thingtime builder (+233 more)
+### Community 28 - "thingmon.ts"
+Cohesion: 0.04
+Nodes (80): choiceButton(), duePill(), filePill(), priorityPill(), projectPill(), taskRow(), el(), ifOp() (+72 more)
 
 ### Community 29 - "thingtime-app/ds/react.js"
 Cohesion: 0.01
@@ -2660,100 +2617,100 @@ Cohesion: 0.01
 Nodes (127): act(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), callCallback(), canHydrateInstance() (+119 more)
 
 ### Community 40 - "DesignWorkspace.tsx"
-Cohesion: 0.14
-Nodes (17): DocsDesign(), socialPreview, DESIGN_ASSET_BASE, designEntries, DesignEntry, DesignEntryKind, designKindColors, getDesignEntryBySlug() (+9 more)
+Cohesion: 0.15
+Nodes (15): DocsDesign(), socialPreview, DESIGN_ASSET_BASE, designEntries, DesignEntry, DesignEntryKind, designKindColors, getDesignEntryPreviewSrc() (+7 more)
 
 ### Community 41 - "registry.ts"
 Cohesion: 0.01
-Nodes (481): Components Library PR Note, Debugging history worth keeping, Follow-on, PR #291 — Components library: /components page, component thing kind, 1000-component catalog, Round 2 (owner feedback): families + deep links, Shape of the change, The catalog + generation pipeline, Validation (+473 more)
+Nodes (398): Data and API conventions, Architecture, Mongo Collections, Phase 0: Provider Bridge, Phase 1: Compliance Core, Streams And Domains, Evidence ledger, Evidence ledger (+390 more)
 
-### Community 42 - "MobileSyncStaging"
-Cohesion: 0.03
-Nodes (64): FolderBookmark, MobileFolderBatchValidator, BackupGap, Chunk, CodingKeys, fingerprint, id, kind (+56 more)
+### Community 42 - "Codable"
+Cohesion: 0.01
+Nodes (137): FolderBookmark, MobileFolderBatchValidator, MobileFolderBulkReader, Payload, ReadGuard, compositeDigest, descriptorAccessError, descriptorMetadata (+129 more)
 
 ### Community 43 - "ThingtimeNodeController"
-Cohesion: 0.03
-Nodes (52): Payload, CommandJournal, CommandJournalSnapshot, ControlPlaneClient, PairingDeviceDescriptor, CredentialVault, Data, DeviceCredential (+44 more)
+Cohesion: 0.04
+Nodes (46): CommandJournal, CommandJournalDisposition, execute, inProgress, replay, uncertain, CommandJournalEntry, CommandJournalSnapshot (+38 more)
 
 ### Community 44 - "FileSyncOwnerScope"
 Cohesion: 0.03
-Nodes (54): Shared Apple file synchronization, FileSyncOwnerScope, .key, skipped, Grant, MobileFolderStore, WriteApproval, .fields (+46 more)
+Nodes (54): Shared Apple file synchronization, Failure, destination, .errorDescription, identity, FileSyncOwnerScope, .key, skipped (+46 more)
 
 ### Community 45 - "useApi"
 Cohesion: 0.01
-Nodes (570): UI entry points, Debugging log, PR #67 — Profile composer + Thingtime posts 🌀 + Filters ▸ Advanced search, What shipped, Client, MODERATION_MEDIA_PROVIDER_OPTIONS, MODERATION_TEXT_PROVIDER_OPTIONS, MONGO_QUERY_COLLECTIONS (+562 more)
+Nodes (509): UI entry points, Known Issues, What shipped, Client, rxjs, adminFilterValueForOperatorChange(), AdminRowFieldKind, AdminRowQuery (+501 more)
 
 ### Community 46 - "test-agent-desktop-relay.cjs"
 Cohesion: 0.01
-Nodes (181): iPhone Photos automation, Paired File Sync transfer admissions, Persistent background file transport, Build the immutable full-app image, Focused regression checks, Noninteractive native regression lane, Signed Mac sync acceptance with a private backend, Start and control the same browser/backend (+173 more)
+Nodes (168): Build the immutable full-app image, BrowserBundles, bundleDigest(), CHANNELS, { createReadStream }, { EventEmitter }, fs, path (+160 more)
 
 ### Community 47 - "folder-sync.cjs"
-Cohesion: 0.01
-Nodes (216): authenticatedJson(), downloadRetry(), equal(), fingerprint(), { governedDownload }, { governorFor }, hex(), invalid() (+208 more)
+Cohesion: 0.02
+Nodes (194): authenticatedJson(), downloadRetry(), equal(), fingerprint(), { governedDownload }, { governorFor }, hex(), invalid() (+186 more)
 
-### Community 48 - "google.ts"
-Cohesion: 0.23
-Nodes (14): exchangeGoogleMail(), fetchGoogleMailBatch(), GMAIL_SCOPE, GOOGLE_MAIL_CALLBACK, googleJson(), googleMailClient(), GoogleMailGrant, googleTokens() (+6 more)
+### Community 48 - "AdminDashboard.tsx"
+Cohesion: 0.07
+Nodes (50): MODERATION_MEDIA_PROVIDER_OPTIONS, MODERATION_TEXT_PROVIDER_OPTIONS, ADMIN_TAB_STYLES, APP_QUERY_FIELDS, AppRow, appRowId(), AppsTab(), Chip() (+42 more)
 
-### Community 49 - "componentTemplate.ts"
-Cohesion: 0.04
-Nodes (120): postcss, postcss-value-parser, mapAuthoredHtmlMedia(), mapStyleMedia(), visitAuthoredHtmlMedia(), compositionAttachmentIds(), CompositionMediaOptions, iterateStoredCompositionMedia() (+112 more)
+### Community 49 - "ConnectorRuntime"
+Cohesion: 0.07
+Nodes (20): ConnectorCommand, ConnectorEvent, ConnectorIncomingFrame, ConnectorProjectReference, ConnectorReply, ConnectorRuntime, ConnectorRuntimeConfiguration, ConnectorRuntimeHealth (+12 more)
 
 ### Community 50 - "main.cjs"
 Cohesion: 0.01
-Nodes (346): prepareAppLocations(), AuthorityTransition, compatibilityError(), encodeBatchInput(), FolderBatchStream, invalid(), encodeStageInput(), FolderStream (+338 more)
+Nodes (273): prepareAppLocations(), AuthorityTransition, compatibilityError(), encodeBatchInput(), FolderBatchStream, invalid(), encodeStageInput(), FolderStream (+265 more)
 
 ### Community 51 - "accounting.ts"
 Cohesion: 0.01
-Nodes (297): Gift Invites, planSessionOwns(), resolveOwnedChatGPTPlan(), SessionOwner, createOwnedPlanResolver(), issued, OwnedPlanAdmission, ownsPlanAdmission() (+289 more)
+Nodes (254): Gift Invites, issued, OwnedPlanAdmission, ownsPlanAdmission(), Provider, owner, request, settings (+246 more)
 
-### Community 52 - "uploadBatch.ts"
+### Community 52 - "StorageMutationError"
 Cohesion: 0.02
-Nodes (184): attachmentIdForRequest(), service, authorizeBatch(), BatchAuthorityChanged, authorityStatus(), BatchObservationConflict, closed(), createFileBatchService() (+176 more)
+Nodes (218): ATTACHMENT_UPLOAD_TTL_MS, AttachmentTransferAuthority, completeAttachmentUpload, signAttachmentUploadParts, startAttachmentUpload, fenceAccountSession(), isFullAccountSessionPurpose(), Binding (+210 more)
 
-### Community 53 - "routes.tsx"
+### Community 53 - "@chakra-ui/react"
+Cohesion: 0.01
+Nodes (277): 1 · Design system alignment, Round 9 (2026-09-01) — Lopu repository review of the PR head, Seamless page editor, @chakra-ui/react, @monaco-editor/react, react-router, AgentBrowserDefaults(), AgentBrowserViewer() (+269 more)
+
+### Community 54 - "Sendable"
 Cohesion: 0.02
-Nodes (105): Component catalog seeding (dev DB), Features, Fixes (QA-found), Round 4 — Figma-layer styling + WYSIWYG + the "grid ×2" class of layout bugs (2026-08-31), PR #888 — Run service workspaces live on pages and in the editor, Remaining / follow-ups, Root cause, Validation (2026-09-22) (+97 more)
-
-### Community 54 - "MobileFolderInventory"
-Cohesion: 0.03
-Nodes (67): BackupStatus, Capabilities, Capture, Change, ChangesPage, CodingKeys, capture, entries (+59 more)
+Nodes (88): MobileFolderIgnoreRules, Rule, Token, any, globstar, globstarSlash, literal, members (+80 more)
 
 ### Community 55 - "SyncProgressViewer.tsx"
-Cohesion: 0.05
-Nodes (68): button(), element(), priorityReadinessBlocks, priorityReadinessDisplay(), progressBytes(), syncProgressBlocks, SyncProgressBranch, syncProgressDisplay() (+60 more)
+Cohesion: 0.04
+Nodes (70): Props, button(), element(), priorityReadinessBlocks, priorityReadinessDisplay(), progressBytes(), syncProgressBlocks, SyncProgressBranch (+62 more)
 
-### Community 56 - "ref_lucide_react"
-Cohesion: 0.01
-Nodes (327): DeviceApplications, DeviceApplicationsProps, approvalTone(), DeviceApprovalCard, DeviceApprovalCardProps, expiryLabel(), scopeLabel(), AudioLevelControl() (+319 more)
+### Community 56 - "DeviceDetailsDrawer.tsx"
+Cohesion: 0.07
+Nodes (72): DeviceApplications, DeviceApplicationsProps, approvalTone(), DeviceApprovalCard, DeviceApprovalCardProps, expiryLabel(), scopeLabel(), DeviceCard (+64 more)
 
-### Community 57 - "userVault.ts"
+### Community 57 - "waterfallService.ts"
 Cohesion: 0.06
-Nodes (78): 1.3 Your own providers (Secure Vault → Lopu), 1. Data model, openai(), assertGroup(), createUserVaultGroup(), createVaultEnvironmentMover(), createVaultThing(), decryptValue() (+70 more)
+Nodes (55): Reusable AI model and endpoint waterfall, Rollout and verification, Stack execution, @anthropic-ai/sdk, diagnosticReason(), sanitizeAnthropicApiKeyError(), message, record (+47 more)
 
 ### Community 58 - "reconcile.ts"
 Cohesion: 0.02
-Nodes (253): Android binary upload ranges, iOS incoming shares, iOS/ShareExtension: system Share target, iOS/ShareSupport: provider representations and atomic App Group inbox drained into Documents/Shared, Bounded cloud downloads and staged executor — 2026-10-17, Cloud execution checkpoint — 2026-10-17, make(), /api/v1/files protected file writer (+245 more)
+Nodes (182): Android current-file upload continuation, Two-Way Sync, /api/v1/files protected file writer, MobileSyncConnections transport, createPagedCloudSyncPort, Browser IndexedDB sync journal (v1–v7), fake-indexeddb, SyncConflictReview() (+174 more)
 
 ### Community 59 - "scripts"
 Cohesion: 0.01
 Nodes (231): scripts, audit:web-platform, backup:cloud, backup:replica, backup:vault, branding-assets, build, build:client (+223 more)
 
 ### Community 60 - "peerDiscovery.ts"
-Cohesion: 0.06
-Nodes (74): observeScheduledPeerEvent(), DataEnvironmentKind, DeploymentDataEnvironment, getDeploymentDataEnvironment(), isSameDataEnvironment(), normaliseId(), normaliseOrigin(), getDeploymentPeersCollection() (+66 more)
+Cohesion: 0.07
+Nodes (69): observeScheduledPeerEvent(), getDeploymentPeersCollection(), allowedPeerHost(), announcePeer(), base64url(), bodyDigest(), boundedPeerLimit(), canonicalJson() (+61 more)
 
 ### Community 61 - "NativeDeferredUpload"
 Cohesion: 0.02
-Nodes (77): account, DeferredProcessingScheduler, DeferredProcessingTask, .expiration, Failure, .errorDescription, pausePersistence, NativeDeferredUpload (+69 more)
+Nodes (67): account, DeferredProcessingScheduler, DeferredProcessingTask, .expiration, Failure, .errorDescription, pausePersistence, NativeDeferredUpload (+59 more)
 
 ### Community 62 - "variable"
 Cohesion: 0.03
-Nodes (190): animate(), ANIMATION_BOUNDARIES, boundary(), frames, observe(), setup, animationRecipe(), animationState() (+182 more)
+Nodes (199): animate(), ANIMATION_BOUNDARIES, boundary(), frames, observe(), setup, animationRecipe(), animationState() (+191 more)
 
 ### Community 63 - "integrations.ts"
-Cohesion: 0.02
-Nodes (156): jose, ADMIN_INTEGRATION_MAX_REQUEST_BYTES, ADMIN_INTEGRATION_MAX_RESPONSE_BYTES, ADMIN_INTEGRATION_SCHEMA_VERSION, asText(), configuredGenericHosts(), EndpointInput, EndpointProvider (+148 more)
+Cohesion: 0.03
+Nodes (168): jose, ADMIN_INTEGRATION_MAX_REQUEST_BYTES, ADMIN_INTEGRATION_MAX_RESPONSE_BYTES, ADMIN_INTEGRATION_SCHEMA_VERSION, asText(), configuredGenericHosts(), EndpointInput, EndpointProvider (+160 more)
 
 ### Community 64 - "claude-design-mockup-v2-fable/ds/thingtime-bundle.js"
 Cohesion: 0.01
@@ -2765,7 +2722,7 @@ Nodes (108): noop(), addPrefix2(), addVariantChild(), AlertIcon(), applyAxisDelt
 
 ### Community 66 - "thingtime-directions/ds/thingtime-bundle.js"
 Cohesion: 0.01
-Nodes (108): noop(), addPrefix2(), addVariantChild(), AlertIcon(), applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas() (+100 more)
+Nodes (122): noop(), addPrefix(), addVariantChild(), AlertIcon(), applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas() (+114 more)
 
 ### Community 67 - "thingtime-landing-1a-classic-centered/ds/thingtime-bundle.js"
 Cohesion: 0.01
@@ -2803,33 +2760,33 @@ Nodes (108): noop(), addPrefix2(), addVariantChild(), AlertIcon(), applyAxisDelt
 Cohesion: 0.01
 Nodes (108): noop(), addPrefix2(), addVariantChild(), AlertIcon(), applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas() (+100 more)
 
-### Community 76 - "accountRestoreSteps.ts"
-Cohesion: 0.04
-Nodes (106): fenceAccountSession(), AccountBackupReader, ACCOUNT_FILE_RESTORE_REQUIREMENTS, accountFileRestoreBranchId(), accountFileRestoreCommandId(), accountFileRestoreContentKey(), AccountFileRestoreFolder, accountFileRestoreGraphHash() (+98 more)
+### Community 76 - "compositionMediaCore.ts"
+Cohesion: 0.09
+Nodes (55): postcss, postcss-value-parser, mapAuthoredHtmlMedia(), mapStyleMedia(), visitAuthoredHtmlMedia(), compositionAttachmentIds(), CompositionMediaOptions, iterateStoredCompositionMedia() (+47 more)
 
-### Community 77 - "setup.ts"
-Cohesion: 0.04
-Nodes (76): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method), 3. One database: `thingtime` — and (almost) one collection, Account storage is one exact, transactional ledger, App namespaces ("Login with Thingtime"), Appended/child data is relational — never an unbounded embedded array (+68 more)
+### Community 77 - "3. One database: `thingtime` — and (almost) one collection"
+Cohesion: 0.06
+Nodes (36): 3. One database: `thingtime` — and (almost) one collection, Account storage is one exact, transactional ledger, App namespaces ("Login with Thingtime"), Private account drafts, Private password entries, Server error Things, Stable file identities and retained byte versions, Evidence ledger (+28 more)
 
-### Community 78 - "MobileDeviceLocation"
-Cohesion: 0.05
-Nodes (13): Binding, MobileDeviceLocation, .canUseLocation, .scope, .status, MobileLocationDriving, SystemMobileLocationDriver, .authorization (+5 more)
+### Community 78 - "ActionDetailPage.tsx"
+Cohesion: 0.07
+Nodes (63): Deferred (with rationale), PR #387 — Action Thing v1: declarative capability-bounded programs, Round 3 — Lopu review round 2 rebuilt on-branch (2026-08-25, commit 7706c3eef), Round 4 — ttAction reachability, precisely mapped (2026-08-25), Round 5 — functional multi-review pass (2026-08-25, post-completion directive), Round 5b — correctness-lens fixes (same review pass), Round 6 — defensive security review + fixes (2026-08-25), Shape of the change (+55 more)
 
 ### Community 79 - "verify-vercel-output.mjs"
 Cohesion: 0.02
-Nodes (152): resolveSsoHub(), SSO_HUB_CACHE_KEY, ssoHubDisplayName(), SsoHubEnvironment, validOrigin(), FIRST_PARTY_SSO_HUB_ORIGINS, SSO_HUB_DEVELOP, SSO_HUB_PRODUCTION (+144 more)
+Nodes (146): assetPath(), installPreviewBuildFreshness(), isStalePreviewEntry(), isVercelPreviewHost(), previewEntryAssetFromHtml(), previewEntryAssetFromSources(), PreviewFreshnessRuntime, previewRefreshUrl() (+138 more)
 
-### Community 80 - "configuration.ts"
-Cohesion: 0.03
-Nodes (115): DesktopSyncAutomation(), control, syncAutomationBlocks, canonicalResourceLimitFields(), FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_REQUIREMENTS, FILE_SYNC_RESOURCE_KEYS (+107 more)
+### Community 80 - "prConflictResolverModelWaterfallCore.ts"
+Cohesion: 0.05
+Nodes (64): verified(), Admin editor (`PRConflictResolverModelWaterfallEditor.tsx`), Consumers, Core (`remix/app/api/utils/settings/prConflictResolverModelWaterfallCore.ts`), Route + docs, What shipped, App Suites PR Note, Lopu AI Assistant Design Note (+56 more)
 
 ### Community 81 - "remoteSyncProtocol.ts"
 Cohesion: 0.02
-Nodes (189): createDeviceSyncControlService(), defaults, Dependencies, DEVICE_SYNC_CONTROL_KIND, DEVICE_SYNC_REQUEST_MS, deviceSyncControl, encode(), expired() (+181 more)
+Nodes (183): createDeviceSyncControlService(), defaults, Dependencies, DEVICE_SYNC_CONTROL_KIND, DEVICE_SYNC_REQUEST_MS, deviceSyncControl, encode(), expired() (+175 more)
 
-### Community 82 - "SafeActionKind"
-Cohesion: 0.03
-Nodes (63): DeviceScript, ActionEnvelope, SystemRemoteInput, ActionPolicyDecision, allow, deny, requireApproval, SafeActionContext (+55 more)
+### Community 82 - "SafeActionRequest"
+Cohesion: 0.08
+Nodes (11): DeviceScript, ActionEnvelope, SystemRemoteInput, ActionOrigin, localUser, remoteAccount, SafeActionContext, SafeActionPolicy (+3 more)
 
 ### Community 83 - "indexer/src/lib.rs"
 Cohesion: 0.03
@@ -2837,155 +2794,159 @@ Nodes (137): application_kind(), broad_fuzzy_fts_can_be_interrupted_by_its_time_
 
 ### Community 84 - "fail"
 Cohesion: 0.02
-Nodes (157): { createHash, randomUUID }, createNativePasswordApproval(), approve(), cancel(), finish(), requireSender(), { exactOrigin, targetScope, UUID, fail, PasswordBridgeError }, { createVaultTransport } (+149 more)
+Nodes (158): mergeEndpointProfiles(), { createHash, randomUUID }, createNativePasswordApproval(), approve(), cancel(), finish(), requireSender(), { exactOrigin, targetScope, UUID, fail, PasswordBridgeError } (+150 more)
 
 ### Community 85 - "NativeBackgroundPhotoUpload"
 Cohesion: 0.03
-Nodes (36): Job, NativeBackgroundPhotoTransport, NativeBackgroundPhotoUpload, .activeCount, .retainedReservationIds, NativeBackgroundTaskBinding, NativeBackgroundUploadCalendar, NativeBackgroundUploadCompletionTask (+28 more)
+Nodes (39): Job, NativeBackgroundPhotoTransport, NativeBackgroundPhotoUpload, .activeCount, .retainedReservationIds, NativeBackgroundTaskBinding, NativeBackgroundUploadCalendar, NativeBackgroundUploadCompletionTask (+31 more)
 
 ### Community 86 - "domBridge.ts"
 Cohesion: 0.02
-Nodes (140): ANIMATION_CONSTRUCTORS, ANIMATION_ELEMENT_CALLS, ANIMATION_GLOBALS, ANIMATION_RECEIVER_POLICY, ANIMATION_STATIC, AnimationArg, ANIMATION_LIMITS, animationArgument() (+132 more)
+Nodes (146): ANIMATION_CONSTRUCTORS, ANIMATION_ELEMENT_CALLS, ANIMATION_GLOBALS, ANIMATION_RECEIVER_POLICY, ANIMATION_STATIC, AnimationArg, ANIMATION_LIMITS, animationArgument() (+138 more)
 
-### Community 87 - "thingmon.ts"
-Cohesion: 0.04
-Nodes (81): choiceButton(), duePill(), filePill(), priorityPill(), projectPill(), taskRow(), bedCard(), seedOptions() (+73 more)
+### Community 87 - "API endpoints and capabilities"
+Cohesion: 0.02
+Nodes (103): Library Request Transport, API Capability Manifest Tests, endpoint Docs Registry, useApi Capability Negotiation, Platform APIs, Library Request Builder, Library SDK Sandbox, create<Name>Loader (+95 more)
 
 ### Community 88 - "ThingtimeWatchStore"
-Cohesion: 0.03
-Nodes (70): ThingtimeWatchAppDelegate, StorageError, encoding, .errorDescription, keychain, ThingtimeWatchAccount, .displayUsername, .domain (+62 more)
+Cohesion: 0.02
+Nodes (76): ThingtimeWatchAppDelegate, StorageError, encoding, .errorDescription, keychain, ThingtimeWatchAccount, .displayUsername, .domain (+68 more)
 
 ### Community 89 - "branding/_index.tsx"
 Cohesion: 0.07
-Nodes (45): BrandAssetSection(), Chevron(), EXPORT_BACKGROUNDS, Eyebrow(), Field(), FileChip(), formatBytes(), ManifestPng (+37 more)
+Nodes (41): BrandAssetSection(), EXPORT_BACKGROUNDS, Eyebrow(), Field(), FileChip(), formatBytes(), ManifestPng, ManifestSurface (+33 more)
 
-### Community 90 - "ControlPlaneScheduler"
-Cohesion: 0.05
-Nodes (29): ConnectorProjectReference, CommandExecutionReport, CommandLeaseBatch, CommandLeaseRequest, CommandReportStatus, failed, succeeded, uncertain (+21 more)
+### Community 90 - "LeasedCommand"
+Cohesion: 0.03
+Nodes (28): CommandExecutionReport, CommandLeaseBatch, CommandLeaseRequest, ControlPlanePollCadence, .isIdle, .waitSeconds, ControlPlaneScheduler, .hasRunningWork (+20 more)
 
-### Community 91 - "waterfallService.ts"
-Cohesion: 0.05
-Nodes (66): Personal saved library, Reusable AI model and endpoint waterfall, Rollout and verification, Stack execution, @anthropic-ai/sdk, diagnosticReason(), sanitizeAnthropicApiKeyError(), message (+58 more)
+### Community 91 - "runWithMongoEndpoint"
+Cohesion: 0.06
+Nodes (53): request, result, createReadyAttachmentPostInsertHook(), inspectReadyAttachmentsForPost, requestRecordingHandoff(), updateRecordingTodo(), listRecordingAutomation(), parseTranscriptAttachmentIds() (+45 more)
 
 ### Community 92 - "AuthenticatorSetupInbox"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (9): AuthenticatorSetup, AuthenticatorSetupAuthority, AuthenticatorSetupCapability, AuthenticatorSetupDeliveryGate, AuthenticatorSetupInbox, AuthenticatorSetupPage, Binding, AuthenticatorSetupTests (+1 more)
 
 ### Community 93 - ".store"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (7): ManagedFileStoreProcessTest, ManagedFileStoreTest, ManagedTrashProcessTest, ManagedTrashTest, ManagedVersionTest, OfflineDocumentsProviderTest, Provider
 
 ### Community 94 - "Attachments and media"
-Cohesion: 0.06
-Nodes (36): Account drafts and templates, Closed transfer-admission 1.5.1 conflict diagnostics, Android saved-settings consent acceptance, Android saved-settings consent acceptance: revision-guarded edits, reapproval, cancellation and byte preservation, Protected shared attachment blobs and historical migration, Attachments and media, Authorization helper (every read of bytes), iOS automatic setup and native device pairing 1.2.0 queue (+28 more)
+Cohesion: 0.01
+Nodes (174): Account drafts and templates, Closed transfer-admission 1.5.1 conflict diagnostics, Android installed History acceptance: real uploads, filtering, guarded restore and exact byte readback, Android saved-settings consent acceptance, Android saved-settings consent acceptance: revision-guarded edits, reapproval, cancellation and byte preservation, useApi.tsx: api.v1.attachments client with prior api.attachment-* capability negotiation, app/docs/apiDocs.ts endpoint registry: contractVersion/featureVersion feed capability manifests and Nitro route table, attachmentAccess.ts canViewHomeAttachmentTarget: purpose-specific ACL, comment inheritance, membership and profile/emoji checks (+166 more)
 
-### Community 95 - "PlatformProgram"
+### Community 95 - "webPlatform/types.ts"
 Cohesion: 0.04
-Nodes (73): rule(), html(), editAnimationProgram(), editARIAProgram(), browseStandards(), byId, clean(), componentForFeature() (+65 more)
+Nodes (87): CustomEvent, setup(), rule(), html(), editAnimationProgram(), editARIAProgram(), browseStandards(), byId (+79 more)
 
 ### Community 96 - "Error"
-Cohesion: 0.02
-Nodes (86): MobileFolderBulkReader, ReadGuard, compositeDigest, descriptorAccessError, descriptorMetadata, descriptorRead, descriptorReopen, finalInspectError (+78 more)
+Cohesion: 0.03
+Nodes (63): FolderReconnectFailure, .errorDescription, offline, remounted, Failure, approvalCancelled, changed, .errorDescription (+55 more)
 
 ### Community 97 - "ThingtimeAPIClient"
-Cohesion: 0.02
-Nodes (69): parts, LeasedCommand, AlertDownloadPolicy, AVAudioPlayer, DeviceAlertClient, DeviceAlertPlayback, DeviceAlertService, InMemoryDeviceCredentialStore (+61 more)
+Cohesion: 0.03
+Nodes (62): parts, InMemoryDeviceCredentialStore, PairingClaimParameters, PermissionRequestParameters, AlertMedia, App, AppleMusic, AudioDevice (+54 more)
 
 ### Community 98 - "publishing.ts"
-Cohesion: 0.06
-Nodes (61): createMarketingPublicationsStore(), getMarketingPublications, PublicationReadResult, store, StoredDoc, StoreDependencies, at, applyWritePlan() (+53 more)
+Cohesion: 0.07
+Nodes (47): createMarketingPublicationsStore(), getMarketingPublications, PublicationReadResult, store, StoredDoc, StoreDependencies, at, applyWritePlan() (+39 more)
 
 ### Community 99 - "kindRenderers.tsx"
 Cohesion: 0.04
 Nodes (158): 2026-07-15 — Review rounds 2 & 3 (recursive), Avatar(), BodyText(), cardShell, CardTitle(), CoverArea(), DateBlock(), formatDateTime() (+150 more)
 
 ### Community 100 - "MobileSyncConnections.tsx"
-Cohesion: 0.02
-Nodes (262): Android Original Media Backup, PhotoDocumentsProvider, baseline, draft, editorScope, entries, key, scope (+254 more)
+Cohesion: 0.01
+Nodes (303): Android Original Media Backup, PhotoDocumentsProvider, Retained File History, activityManager, CanonicalFolderFailure, readDeviceFolderReference(), BackupCoverageViewer(), AccountBackupWorkspace() (+295 more)
 
-### Community 101 - "getHomeThingsCollection"
-Cohesion: 0.02
-Nodes (294): 4. One MongoDB connection source, Evidence ledger, Evidence ledger, Addendum: per-channel toggles (push + email) & SES notification emails (2026-08-03), Verification log (addendum, 2026-08-03), syd1 region pin co-locating functions with Atlas Sydney, Review round 3 (Lopu, 2026-09-02) — the twin prune could silently unprotect the key it claims to hold, croner (+286 more)
+### Community 101 - "recordingsWorker.ts"
+Cohesion: 0.03
+Nodes (152): 0. House rules that apply everywhere, getAttachmentDownload, endpoint(), DeviceActor, createLopuModelChoicesResolver(), assertPersonalRecordingAuthority, assertPersonalRecordingJob(), createPersonalRecordingAuthority() (+144 more)
 
-### Community 102 - "ScreenCaptureError"
-Cohesion: 0.04
-Nodes (52): CoreImage, CoreMedia, ActiveCapture, JPEGScreenCaptureFrameEncoder, ScreenCaptureAuthorization, ScreenCaptureBackend, ScreenCaptureBackendConfiguration, ScreenCaptureBackendSession (+44 more)
+### Community 102 - "FakeScreenCaptureBackend"
+Cohesion: 0.15
+Nodes (9): ScreenCaptureEvent, failed, stopped, FakeScreenCaptureBackend, FakeScreenCaptureBackendSnapshot, GatedScreenCaptureEncoder, PassthroughScreenCaptureEncoder, ScreenCaptureEventRecorder (+1 more)
 
-### Community 103 - "passwords/model.ts"
+### Community 103 - "transfer.ts"
 Cohesion: 0.08
-Nodes (39): moveThingField(), ThingFieldMod, ThingFieldType, ThingMods, emptyPasswordEntry(), FieldType, identityLabel(), isHiddenPasswordFormField() (+31 more)
+Nodes (35): jsqr, @streamparser/json, ThingFieldMod, ThingFieldType, ThingMods, emptyPasswordEntry(), passwordFieldValue(), fixture() (+27 more)
 
-### Community 104 - "method"
-Cohesion: 0.05
-Nodes (166): describe, roleFor(), show(), values, controllerApiRecipe(), rejection(), cssFunctionRecipe(), conditional() (+158 more)
+### Community 104 - "programBuilders.ts"
+Cohesion: 0.06
+Nodes (154): describe, show(), values, controllerApiRecipe(), rejection(), cssFunctionRecipe(), Example, examples (+146 more)
 
 ### Community 105 - "ComponentMapbox.tsx"
-Cohesion: 0.06
-Nodes (43): MapboxViewport(), MapProps, number(), activeMapboxNavigation(), asRecord(), LngLat, mapboxFavouritePoints(), mapboxHeight() (+35 more)
+Cohesion: 0.15
+Nodes (25): MapboxViewport(), MapProps, number(), activeMapboxNavigation(), asRecord(), mapboxFavouritePoints(), mapboxHeight(), MapboxMarkerGroup (+17 more)
 
 ### Community 106 - "chatTools.ts"
-Cohesion: 0.05
-Nodes (106): actionConfirmation(), activePageFromContext(), anthropicToolDefinitions(), blockSchema, boundedSummary(), boundThing(), boundToolData(), canonicalJson() (+98 more)
+Cohesion: 0.03
+Nodes (139): Lopu Action access QA, defaultDependencies(), actionConfirmation(), activePageFromContext(), anthropicToolDefinitions(), blockSchema, blocksInput(), boundedSummary() (+131 more)
 
 ### Community 107 - "WidgetAction"
-Cohesion: 0.02
-Nodes (94): AppIntents, WidgetActionInbox, WidgetEndpointCatalog, .activeID, .entries, WidgetEndpointChoice, .body, WidgetAction (+86 more)
+Cohesion: 0.04
+Nodes (33): AppIntents, WidgetAction, chat, feed, newFolder, newThing, .path, search (+25 more)
 
 ### Community 108 - "protocol/src/index.ts"
 Cohesion: 0.02
 Nodes (101): ActionFilter, ActivitySettings, Appearance, BootstrapResponse, CalculationResult, CALCULATOR_MAX_DECIMAL_PLACES, CALCULATOR_MIN_DECIMAL_PLACES, CalculatorSettings (+93 more)
 
 ### Community 109 - "vaultProviderClient.ts"
-Cohesion: 0.04
-Nodes (117): createAnthropicApiKeyClient(), defaultDependencies(), composeLopuSurfacePrompt(), blockedIpv4, blockedIpv6, boundedVaultText(), CLAUDE_REASONING, defaultVaultProviderModel() (+109 more)
+Cohesion: 0.03
+Nodes (154): 1.3 Your own providers (Secure Vault → Lopu), file-type, createAnthropicApiKeyClient(), LopuChatProvider, assertGroup(), createVaultEnvironmentMover(), createVaultThing(), decryptValue() (+146 more)
 
 ### Community 110 - "chat.ts"
 Cohesion: 0.03
-Nodes (130): 2.2 Provider behaviour, addCacheTokens(), AnthropicClientOptions, anthropicProvider(), AnthropicProviderOptions, boundedJson(), chunkWords(), completionAsChunks() (+122 more)
+Nodes (136): 2.2 Provider behaviour, addCacheTokens(), AI_TASK_MAX_BYTES, AnthropicClientOptions, anthropicProvider(), AnthropicProviderOptions, boundedJson(), chunkWords() (+128 more)
 
 ### Community 111 - "astro/index.ts"
 Cohesion: 0.04
 Nodes (119): astronomy-engine, CATEGORY_WEIGHT, findTransits(), Transit, context, melbourneProfile, NOW, ASPECT_CLAUSE (+111 more)
 
 ### Community 112 - "modelsCore.ts"
-Cohesion: 0.04
-Nodes (94): AiModelsServiceDependencies, AiModelsViewer, AiModelThingsCollection, catalogCrystalFields(), createAiModelsService(), ensureAiModelCatalog, EnsureAiModelCatalogResult, Fail (+86 more)
+Cohesion: 0.03
+Nodes (134): ANTHROPIC_EFFORTS, ANTHROPIC_MODELS_VERSION, CLAUDE_PUBLIC_MODELS_URL, discoverConfiguredProviderModels(), DiscoveredAiModel, discoverProviderModels(), discoverPublicClaudeModels(), MODEL_DISCOVERY_TIMEOUT_MS (+126 more)
 
 ### Community 113 - "TESTING.md — per-area manual test checklists"
-Cohesion: 0.01
-Nodes (143): External design inputs, Block, feed(), test:api-capabilities, test:collections, test:environment-gateway, Network Speed Test Account Allowances, Account birthday & profile.birthday scope (`api/utils/auth/birthday.ts`, `/api/v1/oauth/userinfo`) (+135 more)
+Cohesion: 0.02
+Nodes (130): test:api-capabilities, test:collections, test:environment-gateway, Network Speed Test Account Allowances, Account birthday & profile.birthday scope (`api/utils/auth/birthday.ts`, `/api/v1/oauth/userinfo`), Account drafts and reusable post templates, Account storage queue and autonomous recovery, Paginated Action Composer UI Tests (+122 more)
 
 ### Community 114 - "error"
 Cohesion: 0.04
 Nodes (140): adoptClassInstance(), applyDerivedStateFromProps(), attachPingListener(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext() (+132 more)
 
-### Community 115 - "Sendable"
-Cohesion: 0.02
-Nodes (158): Item, Kind, photo, video, Progress, DeviceSyncResourcePolicy, PasswordConnectionStatus, connected (+150 more)
+### Community 115 - "Equatable"
+Cohesion: 0.03
+Nodes (46): AudioToolbox, CoreAudio, CoreWLAN, IOKit.graphics, ConnectionState, checking, connected, failed (+38 more)
 
-### Community 116 - "MobileSyncTrash"
-Cohesion: 0.06
-Nodes (22): CodingKeys, entry, operationId, scope, Item, Lookup, MobileSyncTrash, Mutation (+14 more)
+### Community 116 - "NativePhotoRunActivity"
+Cohesion: 0.04
+Nodes (51): BackgroundEnd, BackgroundEndCause, checkpointedWait, completed, executionExpired, systemEnded, workerCancelled, workerFailed (+43 more)
 
 ### Community 117 - ".main"
 Cohesion: 0.03
-Nodes (32): LocalPairingPresenceGate, PeerSignatureValidator, StagingStreamReader, StreamAcknowledgement, StreamDataReply, XPCListenerDelegate, XPCService, ByteSink (+24 more)
+Nodes (32): StagingStreamReader, StreamAcknowledgement, StreamDataReply, XPCListenerDelegate, XPCService, ByteSink, OneShotReply, ThingtimeNodeBridge (+24 more)
 
 ### Community 118 - "org.json.JSONObject"
-Cohesion: 0.05
-Nodes (15): NativeUploadJob.Transport, AttachmentExport, FilterInputStream, RangeReader, Document, Entry, ManagedFileStore, TrashRow (+7 more)
+Cohesion: 0.07
+Nodes (11): NativeUploadJob.Transport, Document, Entry, ManagedFileStore, TrashRow, Part, FrameReader, SyncStaging (+3 more)
 
 ### Community 119 - "local-runtime.cjs"
 Cohesion: 0.02
-Nodes (100): Agent overview read adapter, Developer acceptance, Live reads and recovery, Saved Things and reporting, assertFreePort(), attachQuitSignals(), crypto, defaultState() (+92 more)
+Nodes (99): Agent overview read adapter, Developer acceptance, Live reads and recovery, Saved Things and reporting, assertFreePort(), attachQuitSignals(), crypto, defaultState() (+91 more)
 
 ### Community 120 - "indexing.ts"
-Cohesion: 0.05
-Nodes (47): APPLICATION_DISCOVERY_MAX_DEPTH, applicationDirectories(), applicationItem(), deduplicateApplications(), discoverApplications(), discoverApplicationsIn(), discoverApplicationsWithSpotlight(), execFileAsync (+39 more)
+Cohesion: 0.04
+Nodes (58): APPLICATION_DISCOVERY_MAX_DEPTH, applicationDirectories(), applicationItem(), deduplicateApplications(), discoverApplications(), discoverApplicationsIn(), discoverApplicationsWithSpotlight(), execFileAsync (+50 more)
 
 ### Community 122 - "connections/providers.ts"
 Cohesion: 0.02
-Nodes (223): RFC-7526, createMongoChatGPTPlanStorage(), MongoChatGPTPlanStorage, MongoDependencies, Row, fromBin(), decryptOwnerValue(), EncryptedVaultValue (+215 more)
+Nodes (241): RFC-7526, ownerVaultConfigured(), account(), collection, docs, matches(), other, testRefreshLoser() (+233 more)
+
+### Community 123 - "webpageDemos.ts"
+Cohesion: 0.05
+Nodes (52): Verification, DEMO_KINDS, ListedBehaviourSuite, ListedWebpageDemo, listWebpageDemos(), ListWebpageDemosResult, seededDemoShareIds(), BehaviourSuiteSummary (+44 more)
 
 ### Community 124 - "error"
 Cohesion: 0.04
@@ -3035,25 +2996,25 @@ Nodes (123): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBai
 Cohesion: 0.06
 Nodes (27): ThingtimeWatchAttachmentMetadata, .transferDictionary, ThingtimeWatchAttachmentTransfer, ThingtimeWatchAttachmentTransferError, .errorDescription, invalidContentType, invalidFilename, invalidMetadata (+19 more)
 
-### Community 136 - "moderationAdmin.ts"
-Cohesion: 0.02
-Nodes (151): 1. Where we are today (post PR #157/#159/#161, measured 2026-08-08), 2. Constraints this design must respect, 3. Primitives we already own (this matters — most of the plumbing exists), 4. The shape of the problem: reads vs writes, own-data vs global-data, 5.1 Option A — Read-local, write-global (multi-region replica set) ⭐ recommended next step, 5.2 Option B — A + write forwarding (single-hop remote writes), 5.3 Option C — Zone-sharded Global Cluster ("true" sharding), 5.4 Rejected: per-region independent databases with app-level sync (+143 more)
+### Community 136 - "analyzeText.ts"
+Cohesion: 0.08
+Nodes (47): Full-content screening + sync-gate circuit breaker (2026-08-19), Historical hybrid create-time text gate (2026-08-19; superseded by the fail-closed pending flow below), Hybrid-gate adversarial review hardening (same day), AnalyzeTextDependencies, AnalyzeTextResult, createAnalyzeTextThing(), DEFAULT_TEXT_SCREEN_BUDGET_MS, defaultDependencies() (+39 more)
 
-### Community 137 - "apps.ts"
-Cohesion: 0.03
-Nodes (185): Evidence ledger, Dev runbook additions, Key decisions, PR #171 — /admin dashboard: subscription tiers, quotas, app suspension & ownership links, Shape of the change, Verification log (2026-08-02), AccountLink, AccountLinkKind (+177 more)
+### Community 137 - "getSessionsCollection"
+Cohesion: 0.02
+Nodes (243): Evidence ledger, Dev runbook additions, Key decisions, PR #171 — /admin dashboard: subscription tiers, quotas, app suspension & ownership links, Shape of the change, Verification log (2026-08-02), AccountLink, AccountLinkKind (+235 more)
 
 ### Community 138 - "pagedRunJournal.ts"
-Cohesion: 0.02
-Nodes (279): SyncConflictReview(), action(), button(), element(), syncConflictReviewBlocks, syncConflictReviewDisplay(), useUploadPriorities(), advanceSyncBaselinePair() (+271 more)
+Cohesion: 0.03
+Nodes (200): Upload Order Preferences, closed(), parseBatchObserveRequest(), style, syncIgnoreRulesBlocks, withDependencyIgnoreDefaults(), action(), button() (+192 more)
 
-### Community 139 - "LopuRecordingUploads"
+### Community 139 - "ThingtimeWatchAPIClient"
 Cohesion: 0.09
-Nodes (14): Context, Entry, LopuRecordingUploads, LopuUploadRedirectPolicy, UploadError, failed, http, incompatible (+6 more)
+Nodes (24): Data, Dictionary, PreparedPart, ThingtimeWatchAPIClient, .pushEnvironment, ThingtimeWatchAPIError, .errorDescription, fileChanged (+16 more)
 
 ### Community 140 - "battle.ts"
 Cohesion: 0.06
-Nodes (74): applyBattleItem(), applyEndOfTurn(), BALL_BONUS, BALL_BREAK_FLAVOR, BattleMon, battleMonFromMember(), BattleMove, catchAttempt() (+66 more)
+Nodes (72): applyBattleItem(), applyEndOfTurn(), BALL_BONUS, BALL_BREAK_FLAVOR, BattleMon, battleMonFromMember(), BattleMove, concludeIfFainted() (+64 more)
 
 ### Community 141 - "reporting.test.mts"
 Cohesion: 0.03
@@ -3061,83 +3022,83 @@ Nodes (93): Agents Report PAT Scope, Discover every authorized reporting account
 
 ### Community 142 - "ManagedFileReplica"
 Cohesion: 0.04
-Nodes (30): FileVersionExport, ManagedFileReplica, .stagingDirectory, Scope, .key, VerifiedCopy, FileVersionExportTests, ManagedFileReplicaTests (+22 more)
+Nodes (29): FileVersionExport, ManagedFileReplica, .stagingDirectory, Scope, .key, VerifiedCopy, FileVersionExportTests, ManagedFileReplicaTests (+21 more)
 
-### Community 143 - "ref_commander_protocol"
-Cohesion: 0.06
-Nodes (61): App(), EmojiPicker, AccountSettings(), environmentLabel(), item, ping, speed, CloudSyncSettings() (+53 more)
+### Community 143 - "Settings.tsx"
+Cohesion: 0.08
+Nodes (39): AccountSettings(), environmentLabel(), ping, renderActivity(), speed, CloudSyncSettings(), formatBytes(), formatCount() (+31 more)
 
-### Community 144 - "NativeUploadPartRequest"
-Cohesion: 0.07
-Nodes (7): FileUploadPart, FileUploadPartTests, NativeUploadPartRequest, PlanResponse, Upload, LiDARUploadArchive, LiDARUploadMemoryTests
+### Community 144 - "useDeviceStore.ts"
+Cohesion: 0.05
+Nodes (74): cacheToken(), clearDeviceCache(), DEVICE_CACHE_VERSION, DeviceDetailCacheEnvelope, deviceDetailCacheKey(), DeviceListCacheEnvelope, deviceListCacheKey(), isRuntimeStateLike() (+66 more)
 
 ### Community 145 - "desktop.ts"
-Cohesion: 0.04
-Nodes (86): client, output, chatGptConnector, orderedMessages(), claudeConnector, arrayOf(), attachmentOf(), conversationBase() (+78 more)
+Cohesion: 0.05
+Nodes (84): chatGptConnector, orderedMessages(), claudeConnector, arrayOf(), attachmentOf(), conversationBase(), idOf(), isoDate() (+76 more)
 
-### Community 146 - "landingSections.tsx"
+### Community 146 - "useThingtime"
 Cohesion: 0.01
-Nodes (264): Everything is a Thing: shared actions and context menus, Fundamentals (read first), 7. One notification: Lopu 🦄, Saved AI waterfall data, AccountSwitcher(), OwnedAccount, RowAvatar(), SwitcherAccount (+256 more)
+Nodes (343): Frontend — re-render cost, Frontend — re-render cost, Inline onChanged closure in PostList defeats PostCard's React.memo entirely, Inline ref callbacks drive an O(n²) DOM sweep on every PostList render, paths recomputes an O(N²) full-tree walk of the entire thingtime object on every mutation, Recursive Thingtime tree component is unmemoized and subscribes to the whole context, setSessionEventCount fires on every engagement event, re-rendering the entire feed page, ThingtimeContext value is a fresh object literal every provider render (+335 more)
 
 ### Community 147 - "Feature To-Do README"
-Cohesion: 0.10
-Nodes (52): Anti-Abuse Storage Hardening, Scheduled Lopu Tasks, Conventions used in every map, Feature maps, Incoming mail, Creator Sustainability and Fair Value Baseline, Ethical Adoption Baseline, Conventions (+44 more)
+Cohesion: 0.11
+Nodes (47): Anti-Abuse Storage Hardening, Scheduled Lopu Tasks, Creator Sustainability and Fair Value Baseline, Ethical Adoption Baseline, Conventions, Index, Thingtime notes, Resource-Conscious Reach Baseline (+39 more)
 
 ### Community 148 - "NativePhotoExecutionLease"
 Cohesion: 0.05
-Nodes (27): BackgroundTasks, NativePhotoContinuedProgress, NativePhotoExecutionLease, .canExecute, .continuedActive, .continuedMeasurement, NativeUploadBackgroundCoordinator, NativeUploadBackgroundLease (+19 more)
+Nodes (30): BackgroundTasks, iOS continued-upload lifecycle, NativePhotoContinuedProgress, NativePhotoExecutionLease, .canExecute, .continuedActive, .continuedMeasurement, NativeUploadBackgroundCoordinator (+22 more)
 
 ### Community 149 - "Mac download staging stream (2026-10-17)"
 Cohesion: 0.03
-Nodes (60): Failure, capacity, .errorDescription, FileUploadPartStore, Part, Record, Request, NativeFileJournal (+52 more)
+Nodes (58): FileUploadPart, Failure, capacity, .errorDescription, FileUploadPartStore, Part, Record, Request (+50 more)
 
-### Community 150 - "ref_node_assert"
-Cohesion: 0.00
-Nodes (266): CustomEvent, setup(), CustomEvent, setup(), personalChatGPTPlanOwner(), assert, electronDir, path (+258 more)
+### Community 150 - "generate-route-previews.mjs"
+Cohesion: 0.07
+Nodes (22): file, selectHookTransport(), notifyCommentAdded, source, text, expressions, source, text (+14 more)
 
-### Community 151 - "View"
-Cohesion: 0.03
-Nodes (41): WidgetPreferences, ThingtimeApp, .body, DeploymentPresentation, DeploymentLoadStatus, .body, DestinationPickerDrawer, .body (+33 more)
+### Community 151 - "ThingtimeWebView"
+Cohesion: 0.05
+Nodes (25): ThingtimeApp, .body, DeploymentLoadStatus, .body, DestinationPickerDrawer, .body, DestinationPickerHeader, .body (+17 more)
 
 ### Community 152 - "IndexerError"
 Cohesion: 0.06
 Nodes (67): capture_inner(), failure(), identity(), admit(), begin(), Cache, change_page(), check_seal_events() (+59 more)
 
-### Community 153 - "behaviourSuites.ts"
-Cohesion: 0.05
-Nodes (48): pickSuiteExamples(), seededSuiteCount(), APP_SLUG_PREFIX, APP_SUITES, ArgSpec, BEHAVIOUR_SUITES, getBehaviourSuite(), InputSpec (+40 more)
+### Community 153 - "electronBridge.ts"
+Cohesion: 0.03
+Nodes (112): PR 709 Shared Settings Views, PR 709: Shared settings views and Mac panel preferences, OAUTH_ERROR_CODES, ConnectionProviderIcon(), ConnectionsPage(), ConnectionsSession(), FeedFilter, Provider (+104 more)
 
 ### Community 154 - "worktree-ports.cjs"
 Cohesion: 0.03
-Nodes (86): Local development and worktrees, { pm2AppConfig }, {pm2AppConfig}, child, { existsSync }, localBin, path, { ports } (+78 more)
+Nodes (88): Local development and worktrees, { pm2AppConfig }, {pm2AppConfig}, child, { existsSync }, localBin, path, { ports } (+80 more)
 
-### Community 155 - "isFail"
-Cohesion: 0.04
-Nodes (85): inspectActionProgram(), resolveActionProgram(), createListForkBoundMedia(), createListForkBoundMediaDocuments(), listForkBoundMedia, listForkBoundMediaDocuments, includeForkComments(), MAX_FORK_THINGS (+77 more)
-
-### Community 156 - "credentialVault.ts"
+### Community 155 - "LidarScanLibraryPage.tsx"
 Cohesion: 0.07
-Nodes (55): createSystemEnvironmentStore(), EnvironmentEntry, identifier(), Options, publicEnvironmentEntry(), revealSystemEnvironment(), systemEnvironmentStore(), entry (+47 more)
+Nodes (45): createLidarScanClient(), LIDAR_SCAN_CAPABILITY, lidarAppLink(), LidarSaveDestination, LidarScanAction, LidarScanItem, LidarScanScope, LidarScanSnapshot (+37 more)
 
-### Community 157 - "deviceLiveAiCore.ts"
+### Community 156 - "moderationAdmin.ts"
 Cohesion: 0.06
-Nodes (71): DEVICE_PAIRING_PROOF_VERSION, NodeDeviceCommand, PublicDeviceApproval, DeviceCreateCommandRequest, DeviceNodeCommandRequest, DeviceNodeCommandResponse, DeviceNodeStateRequest, DeviceNodeStateResponse (+63 more)
+Nodes (46): 1. What the Thingtime pipeline spends today, ANALYZABLE_IMAGE_CONTENT_TYPES, AnalyzeAttachmentDependencies, AnalyzeAttachmentResult, analyzeReadyAttachment, createAnalyzeReadyAttachment(), defaultDependencies(), defaultFetchBytes() (+38 more)
+
+### Community 157 - "NativeUploadHttp.java"
+Cohesion: 0.08
+Nodes (8): Cookies, DeviceHttpTransport, NativeUploadHttp, RequestBody, SessionCookie, SessionCookieTest, Storage and accounting model, Android historical Save As — 2026-10-17
 
 ### Community 158 - "colors.tsx"
 Cohesion: 0.25
 Nodes (6): hex-to-rgba, chakras, chakrasDark, chakrasLight, g, greys
 
-### Community 159 - "PR #578 — App suites: Pokeworld + StarsAlign on Thingtime"
-Cohesion: 0.12
-Nodes (17): App Suites PR Note, Action grammar v2 (`schemas/registry.ts`, `api/utils/actions/execute.ts`), Lopu review round 2 — 2026-09-03, Page runtime (`components/Builder/webpageRuntime.tsx`), Platform pieces added, PR #578 — App suites: Pokeworld + StarsAlign on Thingtime, Templates (`componentTemplate.ts`, `HtmlThingRenderer.tsx`), Verification (+9 more)
+### Community 159 - "chatPrompt.ts"
+Cohesion: 0.04
+Nodes (68): Components Library PR Note, Debugging history worth keeping, Follow-on, PR #291 — Components library: /components page, component thing kind, 1000-component catalog, Round 2 (owner feedback): families + deep links, Shape of the change, The catalog + generation pipeline, Validation (+60 more)
 
-### Community 160 - "plugin.ts"
+### Community 160 - "patTokens.ts"
 Cohesion: 0.01
-Nodes (581): Design decisions, Round 4 — Lopu review (2026-09-03), Architecture, Auto-login hints, Ceremonies, Endpoints (all three-place registered + documented), Notes / follow-ups, Passkeys are protected things (+573 more)
+Nodes (336): RFC-9111, Application Boundary, Where the code lives, Design decisions, Round 4 — Lopu review (2026-09-03), Migrations (admin), 1. Verified access, Auto-login hints (+328 more)
 
 ### Community 161 - "desktop-settings.cjs"
 Cohesion: 0.03
-Nodes (75): byteLength(), crypto, customEndpointId(), DEFAULT_ENDPOINTS, DesktopSettingsStore, emptyPersistedState(), fs, fsPromises (+67 more)
+Nodes (74): byteLength(), crypto, customEndpointId(), DEFAULT_ENDPOINTS, DesktopSettingsStore, emptyPersistedState(), fs, fsPromises (+66 more)
 
 ### Community 162 - "ThingtimeNativeNotifications"
 Cohesion: 0.04
@@ -3145,7 +3106,7 @@ Nodes (41): String, .nonEmpty, ThingtimeWatchNotification, .actionText, .display
 
 ### Community 163 - "quota.ts"
 Cohesion: 0.07
-Nodes (93): migrateLegacyServiceQuotaThings(), childHistorySizeExpression(), claimedChildCountExpression(), documentToState(), getServiceQuotaStatus(), initializeQuotaThing(), mutateServiceQuota(), normalizePipeline() (+85 more)
+Nodes (92): childHistorySizeExpression(), claimedChildCountExpression(), documentToState(), getServiceQuotaStatus(), initializeQuotaThing(), mutateServiceQuota(), normalizePipeline(), permitQuota() (+84 more)
 
 ### Community 164 - "core/src/lib.rs"
 Cohesion: 0.04
@@ -3153,19 +3114,19 @@ Nodes (91): action_filter_applies_any_all_and_none_constraints(), ActionFilter, 
 
 ### Community 165 - "logoVariants.ts"
 Cohesion: 0.06
-Nodes (69): What shipped in round 2, How it is put together, socialCardLogoSvg(), BrandExportOptions, buildExportSvg(), clampPad(), PaddingPx, DEFAULT_FAMILY_THEMES (+61 more)
+Nodes (68): What shipped in round 2, How it is put together, socialCardLogoSvg(), BrandExportOptions, buildExportSvg(), clampPad(), downloadBrandExport(), PaddingPx (+60 more)
 
-### Community 166 - "mail/model.ts"
+### Community 166 - "useMail.ts"
 Cohesion: 0.10
-Nodes (36): Incoming mail, GmailWorkspace(), load(), Mail, GmailComposer(), perform(), persist(), newGmailDraft() (+28 more)
+Nodes (44): Incoming mail, GmailMessageActions(), GmailWorkspace(), load(), Mail, GmailComposer(), perform(), persist() (+36 more)
 
-### Community 167 - "Auth, accounts and admin"
-Cohesion: 0.02
-Nodes (111): Thingtime browser extension password workspace UI, Connection diagnostics, Design and trust boundary, Password workspace, explicit autofill and local QR (0.3), Passwords settings discovery, Provider page contract (version 1), Resizable browser workspace, Thingtime accounts (+103 more)
+### Community 167 - "Password manager"
+Cohesion: 0.17
+Nodes (12): Automatic Website preview icons, Browser passkeys and settings, Device connection control, Native Password AutoFill, Native progress, recovery and naming, Official tree branding, Password generator and entry icons, Password manager (+4 more)
 
 ### Community 168 - "ShareInbox"
-Cohesion: 0.09
-Nodes (4): ShareComposerMetadata, Batch, ShareInbox, NativeShareTests
+Cohesion: 0.10
+Nodes (12): Acceptance, Build and fork setup, macOS system sharing, Native boundary, Batch, Failure, empty, .errorDescription (+4 more)
 
 ### Community 169 - "Synthetic personal recording runtime smoke"
 Cohesion: 0.02
@@ -3173,27 +3134,27 @@ Nodes (108): Admin error-log Things (2026-09-14), Android Native Device Pairing,
 
 ### Community 170 - "PhotoLibrary"
 Cohesion: 0.06
-Nodes (23): PhotoLibraryTest, ContextWrapper, PhotoDocumentsProvider, Media, PhotoLibrary, ACL storage and authorization, Authored schema and Component declarations, Growing settings and definitions (+15 more)
+Nodes (10): PhotoLibraryTest, ContextWrapper, Provider, OfflineDocumentsProvider, PhotoDocumentsProvider, Media, PhotoLibrary, Verification and rollout (+2 more)
 
 ### Community 171 - "mergeLanes"
 Cohesion: 0.03
 Nodes (99): attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextRetryLane() (+91 more)
 
 ### Community 172 - "localAttachmentStorage.ts"
-Cohesion: 0.04
-Nodes (77): Local attachment stand-in (`localAttachmentStorage.ts`), @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, @vercel/oidc-aws-credentials-provider, AttachmentRange, MAX_ATTACHMENT_RANGE_BYTES, getPrivateS3Config(), PrivateS3Config (+69 more)
+Cohesion: 0.06
+Nodes (55): Attachment Archive Capability, Local Attachment Object Capability, Developer Experience Follow-ups PR, Developer-experience follow-ups: local attachment storage, API fixtures, feature maps, worktree bootstrap, Follow-ups, Validation, Why these shapes, Archive and Local Storage Review Fixes PR (+47 more)
 
 ### Community 173 - "verify-signed-app.mjs"
 Cohesion: 0.03
-Nodes (84): archiveFor(), ARCHIVES, { createReadStream }, crypto, digest(), fs, NOTICES, path (+76 more)
+Nodes (90): archiveFor(), ARCHIVES, { createReadStream }, crypto, digest(), fs, NOTICES, path (+82 more)
 
-### Community 174 - "devices.ts"
-Cohesion: 0.06
-Nodes (65): bearerCredential(), CanonicalDevicePairingClaim, createDevicePairingSession(), DEVICE_SESSION_LIFETIME_MS, deviceCredentialHash(), devicePairingProofHash(), ED25519_SPKI_PREFIX, findPairingSession() (+57 more)
-
-### Community 175 - "ThingtimeWatchAPIClient"
+### Community 174 - "release-cache.cjs"
 Cohesion: 0.09
-Nodes (23): Data, Dictionary, PreparedPart, ThingtimeWatchAPIClient, .pushEnvironment, ThingtimeWatchAPIError, .errorDescription, fileChanged (+15 more)
+Nodes (45): assertBundleDirectory(), assertBundlePath(), branchDetails(), cacheInstalledBundle(), cacheKey(), cachePaths(), cacheReleaseArchive(), commandFailure() (+37 more)
+
+### Community 175 - "ThingEntry"
+Cohesion: 0.05
+Nodes (45): ThingtimeNewControl, .body, ThingtimeSearchControl, .body, ThingtimeTranscribeControl, .body, ThingtimeVoiceControl, .body (+37 more)
 
 ### Community 176 - "commitRootImpl"
 Cohesion: 0.03
@@ -3247,33 +3208,33 @@ Nodes (96): assertValidProps(), checkAttributeStringCoercion(), checkCSSProperty
 Cohesion: 0.03
 Nodes (95): addFiberToLanesMap(), batchedUpdates$1(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl() (+87 more)
 
-### Community 189 - "mediaPipeline.test.ts"
-Cohesion: 0.06
-Nodes (47): @imagemagick/magick-wasm, mediabunny, @resvg/resvg-wasm, createHostMediaPipeline(), MediaWorkerPort, isImageFile(), defaults, program (+39 more)
+### Community 189 - "imagePipeline.test.ts"
+Cohesion: 0.05
+Nodes (56): @imagemagick/magick-wasm, @resvg/resvg-wasm, mediaToolsSuite, detail, explorer, fieldStyle, link(), nav (+48 more)
 
-### Community 190 - "ConnectorRuntime"
-Cohesion: 0.07
-Nodes (18): ConnectorCommand, ConnectorEvent, ConnectorIncomingFrame, ConnectorReply, ConnectorRuntime, ConnectorRuntimeConfiguration, ConnectorRuntimeHealth, ConnectorRuntimeState (+10 more)
+### Community 190 - "PhotoAutomationControls.tsx"
+Cohesion: 0.05
+Nodes (64): reply(), blocks, decimalBytes(), displayBytes(), Draft, draftFrom(), legacyLabels, migratePhotoAutomationLabels() (+56 more)
 
-### Community 191 - "dusted.ts"
+### Community 191 - "snapquest.ts"
 Cohesion: 0.04
-Nodes (60): addProgress, addTodo, agentTasksSuite, createTask, kit, readChildren(), states, taskInput (+52 more)
+Nodes (59): addProgress, addTodo, agentTasksSuite, createTask, kit, readChildren(), states, taskInput (+51 more)
 
 ### Community 192 - "AuthenticatorSetupBridge"
 Cohesion: 0.09
 Nodes (8): AuthenticatorSetupBridge, NoRedirect, StatusKind, error, verificationFailure, workflow, AuthenticatorSetupBridgeStatusTests, .uri
 
-### Community 193 - "LopuVoiceCaptures"
-Cohesion: 0.11
-Nodes (5): Entry, LopuVoiceCaptures, VoiceCaptureRedirectPolicy, LopuVoiceCaptureTests, .manifest
+### Community 193 - "workspaces.ts"
+Cohesion: 0.13
+Nodes (42): createUserVaultGroup(), listUserVault(), moveUserVaultEntry, loadWorkspaceAccess(), MAX_WORKSPACE_RECORDS, readAccess(), reads, serviceWorkspaceCanRead() (+34 more)
 
 ### Community 194 - "dependencies"
 Cohesion: 0.02
 Nodes (94): dependencies, @anthropic-ai/claude-code, @anthropic-ai/sdk, astronomy-engine, @aws-sdk/client-s3, @aws-sdk/client-sesv2, @aws-sdk/s3-request-presigner, axios (+86 more)
 
-### Community 195 - "ChatGPTPlanRuntime"
-Cohesion: 0.14
-Nodes (19): ChatGPTPlanRuntime, ChatGPTPlanRuntimeError, digest(), safeFailure(), same(), scopeKey(), Store, fixture() (+11 more)
+### Community 195 - "browserActionRuntime.ts"
+Cohesion: 0.03
+Nodes (124): CI regression correction, Decisions, Evidence, Password generator, entry icons and passkey setup, Rendered acceptance, Scope, Fail, validateRunInputs() (+116 more)
 
 ### Community 196 - "diffHydratedProperties"
 Cohesion: 0.04
@@ -3320,12 +3281,12 @@ Cohesion: 0.04
 Nodes (93): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+85 more)
 
 ### Community 207 - "FileSyncIdentityAdmission"
-Cohesion: 0.10
-Nodes (13): FileSyncIdentityAdmission, .queuedForTesting, Permit, Scope, Waiter, FileSyncIdentityAdmissionTests, IdentityAdmissionTestClock, IdentityStarts (+5 more)
+Cohesion: 0.08
+Nodes (18): ShareTests, Failure, capacity, timer, FileSyncIdentityAdmission, .queuedForTesting, Permit, Scope (+10 more)
 
-### Community 208 - "portableBackup.ts"
-Cohesion: 0.02
-Nodes (251): backup-file-folder, backup:vault plan-tree, BackupObjectStore, Independent S3 replica worker, Local vault, openSealedBackup, backup:replica CLI, restore-tree (+243 more)
+### Community 208 - "ref_node_crypto"
+Cohesion: 0.01
+Nodes (651): Draft and large-content snapshot coverage — 2026-10-18, Historical attachment bytes in account snapshots — 2026-10-18, Portable Backups, account-content v1 Snapshot Shape, Account inventory producer, Account profile content and private preferences, Attachment bytes and offline file-version recovery, backup-file-folder (+643 more)
 
 ### Community 209 - "captureCommitPhaseError"
 Cohesion: 0.04
@@ -3371,81 +3332,81 @@ Nodes (92): attachPingListener(), attachSuspenseRetryListeners(), captureCommitP
 Cohesion: 0.04
 Nodes (92): attachPingListener(), attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+84 more)
 
-### Community 220 - "appSuites/index.ts"
-Cohesion: 0.12
-Nodes (15): branchwoodSuite, dustedSuite, gardenSuite, mediaToolsSuite, pokeworldSuite, snapquestSuite, starsalignSuite, thingmonSuite (+7 more)
+### Community 220 - "chats/reply/_reply.tsx"
+Cohesion: 0.04
+Nodes (83): chatGPTPlanFailure(), isChatGPTPlanProvider(), listAiModels, resolveLopuBilling(), isLopuAccessActor(), debitLopuUsage, AI_TASK_ADMISSION_LEASE_MS, AI_TASK_KIND (+75 more)
 
 ### Community 221 - "lopuChatStore.ts"
 Cohesion: 0.01
-Nodes (667): lopuAccessMode, isRunningLopuChatTask(), AccessSettingsEditor(), AccountRow(), Chip(), CREDIT_ENTRIES, CreditEntry, errorMessage() (+659 more)
+Nodes (846): 4. Client, @emotion/react, lopuAccessMode, AI_TASK_HEADER, AI_TASK_OPERATIONS, AI_TASK_OWNER_HEADER, AI_TASK_PATH, AiBackgroundTask (+838 more)
 
 ### Community 222 - "captureCommitPhaseError"
 Cohesion: 0.04
 Nodes (91): attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+83 more)
 
 ### Community 223 - "styleTokens.ts"
-Cohesion: 0.05
-Nodes (61): Agent connection and artifacts, No-login native draft preview and export, Supported draft scope and bounds, Verification, blockToHtml(), elementToBlocks(), elementToUnstyledBlocks(), escapeHtml() (+53 more)
+Cohesion: 0.09
+Nodes (36): Supported draft scope and bounds, makeEditorPanelMovable(), makeEditorPanelResizable(), LongTextEditorInner, clamp(), hslToRgba(), parseColor(), Rgba (+28 more)
 
 ### Community 224 - "Doc"
-Cohesion: 0.04
-Nodes (22): Memory, ByteArrayInputStream, NativeUploadRecoveryTest, NativeUploadJob.Transport, SafFolderProviderTest, Content, Doc, Failure (+14 more)
+Cohesion: 0.05
+Nodes (16): Memory, ByteArrayInputStream, NativeUploadRecoveryTest, NativeUploadJob.Transport, SafFolderProviderTest, Content, Doc, Failure (+8 more)
 
 ### Community 225 - "daemon/src/server.ts"
-Cohesion: 0.04
-Nodes (61): options, callbackPage(), commanderIndexScope(), CommanderServer, compactFavourites(), createCommanderServer(), completeOAuthCallback(), oauthCallback() (+53 more)
+Cohesion: 0.06
+Nodes (53): options, callbackPage(), commanderIndexScope(), CommanderServer, compactFavourites(), createCommanderServer(), completeOAuthCallback(), oauthCallback() (+45 more)
 
 ### Community 226 - "ThingtimeWatchAudioRecorder"
-Cohesion: 0.07
-Nodes (18): ThingtimeWatchApp, .body, Recording, .displayDate, .displaySize, .id, RecordingError, .errorDescription (+10 more)
+Cohesion: 0.08
+Nodes (13): ThingtimeWatchApp, .body, Recording, .displayDate, .displaySize, .id, ThingtimeWatchAudioRecorder, ThingtimeWatchAttachmentView (+5 more)
 
 ### Community 227 - "pokeworld/index.ts"
-Cohesion: 0.04
-Nodes (81): ASTRO_PACK_ARITIES, astroPack, ACTION_PACKS, bindPacks(), memberFromBattleMon(), CAVE_SPECIES, defaultBiomesFor(), defaultRuleId() (+73 more)
+Cohesion: 0.03
+Nodes (116): Pokeworld (`schemas/appSuites/pokeworld.ts`, pack `packs/pokeworld/`), StarsAlign (`schemas/appSuites/starsalign.ts`, pack `packs/astro/`), The two apps, catchAttempt(), memberFromBattleMon(), CAVE_SPECIES, defaultBiomesFor(), defaultRuleId() (+108 more)
 
 ### Community 228 - "agent-reporting-acceptance.mjs"
 Cohesion: 0.08
 Nodes (31): aclProvisioning, aclScale, algorithmScale, browserQa(), browserScopedConsent(), checks, childDiagnostics, children (+23 more)
 
-### Community 229 - "deviceCommands.ts"
-Cohesion: 0.11
-Nodes (58): resolveDeviceMedia(), availableDeviceApprovalSlot(), bounded(), claimNextDeviceCommand(), commandApprovalState(), commandOutputReference(), commandStatus(), CreateCommandInput (+50 more)
+### Community 229 - "PasswordProviderPhase"
+Cohesion: 0.09
+Nodes (14): ProviderPreview, PasskeyRegistrationAttempt, PasswordProviderPhase, confirming, connection, filling, indexing, .message (+6 more)
 
 ### Community 230 - "browserPasskey.ts"
-Cohesion: 0.06
-Nodes (56): RFC-5915, @simplewebauthn/server, tldts, PASSKEY_PROVIDER_NAMES, PASSKEY_PROVIDERS, providerNameForAaguid(), authData(), BROWSER_PASSKEY_EXCLUDED_MESSAGE (+48 more)
+Cohesion: 0.05
+Nodes (65): RFC-5915, tldts, PASSKEY_PROVIDER_NAMES, PASSKEY_PROVIDERS, providerNameForAaguid(), detailOf(), emit(), ProviderSession() (+57 more)
 
-### Community 231 - "PasswordProviderError"
-Cohesion: 0.07
-Nodes (24): Data, .base64URL, PasswordEntry, PasswordField, PasswordProviderError, .allowsRetryInCurrentRequest, cancelled, conflict (+16 more)
+### Community 231 - "CredentialProviderViewController"
+Cohesion: 0.11
+Nodes (6): Choice, CredentialProviderViewController, ProviderView, .body, .treeImage, ProviderViewModel
 
-### Community 232 - "catalog.test.ts"
-Cohesion: 0.07
-Nodes (48): Where things live, categoryCounts(), hasPlaceholder(), PAGE_COUNT, PAGES, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, validateCatalog() (+40 more)
+### Community 232 - "marketing/types.ts"
+Cohesion: 0.11
+Nodes (24): CATEGORIES, PAGES, COMPETITOR_BY_KEY, CONCEPT_BY_KEY, CONCEPTS, TEMPLATE_BY_KEY, TEMPLATES, byKey() (+16 more)
 
 ### Community 233 - "MobileDevicePairing"
-Cohesion: 0.05
-Nodes (17): MobileDeviceAlerts, .remoteRegistrationPermitted, MobileDeviceAlertsTransport, MobileDeviceCommandWorker, snapshot, MobileDeviceLocationTransport, Failure, http (+9 more)
+Cohesion: 0.02
+Nodes (64): Failure, foregroundRequired, invalidInput, soundNotPrepared, unavailable, MobileDeviceAlertActions, MobileDevicePreparedSoundStore, Receipt (+56 more)
 
 ### Community 234 - "socialPreview.ts"
-Cohesion: 0.07
-Nodes (74): buildSocialMetaTags(), escapeHtml(), fallbackSocialMeta(), GENERIC_SITE_DESCRIPTION, injectSocialMeta(), named(), PageMeta, property() (+66 more)
+Cohesion: 0.08
+Nodes (70): Safety boundaries, getRequestOrigin(), buildSocialMetaTags(), escapeHtml(), fallbackSocialMeta(), GENERIC_SITE_DESCRIPTION, injectSocialMeta(), named() (+62 more)
 
 ### Community 235 - "acceptance-viewer.test.cjs"
 Cohesion: 0.05
-Nodes (52): BROWSER_OPERATIONS, codes, exec(), { execFile }, failure(), fs, invoke, { loadBinding } (+44 more)
+Nodes (51): codes, exec(), { execFile }, failure(), fs, invoke, { loadBinding }, path (+43 more)
 
-### Community 236 - "musing.ts"
-Cohesion: 0.06
-Nodes (49): Admin editor (`PRConflictResolverModelWaterfallEditor.tsx`), Consumers, Gotchas learned, Known limitation / follow-up, PR #388 — Unlimited AI model waterfall with the full Claude + OpenAI catalog, Review round 1 — musing output budget (Lopu, 2026-08-24), Review round 4 — behavioral streaming contract (Codex, 2026-08-27), Route + docs (+41 more)
+### Community 236 - "Devices/deviceCore.ts"
+Cohesion: 0.09
+Nodes (54): ACTION_CAPABILITY, blockedPolicy(), boundedInteger(), cacheAgentSession(), cacheCapability(), cacheCommand(), cacheDesired(), cacheError() (+46 more)
 
 ### Community 237 - "ThingtimeNodeError"
-Cohesion: 0.02
-Nodes (52): IOBluetooth, IOKit.ps, IOKit.pwr_mgt, ShareTests, ThingtimeNodeError, approvalRequired, .code, commandConflict (+44 more)
+Cohesion: 0.03
+Nodes (43): IOBluetooth, IOKit.ps, IOKit.pwr_mgt, ThingtimeNodeError, approvalRequired, .code, commandConflict, commandIdRequired (+35 more)
 
 ### Community 238 - "CommanderWebView"
 Cohesion: 0.04
-Nodes (12): CommanderLauncherContentView, .surfaceInset, .usesCustomWindowResizeHandling, CommanderResizeHandleView, .mouseDownCanMoveWindow, CommanderResizeEdges, CommanderResizeRegion, CommanderWebView (+4 more)
+Nodes (17): CommanderLauncherContentView, .surfaceInset, .usesCustomWindowResizeHandling, CommanderResizeHandleView, .mouseDownCanMoveWindow, CommanderFileDragError, .errorDescription, invalidPath (+9 more)
 
 ### Community 239 - "completeWork"
 Cohesion: 0.04
@@ -3497,43 +3458,43 @@ Nodes (85): 2026-10-19 — Disk-backed complete selected-tree restore, 2026-10-1
 
 ### Community 251 - "thingmon/rules.ts"
 Cohesion: 0.06
-Nodes (76): Trust-ladder note (from the rescue's browser pass), Gotchas recorded, THINGMON_SPECIES_DATA, critterView(), THINGMON_PACK_ARITIES, THINGMON_SPECIES_SEED, thingmonPack, act() (+68 more)
+Nodes (76): Request, API and storage contract, Trust-ladder note (from the rescue's browser pass), THINGMON_SPECIES_DATA, critterView(), THINGMON_SPECIES_SEED, act(), applyItem() (+68 more)
 
-### Community 252 - "namespace.ts"
+### Community 252 - "SafeActionKind"
 Cohesion: 0.04
-Nodes (101): APP_DATA_KEY_RE, AppDataWriteConflict, deleteAppData(), registeredStorageSize(), resolveAppDataAcl, sanitizeAppDataKey(), setAppData(), storageMutationFail() (+93 more)
+Nodes (51): SafeActionKind, activateApplication, clickPointer, connectWiFi, disconnectWiFi, filesystem, forceTerminateApplication, hideApplication (+43 more)
 
 ### Community 253 - "sitemapCore.ts"
-Cohesion: 0.06
-Nodes (63): What changed, INDEXABLE_STATIC_PATH_PATTERN, isIndexableStaticPath(), STATIC_SITEMAP_PATHS, socialPageIsIndexable(), brandingAssets, buildSitemapDocument(), lastmodOf() (+55 more)
+Cohesion: 0.04
+Nodes (78): What changed, ORGANIZATION_LEGAL_NAME, ORGANIZATION_LOGO_HEIGHT, ORGANIZATION_LOGO_PATH, ORGANIZATION_LOGO_WIDTH, ORGANIZATION_SAME_AS, ORGANIZATION_WORDMARK_HEIGHT, ORGANIZATION_WORDMARK_PATH (+70 more)
 
 ### Community 254 - "timeline"
-Cohesion: 0.05
-Nodes (49): Contextual notes and Lopu explanations — 2026-10-13, Delivery and acceptance ledger, Direct named branch lookup — 2026-09-28, Fable 5.1 browser integration (2026-09-29), Folder placement increment — 2026-09-27, History-to-Thing database identity — 2026-09-28, Home and selected database history — 2026-09-28, Known Action outcome recovery — 2026-09-30 (+41 more)
+Cohesion: 0.02
+Nodes (91): Timeline Storage and Transaction Integration, Timeline Branch Merge, Timeline Shared Formats and Client Queue, Verify, Contextual notes and Lopu explanations — 2026-10-13, Deleted Thing recovery — 2026-09-30, Delivery and acceptance ledger, Fable 5.1 browser integration (2026-09-29) (+83 more)
 
-### Community 255 - "RecoveryComponent"
-Cohesion: 0.03
-Nodes (89): .pages, Installed iOS two-way acceptance and WebKit fetch binding — 2026-10-17, .buildDate, CacheManifest, CacheManifestEntry, .cachedDate, .id, CacheReleaseDescriptor (+81 more)
+### Community 255 - "RecoveryCoreTests.swift"
+Cohesion: 0.04
+Nodes (61): .buildDate, CacheManifest, CacheManifestEntry, .cachedDate, .id, CacheReleaseDescriptor, RecoveryBundleTrust, unsigned (+53 more)
 
 ### Community 256 - "utils/mongodb/connectionInventory.ts"
-Cohesion: 0.09
-Nodes (40): Authored marker presentation (api.maps1.2.0), buildConnectionSnapshotThing(), ConnectionInventoryPage, count(), createConnectionInventoryReader(), createConnectionSnapshotPublisher(), date(), decodeConnectionInventoryCursor() (+32 more)
+Cohesion: 0.19
+Nodes (19): Historical AI identity foundation — 2026-09-12, buildConnectionSnapshotThing(), ConnectionInventoryPage, count(), createConnectionInventoryReader(), createConnectionSnapshotPublisher(), date(), decodeConnectionInventoryCursor() (+11 more)
 
 ### Community 257 - "things-and-folders.md"
 Cohesion: 0.03
-Nodes (85): Things API Capability 1.52.1, Things Bulk Capability 1.7.2, Things Export Capability 1.16.1, History Browser, Contextual History Panel, Compiled Device Folder Replica Fixture, Device Sync Resources, History Timeline Design Concept (+77 more)
+Nodes (90): Things API Capability 1.52.1, Things Bulk Capability 1.7.2, Things Export Capability 1.16.1, History Browser, Contextual History Panel, Compiled Device Folder Replica Fixture, Device Sync Resources, Account Drafts and Templates (+82 more)
 
-### Community 258 - "garden.ts"
-Cohesion: 0.03
-Nodes (120): beginAction, Choice, choicesView(), chooseAction, ENDINGS, endingsView(), flagsOf(), journal (+112 more)
+### Community 258 - "dusted.ts"
+Cohesion: 0.04
+Nodes (103): Action grammar v2 (`schemas/registry.ts`, `api/utils/actions/execute.ts`), choicesView(), flagsOf(), addAction, board, clearDoneAction, composer, doneList (+95 more)
 
 ### Community 259 - "LiveAISyncCoordinator"
 Cohesion: 0.09
-Nodes (23): warning, event, Kind, activity, visible, LiveAISyncConfiguration, LiveAISyncCoordinator, LiveAISyncError (+15 more)
+Nodes (22): event, Kind, activity, visible, LiveAISyncConfiguration, LiveAISyncCoordinator, LiveAISyncError, corruptJournal (+14 more)
 
-### Community 260 - "Check"
-Cohesion: 0.05
-Nodes (12): FileExportBridge, Request, Active, FolderBridge, Request, FolderRangeSink, Send, FolderRangeSource (+4 more)
+### Community 260 - "FolderBridge"
+Cohesion: 0.06
+Nodes (7): FileExportBridge, Request, Active, FolderBridge, Request, MainActivity, WebViewClient
 
 ### Community 261 - ""remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js""
 Cohesion: 0.05
@@ -3545,7 +3506,7 @@ Nodes (65): clear(), _extends(), keyframes(), "remix/node_modules/.pnpm/lodash.m
 
 ### Community 263 - ""remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js""
 Cohesion: 0.05
-Nodes (65): clear(), _extends(), keyframes(), "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"(), apply(), arrayLikeKeys(), assignMergeValue(), assignValue() (+57 more)
+Nodes (66): clear(), _extends(), keyframes(), "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"(), apply(), arrayLikeKeys(), assignMergeValue(), assignValue() (+58 more)
 
 ### Community 264 - ""remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js""
 Cohesion: 0.05
@@ -3583,69 +3544,69 @@ Nodes (65): clear(), _extends(), keyframes(), "remix/node_modules/.pnpm/lodash.m
 Cohesion: 0.05
 Nodes (65): clear(), _extends(), keyframes(), "remix/node_modules/.pnpm/lodash.mergewith@4.6.2/node_modules/lodash.mergewith/index.js"(), apply(), arrayLikeKeys(), assignMergeValue(), assignValue() (+57 more)
 
-### Community 273 - "reconcile.test.ts"
-Cohesion: 0.24
-Nodes (7): entries(), SyncScan, baseline(), plan(), scan(), scope, twoWay
+### Community 273 - "openaiProvider.ts"
+Cohesion: 0.10
+Nodes (33): Claude 28px Patch Image Token Formula, Per-Image Pipeline Cost on claude-opus-5, Free omni-moderation first-pass gate (2026-08-19), CLAUDE_IMAGE_MEDIA_TYPES, createClaudeModerationProvider(), DEFAULT_MODERATION_MODEL, parseVerdict(), ModerationVerdict (+25 more)
 
-### Community 274 - "backgroundTasks.ts"
+### Community 274 - "utils/environmentGateway.ts"
 Cohesion: 0.02
-Nodes (171): RFC-9110, nitro, workflow, backupDestinationRegistry, backupDispatcher, defaults, Dependencies, DispatchResult (+163 more)
+Nodes (141): RFC-9110, nitro, workflow, APPLE_APP_ASSOCIATION_PATH, appleAppAssociation(), fenceCurrentAccountAuthorization, createPlatformReporting(), defaults (+133 more)
 
 ### Community 275 - "migrationDiagnostics.ts"
-Cohesion: 0.05
-Nodes (84): Admin error logs, AdminDiagnosticRevealable, AdminDiagnosticRevealContext, captureAdminErrorDiagnostic(), captureObjectId(), CaptureState, createCaptureState(), CREDENTIAL_COMPONENTS (+76 more)
+Cohesion: 0.04
+Nodes (103): reference(), AdminDiagnosticRevealable, AdminDiagnosticRevealContext, captureAdminErrorDiagnostic(), captureObjectId(), CaptureState, createCaptureState(), CREDENTIAL_COMPONENTS (+95 more)
 
-### Community 276 - "LopuChatActivityController"
-Cohesion: 0.05
-Nodes (13): LopuChatLiveActivity, .body, ContentState, LopuChatActivityAttributes, Handle, LopuChatActivityClient, .system, LopuChatActivityController (+5 more)
+### Community 276 - "Coordinator"
+Cohesion: 0.03
+Nodes (20): LopuChatLiveActivity, .body, ContentState, LopuChatActivityAttributes, LiDARLaunchRoute, Handle, LopuChatActivityClient, .system (+12 more)
 
 ### Community 277 - "Mobile devices and file synchronization"
-Cohesion: 0.03
-Nodes (80): 2026-10-19 — Scene-backed iOS bridge test host, Account inventory boundary — 2026-10-17, Android binary download ranges — 2026-10-17, Android binary upload ranges — 2026-10-17, Android checkpoint — 2026-10-17, Android folder access checkpoint — 2026-10-17, Android historical file exports — 2026-10-17, Android native whole-file transport — 2026-10-18 (+72 more)
+Cohesion: 0.02
+Nodes (129): 2026-10-19 — Scene-backed iOS bridge test host, Account inventory boundary — 2026-10-17, Android binary download ranges — 2026-10-17, Android binary upload ranges — 2026-10-17, Android checkpoint — 2026-10-17, Android folder access checkpoint — 2026-10-17, Android foreground offline-root download integration (2026-10-17), Android foreground photo backup — 2026-10-18 (+121 more)
 
 ### Community 278 - "socialCard.ts"
-Cohesion: 0.07
-Nodes (50): Outcome, asciiAt(), AVIF_CONTAINER_BOXES, avifExtent(), badgeRenders(), brandGeometry(), buildSocialCardSvg(), CardLayout (+42 more)
+Cohesion: 0.09
+Nodes (43): asciiAt(), AVIF_CONTAINER_BOXES, avifExtent(), badgeRenders(), brandGeometry(), buildSocialCardSvg(), CardLayout, CardTemplate (+35 more)
 
 ### Community 279 - "ensure-dependencies.js"
 Cohesion: 0.06
 Nodes (37): children, devContext, { ensureDependencies }, loadLocalEnv(), parseEnvValue(), require, { resolveDevContext }, brokenToolNames() (+29 more)
 
-### Community 280 - "ProviderSession"
-Cohesion: 0.09
-Nodes (8): PasswordHostConnectionAuthority, ProviderSession, PasswordSessionStore, .group, ConnectionStatusTests, HostConnectionTests, PasswordApp, Retirement
+### Community 280 - "deviceTypes.ts"
+Cohesion: 0.06
+Nodes (46): BatteryStatus(), Card(), DeviceSystemControls, DeviceSystemControlsProps, DisplayCard(), MediaVolumeControl(), RemoteInputControls(), DEVICE_AGENT_SESSION_STATUSES (+38 more)
 
-### Community 281 - "platformReporting.ts"
-Cohesion: 0.03
-Nodes (115): syncAiProviderModels, fenceCurrentAccountAuthorization, AUTOMATION_SWITCHES_KEY, createAutomationSwitchesStore(), idToStoredKey(), project(), readAutomationSwitches, Row (+107 more)
+### Community 281 - "requireAdmin"
+Cohesion: 0.02
+Nodes (188): listAdminUsersOverview(), ADMIN_PRIVATE_CACHE_CONTROL, applyAdminPrivateHeaders(), withAdminPrivateResponse(), allowed, blocked, createAdmin(), sampleList() (+180 more)
 
-### Community 282 - "prConflictResolverModelWaterfallCore.ts"
-Cohesion: 0.05
-Nodes (68): Claude 28px Patch Image Token Formula, Per-Image Pipeline Cost on claude-opus-5, verified(), Core (`remix/app/api/utils/settings/prConflictResolverModelWaterfallCore.ts`), 0. House rules that apply everywhere, 1.1 `ai-model` things (the model catalog), composeAiWorkflowModelChoice(), CLAUDE_IMAGE_MEDIA_TYPES (+60 more)
+### Community 282 - "musing.ts"
+Cohesion: 0.06
+Nodes (58): Gotchas learned, Known limitation / follow-up, PR #388 — Unlimited AI model waterfall with the full Claude + OpenAI catalog, Review round 1 — musing output budget (Lopu, 2026-08-24), Review round 4 — behavioral streaming contract (Codex, 2026-08-27), Verification, claudeOAuthEnvironment(), ClaudeOAuthEvent (+50 more)
 
-### Community 283 - "HttpExchange"
-Cohesion: 0.11
-Nodes (7): Handler, Headers, HttpExchange, HttpServer, NativeUploadHttpTest, CookieHandler, java.net.Authenticator
+### Community 283 - "icons.test.ts"
+Cohesion: 0.10
+Nodes (33): passwords/icons.ts, VaultDataKey, sealPasswordIcon(), PasswordEntryIcon(), PasswordIconEditor(), PasswordIconEditorScope(), action(), brandIconHeading (+25 more)
 
-### Community 284 - "build-local-app.mjs"
-Cohesion: 0.05
-Nodes (38): electronBuilder, electronDir, { identity, qualifier }, installedSigningIdentity(), resolveLocalSigningIdentity(), run(), signingEnvironment, developerIdIdentity() (+30 more)
+### Community 284 - "ref_node_child_process"
+Cohesion: 0.01
+Nodes (148): searchableItems, { spawnMock }, { spawnMock }, child, data, fixtures, latencies, resources (+140 more)
 
-### Community 285 - "NativeUploadHttp.java"
-Cohesion: 0.08
-Nodes (8): Cookies, DeviceHttpTransport, NativeUploadHttp, RequestBody, SessionCookie, SessionCookieTest, Storage and accounting model, Android historical Save As — 2026-10-17
+### Community 285 - "chat.streaming.test.mts"
+Cohesion: 0.06
+Nodes (35): AnthropicBlock, AnthropicPlan, anthropicPlans, anthropicRequests, CapturedRequest, chatGPTPlanTurn(), envNames, fakeMint() (+27 more)
 
 ### Community 286 - "devices/deviceCore.ts"
-Cohesion: 0.03
-Nodes (88): DeviceMediaInput, DeviceMediaPrepareInput, DeviceNotificationInput, ALWAYS_APPROVAL_DEVICE_COMMANDS, bounded(), boundedInteger(), commandMessageText(), ConnectorInput (+80 more)
+Cohesion: 0.01
+Nodes (427): SessionDoc, alertId(), DeviceAlertSound, DeviceMediaInput, DeviceMediaPrepareInput, DeviceNotificationInput, keys(), mediaVersion() (+419 more)
 
 ### Community 287 - "marketing/catalog.ts"
-Cohesion: 0.11
-Nodes (62): API and storage, Coverage and boundaries, Password confirmation preferences, buildChecklist(), buildCompare(), buildConcept(), buildFaq(), buildFeatureCompare() (+54 more)
+Cohesion: 0.10
+Nodes (66): API and storage, Coverage and boundaries, Password confirmation preferences, buildChecklist(), buildCompare(), buildConcept(), buildFaq(), buildFeatureCompare() (+58 more)
 
-### Community 288 - "🌈 Welcome 👋 to Thingtime 🦄 🧠"
-Cohesion: 0.07
-Nodes (33): The API is the only gateway to data, Appended/child data is relational, Seed and test through the real API, Protected ci-* Control Thing Kinds, Admin CI dashboard, Control-plane architecture, External bootstrap, Goal (+25 more)
+### Community 288 - "ProviderSession"
+Cohesion: 0.11
+Nodes (6): NoRedirect, PasswordClient, Reply, VerificationSettings, ProviderSession, ConnectionStatusTests
 
 ### Community 289 - "source/support.js"
 Cohesion: 0.07
@@ -3695,73 +3656,73 @@ Nodes (65): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey
 Cohesion: 0.07
 Nodes (65): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), getDC(), Dispatcher() (+57 more)
 
-### Community 301 - "MobileDeviceDiagnostics"
-Cohesion: 0.09
-Nodes (12): Binding, .key, Envelope, MobileDeviceDiagnosticOutbox, Failure, rateLimited, MobileDeviceDiagnostics, MobileDeviceDiagnosticsTransport (+4 more)
+### Community 301 - "MobileDeviceDiagnosticEvent"
+Cohesion: 0.03
+Nodes (65): ApplicationState, active, background, inactive, Background, Category, index, lifecycle (+57 more)
 
 ### Community 302 - "DeviceScope"
-Cohesion: 0.11
-Nodes (9): FolderStoreTest, Storage, ManagedFolderAccessTest, Storage, DeviceScope, FolderStore, Grant, ManagedFolderAccess (+1 more)
+Cohesion: 0.07
+Nodes (13): FolderStoreTest, Permissions, Storage, ManagedFolderAccessTest, Permissions, Storage, DeviceScope, FolderStore (+5 more)
 
-### Community 303 - "updown.ts"
+### Community 303 - "actionExpressions.ts"
 Cohesion: 0.06
-Nodes (49): Evidence ledger, UPDOWN_KEY_FIELD, MAX_POLL_COMPOSER_OPTIONS, MIN_POLL_OPTIONS, pollOptionsOf(), PollShape, pollShapeOfCrystal(), PollVoteEntry (+41 more)
+Nodes (60): ActionRunArgs, buildActionRunBody(), authored, capList(), capProjectedText(), capText(), catalogueSignature(), compare() (+52 more)
 
 ### Community 304 - "CommanderNativeBridge"
 Cohesion: 0.05
 Nodes (29): BridgeError, credentialMissing, daemon, .errorDescription, invalidApplicationControl, invalidCommandShortcuts, invalidDaemonResponse, invalidNotification (+21 more)
 
-### Community 305 - "pokeworld.test.ts"
-Cohesion: 0.07
-Nodes (47): Pokeworld (`schemas/appSuites/pokeworld.ts`, pack `packs/pokeworld/`), StarsAlign (`schemas/appSuites/starsalign.ts`, pack `packs/astro/`), The two apps, call(), context(), reachesPortal(), SAMPLE_BLOCKS, trainer() (+39 more)
+### Community 305 - "PasswordProviderError"
+Cohesion: 0.08
+Nodes (24): .entry, Data, .base64URL, PasswordEntry, PasswordField, PasswordProviderError, .allowsRetryInCurrentRequest, cancelled (+16 more)
 
-### Community 306 - "CredentialProviderViewController"
+### Community 306 - ".frame"
 Cohesion: 0.12
-Nodes (3): Choice, CredentialProviderViewController, ProviderViewModel
+Nodes (13): Shared Rust filesystem workspace, recordPhase(), startNative(), fixtureActionLabel(), fixtureActions, FixtureIdentityTiming, FixturePageObservers, fixturePathLabel() (+5 more)
 
-### Community 307 - "morePackages.ts"
-Cohesion: 0.09
-Nodes (21): colors, formats, luxon, MORE_PACKAGE_EXAMPLES, semver, validator, zod, arrays (+13 more)
+### Community 307 - "deviceStatusPresentation.ts"
+Cohesion: 0.32
+Nodes (10): deviceConnectorPresentation(), deviceHealthPresentation(), deviceLastSeenLabel(), deviceServicePresentation(), DeviceStatusPresentation, DeviceStatusTone, ago(), now (+2 more)
 
 ### Community 308 - "LauncherPanelController"
 Cohesion: 0.08
 Nodes (15): DaemonReady, KeychainStore, LaunchAtLoginService, LauncherPanelController, .commandPresentationItemIDForTesting, .customWindowResizeHandlingEnabledForTesting, .isVisible, .launcherOpenedScriptForTesting (+7 more)
 
-### Community 309 - "webpageDemos.ts"
-Cohesion: 0.06
-Nodes (56): Verification, 2.1 Files, DEMO_KINDS, ListedBehaviourSuite, ListedWebpageDemo, listWebpageDemos(), ListWebpageDemosResult, seededDemoShareIds() (+48 more)
+### Community 309 - "behaviourSuites.ts"
+Cohesion: 0.05
+Nodes (49): pickSuiteExamples(), seededSuiteCount(), APP_SLUG_PREFIX, APP_SUITES, ArgSpec, BEHAVIOUR_SUITES, BehaviourSuite, getBehaviourSuite() (+41 more)
 
 ### Community 310 - "marketingPublicationsStore.tsx"
-Cohesion: 0.11
-Nodes (29): applyMarketingPublicationChanges(), cachePublications(), emit(), getMarketingPublicationsSnapshot(), getPreview(), getServerSnapshot(), invalidatePublicationReads(), listeners (+21 more)
+Cohesion: 0.10
+Nodes (31): empty(), applyMarketingPublicationChanges(), cachePublications(), emit(), getMarketingPublicationsSnapshot(), getPreview(), getServerSnapshot(), invalidatePublicationReads() (+23 more)
 
 ### Community 311 - "LopuVoiceSessionController"
-Cohesion: 0.08
-Nodes (8): ContentState, LopuVoiceActivityAttributes, error, LopuVoiceSessionController, .sendToWeb, RealtimeDescriptor, Settings, LopuVoiceRecoveryTests
+Cohesion: 0.03
+Nodes (36): ContentState, LopuVoiceActivityAttributes, Context, Entry, LopuRecordingUploads, LopuUploadRedirectPolicy, UploadError, failed (+28 more)
 
 ### Community 312 - "ThingtimeWebDestination"
-Cohesion: 0.07
-Nodes (28): DeploymentGroup, DeploymentOption, .id, DeploymentSection, .latestDeployment, .latestSuccessfulDeploymentID, DeploymentsOverview, .fallbackDeploymentCount (+20 more)
-
-### Community 313 - "NativePhotoRunActivity"
-Cohesion: 0.07
-Nodes (26): NativePhotoRunActivity, Phase, checkingCloud, checkingOriginals, complete, downloading, publishing, uploading (+18 more)
-
-### Community 314 - "appData.ts"
-Cohesion: 0.07
-Nodes (41): appsExist(), AppDataEntry, AppDataVisibility, buildKeyFilter(), decodeCursor(), decodeKeyCursor(), encodeCursor(), encodeKeyCursor() (+33 more)
-
-### Community 315 - "deviceLiveAi.ts"
-Cohesion: 0.10
-Nodes (45): appendLiveEvents(), applyDeltaGuardEvent(), deltaGuardEvent(), DEVICE_LIVE_CONTROL_EVENT_MAX_BYTES, DEVICE_LIVE_CONTROL_EVENT_MAX_COUNT, DEVICE_LIVE_CONTROL_EVENT_RETENTION_MS, DeviceLiveConnectorContext, DeviceLiveSyncError (+37 more)
-
-### Community 316 - "Trusted developer ecosystem roadmap"
-Cohesion: 0.12
-Nodes (16): Architecture direction to approve, First decision packet, Layered trust contract, M0 — Decide the ecosystem contract, M1 — One declaration and conformance kit, M2 — Immutable releases and reproducible review, M3 — Honest install, update, and consent lifecycle, M4 — Containment, response, appeal, and recovery (+8 more)
-
-### Community 317 - ".applicationDidFinishLaunching"
 Cohesion: 0.04
-Nodes (19): MacSyncConditions, AccountRuntime, AppDelegate, MultiAccountControlPlaneRuntime, NodeControllerRelay, ThingtimeNodeApplication, DeviceLocationService, .authorization (+11 more)
+Nodes (43): DeploymentPresentation, DeploymentOptionRow, .accessibilityLabel, .body, .deployment, .destination, DeploymentSectionDisclosure, .body (+35 more)
+
+### Community 313 - "createRuntime"
+Cohesion: 0.15
+Nodes (34): boot(), createComponentFactory(), getDC(), Dispatcher(), createExternalModules(), ensureBabel(), getError(), load() (+26 more)
+
+### Community 314 - "GitHubReleaseCatalog"
+Cohesion: 0.11
+Nodes (18): .pages, Installed iOS two-way acceptance and WebKit fetch binding — 2026-10-17, CodingKeys, assets, body, browserDownloadURL, htmlURL, id (+10 more)
+
+### Community 315 - "api/src/index.ts"
+Cohesion: 0.11
+Nodes (24): Deploy, How an endpoint gets onto Cloudflare, MongoDB connections: a fixed pool of shards, Routing and fallback, Thingtime Cloudflare API Worker, Env, fetch(), MongoPoolShard (+16 more)
+
+### Community 316 - ".main"
+Cohesion: 0.10
+Nodes (7): PasswordSessionStore, .group, TOTP, CoreTests, PasswordApp, Retirement, Installed-app Login with Thingtime (loopback + PKCE)
+
+### Community 317 - "DeviceLocationService"
+Cohesion: 0.07
+Nodes (10): DeviceLocationObservation, DeviceLocationService, .authorization, DeviceObservationClient, DeviceObservationPolicy, State, Value, DeviceLocationTests (+2 more)
 
 ### Community 318 - "pokeworld.ts"
 Cohesion: 0.04
@@ -3780,8 +3741,8 @@ Cohesion: 0.03
 Nodes (63): Commander Architecture, Commander architecture, C# and WebView2 Windows shell, Distribution, Extension compatibility, Extension render protocol, Filesystem indexing, Filesystem metadata (+55 more)
 
 ### Community 322 - "vercel/status.ts"
-Cohesion: 0.11
-Nodes (47): appendDeploymentIdToDashboardUrl(), clampPercent(), DEFAULT_DEPLOYMENT_BRANCH_LIMIT, DEFAULT_DEPLOYMENT_HISTORY_LIMIT, deploymentPageCache, formatBuildPhase(), formatRelativeTime(), getBranchDeploymentKey() (+39 more)
+Cohesion: 0.09
+Nodes (57): appendDeploymentIdToDashboardUrl(), clampPercent(), DEFAULT_DEPLOYMENT_BRANCH_LIMIT, DEFAULT_DEPLOYMENT_HISTORY_LIMIT, deploymentPageCache, formatBuildPhase(), formatRelativeTime(), getBranchDeploymentKey() (+49 more)
 
 ### Community 323 - "start"
 Cohesion: 0.11
@@ -3792,16 +3753,16 @@ Cohesion: 0.05
 Nodes (68): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), constructSelectEvent() (+60 more)
 
 ### Community 326 - "useAgentSession.ts"
-Cohesion: 0.07
-Nodes (46): PublicDeviceEvent, agentSessionCacheKey(), CachedAgentSession, isMessage(), readAgentSessionCache(), restoreAgentSessionCache(), token(), writeAgentSessionCache() (+38 more)
+Cohesion: 0.08
+Nodes (45): agentSessionCacheKey(), CachedAgentSession, isMessage(), readAgentSessionCache(), restoreAgentSessionCache(), token(), writeAgentSessionCache(), activityFromEvent() (+37 more)
 
 ### Community 327 - "start"
-Cohesion: 0.11
-Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChange(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), convertBoundingBoxToBox() (+30 more)
+Cohesion: 0.07
+Nodes (53): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChange(), animateChildren(), animateList(), animateTarget(), animateVariant() (+45 more)
 
-### Community 328 - "verification.ts"
-Cohesion: 0.08
-Nodes (36): CookieOptions, createCookie(), createPasswordVerificationService(), check(), identity(), policy(), defaultStore, deviceCookie() (+28 more)
+### Community 328 - "BrowserLeases"
+Cohesion: 0.09
+Nodes (19): iPhone Photos automation, Paired File Sync transfer admissions, Persistent background file transport, Focused regression checks, Noninteractive native regression lane, Signed Mac sync acceptance with a private backend, Start and control the same browser/backend, Synthetic identity and real native acceptance (+11 more)
 
 ### Community 329 - "resources.rs"
 Cohesion: 0.06
@@ -3812,8 +3773,8 @@ Cohesion: 0.05
 Nodes (66): addSubtreeSuspenseContext(), completeWork(), createCapturedValue(), cutOffTailIfNeeded(), findFirstSuspended(), findLastContentRow(), getChildHostContext(), getChildNamespace() (+58 more)
 
 ### Community 331 - "install-local-app.mjs"
-Cohesion: 0.12
-Nodes (35): acquireInstallLock(), assertExpectedBundle(), assertManagedNodeLaunchAgent(), commandFailure(), createNodeServiceLifecycle(), managedAgentContents(), snapshot(), start() (+27 more)
+Cohesion: 0.06
+Nodes (60): executeCachedReleasePlan(), fail(), main(), parseArguments(), processExists(), readPlan(), verifyCachedReleaseSource(), waitForExit() (+52 more)
 
 ### Community 332 - "mount"
 Cohesion: 0.05
@@ -3832,8 +3793,8 @@ Cohesion: 0.05
 Nodes (65): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+57 more)
 
 ### Community 336 - "mount"
-Cohesion: 0.05
-Nodes (64): add(), addScaleCorrector(), addUniqueItem(), bindToMotionValue(), checkVariantsDidChange(), componentDidMount(), componentDidUpdate(), componentWillUnmount() (+56 more)
+Cohesion: 0.04
+Nodes (75): add(), addScaleCorrector(), addUniqueItem(), bindToMotionValue(), checkVariantsDidChange(), componentDidMount(), componentDidUpdate(), componentWillUnmount() (+67 more)
 
 ### Community 337 - "push"
 Cohesion: 0.05
@@ -3907,33 +3868,33 @@ Nodes (65): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhas
 Cohesion: 0.05
 Nodes (64): add(), addScaleCorrector(), addUniqueItem(), bindToMotionValue(), checkVariantsDidChange(), componentDidMount(), componentDidUpdate(), componentWillUnmount() (+56 more)
 
-### Community 355 - "apiDocs.ts"
-Cohesion: 0.02
-Nodes (122): Move a connection, APPLE_APP_ASSOCIATION_PATH, appleAppAssociation(), ROOT_DOCS_TWIN_IDS, thingtimeCapabilityManifest(), CHATGPT_CAPABILITY_MANIFEST_PATH, CHATGPT_TOKEN_PATH, endpoints (+114 more)
+### Community 355 - "ref_node_assert"
+Cohesion: 0.01
+Nodes (307): CustomEvent, setup(), personalChatGPTPlanOwner(), assert, { personalChatGPTPlanOwner }, test, assert, helper (+299 more)
 
 ### Community 356 - "remix/package.json"
 Cohesion: 0.03
 Nodes (83): @anthropic-ai/claude-code, @chakra-ui/react-types, draft-js, @editorjs/checklist, @editorjs/code, @editorjs/delimiter, @editorjs/editorjs, @editorjs/embed (+75 more)
 
 ### Community 357 - "graphify-cas.mjs"
-Cohesion: 0.06
-Nodes (80): Attachment Archive Capability, Local Attachment Object Capability, Developer Experience Follow-ups PR, Developer-experience follow-ups: local attachment storage, API fixtures, feature maps, worktree bootstrap, Follow-ups, Validation, What shipped, Why these shapes (+72 more)
+Cohesion: 0.08
+Nodes (66): What shipped, activateSnapshot(), artifactHash(), baselineNodeCount(), compareSnapshotQuality(), computeSourceFingerprint(), copyPortableFiles(), copyWritable() (+58 more)
 
 ### Community 358 - "src/manifest.ts"
-Cohesion: 0.06
-Nodes (59): buildCandidates(), buildEnvironment(), buildExtensions, commandFrom(), detectPackageManager(), existingFile(), extensionFrom(), findRaycastManifest() (+51 more)
+Cohesion: 0.03
+Nodes (97): buildCandidates(), buildEnvironment(), buildExtensions, commandFrom(), detectPackageManager(), existingFile(), extensionFrom(), findRaycastManifest() (+89 more)
 
 ### Community 359 - "marketing/_index.tsx"
-Cohesion: 0.14
-Nodes (47): What shipped, MarketingColdStart(), MarketingUnpublished(), useNoIndex(), AdminButton(), AdminSurface, MarketingAdminBar(), PublishStatePill() (+39 more)
-
-### Community 360 - "kindRenderersMedia.tsx"
 Cohesion: 0.10
-Nodes (26): ArticleValue, AudioValue, BookValue, boundedRenderValue(), boundedTableContent(), CodeValue, FILE_EMOJI, FileValue (+18 more)
+Nodes (63): What shipped, CategoryPages(), eyebrow, MarketingPublishingTab(), SetState, Stat(), StateDot(), MarketingColdStart() (+55 more)
+
+### Community 360 - "ExtensionsSettings.tsx"
+Cohesion: 0.13
+Nodes (22): activeCommandShortcuts(), bundledExtensionIds, commandModeLabel(), CommandShortcutButton(), ExtensionMode, ExtensionsSettings(), syncMessage(), calculatorExtension (+14 more)
 
 ### Community 361 - "ShareInboxTests"
-Cohesion: 0.12
-Nodes (5): ShareItemImporter, info, ShareInboxTests, StubShareItem, draft
+Cohesion: 0.10
+Nodes (4): ShareItemImporter, ShareInboxTests, StubShareItem, draft
 
 ### Community 362 - "native-lidar-scans.md"
 Cohesion: 0.04
@@ -3941,11 +3902,11 @@ Nodes (54): Anchor Events and Mesh Files, Apple ARFrame Raw Feature Points Docum
 
 ### Community 363 - "attachmentArchive.ts"
 Cohesion: 0.05
-Nodes (55): ARCHIVE_ATTACHMENT_PROJECTION, ARCHIVE_CHILD_PROJECTION, ARCHIVE_SHARED_ROOT_PROJECTION, ArchiveAttachmentDoc, ArchiveDependencies, ArchiveEntry, ArchiveManifestOptions, ArchivePlan (+47 more)
+Nodes (57): canViewSharedCompositionAttachment, ARCHIVE_ATTACHMENT_PROJECTION, ARCHIVE_CHILD_PROJECTION, ARCHIVE_SHARED_ROOT_PROJECTION, ArchiveAttachmentDoc, ArchiveDependencies, ArchiveEntry, ArchiveManifestOptions (+49 more)
 
 ### Community 364 - "[Unreleased]"
-Cohesion: 0.03
-Nodes (58): raw(), [1.0.0] - YYYY-MM-DD, 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs), 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design, 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution, 2026-08-31 — Bounded Graphify snapshot retention, 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI), 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI) (+50 more)
+Cohesion: 0.04
+Nodes (57): raw(), [1.0.0] - YYYY-MM-DD, 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs), 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design, 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution, 2026-08-31 — Bounded Graphify snapshot retention, 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI), 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI) (+49 more)
 
 ### Community 365 - "scheduleUpdateOnFiber"
 Cohesion: 0.05
@@ -3995,43 +3956,43 @@ Nodes (61): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(
 Cohesion: 0.03
 Nodes (61): Boundary with adjacent roadmaps, Invariants, Measures, Milestone R0 — Approve the charter and accountable owners, Milestone R1 — Publish the canonical lifecycle and route inventory, Milestone R2 — Make intent and processing legible before work, Milestone R3 — Prove one synthetic lifecycle deterministically, Milestone R4 — Run one private, single-person pilot (+53 more)
 
-### Community 377 - "syncTaskRuntime.ts"
-Cohesion: 0.07
-Nodes (34): NATIVE_SYNC_FOREGROUND_WAIT, Page, watchNativeSyncVisibility(), active, listeners, nativeUploadMayContinue(), subscribeNativeUploadBackground(), trackNativeUploadBackground() (+26 more)
+### Community 377 - "TransferSpeedTrackers.tsx"
+Cohesion: 0.05
+Nodes (58): action(), button(), element(), MAX_SPEED_TRACKERS, readSpeedTrackers(), speedDraftBlocks(), SpeedTracker, speedTrackerBlocks() (+50 more)
 
 ### Community 378 - "PR 764 — portable Thing transfer"
 Cohesion: 0.03
-Nodes (63): 2026-09-12 — AI archive presentation connected, 2026-09-12 — Authorized live-chat snapshot reader foundation, 2026-09-12 — Bounded moderation acceptance, 2026-09-12 — Live-chat presentation normalization, 2026-09-12 — Live fixture finds ISO timestamp mismatch, 2026-09-12 — Ordinary live-chat export route connected, 2026-09-12 — Transfer verification sweep, Archive gallery projection preparation — 2026-09-12 (+55 more)
+Nodes (60): 2026-09-12 — AI archive presentation connected, 2026-09-12 — Authorized live-chat snapshot reader foundation, 2026-09-12 — Bounded moderation acceptance, 2026-09-12 — Live-chat presentation normalization, 2026-09-12 — Live fixture finds ISO timestamp mismatch, 2026-09-12 — Ordinary live-chat export route connected, 2026-09-12 — Transfer verification sweep, Accounted archive storage writer — 2026-09-12 (+52 more)
 
 ### Community 379 - "CommanderAppDelegate"
 Cohesion: 0.09
 Nodes (7): CommanderAppDelegate, CommanderHostError, .errorDescription, invalidWindowMode, launcherUnavailable, windowPinningDisabled, CommanderMain
 
 ### Community 380 - "filesystem-indexer/src/index.ts"
-Cohesion: 0.05
-Nodes (33): cancel(), EffectiveResourceLimits, ErrorResponse, execFileAsync, FileSystemIndexerClient, FileSystemIndexerClientOptions, IgnoreRule, IgnoreRuleKind (+25 more)
-
-### Community 381 - "Coordinator"
 Cohesion: 0.06
-Nodes (8): MobileDeviceBridge, PendingStatus, MobileDeviceLocationBridge, AuthenticatorSetupDelivery, Coordinator, ThingtimeWKWebView, UIEdgeInsets, WebView
+Nodes (29): EffectiveResourceLimits, ErrorResponse, FileSystemIndexerClientOptions, IgnoreRule, IgnoreRuleKind, IndexConfiguration, IndexKind, IndexProgress (+21 more)
 
-### Community 382 - "NotificationsPage.tsx"
-Cohesion: 0.10
-Nodes (47): DEFAULT_NOTIFICATION_FILTERS, hasActiveNotificationFilters(), isInternalPath(), isSystemNotification(), localDayBound(), NOTIFICATION_HISTORY_CACHE_PREFIX, NOTIFICATION_TYPE_META, NOTIFICATION_TYPES_BY_CATEGORY (+39 more)
+### Community 381 - "editable-sync-review.browser.tsx"
+Cohesion: 0.13
+Nodes (20): PagedSyncConflictReview(), action(), button(), element(), syncConflictReviewBlocks, syncConflictReviewDisplay(), ConflictReviewView, createConflictReviewController() (+12 more)
 
-### Community 383 - "providerProbe.ts"
-Cohesion: 0.07
-Nodes (39): ANTHROPIC_EFFORTS, ANTHROPIC_MODELS_VERSION, CLAUDE_PUBLIC_MODELS_URL, discoverConfiguredProviderModels(), DiscoveredAiModel, discoverProviderModels(), discoverPublicClaudeModels(), isModelUnavailableError() (+31 more)
+### Community 382 - "branchwood.ts"
+Cohesion: 0.09
+Nodes (25): beginAction, Choice, chooseAction, ENDINGS, endingsView(), journal, journalAction, k (+17 more)
 
-### Community 384 - "raycast-compat/src/store.ts"
-Cohesion: 0.07
-Nodes (36): RaycastExtensionSourceReport, boundedTimeout(), compatibilityCapabilities, CompatibilityCapability, RAYCAST_WORKER_ISOLATION_NOTICE, RaycastCommandExecutionOptions, RaycastExtensionPreparationError, RaycastExtensionRuntime (+28 more)
+### Community 383 - "Prepared"
+Cohesion: 0.19
+Nodes (3): Content, Prepared, Request
+
+### Community 384 - "library/types.ts"
+Cohesion: 0.19
+Nodes (17): runLibraryRequest(), stripe, GOOGLE_MAPS_SCRIPT, googleInput, MAPBOX_SCRIPT, MAPBOX_STYLES, mapboxInput, buildExampleRequest() (+9 more)
 
 ### Community 385 - "constructor"
 Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
-### Community 386 - "ActivitySettings.tsx"
+### Community 386 - "vitest"
 Cohesion: 0.11
 Nodes (32): preferenceKey(), ActivitySettings(), ApplicationControlAction, ApplicationControlResult, averageSpeed(), Breakdown(), formatBytes(), formatDuration() (+24 more)
 
@@ -4039,37 +4000,37 @@ Nodes (32): preferenceKey(), ActivitySettings(), ApplicationControlAction, Appli
 Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
-### Community 388 - "chat.streaming.test.mts"
-Cohesion: 0.06
-Nodes (35): AnthropicBlock, AnthropicPlan, anthropicPlans, anthropicRequests, CapturedRequest, chatGPTPlanTurn(), envNames, fakeMint() (+27 more)
+### Community 388 - "account-restore-steps.integration.mts"
+Cohesion: 0.08
+Nodes (25): access, binding, callTimeline(), cookie, currentBytes, deps(), fileId, fileReview (+17 more)
 
 ### Community 389 - "start"
 Cohesion: 0.11
 Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChange(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), convertBoundingBoxToBox() (+30 more)
 
 ### Community 390 - "NativePhotoBackupSummaries"
-Cohesion: 0.09
-Nodes (13): Binding, Catchup, Database, .changes, NativePhotoBackupSummaries, Totals, .empty, Value (+5 more)
+Cohesion: 0.07
+Nodes (17): Bucket, ProcessUsageHistory, Series, ProcessUsageHistoryTests, Binding, Catchup, Database, .changes (+9 more)
 
 ### Community 391 - "start"
 Cohesion: 0.11
 Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChange(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), convertBoundingBoxToBox() (+30 more)
 
-### Community 392 - "api/package.json"
+### Community 392 - "deprecated/api/package.json"
 Cohesion: 0.07
 Nodes (27): author, description, homepage, axios, bcrypt, eslint, eslint-config-prettier, eslint-plugin-prettier (+19 more)
 
 ### Community 393 - "world.ts"
-Cohesion: 0.08
-Nodes (50): Reusable language definitions, BIOME_PROFILES, biomeFor(), BiomeName, BiomeProfile, blockCache, BlockPortals, buildRoles() (+42 more)
+Cohesion: 0.07
+Nodes (53): Reusable language definitions, BIOME_PROFILES, biomeFor(), BiomeName, BiomeProfile, BIOMES, BLOCK_TILES, blockCache (+45 more)
 
 ### Community 394 - "constructor"
-Cohesion: 0.08
-Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
+Cohesion: 0.17
+Nodes (12): constructor(), distance2D(), end(), getPanInfo(), getVelocity(), lastDevicePoint(), set(), setCurrent() (+4 more)
 
 ### Community 395 - "components/EmojiPicker.tsx"
 Cohesion: 0.08
-Nodes (49): ActionsPanel(), allowedEditDistance(), boundedEditDistance(), EMOJI_BY_ID, EMOJI_CATEGORIES, EMOJI_ENTRIES, EmojiCategory, EmojiEntry (+41 more)
+Nodes (50): ActionsPanel(), item, allowedEditDistance(), boundedEditDistance(), EMOJI_BY_ID, EMOJI_CATEGORIES, EMOJI_ENTRIES, EmojiCategory (+42 more)
 
 ### Community 396 - "mergeLanes"
 Cohesion: 0.05
@@ -4116,16 +4077,16 @@ Cohesion: 0.05
 Nodes (55): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), enterDisallowedContextReadInDEV(), exitDisallowedContextReadInDEV(), getStateFromUpdate(), getWorkInProgressRoot(), includesBlockingLane() (+47 more)
 
 ### Community 407 - "LiDARCaptureStore"
-Cohesion: 0.16
+Cohesion: 0.17
 Nodes (6): DiscardFailure, LiDARCapture, .manifestVersion, LiDARCaptureStore, .byteCount, Receipt
 
 ### Community 408 - "constructor"
 Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
-### Community 409 - "ThingtimeMenuBarIconID"
-Cohesion: 0.06
-Nodes (29): PasswordProviderPhase, confirming, connection, filling, indexing, .message, saving, vault (+21 more)
+### Community 409 - ".applicationDidFinishLaunching"
+Cohesion: 0.04
+Nodes (29): AccountRuntime, AppDelegate, LocalPairingPresenceGate, MultiAccountControlPlaneRuntime, NodeControllerRelay, PeerSignatureValidator, ThingtimeNodeApplication, ThingtimeNodeEndpointScope (+21 more)
 
 ### Community 410 - "ChildReconciler"
 Cohesion: 0.09
@@ -4140,8 +4101,8 @@ Cohesion: 0.06
 Nodes (54): alloc(), analyzeBreakpoints(), analyzeCSSValue(), append(), applyDefaultFilter(), caret(), char(), charat() (+46 more)
 
 ### Community 413 - "parse"
-Cohesion: 0.06
-Nodes (54): alloc(), analyzeBreakpoints(), analyzeCSSValue(), append(), applyDefaultFilter(), caret(), char(), charat() (+46 more)
+Cohesion: 0.10
+Nodes (34): alloc(), append(), caret(), char(), charat(), comment(), commenter(), compile() (+26 more)
 
 ### Community 414 - "parse"
 Cohesion: 0.06
@@ -4180,12 +4141,12 @@ Cohesion: 0.06
 Nodes (54): alloc(), analyzeBreakpoints(), analyzeCSSValue(), append(), applyDefaultFilter(), caret(), char(), charat() (+46 more)
 
 ### Community 423 - "runtimeEntry.ts"
-Cohesion: 0.06
-Nodes (45): inspectPlatformInterface(), bindLiveDOMEvent(), boolKeys, eventNode(), LIVE_DOM_EVENTS, LIVE_DOM_METHODS, nativeDescriptor(), nativeDOMMethod() (+37 more)
+Cohesion: 0.08
+Nodes (43): inspectPlatformInterface(), bindLiveDOMEvent(), boolKeys, eventNode(), LIVE_DOM_EVENTS, LIVE_DOM_METHODS, nativeDescriptor(), nativeDOMMethod() (+35 more)
 
 ### Community 424 - "adminRowQuery.ts"
 Cohesion: 0.14
-Nodes (32): adminFilterValueForOperatorChange(), adminRowFieldExists(), AdminRowFieldOption, adminRowMatchesFilter(), applyAdminRowQuery(), asBoolean(), asDateMs(), asNumber() (+24 more)
+Nodes (32): AdminRowField, adminRowFieldExists(), AdminRowFieldOption, adminRowMatchesFilter(), applyAdminRowQuery(), asBoolean(), asDateMs(), asNumber() (+24 more)
 
 ### Community 425 - "WalkthroughPlayer.tsx"
 Cohesion: 0.09
@@ -4204,20 +4165,20 @@ Cohesion: 0.07
 Nodes (28): Admin CI Control Plane, AI Credential Waterfall, api/utils/ciControl, Automation Provider Policies, Bookmarkable Admin Routes, Cached Snapshot Rendering and Refresh, Thingtime Capability Manifest Compatibility, CI Admin Authorization (+20 more)
 
 ### Community 429 - "seed-fixture.mjs"
-Cohesion: 0.08
-Nodes (36): chunk(), cleanup(), crc32(), crcTable, create(), defaultBase(), fixtureFiles(), fixturesDir (+28 more)
+Cohesion: 0.09
+Nodes (34): chunk(), cleanup(), crc32(), crcTable, create(), fixtureFiles(), fixturesDir, here (+26 more)
 
 ### Community 430 - "backup-workspace.integration.mts"
-Cohesion: 0.05
-Nodes (36): active, assetDirectory, binding, browser, call(), compiledEntry, compiledEntrySha256, compiledServer (+28 more)
+Cohesion: 0.02
+Nodes (130): JsonBodyBudget, parseAttachmentRange(), applyPrivateHeaders(), ATTACHMENT_JSON_BODY_BYTES, ATTACHMENT_PRIVATE_CACHE_CONTROL, AttachmentMutationDependencies, attachmentPostOnlyLoader(), createAttachmentMutationAction() (+122 more)
 
 ### Community 431 - "PhotoSourceIndexOutbox"
-Cohesion: 0.10
-Nodes (23): CodingKeys, assetKey, assetKind, availability, capturedAt, modifiedAt, name, originalCount (+15 more)
+Cohesion: 0.07
+Nodes (32): CodingKeys, assetKey, assetKind, availability, capturedAt, modifiedAt, name, originalCount (+24 more)
 
-### Community 432 - "UI shell, menus and design system"
-Cohesion: 0.08
-Nodes (31): Android Managed Folder Access, FolderBridge, ManagedFileStore, ManagedFolderAccess, OfflineDocumentsProvider, Automatic Page Titles and Social Previews, Customised Link Previews, Editable map markers and connector settings (+23 more)
+### Community 432 - "ScreenCaptureRawFrame"
+Cohesion: 0.14
+Nodes (9): ScreenCaptureBackendConfiguration, ScreenCaptureFrame, .byteCount, ScreenCaptureFrameIngress, ScreenCaptureLimits, ScreenCaptureRawFrame, ScreenCaptureRawPayload, opaque (+1 more)
 
 ### Community 433 - ".main"
 Cohesion: 0.13
@@ -4228,12 +4189,12 @@ Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
 ### Community 435 - "MockScreens.tsx"
-Cohesion: 0.13
-Nodes (35): ACTIVE, Avatar(), Bubble(), BuilderScreen(), Caret(), Check(), Chrome(), ComponentsScreen() (+27 more)
+Cohesion: 0.09
+Nodes (43): ACTIVE, Avatar(), Bubble(), BuilderScreen(), Caret(), Check(), Chrome(), ComponentsScreen() (+35 more)
 
 ### Community 436 - "account-file-restore.integration.mts"
-Cohesion: 0.05
-Nodes (50): access, branchRecords, byteKeys, call(), conflictBytes, currentBytes, dest, destinationRuntime (+42 more)
+Cohesion: 0.03
+Nodes (97): TimelineFileVersion(), TimelineFileVersionActions(), TimelineFileVersionProps, TimelineFileVersions(), CloudFileCommit, ContentFingerprint, exportFileVersion(), FileExportError (+89 more)
 
 ### Community 437 - "src/backup.rs"
 Cohesion: 0.07
@@ -4241,7 +4202,7 @@ Nodes (23): Entry, Event, Complete, Entry, Hello, Ignored, Indexed, Resources (+
 
 ### Community 438 - "iOS README"
 Cohesion: 0.03
-Nodes (94): test-upload-part-process.sh script, Automatic iOS TestFlight releases, Build Allocation and Archive Verification, Credential Rotation and Delivery Controls, Existing GitHub secrets and vault migration, Credential Migration Procedure, Release Triggers and Build Workflow, Share Extension and App Group Requirements (+86 more)
+Nodes (84): test-upload-part-process.sh script, api.things-storage-policy, Browser managed replicas, Cloud and this device, Cloud only, Cloud-only removal safeguards, iOS file-replica bridge, Keep on this device (+76 more)
 
 ### Community 439 - "PR #489 Add Verified Multi-Target Feature Stacks"
 Cohesion: 0.04
@@ -4264,12 +4225,12 @@ Cohesion: 0.08
 Nodes (44): birthFormComponent, button(), card(), chip(), combosAction, combosComponent, combosMetaAction, each() (+36 more)
 
 ### Community 444 - ".save"
-Cohesion: 0.09
-Nodes (13): ShareLivePhotoPart, .json, ProviderShareItem, .registeredTypeIdentifiers, .suggestedName, .suppliesImage, .suppliesLivePhoto, SavedItem (+5 more)
+Cohesion: 0.10
+Nodes (10): ProviderShareItem, .registeredTypeIdentifiers, .suggestedName, .suppliesImage, .suppliesLivePhoto, ShareImportCancellation, ShareItemSource, .suppliesImage (+2 more)
 
-### Community 445 - "android.net.Uri"
-Cohesion: 0.09
-Nodes (5): Permissions, Permissions, Permissions, Permissions, SafFolderProvider
+### Community 445 - "smarts/index.test.ts"
+Cohesion: 0.11
+Nodes (22): basic(), create(), deletesmart(), ee(), epp(), escapeEscapes(), escapePropertyPath(), getParent() (+14 more)
 
 ### Community 446 - "updateDehydratedSuspenseComponent"
 Cohesion: 0.05
@@ -4315,25 +4276,25 @@ Nodes (50): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue
 Cohesion: 0.05
 Nodes (50): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense(), createFiberFromSuspenseList(), createFiberFromTypeAndProps() (+42 more)
 
-### Community 457 - "thingtime.ts"
-Cohesion: 0.10
-Nodes (18): LOGIN_REQUIREMENTS, readPublicJson(), registeredLoginRedirect(), select(), assertNetworkProbeCapabilities(), fetchNetworkProbeCapabilities(), NETWORK_PROBE_MAX_UPLOAD_BYTES, NETWORK_PROBE_PACKET_BYTES (+10 more)
+### Community 457 - "ref_commander_protocol"
+Cohesion: 0.11
+Nodes (17): LOGIN_REQUIREMENTS, readPublicJson(), registeredLoginRedirect(), select(), assertNetworkProbeCapabilities(), fetchNetworkProbeCapabilities(), NETWORK_PROBE_MAX_UPLOAD_BYTES, NETWORK_PROBE_PACKET_BYTES (+9 more)
 
 ### Community 458 - "conceptBits.tsx"
 Cohesion: 0.20
-Nodes (42): getEditorJsDoc(), AddChildButton(), ConceptCrumbs(), ConceptViewerProps, DeleteButton(), KindFlip(), LeafValueEditor(), useConceptLayout() (+34 more)
+Nodes (42): AddChildButton(), ConceptCrumbs(), ConceptViewerProps, DeleteButton(), KindFlip(), LeafValueEditor(), useConceptLayout(), useContainerWidth() (+34 more)
 
 ### Community 459 - ".write"
 Cohesion: 0.10
 Nodes (14): BufferError, .errorDescription, inaccessibleGeometry, inaccessiblePixels, Depth, Event, Frame, GeometrySource (+6 more)
 
 ### Community 460 - "ShareComposerSession.swift"
-Cohesion: 0.10
-Nodes (27): beginSubmission(), complete(), composerURL(), Entry, .json, Failure, busy, .errorDescription (+19 more)
+Cohesion: 0.09
+Nodes (31): beginSubmission(), complete(), composerURL(), Entry, .json, Failure, busy, .errorDescription (+23 more)
 
-### Community 461 - "Launcher.tsx"
-Cohesion: 0.07
-Nodes (41): CommanderIcon(), buildHistoryRows(), categoryForHit(), categoryTitles, commandHistoryEntry(), displayTitle(), groupedHits(), HistoryRow (+33 more)
+### Community 461 - "nativeRequest"
+Cohesion: 0.08
+Nodes (37): App(), EmojiPicker, buildHistoryRows(), categoryForHit(), categoryTitles, commandHistoryEntry(), displayTitle(), groupedHits() (+29 more)
 
 ### Community 462 - "CommanderUtilityWindow"
 Cohesion: 0.12
@@ -4343,9 +4304,9 @@ Nodes (4): CommanderUtilityWindow, CommanderUtilityWindowTests, WindowPreview, W
 Cohesion: 0.07
 Nodes (38): ARCHETYPES, args, baseStats(), buildSpecies(), Canvas, canvases, catalogue, chunk() (+30 more)
 
-### Community 464 - "getSelectedImages"
+### Community 464 - "commanderTrim.tsx"
 Cohesion: 0.16
-Nodes (28): Command(), convertFormats, formats, openNewFinderWindow(), regexToReplacementConverter(), REPLACEMENT_ESCAPES, unescapeRegexReplacementText(), regexTrim() (+20 more)
+Nodes (27): Command(), convertFormats, formats, openNewFinderWindow(), regexToReplacementConverter(), REPLACEMENT_ESCAPES, unescapeRegexReplacementText(), regexTrim() (+19 more)
 
 ### Community 465 - "INativeBridge"
 Cohesion: 0.08
@@ -4361,7 +4322,7 @@ Nodes (48): addValue(), animateSingleValue(), flushKeyframeResolvers(), forEach(
 
 ### Community 468 - "get"
 Cohesion: 0.07
-Nodes (48): addValue(), animateSingleValue(), flushKeyframeResolvers(), forEach(), get(), getBaseTarget(), getBaseTargetFromProps(), getComputedStyle() (+40 more)
+Nodes (45): addValue(), animateSingleValue(), convertBoundingBoxToBox(), flushKeyframeResolvers(), get(), getComputedStyle(), getStaticValue(), getTheme3() (+37 more)
 
 ### Community 469 - "get"
 Cohesion: 0.07
@@ -4451,21 +4412,21 @@ Nodes (47): checkDepsAreArrayDev(), ChildReconciler(), createChild(), deleteChil
 Cohesion: 0.14
 Nodes (23): EventSender, Changes, discover(), first_namespace_gate_does_not_visit_later_subtrees(), fixture(), injected(), monitor(), namespace_refreshes_immediate_parent_and_pages_more_than_64_rows() (+15 more)
 
-### Community 491 - "@raycast/api"
-Cohesion: 0.11
-Nodes (31): Command(), ImageGeneratorActionPanel(), ImagePatternGrid(), SizeSelectionActionPanel(), Command(), Command(), run, applyFilter() (+23 more)
+### Community 491 - "generators.ts"
+Cohesion: 0.17
+Nodes (21): ImageGeneratorActionPanel(), ImagePatternGrid(), SizeSelectionActionPanel(), Command(), generatePlaceholder(), generatePreview(), generators, getCheckerboardOptions() (+13 more)
 
 ### Community 492 - "VERCEL_DEPLOYMENTS.md"
-Cohesion: 0.06
-Nodes (46): Vercel prebuilt deployments workflow, deploy-vercel-prebuilt control-plane job, Develop S3 PR preview workflow, develop-pr-preview control-plane job, Protected github-actions controller branch, Native compile listener workflow, native-compile-listener compile job, Web CI workflow listener (+38 more)
+Cohesion: 0.03
+Nodes (67): Configuration and environment partitioning, Environment API gateways and index lifecycle, Index readiness, Parallel Hobby frontend with database-backed enrollment, Promotion procedure, Requests, promotion and rollback, Rollout and environment mapping, Select the connection mode (+59 more)
 
 ### Community 493 - "constructor"
 Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
 ### Community 494 - "querySafety.ts"
-Cohesion: 0.11
-Nodes (31): normalized(), aggregationStageSet, ALL_PROBE_PREDICATES, blockedKeySet, boundedInteger(), collectionSet, COMPUTE_PROBE_PREDICATES, deserializeExtendedJson() (+23 more)
+Cohesion: 0.10
+Nodes (34): collectValues(), normalized(), aggregationStageSet, ALL_PROBE_PREDICATES, blockedKeySet, boundedInteger(), collectionSet, COMPUTE_PROBE_PREDICATES (+26 more)
 
 ### Community 495 - "bounded_walk.rs"
 Cohesion: 0.08
@@ -4488,12 +4449,12 @@ Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
 ### Community 500 - "chatgptPlanRuntime.ts"
-Cohesion: 0.06
-Nodes (64): adaptChatGPTResponsesRequest(), AUTH, buildAuthorizationUrl(), ChatGPTAuthorizationAttempt, ChatGPTCredentials, ChatGPTModel, ChatGPTPlanError, ChatGPTVerificationOptions (+56 more)
+Cohesion: 0.04
+Nodes (85): openai, adaptChatGPTResponsesRequest(), AUTH, buildAuthorizationUrl(), ChatGPTAuthorizationAttempt, ChatGPTCredentials, ChatGPTModel, ChatGPTPlanError (+77 more)
 
 ### Community 501 - "ciControlRelocationCore.ts"
-Cohesion: 0.07
-Nodes (39): PR #583 — feat(mongodb): move CI telemetry to a ciControl satellite and reclaim things index storage, Problem, Production rollout, Review round 2 (Lopu, 2026-09-02) — the text index now really is rebuilt last, Review round (Lopu, 2026-09-02) — two defects fixed in `ciControlRelocationCore.ts`, Verification, CI_RETENTION_ENV, ciExpiresAt() (+31 more)
+Cohesion: 0.08
+Nodes (32): Review round 2 (Lopu, 2026-09-02) — the text index now really is rebuilt last, CI_RETENTION_ENV, ciExpiresAt(), ciRetentionClass, ciRetentionPolicy, daysFor(), DEFAULT_CI_RETENTION_DAYS, describeCiRetention() (+24 more)
 
 ### Community 502 - "constructor"
 Cohesion: 0.08
@@ -4503,21 +4464,21 @@ Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(),
 Cohesion: 0.08
 Nodes (20): binary_accepts_a_request_and_returns_flattened_hits(), binary_emits_a_structured_error_then_keeps_serving(), binary_flushes_each_response_before_stdin_closes(), binary_processes_multiple_requests_in_order(), binary_rejects_syntactically_malformed_json_then_keeps_serving(), run_json_lines(), run_raw_lines(), settings_request() (+12 more)
 
-### Community 504 - "builderPages.test.ts"
-Cohesion: 0.24
-Nodes (16): LIBRARY_BUILDER_INDEX, libraryExamplePageId(), libraryServicePageId(), body(), component(), heading(), integrationBuilderSeeds(), IntegrationSeed (+8 more)
+### Community 504 - "automationSwitches.ts"
+Cohesion: 0.09
+Nodes (36): AUTOMATION_SWITCHES_KEY, createAutomationSwitchesStore(), idToStoredKey(), project(), readAutomationSwitches, Row, store, StoredAutomationSwitches (+28 more)
 
 ### Community 505 - "timeline-published-components.integration.mts"
 Cohesion: 0.06
 Nodes (39): absentPreview, absentQuery, apply, atomicCommand, atomicQuery, call(), changeComponent(), command() (+31 more)
 
 ### Community 506 - "ApplicationResponsivenessService"
-Cohesion: 0.09
-Nodes (16): AccessibilityProbeResult, responded, timedOut, unavailable, ApplicationControlAction, forceQuit, quit, restart (+8 more)
+Cohesion: 0.08
+Nodes (19): AccessibilityProbeResult, responded, timedOut, unavailable, ApplicationControlAction, forceQuit, quit, restart (+11 more)
 
-### Community 507 - "raycastLocal.ts"
-Cohesion: 0.09
-Nodes (22): commanderDataDirectory(), AccountEnvironmentUpdate, normalizedAccountEnvironment(), normalizedSettings(), normalizeExtensionPreferences(), PersistentSnapshot, PersistentState, PersistentStore (+14 more)
+### Community 507 - "PersistentStore"
+Cohesion: 0.13
+Nodes (11): commanderDataDirectory(), AccountEnvironmentUpdate, normalizedAccountEnvironment(), normalizedSettings(), normalizeExtensionPreferences(), PersistentSnapshot, PersistentState, PersistentStore (+3 more)
 
 ### Community 508 - "start"
 Cohesion: 0.11
@@ -4532,12 +4493,12 @@ Cohesion: 0.09
 Nodes (34): Round 3 — empty registry on Vercel (tree-shaking), getKindRenderer(), getKindRenderers(), resolutionCandidates(), sanitizeParsedJson(), BLOCK_TYPE_META, columnsStories, ColumnsStory() (+26 more)
 
 ### Community 511 - "Delivered"
-Cohesion: 0.05
-Nodes (36): 2026-08-17 Messenger + Electron integration, 2026-08-19 persistent mesh node + live sessions, 2026-08-21 installed-node follow-up, 2026-08-23 expanded safe machine controls, 2026-08-24 consented media-volume follow-up, 2026-08-24 consented remote input follow-up, 2026-08-24 display, hardware, and lifecycle controls, 2026-08-24 fixed Spotify playback follow-up (+28 more)
+Cohesion: 0.03
+Nodes (66): Protected Electron Release Lane, Approved PR prereleases, Desktop and Recovery artifacts, Electron production release control plane, Local versus production proof, Secret mapping and distribution selection, Commands, GitHub Releases (+58 more)
 
 ### Community 512 - "Content provenance and correction baseline"
 Cohesion: 0.01
-Nodes (149): Claims and attestations, Current planning boundary, Governance and voting, Identity, Trust, Identity, And Governance, Candidate measures, Candidate minimum contract, Collaboration agency and shared-stewardship baseline (+141 more)
+Nodes (150): Claims and attestations, Current planning boundary, Governance and voting, Identity, Trust, Identity, And Governance, Candidate measures, Candidate minimum contract, Collaboration agency and shared-stewardship baseline (+142 more)
 
 ### Community 513 - "webapi"
 Cohesion: 0.05
@@ -4548,36 +4509,36 @@ Cohesion: 0.12
 Nodes (7): Failure, PairingEngine, Store, Transport, Memory, PairingEngineTest, Server
 
 ### Community 515 - "FooterStatusPanel.tsx"
-Cohesion: 0.15
-Nodes (27): MongoStatus(), pulse, STATUS_COLORS, FooterStatusPanel(), StoredEnvironmentSelection, FrontendStatus(), NitroStatus(), pulse (+19 more)
+Cohesion: 0.13
+Nodes (30): getMongoStatus opens and closes a brand-new MongoClient on every page view, VercelDeploymentStatus, MongoStatus(), pulse, STATUS_COLORS, FooterStatusPanel(), StoredEnvironmentSelection, FrontendStatus() (+22 more)
 
 ### Community 516 - "updateWorkInProgressHook"
 Cohesion: 0.07
 Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
 
 ### Community 517 - "thingtime-launch-celebration/support.js"
-Cohesion: 0.10
-Nodes (31): collectProps(), compileAttr(), compileTemplate(), contentKey(), resolve2(), cssToObj(), dcNameFromPath(), encodeCase() (+23 more)
+Cohesion: 0.07
+Nodes (65): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), getDC(), Dispatcher() (+57 more)
 
 ### Community 518 - "CIControlDashboard.tsx"
 Cohesion: 0.02
-Nodes (161): jsqr, activityCatalog, activityEvents(), activityInterval(), ActivityIntervalOptions, ActivityKind, activityListener(), activityManager (+153 more)
+Nodes (203): activityCatalog, activityEvents(), activityInterval(), ActivityIntervalOptions, ActivityKind, activityListener(), ActivityRow, ActivitySpec (+195 more)
 
 ### Community 519 - "start"
 Cohesion: 0.11
 Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChange(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), convertBoundingBoxToBox() (+30 more)
 
-### Community 520 - "StorageMutationError"
-Cohesion: 0.02
-Nodes (276): Open decisions, PR 991: Unified Timeline contextual messages, Debugging notes, PR #991 — Unified Timeline contextual messages: notes, Lopu explanations and system lines, Remaining acceptance work, Review round (adversarial five-lens review, fixed before merge), Verification record, What landed (+268 more)
+### Community 520 - "algorithms.ts"
+Cohesion: 0.05
+Nodes (94): Appended/child data is relational — never an unbounded embedded array, Managed profile-media contract, algorithmStorageCas(), algorithmThingToDoc(), assertLegacyAlgorithmMutationAllowed(), createAlgorithm(), CreateAlgorithmInput, deleteAlgorithm() (+86 more)
 
 ### Community 521 - "overviewCore.ts"
-Cohesion: 0.10
-Nodes (34): OverviewSearch, readAgentOverview(), dependencies(), thing(), user, buildOverview(), chatHref(), date() (+26 more)
+Cohesion: 0.07
+Nodes (47): OverviewSearch, readAgentOverview(), dependencies(), thing(), user, buildOverview(), chatHref(), date() (+39 more)
 
 ### Community 522 - "mac-file-sync.integration.mts"
-Cohesion: 0.02
-Nodes (87): Account drafts and templates, Agent browser runtime, Browser verification, Commander native background indexing, Encrypted attachment download CORS regression, Environment, First ten minutes in a fresh checkout or worktree, Graphify snapshots and hooks (+79 more)
+Cohesion: 0.03
+Nodes (61): pull(), CloudIndexChange, CloudIndexFeed, CloudIndexResume, Frame, frameQueue(), identifier(), parseCloudIndexFeed() (+53 more)
 
 ### Community 523 - "start"
 Cohesion: 0.11
@@ -4587,9 +4548,9 @@ Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChan
 Cohesion: 0.17
 Nodes (7): discard_through_newline(), HELP, main(), MAX_REQUEST_LINE_BYTES, read_bounded_line(), run(), write_response()
 
-### Community 525 - "reporting.ts"
-Cohesion: 0.17
-Nodes (32): agentReporting(), coordinateReporting(), CoordinationRead, fail(), isPrivateCoordinationPost(), isSubspacePostAcl(), privateCoordinationProjection(), readCoordinationAsOwner() (+24 more)
+### Community 525 - "window-zoom.test.cjs"
+Cohesion: 0.12
+Nodes (18): Private device diagnostics, applyWindowZoom(), attachWindowZoom(), windowZoomMenu(), zoomCommand(), { app, BrowserWindow, Menu }, assert, { attachWindowZoom, windowZoomMenu } (+10 more)
 
 ### Community 526 - "generate-branding-assets.mjs"
 Cohesion: 0.06
@@ -4600,8 +4561,8 @@ Cohesion: 0.10
 Nodes (12): DeliveryGate, .allowsSave, LiDARRecorder, .isSupported, Update, discarded, discardFailed, emptyCapture (+4 more)
 
 ### Community 529 - "raycast/package.json"
-Cohesion: 0.04
-Nodes (49): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+41 more)
+Cohesion: 0.05
+Nodes (40): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+32 more)
 
 ### Community 530 - "start"
 Cohesion: 0.11
@@ -4609,7 +4570,7 @@ Nodes (38): addDomEvent(), addListeners(), addPointerEvent(), addValueToWillChan
 
 ### Community 531 - "smarts/index.tsx"
 Cohesion: 0.05
-Nodes (52): addBindingsToContext(), babelPlugin(), basic(), clone(), context(), contextObject(), create(), createContext() (+44 more)
+Nodes (54): addBindingsToContext(), babelPlugin(), clone(), context(), contextObject(), createContext(), createInlineContext(), createObjectProperties() (+46 more)
 
 ### Community 532 - "start"
 Cohesion: 0.11
@@ -4672,36 +4633,36 @@ Cohesion: 0.07
 Nodes (39): Bridge, file-source, share-save, Messenger, attachment and capability acceptance tests, Generic shared Data Action execution: api.actions-run 1.42.0, Metadata: api.attachment-annotate 1.3.0, api.attachment-link 1.2.0 and api.files 1.12.0, Backup envelopes retain their separate existing contract, Individual Builder blocks for toolbar buttons, labels, icons and accents, ContextActionToolbar: registered actions, selection and persisted context layout, Contracts and recovery, Development and release (+31 more)
 
 ### Community 547 - "custom-drawer-acceptance.mjs"
-Cohesion: 0.06
+Cohesion: 0.05
 Nodes (29): assert, fixtureChats, fixturePages, fs, http, models, os, plan (+21 more)
 
-### Community 548 - "folder-transfer-worker.cjs"
-Cohesion: 0.08
-Nodes (25): get(), http, https, networkWait(), put(), timeoutError(), approvals, { availableParallelism } (+17 more)
+### Community 548 - "environment-gateway-acceptance.mjs"
+Cohesion: 0.14
+Nodes (19): alias, api(), children, cwd, delay(), endpointBundle, expectPoolDrain(), indexTrace() (+11 more)
 
 ### Community 549 - "fileCrypto.ts"
-Cohesion: 0.13
-Nodes (27): createPasswordBackup(), data(), backupFilePath(), patchBackupFileReferences(), chunks(), decode(), decryptPasswordFile(), encode() (+19 more)
+Cohesion: 0.07
+Nodes (42): PasswordAttachments(), PasswordAttachmentsScope(), Props, action(), button(), control, el(), passwordAttachmentBlocks (+34 more)
 
 ### Community 550 - "isObject"
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
-### Community 551 - "image-presentation-acceptance.mjs"
-Cohesion: 0.14
-Nodes (9): basePort, checks, children, delay(), env, imageBytes, ports, ready() (+1 more)
+### Community 551 - "getSelectedImages"
+Cohesion: 0.19
+Nodes (19): Command(), Command(), FORMATS, applyFilter(), runOperation(), Command(), Command(), Command() (+11 more)
 
 ### Community 552 - "isObject"
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
 ### Community 553 - "brandScenes.ts"
-Cohesion: 0.06
-Nodes (68): ChipGroup(), ChipLabel(), ChipOption, BrandImageryItem, brandImageryUrl(), build(), describeAlt(), IMAGERY_FORMAT_GROUPS (+60 more)
+Cohesion: 0.05
+Nodes (70): Chevron(), Segmented(), ChipGroup(), ChipLabel(), ChipOption, BRAND_IMAGERY, BrandImageryItem, brandImageryUrl() (+62 more)
 
-### Community 554 - "isObject"
+### Community 554 - "replace"
 Cohesion: 0.06
-Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
+Nodes (45): addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), lookupToken(), cssVar2(), CSSVars() (+37 more)
 
 ### Community 555 - "MCP/package.json"
 Cohesion: 0.06
@@ -4711,25 +4672,25 @@ Nodes (34): bin, thingtime-local, thingtime-mcp, dependencies, fflate, @modelcon
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
-### Community 557 - "LocalizedError"
-Cohesion: 0.03
-Nodes (59): Failure, destination, .errorDescription, identity, FolderReconnectFailure, .errorDescription, offline, remounted (+51 more)
+### Community 557 - ".run"
+Cohesion: 0.15
+Nodes (4): EmbeddedInventoryChannel, CCommanderInventory, Reply, SharedRustInventoryTests
 
 ### Community 558 - "isObject"
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
-### Community 559 - "MobileDeviceAlertActions"
-Cohesion: 0.15
-Nodes (9): MobileDeviceAlertActions, MobileDevicePreparedSoundStore, Receipt, Failure, conversion, tooLong, unsupported, MobileDeviceNotificationSound (+1 more)
+### Community 559 - "socialCardImages.test.ts"
+Cohesion: 0.14
+Nodes (16): attachmentImageResponse(), IMAGE_WIDTHS, parseImageWidth(), pending, resizeAttachmentImage(), variants, AuthorizedImage, canonicalDependencies() (+8 more)
 
 ### Community 560 - "isObject"
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
-### Community 561 - "PasswordClient"
-Cohesion: 0.11
-Nodes (6): NoRedirect, PasswordCatalogItem, PasswordClient, Reply, VerificationSettings, IdentityIndexTests
+### Community 561 - "router/src/index.js"
+Cohesion: 0.12
+Nodes (26): [command, group, target], config, headers, readTable(), root, writeTable(), annotate(), API_MANIFEST_PATH (+18 more)
 
 ### Community 562 - "isObject"
 Cohesion: 0.06
@@ -4737,7 +4698,7 @@ Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), css
 
 ### Community 563 - "file-export-host.cjs"
 Cohesion: 0.02
-Nodes (83): Active-document events and native on-handler properties, Web IDL options and callbacks, closeServer(), { constants }, fs, http, path, { randomUUID } (+75 more)
+Nodes (80): closeServer(), { constants }, fs, http, path, { randomUUID }, readPort(), savePort() (+72 more)
 
 ### Community 564 - "isObject"
 Cohesion: 0.06
@@ -4759,9 +4720,9 @@ Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnim
 Cohesion: 0.06
 Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), cssVar(), CSSVars(), defineCssVars(), extractSemanticTokens() (+30 more)
 
-### Community 569 - "format.ts"
-Cohesion: 0.02
-Nodes (225): Accounted archive storage writer — 2026-09-12, AI archive participant projection — 2026-09-12, Retryable archive deletion and compensation — 2026-09-12, AttachmentPublicMetadata, canonicalLinkedAttachmentUrl(), orderAttachmentDocsByStoredSort(), toAttachmentPublicMetadata(), CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES (+217 more)
+### Community 569 - "platforms.test.ts"
+Cohesion: 0.08
+Nodes (6): MAP_SDK_EXAMPLES, Bounds, Marker, Place, Popup, LIBRARY_REQUEST_REQUIREMENT
 
 ### Community 570 - "isObject"
 Cohesion: 0.06
@@ -4769,7 +4730,7 @@ Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), css
 
 ### Community 571 - "ServiceWorkspace.tsx"
 Cohesion: 0.08
-Nodes (50): Changes, attachmentUrl(), readAllWorkspace(), workspaceRequest(), WorkspaceSnapshot, ServiceJobContext(), serviceListFilters(), ServiceAddressSearch() (+42 more)
+Nodes (49): Changes, attachmentUrl(), readAllWorkspace(), workspaceRequest(), WorkspaceSnapshot, ServiceJobContext(), serviceListFilters(), ServiceAddressSearch() (+41 more)
 
 ### Community 572 - "isObject"
 Cohesion: 0.06
@@ -4779,89 +4740,93 @@ Nodes (38): addPrefix(), createResolver(), createThemeVars(), lookupToken(), css
 Cohesion: 0.10
 Nodes (22): Authored form pending state and dialog close content (2026-09-27), Authored native menus (2026-09-27), Canvas program receivers (2026-09-27), CSS function comparisons (2026-09-27), Edited Web Platform drafts and JSON Action inputs (2026-09-24), Live Web Platform form contexts (2026-09-27), SVG filter programs (2026-09-27), SVG program receivers (2026-09-27) (+14 more)
 
-### Community 574 - "indexCollectionsLifecycle.test.mts"
-Cohesion: 0.07
-Nodes (16): classifyThingCollModAuthority(), Client, databases, getDb(), drain(), createLatestRevisionAutosave(), defaultTimers, LatestRevisionAutosaveCoordinator (+8 more)
+### Community 574 - "PasswordCatalogItem"
+Cohesion: 0.15
+Nodes (5): PasswordCatalogSelection, PasswordPasskeySelectionSummary, PasswordCatalogItem, CatalogSelectionTests, IdentityIndexTests
 
 ### Community 575 - "ciControl/store.ts"
 Cohesion: 0.02
-Nodes (210): @vercel/sandbox, authorizeAiWaterfall(), automationSwitchEnabled(), adminPreviewDispatchPayload(), dispatchAdminPrPreviewController(), enabledAdminPreviewEnvironments(), PREVIEW_REFRESH_ACTIONS, PreviewPullRequest (+202 more)
+Nodes (216): automationSwitchEnabled(), adminPreviewDispatchPayload(), dispatchAdminPrPreviewController(), enabledAdminPreviewEnvironments(), PREVIEW_REFRESH_ACTIONS, PreviewPullRequest, syncAdminPrPreviewsForPullRequest(), pr (+208 more)
 
 ### Community 576 - "social-media.tsx"
-Cohesion: 0.07
-Nodes (69): copyText(), DOWNLOAD_BATCH_CAP, downloadPng(), downloadSequentially(), downloadSvg(), hasDocument(), hasObjectUrls(), loadImage() (+61 more)
+Cohesion: 0.06
+Nodes (82): copyText(), DOWNLOAD_BATCH_CAP, downloadPng(), downloadSequentially(), downloadSvg(), hasDocument(), hasObjectUrls(), loadImage() (+74 more)
 
 ### Community 577 - "DaemonSupervisor"
-Cohesion: 0.12
-Nodes (10): DaemonError, alreadyRunning, .errorDescription, invalidHandshake, missingResource, portInUse, stopped, timedOut (+2 more)
+Cohesion: 0.09
+Nodes (14): CommanderDevelopmentEnvironment, .enabled, .port, .root, DaemonError, alreadyRunning, .errorDescription, invalidHandshake (+6 more)
 
 ### Community 578 - "popHydrationState"
 Cohesion: 0.08
 Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
 
 ### Community 579 - "mapbox.ts"
-Cohesion: 0.07
-Nodes (46): [command, group, target], config, headers, readTable(), root, writeTable(), annotate(), dispatch() (+38 more)
+Cohesion: 0.12
+Nodes (26): accuracies, confidences, coordinate(), fail(), featureTypes, geocodeSuggestions(), keyFor(), mapboxBrowserConfig() (+18 more)
 
 ### Community 580 - "mobileFolders.client.ts"
 Cohesion: 0.02
-Nodes (299): Native iOS download staging — 2026-10-17, capabilitySatisfies(), patch(), cached, FolderAccess(), FolderAccessProps, NativeVersionRecovery(), Request (+291 more)
+Nodes (202): Native single-path observation (2026-10-18), Native iOS download staging — 2026-10-17, capabilitySatisfies(), patch(), NativeVersionRecovery(), Request, MAX_SYNC_EXCLUSIONS, NativeFileUpload (+194 more)
 
-### Community 581 - "Remaining acceptance"
-Cohesion: 0.03
-Nodes (60): Auth Characters capability, Static Analysis Baselines, Final local verification, Follow-up priorities, Initial evidence, Policy and commands, Regression coverage, Static analysis baselines and coverage (+52 more)
+### Community 581 - "MCP/README.md"
+Cohesion: 0.08
+Nodes (25): Agent connection and artifacts, No-login native draft preview and export, Verification, /api/v1/ai/connections endpoint, thingtime.ai-desktop-export manifest, thingtime_capabilities tool, Connector contract, Desktop app configuration (+17 more)
 
 ### Community 582 - "ClipboardPasteCoordinator"
 Cohesion: 0.19
 Nodes (4): ClipboardPasteCoordinator, PasteboardSnapshot, Result, ClipboardPasteCoordinatorTests
 
-### Community 583 - "apiTests.ts"
-Cohesion: 0.09
-Nodes (23): RFC-3849, ApiTestDefinition, expectJson(), apiDocsSmokeTests, appShapedDataCrystal, plusAlias(), sixDigitCode(), uniqueEmailOtpBody() (+15 more)
+### Community 583 - "watchQuickApprovalTests.ts"
+Cohesion: 0.12
+Nodes (15): credential(), ApiTestDefinition, expectJson(), apiDocsSmokeTests, claim(), common, password, suffix (+7 more)
 
 ### Community 584 - "constructor"
 Cohesion: 0.08
 Nodes (31): animateChildren(), animateList(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), constructor(), createAnimationState() (+23 more)
 
-### Community 586 - ".summary"
-Cohesion: 0.14
-Nodes (7): ProviderView, .body, .treeImage, ProviderPreview, PasskeyRegistrationPolicy, PasskeyRegistrationSummary, PasskeyRegistrationPolicyTests
+### Community 585 - "EditorHistory"
+Cohesion: 0.15
+Nodes (12): What the concept commits to, Principles, copy(), diff(), documentChanges(), EditorHistory, EditorHistoryEvent, equal() (+4 more)
+
+### Community 586 - "shared-body-acceptance.mjs"
+Cohesion: 0.09
+Nodes (21): all, chronological, fixture, [fixturePath, evidencePath], manifest, outcomes, request(), result (+13 more)
 
 ### Community 587 - "Thingtime AI instructions"
-Cohesion: 0.05
-Nodes (42): Agent browsers and editable tasks, Agent credential and end-to-end authentication workflows, Browser and UI validation, Canonical instruction file, Carry new fields through the whole data path, Commander macOS distribution signing, Compact, collapsible multi-section interfaces, Complete the actual login and consent flow (+34 more)
+Cohesion: 0.03
+Nodes (75): Agent browsers and editable tasks, Agent credential and end-to-end authentication workflows, Browser and UI validation, Canonical instruction file, Carry new fields through the whole data path, Commander macOS distribution signing, Compact, collapsible multi-section interfaces, Complete the actual login and consent flow (+67 more)
 
-### Community 588 - "drafts.ts"
+### Community 588 - "account-profile-backup.integration.mts"
 Cohesion: 0.08
-Nodes (54): copySharedAttachment, deleteAttachment, active(), copyDraftMedia(), discardDraft(), DraftError, getDraft(), instantiateTemplate() (+46 more)
+Nodes (28): projectProfilePresentation(), toPublicProfile(), loader(), action, createProfileLoader(), defaultLoaderDependencies, loader, ProfileActionDependencies (+20 more)
 
-### Community 589 - "createRuntime"
-Cohesion: 0.15
-Nodes (34): boot(), createComponentFactory(), getDC(), Dispatcher(), createExternalModules(), ensureBabel(), getError(), load() (+26 more)
-
-### Community 590 - "BuilderDrawer.tsx"
-Cohesion: 0.02
-Nodes (197): 2 · The Thingtime builder, Seamless page editor, parseSubspaceMedia(), parseSubspaceMediaPresentation(), parseSubspaceMediaPresentationSources(), SUBSPACE_MEDIA_SLOTS, IMAGE_UPLOAD_CONTENT_TYPES, TYPE_LABELS (+189 more)
-
-### Community 591 - "queryContract.ts"
+### Community 589 - "FileSystemIndexerClient"
 Cohesion: 0.14
-Nodes (15): MONGO_BLOCKED_QUERY_KEYS, MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS, MONGO_PROTECTED_THING_FIELDS, MONGO_QUERY_LIMITS, MONGO_READ_ONLY_AGGREGATION_STAGES, MONGO_SENSITIVE_QUERY_COLLECTIONS, MongoQueryCollection, MongoQueryOperation (+7 more)
+Nodes (7): cancel(), execFileAsync, FileSystemIndexerClient, QueuedQuery, Page runtime (`components/Builder/webpageRuntime.tsx`), Platform pieces added, Templates (`componentTemplate.ts`, `HtmlThingRenderer.tsx`)
+
+### Community 590 - "webpageBlocks.ts"
+Cohesion: 0.01
+Nodes (322): 2 · The Thingtime builder, 3 · Catalog eviction, Debugging log (bugs found via GUI QA, all fixed in-branch), Native SECTION registry (commits ee5599fd6 → 6ad68f728), Notes / follow-ups, PR #485 — Design system alignment + block-based Thingtime builder, QA-found fixes this round, Round 2 — Limitless full-bleed builder (owner feedback, same day) (+314 more)
+
+### Community 591 - "Raw.tsx"
+Cohesion: 0.16
+Nodes (20): MONGO_QUERY_COLLECTIONS, MONGO_QUERY_OPERATIONS, MONGO_READ_ONLY_AGGREGATION_STAGES, MongoReadOnlyAggregationStage, inputStyles, PipelineBuilder, PipelineBuilderComponent(), Props (+12 more)
 
 ### Community 592 - "magick-wasm NOTICE"
 Cohesion: 0.05
 Nodes (37): magick-wasm NOTICE, AOM, Brotli, bzip2, libde265, OpenEXR, libffi, FreeType (+29 more)
 
-### Community 593 - "createRuntime"
+### Community 593 - "ScreenCaptureKitSession"
+Cohesion: 0.14
+Nodes (4): ScreenCaptureBackendSession, ScreenCaptureKitOutput, ScreenCaptureKitSession, FakeScreenCaptureSession
+
+### Community 594 - "nativeFileIcons.ts"
 Cohesion: 0.15
-Nodes (34): boot(), createComponentFactory(), getDC(), Dispatcher(), createExternalModules(), ensureBabel(), getError(), load() (+26 more)
+Nodes (18): CommanderIcon(), ResultIcon, CachedIcon, cachedNativeFileIcon(), dequeueNextIcon(), drainNativeIconQueue(), iconCache, iconDataUrl() (+10 more)
 
-### Community 594 - "deviceAlerts.ts"
-Cohesion: 0.16
-Nodes (29): getAttachmentDownload, alertId(), DeviceAlertSound, keys(), mediaVersion(), normalizeMediaInput(), normalizeNotificationInput(), preparedSoundFilename() (+21 more)
-
-### Community 595 - "PasswordProviderRegistrationStart"
-Cohesion: 0.18
-Nodes (3): PasswordProviderRegistrationStart, PasswordProviderRequests, ProviderFeedbackTests
+### Community 595 - "sync-web-standards.mjs"
+Cohesion: 0.14
+Nodes (15): parse5, attr(), classes(), matches(), plain(), readInspectorSources(), text(), unique() (+7 more)
 
 ### Community 596 - "scripts"
 Cohesion: 0.06
@@ -4875,9 +4840,9 @@ Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnim
 Cohesion: 0.09
 Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), clearListeners(), complete(), createRenderBatcher() (+26 more)
 
-### Community 599 - "stop"
-Cohesion: 0.09
-Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), clearListeners(), complete(), createRenderBatcher() (+26 more)
+### Community 599 - "initPlayback"
+Cohesion: 0.12
+Nodes (27): attachTimeline(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten(), getFinalKeyframe() (+19 more)
 
 ### Community 600 - "stop"
 Cohesion: 0.09
@@ -4888,8 +4853,8 @@ Cohesion: 0.09
 Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), clearListeners(), complete(), createRenderBatcher() (+26 more)
 
 ### Community 602 - "musing.streaming.test.mts"
-Cohesion: 0.15
-Nodes (12): anthropicPlans, anthropicRequests, CapturedRequest, envNames, openAiPlans, openAiRequests, originalEnv, ProviderPlan (+4 more)
+Cohesion: 0.09
+Nodes (23): PRConflictResolverModelWaterfallEditor, AI Workflow Base Models Catalog, prConflictResolverModelWaterfallCore, Lopu Musing Model Choices Resolver, normalizePrConflictResolverModelWaterfall, parseAiWorkflowModelOptionId, PR #388 Unlimited AI Model Waterfall, resolveAiPreferredAnthropicChoice (+15 more)
 
 ### Community 603 - "stop"
 Cohesion: 0.09
@@ -4916,16 +4881,16 @@ Cohesion: 0.09
 Nodes (34): attachTimeline(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), clearListeners(), complete(), createRenderBatcher() (+26 more)
 
 ### Community 609 - "ThingtimeEmbedRuntime"
-Cohesion: 0.16
-Nodes (6): Public API, cloneJson(), errorMessage(), apiEndpoint(), randomChannel(), ThingtimeEmbedRuntime
+Cohesion: 0.14
+Nodes (7): Public API, cloneJson(), errorMessage(), JsonValue, apiEndpoint(), randomChannel(), ThingtimeEmbedRuntime
 
 ### Community 610 - "SystemMetricsService"
 Cohesion: 0.14
 Nodes (3): ProcessCounters, SystemMetricsService, SystemMetricsServiceTests
 
-### Community 611 - "smarts/index.test.ts"
-Cohesion: 0.09
-Nodes (26): deletesmart(), ee(), epp(), escapeEscapes(), escapePropertyPath(), getParent(), getsmart(), deepGetByArrayUnbound() (+18 more)
+### Community 611 - "plugin.ts"
+Cohesion: 0.02
+Nodes (234): revokePatToken(), REVOKED_SESSION_REAP_MS, CONNECTOR_CONFIRMATION_ACTIONS, CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, ConnectorConfirmationAction, ConnectorConfirmationPatch (+226 more)
 
 ### Community 612 - "Things Page"
 Cohesion: 0.06
@@ -4935,49 +4900,49 @@ Nodes (36): Account Storage Metering, Attachment Auto-Icons, Things Badge Densit
 Cohesion: 0.06
 Nodes (34): dependencies, @commander/protocol, emojibase-data, lucide-react, react, react-dom, vite, @vitejs/plugin-react (+26 more)
 
-### Community 614 - "MobileFolderIgnoreRules"
-Cohesion: 0.12
-Nodes (9): MobileFolderIgnoreRules, Rule, Token, any, globstar, globstarSlash, literal, star (+1 more)
+### Community 614 - "jobSchedules.ts"
+Cohesion: 0.23
+Nodes (18): claimScheduledDay(), due(), duplicate(), idFor(), keyFor(), policy(), readJobSchedules(), saveJobSchedule() (+10 more)
 
 ### Community 615 - "vaultEnvelope.ts"
 Cohesion: 0.15
-Nodes (27): createVaultDataKey(), decode(), failure(), Identity, keyBytes(), open(), openKey(), passwordContext() (+19 more)
+Nodes (26): createVaultDataKey(), decode(), failure(), Identity, keyBytes(), open(), openKey(), passwordContext() (+18 more)
 
 ### Community 616 - "NativeFileUpload"
-Cohesion: 0.04
-Nodes (8): PasswordTestProtocol, Measurement, NativeFileUpload, PacedUploadBody, FileSessionProtocol, LoopbackUpload, NativeFileUploadTests, UploadProtocol
+Cohesion: 0.05
+Nodes (7): PasswordTestProtocol, Measurement, NativeFileUpload, PacedUploadBody, LoopbackUpload, NativeFileUploadTests, UploadProtocol
 
 ### Community 617 - "LiDARTarArchive"
 Cohesion: 0.10
 Nodes (11): .header, ArchiveError, alreadyRecording, damagedArchive, emptyCapture, .errorDescription, invalidEntry, noWritableArchive (+3 more)
 
 ### Community 618 - "Lease"
-Cohesion: 0.05
-Nodes (19): Data and API conventions, Lease, NativeUploadContinuation, Progress, NativeUploadForegroundService, NativeUploadJobService, NativeUploadStopReceiver, Detached DOM receivers (+11 more)
-
-### Community 619 - "deviceObservations.ts"
-Cohesion: 0.14
-Nodes (29): DeviceLocationValue, DeviceObservation, DeviceObservationInput, DeviceObservationSettings, isObservationType(), normalizeDeviceObservation(), observationCursor(), observationCutoff() (+21 more)
+Cohesion: 0.04
+Nodes (27): Lease, NativeUploadContinuation, Progress, NativeUploadForegroundService, NativeUploadJobService, NativeUploadStopReceiver, Handler, Headers (+19 more)
 
 ### Community 620 - "PLAN/device-location-history.md"
 Cohesion: 0.07
 Nodes (34): Device location note, Physical Device Acceptance Layers, APNs Registrations and Notification Delivery, ComponentMapbox, Device Control Events, Verified Device Thing Binding, Device location history and find-device evidence, Device Model Identification (+26 more)
 
-### Community 622 - "passwords/passwords.ts"
-Cohesion: 0.19
-Nodes (27): api.passwords 1.3.0, openVaultValue(), checked(), deletePasswordFiles(), entryMatch(), fileMatch(), passwordFileOperation(), service (+19 more)
+### Community 621 - "Foreground cloud downloads to offline folders"
+Cohesion: 0.10
+Nodes (20): Android README, Binary upload fallback (native access 1.4), Build and run, Current-file background upload continuation, Foreground cloud downloads to offline folders, Installed conflict review acceptance, Installed file History acceptance, Native acceptance (+12 more)
+
+### Community 622 - "passwords/model.ts"
+Cohesion: 0.11
+Nodes (45): api.passwords 1.3.0, openVaultValue(), withUserVaultKey(), checked(), deletePasswordFiles(), entryMatch(), fileMatch(), passwordFileOperation() (+37 more)
 
 ### Community 623 - "MenuBarTelemetry"
 Cohesion: 0.12
 Nodes (5): MenuBarItemTelemetry, MenuBarTelemetry, SystemMenuBar, MenuBarHardwareTests, MenuBarTelemetryTests
 
 ### Community 624 - "websiteIcons.ts"
-Cohesion: 0.05
-Nodes (54): Web standards Builder app, audit:web-platform, Builder, /platform/runtime.html, /platform/runtime.js, test:web-platform, web-standards suite, parse5 (+46 more)
+Cohesion: 0.11
+Nodes (29): ipaddr.js, createProviderIconCache(), knownImageTypes, loadProviderIcon, resolveProviderIcon(), publicMailAddress(), resolveMailHost(), declaredBrandImages() (+21 more)
 
 ### Community 625 - "codexAppServer.ts"
-Cohesion: 0.11
-Nodes (21): CodexThread, CodexTurn, CommandExecution, CONNECTOR_WARNING_MESSAGES, ConnectorWarningCode, DeltaGuard, isoFromSeconds(), record() (+13 more)
+Cohesion: 0.03
+Nodes (77): CodexAppServerConnector, CodexThread, CodexTurn, CommandExecution, CONNECTOR_WARNING_MESSAGES, connectorWarning(), ConnectorWarningCode, DeltaGuard (+69 more)
 
 ### Community 626 - "file-sync-folder-batches.integration.mts"
 Cohesion: 0.06
@@ -4987,21 +4952,21 @@ Nodes (31): api(), base, cookies, fixture, [fixturePath], request(), actualId, b
 Cohesion: 0.20
 Nodes (8): RFC-6238, PasswordAuthenticatorSetup(), AuthenticatorSetupBridge, authenticatorSetupEvent, authenticatorSetupReadyEvent, AuthenticatorSetupSession, SetupNotice, supportsAuthenticatorSetup()
 
-### Community 628 - "page-hook.js"
-Cohesion: 0.15
-Nodes (20): b(), c(), d(), e(), g(), h(), l(), m() (+12 more)
+### Community 628 - "deviceAlerts.test.mts"
+Cohesion: 0.08
+Nodes (29): b(), c(), d(), e(), g(), h(), l(), m() (+21 more)
 
-### Community 629 - "waitlist.ts"
+### Community 629 - "chatMedia.server.ts"
+Cohesion: 0.18
+Nodes (15): anthropicMediaContent(), isLopuImage(), isLopuText(), LOPU_MEDIA_MAX_BYTES, LOPU_MEDIA_TOTAL_BYTES, LOPU_TEXT_MAX_BYTES, LopuMedia, openAiMediaContent() (+7 more)
+
+### Community 631 - "PR #308 — NSFW/TOS media moderation pipeline"
+Cohesion: 0.07
+Nodes (24): 2. Frontier multimodal LLM APIs, 3. Dedicated content-moderation APIs, 4. Open-source / self-hosted, 5. Market trends (through Aug 2026), 6. Monthly projections for Thingtime, 7. Cost levers, cheapest first, 8. Method & verification notes, AI API costing — market analysis & research (August 2026) (+16 more)
+
+### Community 632 - ".synchronize"
 Cohesion: 0.14
-Nodes (21): FALLBACK_MUSINGS, pickFallbackMusing(), wishSlotMusing(), hasLopuAiProviderConfigured, activeRequestsExpr(), consumeLopuMusingQuota(), firstHeaderIp(), getRequestIp() (+13 more)
-
-### Community 631 - "AI API costing — market analysis & research (August 2026)"
-Cohesion: 0.10
-Nodes (18): 1. What the Thingtime pipeline spends today, 2. Frontier multimodal LLM APIs, 3. Dedicated content-moderation APIs, 4. Open-source / self-hosted, 5. Market trends (through Aug 2026), 6. Monthly projections for Thingtime, 7. Cost levers, cheapest first, 8. Method & verification notes (+10 more)
-
-### Community 632 - "utils/devices/deviceDiagnostics.ts"
-Cohesion: 0.10
-Nodes (29): DeviceActor, canonical(), createDeviceDiagnosticsService(), defaults, Dependencies, DEVICE_DIAGNOSTIC_KIND, fail(), HOME (+21 more)
+Nodes (7): PasswordIdentityIndex, PasswordIdentityOperations, CodeQL coverage for every PR target and branch, GitHub Actions control plane, Fixed, Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`), CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
 
 ### Community 633 - "verify-passkeys.mjs"
 Cohesion: 0.11
@@ -5011,53 +4976,53 @@ Nodes (31): Layer 1 — Federated hint resolution, Layer 1 — Federated hint re
 Cohesion: 0.07
 Nodes (34): Account drafts and templates, post composer, post menus, Android foreground cloud downloads, Android native folder write approval checks, Android offline-folder publication backend checks, Android offline folders in Files, Android private download staging checks (+26 more)
 
-### Community 635 - ".perform"
-Cohesion: 0.17
-Nodes (4): Command, MobileDeviceCommandJournal, Receipt, MobileDeviceCommandWorkerTests
+### Community 635 - "webpages/seed.ts"
+Cohesion: 0.14
+Nodes (18): WEBPAGE_RESERVED_ID_PREFIX, appContentDefinitions(), genuineSeeded(), SeedDefinition, seedDemoSuites(), seedDemoWebpages(), seededCount(), SeedFail (+10 more)
 
-### Community 636 - "Environment API gateways and index lifecycle"
-Cohesion: 0.20
-Nodes (10): Configuration and environment partitioning, Environment API gateways and index lifecycle, Index readiness, Parallel Hobby frontend with database-backed enrollment, Promotion procedure, Requests, promotion and rollback, Rollout and environment mapping, Select the connection mode (+2 more)
+### Community 636 - "file-sync-fingerprint.integration.mts"
+Cohesion: 0.13
+Nodes (13): ATTACHMENT_FINGERPRINT_REQUIREMENTS, attachmentFingerprintEntry(), readAttachmentSyncEntry(), hash(), read(), sha(), length(), base (+5 more)
 
-### Community 637 - "email/service.ts"
+### Community 637 - "apns.ts"
 Cohesion: 0.05
-Nodes (92): Application Boundary, Architecture, Mongo Collections, Phase 0: Provider Bridge, Phase 1: Compliance Core, Streams And Domains, Email delivery (owned email layer), @aws-sdk/client-sesv2 (+84 more)
+Nodes (57): refreshLopuLiveActivitiesForOwner(), registerLopuLiveActivity(), registrationFilter(), registrationId(), unregisterLopuLiveActivity(), LOPU_ACTIVITY_LIFETIME_MS, LOPU_ACTIVITY_MAX_CHATS, LOPU_ACTIVITY_PURPOSE (+49 more)
 
 ### Community 638 - ".inspect"
 Cohesion: 0.09
 Nodes (20): MobileFolderInventory, MobileSyncStaging, Native external-volume reconnect, nativeFeedRecovery, NativeFilesystemContinuity, NativeSymbolicLinks, pagedRunJournal.endRemountedLocalFeed, RustInventoryClient.Root (+12 more)
 
 ### Community 639 - "org.junit.Test"
-Cohesion: 0.06
-Nodes (15): NativeUploadServiceTest, AttachmentExportTest, FolderRangeSinkTest, FolderRangeSourceTest, NativeUploadContinuationTest, Cloud, NativeUploadJobTest, NativeUploadPartStoreTest (+7 more)
+Cohesion: 0.05
+Nodes (16): NativeUploadServiceTest, AttachmentExport, FilterInputStream, RangeReader, ProofCache, AttachmentExportTest, FolderRangeSinkTest, FolderRangeSourceTest (+8 more)
 
 ### Community 640 - "structuredFields.ts"
-Cohesion: 0.11
-Nodes (23): passwordEntryDisplay(), PASSWORD_TYPES, blocked, decimalIdentity(), JsonPath, Kind, knownLabels, own() (+15 more)
+Cohesion: 0.12
+Nodes (31): passwordEntryDisplay(), PASSWORD_TYPES, PasswordField, atPath(), exportOnePasswordItem(), fieldTypes, importOnePasswordItem(), ONE_PASSWORD_CATEGORIES (+23 more)
 
 ### Community 641 - "embed/runtime.ts"
-Cohesion: 0.10
-Nodes (24): BridgeThingIdentity, DEFAULT_BRIDGE_THING_NAME, savedThingPayload, FORBIDDEN_PATH_PARTS, getJsonPath(), JsonValue, parseThingPath(), sanitizeJson() (+16 more)
+Cohesion: 0.12
+Nodes (24): BridgeThingIdentity, DEFAULT_BRIDGE_THING_NAME, readBridgeThingIdentity(), savedThingPayload, FORBIDDEN_PATH_PARTS, getJsonPath(), parseThingPath(), sanitizeJson() (+16 more)
 
 ### Community 642 - "svgFixtures.ts"
-Cohesion: 0.18
-Nodes (21): binary(), call(), drawing(), elementTags, exec(), listItemTypes, marker(), mixins (+13 more)
+Cohesion: 0.08
+Nodes (36): doc, DOM_BOUNDARY_FIXTURES, nestedSteps, sample, shadowedNames, start, binary(), call() (+28 more)
 
-### Community 643 - "SchemasBrowsePage.tsx"
+### Community 643 - "localCache.ts"
 Cohesion: 0.03
-Nodes (168): Round 3 — every card opens a dedicated live page, Surfaces, Verification, canonicalPostTags(), EmojiData, EmojiEntry, EmojiGroup, GROUP_TAB_EMOJI (+160 more)
+Nodes (172): Evidence ledger, Round 3 — every card opens a dedicated live page, Surfaces, Verification, values(), builtinSchemaCrystal(), DefinitionValueEditor(), empty() (+164 more)
 
 ### Community 644 - "graphify-semantic.test.py"
-Cohesion: 0.08
+Cohesion: 0.09
 Nodes (3): wrap(), ShareProfileTests, verify_bundle()
 
 ### Community 645 - ".make"
 Cohesion: 0.17
 Nodes (3): PasswordApplicationMenu, PasswordEditResponderActions, PasswordApplicationMenuTests
 
-### Community 646 - "CodexAppServerConnector"
-Cohesion: 0.17
-Nodes (6): CodexAppServerConnector, connectorWarning(), textInput(), ApprovalDecision, SendMessageRequest, SendMessageResult
+### Community 646 - "Shared Rust index and sync backend"
+Cohesion: 0.11
+Nodes (14): Build and verify, Consumers, Coverage by host, iOS prerequisites, Shared filesystem indexer, P0 — Correct incremental recovery, P0 — Every current Mac entry point, P0 — One durable observation store (+6 more)
 
 ### Community 647 - "Support agency and accountable remedy roadmap"
 Cohesion: 0.06
@@ -5071,25 +5036,21 @@ Nodes (12): checks, children, cwd, delay(), env, oauth(), port(), ports (+4 more
 Cohesion: 0.17
 Nodes (20): chipStyle, countLabel(), entriesOf(), escapeRegExp(), formatLeaf(), highlightTitle(), keyStyle, KIND_CHIPS (+12 more)
 
-### Community 650 - "tests.tsx"
-Cohesion: 0.09
-Nodes (36): Chip(), CHIP_TONES, ChipTone, createApiTestContext(), createPayloadParseResult(), createPayloadTexts(), EmailTestConfig, groupLabel() (+28 more)
+### Community 650 - "apiTests.ts"
+Cohesion: 0.20
+Nodes (11): RFC-3849, appShapedDataCrystal, plusAlias(), sixDigitCode(), uniqueEmailOtpBody(), uniqueEmailRegisterBody(), uniqueEmailServiceAccountBody(), uniqueServiceAccountBody() (+3 more)
 
-### Community 651 - "utils/nativeBridge.ts"
+### Community 651 - "nativeSyncTasks.client.ts"
 Cohesion: 0.03
-Nodes (106): desktop(), DesktopLocationBridge, DeviceNativeLocationStatus, requestDeviceLocationNative(), supportsDeviceLocationNative(), LocalNodeSetupCard(), deviceRequests, MobileDeviceStatus (+98 more)
+Nodes (143): createThingtimeCapabilityChecker(), IncompatibleThingtimeCapabilityError, desktop(), DesktopLocationBridge, DeviceNativeLocationStatus, requestDeviceLocationNative(), supportsDeviceLocationNative(), deviceRequests (+135 more)
 
 ### Community 652 - "PR #1002 note — mobile pairing and recoverable file sync"
 Cohesion: 0.09
 Nodes (24): PR #1002 note — mobile pairing and recoverable file sync, Account snapshot inventory producer, android/README.md setup reference, apple/FileSync shared Apple receiver, api.attachment-content capability, AttachmentExport, thingtime-backup-v1 portable vault, cloudTransport.test.ts origin guard (+16 more)
 
 ### Community 653 - "Setup for Forks"
-Cohesion: 0.05
-Nodes (37): Admin access, API self-documentation, App suites (Pokeworld + StarsAlign on Thingtime), Branch automation: develop → main promotion, Branch automation: the `all` wildcard branch, Brand identity for search engines (robots.txt, sitemap, Organization logo), Builder component SDK, Chat continuity and iOS activity (2026-09-21) (+29 more)
-
-### Community 654 - "voiceCaptureQueue.test.ts"
-Cohesion: 0.22
-Nodes (6): VoiceCapture, browserStore, CaptureStore, PendingVoiceCapture, ack, VoiceCaptureQueue
+Cohesion: 0.07
+Nodes (27): Admin access, API self-documentation, App suites (Pokeworld + StarsAlign on Thingtime), Branch automation: develop → main promotion, Branch automation: the `all` wildcard branch, Brand identity for search engines (robots.txt, sitemap, Organization logo), ChatGPT / Codex plugin, Components library (`/components` + the external catalog) (+19 more)
 
 ### Community 655 - "throwException"
 Cohesion: 0.08
@@ -5137,27 +5098,27 @@ Nodes (30): attachRetryListener(), createCapturedValueAtFiber(), createClassErro
 
 ### Community 666 - "Web standards Builder app"
 Cohesion: 0.07
-Nodes (26): Build and validation, Completed media workflow; remaining standards paused, ECMAScript built-in receivers, ECMAScript intrinsic receivers, Generic runtime, HTML and CSS inspector, HTML form receivers, Inventory and coverage (+18 more)
+Nodes (29): Active-document events and native on-handler properties, Build and validation, Completed media workflow; remaining standards paused, ECMAScript built-in receivers, ECMAScript intrinsic receivers, Generic runtime, HTML and CSS inspector, HTML form receivers (+21 more)
 
 ### Community 667 - "attachment-upload.cjs"
 Cohesion: 0.14
 Nodes (15): { createHash }, DesktopAttachmentUpload, { once }, { PassThrough }, { readAccount, readCapabilities, signDesktopUploadPart }, signedTarget(), unavailable(), assert (+7 more)
 
-### Community 668 - ".run"
-Cohesion: 0.12
-Nodes (8): RecoveryFixture, Failure, assertion, invalid, Fixture, PublicationProcessAcceptance, FileSyncRecoverySupport, MobilePublicationProcessTests
+### Community 668 - "moderationSettingsCore.ts"
+Cohesion: 0.17
+Nodes (17): createModerationSettingsStore(), setModerationSettings, store, StoreDependencies, DEFAULT_MODERATION_SETTINGS, isModerationMediaProviderId(), isModerationTextProviderId(), mediaIds (+9 more)
 
 ### Community 669 - "PR 557 — Grow Thingtime's world-domination TODO garden"
 Cohesion: 0.07
 Nodes (30): 2026-09-02 — accessibility and language readiness, 2026-09-02 — attention agency and calm use, 2026-09-03 — community safety and accountable moderation, 2026-09-03 — trusted developer ecosystem, 2026-09-04 — content provenance and correction integrity, 2026-09-04 — service continuity and recovery, 2026-09-05 — creator sustainability and fair value, 2026-09-05 — resource-conscious reach (+22 more)
 
-### Community 670 - "watchPairing.ts"
-Cohesion: 0.18
-Nodes (23): normalizeDeviceDescriptor(), enforceFixedRateLimit(), approveWatchPairing(), claimWatchPairing(), Failure, HOME_ACCOUNTING, inspectWatchPairing(), lookupWatchPairing() (+15 more)
+### Community 670 - "connectionTracker.ts"
+Cohesion: 0.16
+Nodes (17): makeSource(), CONNECTION_SNAPSHOT_FRESH_MS, CONNECTION_SNAPSHOT_RETENTION_MS, connectionDeployment(), connectionFeature(), createConnectionTracker(), deploymentUrl(), Emitter (+9 more)
 
 ### Community 671 - "media-cache-sw.mjs"
-Cohesion: 0.15
-Nodes (26): boundedBlob(), compatibleManifest(), managedUrl(), publicAsset(), publicLifetime(), REQUIREMENTS, responseFromRecord(), bounded() (+18 more)
+Cohesion: 0.13
+Nodes (29): Android Managed Folder Access, FolderBridge, ManagedFolderAccess, boundedBlob(), compatibleManifest(), managedUrl(), publicAsset(), publicLifetime() (+21 more)
 
 ### Community 672 - "AI Advice: Agents And Councils"
 Cohesion: 0.07
@@ -5235,9 +5196,9 @@ Nodes (45): Active API compatibility, GET /api/v1/capabilities flat feature-vers
 Cohesion: 0.27
 Nodes (20): assert_fails(), capabilities_only_advertise_supported_strict_watchers(), execute(), failed_backup_reopens_same_revision_sequence_without_false_absence(), Fixture, live_directory_offsets_use_one_sorted_snapshot_and_reject_a_stale_version(), one(), operation() (+12 more)
 
-### Community 693 - "pageOps.ts"
-Cohesion: 0.13
-Nodes (23): blocksInput(), ApplyPageOpsResult, checkBlockShape(), containerField(), idField(), isPlainObject(), isValidBlockId(), MAX_PAGE_BLOCK_ID_CHARS (+15 more)
+### Community 693 - ".start"
+Cohesion: 0.23
+Nodes (7): ActiveCapture, ScreenCaptureBackend, ScreenCaptureDescriptor, ScreenCaptureFrameEncoding, ScreenCaptureFramePump, StartingCapture, ViewOnlyScreenCapture
 
 ### Community 694 - "Feature Stacks"
 Cohesion: 0.08
@@ -5251,9 +5212,13 @@ Nodes (34): applicationHealthIsReady(), applicationOptions(), bootstrapPrivateUp
 Cohesion: 0.04
 Nodes (48): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+40 more)
 
-### Community 698 - "things/thingStoragePolicy.ts"
-Cohesion: 0.06
-Nodes (72): ATTACHMENT_THINGTIME, isAttachmentThing(), VAULT_ATTACHMENT_PURPOSE, getAttachmentFingerprint, thingStorageJsonPayload(), attachmentBytes(), cacheMatches(), canPersistFor() (+64 more)
+### Community 697 - "PR 299 Performance Audit Findings, Notes and Fixes"
+Cohesion: 0.05
+Nodes (17): Thingtime Performance Audit (README), Deliberately not changed, Fixed in this pass, Headline results, How the audit was produced, Partially addressed, Refuted findings, Status (+9 more)
+
+### Community 698 - "v1/things/_things.tsx"
+Cohesion: 0.03
+Nodes (179): appAccountAllows(), appAccountThingScopes(), listSharedAppData(), AppRequestContext, resolveAppRequest(), appAllowsDesktopRedirect(), appAllowsNativeRedirectUri(), appAllowsOrigin() (+171 more)
 
 ### Community 699 - "editorJsPopoverViewport.test.ts"
 Cohesion: 0.11
@@ -5267,29 +5232,25 @@ Nodes (28): devDependencies, @emotion/styled, eslint, eslint-config-prettier, es
 Cohesion: 0.10
 Nodes (27): Bazel action-key map and content-addressable store, Commands, Content-addressed Graphify snapshots, Layout, Lock ownership and concurrency, Merge behavior, Retention, Scoped semantic refresh (+19 more)
 
-### Community 702 - "timeline-recovery.integration.mts"
-Cohesion: 0.10
-Nodes (22): account, apply, call(), collisionQuery, compare(), create(), history(), multiApply (+14 more)
+### Community 702 - "WidgetOAuthRequest"
+Cohesion: 0.14
+Nodes (10): Failure, alreadyUsed, .errorDescription, expired, invalidCallback, invalidOrigin, randomUnavailable, WidgetOAuthRequest (+2 more)
 
 ### Community 703 - "Unified Thing history and timeline browser baseline"
-Cohesion: 0.10
-Nodes (24): Local-First History Sync, Timeline API, Timeline Event, Unified Timeline, Version Branches and Variations, 🎨 docs/design — Claude Design exports, Entries, History Evolution Design Concept (+16 more)
-
-### Community 704 - "Prepared"
-Cohesion: 0.19
-Nodes (3): Content, Prepared, Request
+Cohesion: 0.09
+Nodes (25): Local-First History Sync, Timeline API, Timeline Event, Unified Timeline, Version Branches and Variations, 🎨 docs/design — Claude Design exports, Entries, History Evolution Design Concept (+17 more)
 
 ### Community 705 - "LiDARCaptureTests"
-Cohesion: 0.16
-Nodes (3): .values, LiDARPointCloud, LiDARCaptureTests
+Cohesion: 0.14
+Nodes (4): .values, .local, LiDARPointCloud, LiDARCaptureTests
 
-### Community 706 - "icons.test.ts"
-Cohesion: 0.17
-Nodes (18): openPasswordIcon(), sealPasswordIcon(), PasswordEntryIcon(), clearPasswordPreviewIcons(), fetchPasswordIcon(), iconMime(), openPasswordIconBlob(), openPasswordPreviewIcon() (+10 more)
+### Community 706 - ".summary"
+Cohesion: 0.21
+Nodes (3): PasskeyRegistrationPolicy, PasskeyRegistrationSummary, PasskeyRegistrationPolicyTests
 
-### Community 707 - ".invalid"
-Cohesion: 0.12
-Nodes (10): NativeUploadJob, Progress, Transport, Binding, Disk, NativeUploadPartStore, Part, NativeUploadSource (+2 more)
+### Community 707 - "Check"
+Cohesion: 0.05
+Nodes (25): FolderRangeSink, Send, FolderRangeSource, Pull, NativeUploadJob, Progress, Transport, Binding (+17 more)
 
 ### Community 708 - "incoming-share.test.cjs"
 Cohesion: 0.10
@@ -5308,8 +5269,8 @@ Cohesion: 0.09
 Nodes (26): analyseComplexValue(), createMotionComponentFactory(), createRendererMotionComponent(), createTransformer(), createUseRender(), degree(), filterProps(), getAnimatableNone() (+18 more)
 
 ### Community 712 - "test"
-Cohesion: 0.09
-Nodes (26): analyseComplexValue(), createMotionComponentFactory(), createRendererMotionComponent(), createTransformer(), createUseRender(), degree(), filterProps(), getAnimatableNone() (+18 more)
+Cohesion: 0.08
+Nodes (27): analyseComplexValue(), applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransformer(), createUseRender(), degree(), filterProps() (+19 more)
 
 ### Community 713 - "test"
 Cohesion: 0.09
@@ -5351,45 +5312,45 @@ Nodes (26): analyseComplexValue(), createMotionComponentFactory(), createRendere
 Cohesion: 0.18
 Nodes (16): action(), button(), control, el(), input(), label(), options(), privateInput() (+8 more)
 
-### Community 724 - "domFixtures.ts"
+### Community 724 - "Thingtime browser extension"
 Cohesion: 0.11
-Nodes (17): characterOperations, childOperations, doc, documentOperations, elementOperations, first, newNode, nodeOperations (+9 more)
+Nodes (17): Connection diagnostics, Design and trust boundary, Password workspace, explicit autofill and local QR (0.3), Passwords settings discovery, Provider page contract (version 1), Resizable browser workspace, Thingtime accounts, Thingtime browser extension (+9 more)
 
-### Community 725 - "editorJsValue.ts"
-Cohesion: 0.06
-Nodes (52): captureComponentFormFields(), fields, flushComponentFormFields(), registerComponentFormField(), SavedFields, ComponentRichText(), Props, RichTextField() (+44 more)
+### Community 725 - "kindRenderersMedia.tsx"
+Cohesion: 0.07
+Nodes (44): captureEditorDraft(), cleanDraftFields(), checklistItems(), EditorJsBlock, ALLOWED_INLINE_TAGS, decodeEntitiesOnce(), decodeEntityOnce(), DROPPED_CONTENT_TAGS (+36 more)
 
-### Community 726 - "Fixture"
-Cohesion: 0.23
-Nodes (4): Fixture, MobileDeviceBridgeQueueTests, Page, .url
+### Community 726 - "packs/index.ts"
+Cohesion: 0.16
+Nodes (14): ASTRO_PACK_ARITIES, astroPack, ACTION_PACKS, bindPacks(), POKEWORLD_PACK_ARITIES, pokeworldPack, THINGMON_PACK_ARITIES, thingmonPack (+6 more)
 
-### Community 727 - "MailError"
-Cohesion: 0.20
-Nodes (20): RFC-2047, mailparser, addresses(), applyGoogleMailMutation(), Client, gmailRaw(), readDraft(), readGoogleDrafts() (+12 more)
+### Community 727 - "mongoConnectionInventoryBlocks.test.ts"
+Cohesion: 0.22
+Nodes (13): migrateMongoInventoryBlocks(), MONGO_CONNECTION_INVENTORY_BLOCKS, count(), mergeMongoInventory(), presentMongoCoverageNotes(), presentMongoDeployments(), presentMongoSources(), safeDeploymentUrl() (+5 more)
 
 ### Community 728 - "apple/README.md"
 Cohesion: 0.09
 Nodes (23): Acceptance, Available widgets, Build and signing, Choose an endpoint per Mac widget, Content and privacy, Widget Content and Privacy, Control Centre Buttons, Widget OAuth Setup (+15 more)
 
-### Community 729 - "contract.ts"
-Cohesion: 0.02
-Nodes (231): One record format, Catalogue and pin verification, Diagnosis and changes, PR #652: Complete Commander search catalogues, app ranking, and pin toggle, Speed-test follow-up (2026-09-05), Verification, binaryBytes(), backupFileHistoryFixture() (+223 more)
+### Community 729 - "namespace.ts"
+Cohesion: 0.04
+Nodes (102): APP_DATA_KEY_RE, AppDataEntry, AppDataVisibility, AppDataWriteConflict, buildKeyFilter(), decodeCursor(), decodeKeyCursor(), deleteAppData() (+94 more)
 
-### Community 730 - ".synchronize"
-Cohesion: 0.07
-Nodes (21): PasswordIdentityIndex, PasswordIdentityOperations, 1. The question, 2.1 Who wrote 1.8 million things, 2.2 Where the 3.1 GB goes, 2. What production actually holds, 3.1 CI telemetry moved to its own collection (`ciControl`), 3.2 Retention (+13 more)
+### Community 730 - "Thingtime production MongoDB: index storage audit and restructure"
+Cohesion: 0.12
+Nodes (15): 1. The question, 2.1 Who wrote 1.8 million things, 2.2 Where the 3.1 GB goes, 2. What production actually holds, 3.1 CI telemetry moved to its own collection (`ciControl`), 3.2 Retention, 3.3 Ingest de-noising, 3.4 The `things` index plan (+7 more)
 
-### Community 731 - "runOperation"
-Cohesion: 0.11
-Nodes (32): Command(), Command(), flip(), pad(), resize(), rotate(), runOperation(), scale() (+24 more)
+### Community 731 - "moveImageResultsToFinalDestination"
+Cohesion: 0.20
+Nodes (20): Command(), Command(), flip(), pad(), resize(), rotate(), scale(), stripEXIF() (+12 more)
 
 ### Community 732 - ".evidence"
 Cohesion: 0.12
 Nodes (5): DirectParentAuthenticator, ThingtimeNodeBridgeCodeIdentity, ThingtimeNodeBridgeParentEvidence, ThingtimeNodeBridgeParentPolicy, BridgeParentPolicyTests
 
-### Community 733 - "EditorHistory"
-Cohesion: 0.15
-Nodes (12): What the concept commits to, Principles, copy(), diff(), documentChanges(), EditorHistory, EditorHistoryEvent, equal() (+4 more)
+### Community 733 - "editorJsHtml.ts"
+Cohesion: 0.10
+Nodes (36): blockToHtml(), editorJsToHtml(), elementToBlocks(), elementToUnstyledBlocks(), escapeHtml(), htmlToEditorJs(), htmlToPlainText(), ListItem (+28 more)
 
 ### Community 734 - "scripts"
 Cohesion: 0.07
@@ -5399,29 +5360,29 @@ Nodes (27): scripts, build, build:database, build:mail, build:native, build:pass
 Cohesion: 0.11
 Nodes (25): api.files 1.13.1 — path-setup backpressure contract, api.file-sync-transfer-admissions 1.5.1 — closed configuration/destination/transfer diagnostics, Native Photos automation 1.6 negotiation and shared scope accounting, Budget waits: drain admitted siblings, save/read checkpoint and preserve bounded deadlines, Desktop/mobile control placement and nested Builder editing passed, Delivery gates: exact-head protected CI, main merge, production contracts, signed TestFlight upload and Apple internal availability, Source and evidence boundaries, Cloud-path setup: two fair FIFO slots, queued cancellation and deadline cleanup (+17 more)
 
-### Community 736 - "app/fileSync: reconcile.ts three-way planning, execute.ts stable operations/receipt recovery and journal.client.ts browser queue"
-Cohesion: 0.14
-Nodes (16): Attachment Things: private versioned bytes, exactly one targetId parent or owner-only draft/recording, Files 1.2.0 folder creation: immutable receipts, ordinary Things writer/Timeline and prepareCloudInventoryRun parent-ID pinning, Files 1.1.0 cloud inventory: GET /api/v1/files?rootId, complete private snapshot scans and account/origin/home-storage pinning, cloudWrite.ts, cloudTransport.ts and cloudSyncPort.client.ts: prepared uploads/backup/remote Trash, pinned destinations and exact retry receipts, sha256-parts-v1 fingerprints: getAttachmentFingerprint, shared contentFingerprint.ts hashing and authorized attachmentFingerprint.client.ts receipts, Attachment-content 1.14.0: attachmentRanges.ts bounded exact-version byte ranges and cloudDownloadSource.ts metadata/range/ETag validation, foregroundSync.ts: explicit mobile upload/backup and approved iOS download, complete scans, native policy signals and baseline checkpoints, FUNDAMENTALS.md §3: appended data is relational; attachments target their parent (+8 more)
+### Community 736 - "raycastLocal.ts"
+Cohesion: 0.18
+Nodes (12): decodeXML(), discoverRaycastInstallations(), execFile, humanizeSlug(), loadRaycastPreferences(), parsePropertyListXML(), PreferenceDictionary, RaycastInstallation (+4 more)
 
-### Community 737 - "commentProjection.test.mts"
-Cohesion: 0.12
-Nodes (22): actor, aggregates, collection, comment(), date, doc(), equal(), matches() (+14 more)
+### Community 737 - "mapboxOverlay.ts"
+Cohesion: 0.18
+Nodes (15): LngLat, defaultButtons, mapboxMarkerVisual(), MapboxOverlayData, markerVisuals, renderMarker(), scaleMapboxMarker(), updateMapboxOverlay() (+7 more)
 
-### Community 738 - "requireAdmin"
-Cohesion: 0.02
-Nodes (152): Migrations (admin), 1. Verified access, ADMIN_PRIVATE_CACHE_CONTROL, applyAdminPrivateHeaders(), withAdminPrivateResponse(), allowed, blocked, createAdmin() (+144 more)
+### Community 738 - "services/search.ts"
+Cohesion: 0.18
+Nodes (8): categoryPreferenceScore(), fallbackSearch(), matchesApplicationNameWords(), mergeItems(), Pending, score(), SearchService, weightedScore()
 
 ### Community 739 - "editorJsBlockReorder.ts"
 Cohesion: 0.17
 Nodes (22): blockRects(), EditorLike, watchEditorJsBlockReorder(), WatchEditorJsBlockReorderOptions, AUTOSCROLL_EDGE_PX, AUTOSCROLL_MAX_STEP_PX, autoscrollStep(), BlockRect (+14 more)
 
-### Community 740 - "mongoConnectionInventoryBlocks.ts"
-Cohesion: 0.21
-Nodes (12): action(), button(), card, el(), field(), input, LEGACY_MONGO_CONNECTION_INVENTORY_BLOCKS, metric() (+4 more)
+### Community 740 - "thingParentPathsCore.ts"
+Cohesion: 0.23
+Nodes (16): add(), directParentIds(), identifier(), indexParentReferences(), ParentIndex, parentPathPage(), ParentPathSegment, ParentPathThing (+8 more)
 
-### Community 741 - "verify-lopu-actions.mts"
-Cohesion: 0.07
-Nodes (33): Lopu Action access QA, LopuApprovedAction, LopuConfirmableTool, LopuConfirmationAction, LopuConfirmationGrant, MAX_LOPU_CONFIRM_KEY_CHARS, MAX_LOPU_CONFIRM_SUMMARY_CHARS, CONFIRMABLE_TOOLS (+25 more)
+### Community 741 - "Trusted developer ecosystem roadmap"
+Cohesion: 0.12
+Nodes (16): Architecture direction to approve, First decision packet, Layered trust contract, M0 — Decide the ecosystem contract, M1 — One declaration and conformance kit, M2 — Immutable releases and reproducible review, M3 — Honest install, update, and consent lifecycle, M4 — Containment, response, appeal, and recovery (+8 more)
 
 ### Community 742 - "backup-worker.test.cjs"
 Cohesion: 0.10
@@ -5431,9 +5392,9 @@ Nodes (15): access, assert, { build }, { createRequire }, fixture(), fs, { join,
 Cohesion: 0.18
 Nodes (7): CommanderOAuthCallback, OAuthCallbackHandoff, OAuthCallbackHandoffError, daemon, .errorDescription, invalidCallback, invalidDaemonResponse
 
-### Community 744 - "Preview retention and PR liveliness"
-Cohesion: 0.06
-Nodes (29): Protected Electron Release Lane, Approved PR prereleases, Desktop and Recovery artifacts, Electron production release control plane, Local versus production proof, Commands, GitHub Releases, Historical file export on Mac (+21 more)
+### Community 744 - "queryContract.ts"
+Cohesion: 0.15
+Nodes (14): MONGO_BLOCKED_QUERY_KEYS, MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS, MONGO_PROTECTED_THING_FIELDS, MONGO_QUERY_LIMITS, MONGO_SENSITIVE_QUERY_COLLECTIONS, MongoBsonValueType, MongoQueryCollection, MongoQueryOperation (+6 more)
 
 ### Community 745 - "Selected Ordinary Graph Execution Primitives"
 Cohesion: 0.18
@@ -5443,29 +5404,29 @@ Nodes (15): Actions Run Execution Admission, api.things Execution Progress Proje
 Cohesion: 0.08
 Nodes (24): Evidence ledger, Gaps and risks, Narrow vocabulary, Owner decisions, Refresh triggers, Smallest honest first study, Why preserve this note, Youth safety and age-appropriate agency baseline (+16 more)
 
-### Community 747 - "FixtureController"
-Cohesion: 0.10
-Nodes (4): AppDelegate, FixtureController, SceneDelegate, LivePhotoFixture
+### Community 747 - "tests.tsx"
+Cohesion: 0.23
+Nodes (15): Chip(), CHIP_TONES, ChipTone, createApiTestContext(), createPayloadParseResult(), createPayloadTexts(), EmailTestConfig, groupLabel() (+7 more)
 
-### Community 748 - "library/runtime.test.ts"
-Cohesion: 0.25
-Nodes (13): runLibraryRequest(), stripe, buildExampleRequest(), MAX_INPUT_BYTES, MAX_RESPONSE_BYTES, parseExampleInput(), readBoundedJson(), exampleThings() (+5 more)
+### Community 748 - "optIn"
+Cohesion: 0.18
+Nodes (16): addOpt(), anyOptsIn(), anyThingsIn(), optIn(), optIndex(), optsIn(), popOpt(), popOpts() (+8 more)
 
-### Community 749 - "workspaceAppComposition.ts"
-Cohesion: 0.08
-Nodes (37): CI regression correction, Decisions, Evidence, Password generator, entry icons and passkey setup, Rendered acceptance, Scope, serviceWorkspaceStyles, SERVICE_KINDS (+29 more)
+### Community 749 - "ClientTests"
+Cohesion: 0.22
+Nodes (3): ClientTests, .manifest, CapabilityContractTests
 
 ### Community 750 - "android.content.Context"
-Cohesion: 0.07
+Cohesion: 0.09
 Nodes (10): DeviceLiveTest, FileHistoryAcceptance, KeystoreDeviceStoreTest, NativeTrashAcceptance, NativeUploadBackgroundAcceptance, NativeVersionAcceptance, PhotoBackupAcceptance, SyncDeletionAcceptance (+2 more)
 
 ### Community 751 - "app"
-Cohesion: 0.03
-Nodes (66): MCP Snapshot Ingestion, Browser request program, Cursor pagination, Editable Builder definitions and browser Actions, JSON inputs, Verification, Connector contract, Data flow (+58 more)
+Cohesion: 0.07
+Nodes (32): MCP Snapshot Ingestion, Connector contract, Data flow, Next platform slices, Thingtime MCP architecture, Thingtime model, Trust boundary, app() (+24 more)
 
-### Community 752 - "test-file-sync-transfer-admissions.mts"
-Cohesion: 0.03
-Nodes (91): Secret mapping and distribution selection, main(), maybeWriteQr(), relayToCodex(), relayUrl, reservePort(), startRelay(), wait() (+83 more)
+### Community 752 - "folder-transfer-worker.cjs"
+Cohesion: 0.08
+Nodes (25): get(), http, https, networkWait(), put(), timeoutError(), approvals, { availableParallelism } (+17 more)
 
 ### Community 753 - "_data.js"
 Cohesion: 0.19
@@ -5479,24 +5440,24 @@ Nodes (18): thingtimeToolDefinitions, renderThingtimeMcpUi(), app(), preview, bo
 Cohesion: 0.18
 Nodes (11): Native Apple Watch Notifications PR Note, PR #596 — Add native Apple Watch notifications, TestFlight build 16, TestFlight build 17 — private attachment Things, TestFlight build 18 — notification history and offline downloads, TestFlight build 19 — Apple-native recorder and saved recordings, TestFlight build 20 — resilient iPhone connection and recording chooser, TestFlight build 21 — correct origin migration and visible diagnostics (+3 more)
 
-### Community 756 - "MacPhotosSyncTests"
-Cohesion: 0.21
-Nodes (3): MacPhotoBytes, MacPhotoFixture, MacPhotosSyncTests
+### Community 756 - "Local development and worktrees"
+Cohesion: 0.13
+Nodes (15): Account drafts and templates, Agent browser runtime, Browser verification, Commander native background indexing, Encrypted attachment download CORS regression, Environment, First ten minutes in a fresh checkout or worktree, Graphify snapshots and hooks (+7 more)
 
 ### Community 757 - "tt-logo Custom Element"
 Cohesion: 0.13
 Nodes (22): API To GUI Mapping, Car Thing Demo, 1a Classic Centered Direction, 1c Crowdfund Campaign Direction, Thingtime Directions Design Doc, 1d Developer First Direction, Thingtime Ecosystem Surfaces, Everything Is A Thing (+14 more)
 
-### Community 758 - "root.tsx"
-Cohesion: 0.03
-Nodes (109): AgentBrowserDefaults(), AgentBrowserViewer(), BrowserClaim, Frame, Page, AgentNetworkSettings(), AgentTaskSecuritySettings(), Ports() (+101 more)
+### Community 758 - "mongoConnectionInventoryBlocks.ts"
+Cohesion: 0.21
+Nodes (12): action(), button(), card, el(), field(), input, LEGACY_MONGO_CONNECTION_INVENTORY_BLOCKS, metric() (+4 more)
 
 ### Community 759 - "runtime/package.json"
 Cohesion: 0.09
 Nodes (21): dependencies, bcrypt, cbor-extract, mongodb, playwright-core, @puppeteer/browsers, puppeteer-core, @resvg/resvg-js (+13 more)
 
 ### Community 760 - "graphify-semantic.py"
-Cohesion: 0.15
+Cohesion: 0.13
 Nodes (12): cached_markdown_units(), run(), complete(), main(), check_cache(), detect_scoped(), expect(), extract_scoped() (+4 more)
 
 ### Community 761 - "Result: resilient media sharing and explicit Live Photo playback"
@@ -5508,20 +5469,20 @@ Cohesion: 0.10
 Nodes (22): Admin CI Feature Stacks, Capability Negotiation, Opt-in PR Previews, CI Dashboard Backoff, CI Dashboard Query Capacity, Action Admission and Hold-Aware Projections, Atomic Canonical Transaction, Browser Execution Boundaries (+14 more)
 
 ### Community 763 - "Portable backup vault tooling"
-Cohesion: 0.07
-Nodes (30): Android offline-folder recovery development, Android photo backup setup, Android retained-version recovery development, Automatic AI model catalogue sync, Automatic iOS TestFlight publishing, Backup source retention rollout, Capture a selected cloud folder, Cloud inventory paging acceptance (+22 more)
+Cohesion: 0.10
+Nodes (22): Android offline-folder recovery development, Automatic AI model catalogue sync, Automatic iOS TestFlight publishing, Backup source retention rollout, Capture a selected cloud folder, Cloud inventory paging acceptance, Desktop middleware assets, Disposable Mac paged-sync acceptance (+14 more)
 
-### Community 764 - "react-router"
+### Community 764 - "liveComponent.tsx"
 Cohesion: 0.01
-Nodes (457): Prefilled incoming shares, Subspace messages and embedded Things, Implemented contract, Round 4 — ttAction reachability, precisely mapped (2026-08-25), One live path, 2026-07-15 — Hardening pass (recursive review follow-up), 2026-07-15 — Native Thingtime rendering for feed things (ThingView), PR #69 — Unified: /search platform + profile composer & advanced filters (+449 more)
+Nodes (573): Implemented contract, Debugging history worth keeping, Component catalog seeding (dev DB), Features, Fixes (QA-found), Round 4 — Figma-layer styling + WYSIWYG + the "grid ×2" class of layout bugs (2026-08-31), One live path, PR #888 — Run service workspaces live on pages and in the editor (+565 more)
 
 ### Community 765 - "seo-social-metadata.md"
 Cohesion: 0.11
 Nodes (16): Broader SEO Work, Public Content Safety, Social Metadata Foundation, Broader work remains, Investigation — 2026-09-17, Social previews and structured-data foundation, Standards, Verification and cache diagnosis (+8 more)
 
-### Community 766 - "PasskeyMaterial"
-Cohesion: 0.13
-Nodes (7): CBOR, PasskeyMaterial, .entry, TOTP, CoreTests, Review round (five lenses, two skeptics per finding; 12 confirmed, all fixed), Installed-app Login with Thingtime (loopback + PKCE)
+### Community 766 - "catalogImport.ts"
+Cohesion: 0.29
+Nodes (11): addCatalogProgress(), CatalogDefinition, CatalogImport, CatalogProgress, emptyCatalogProgress(), MAX_CATALOG_FILE_BYTES, parseCatalogImport(), publishCatalogImport() (+3 more)
 
 ### Community 768 - "Thingtime Icon (SVG source, green/brown plus-cross pixel mark)"
 Cohesion: 0.10
@@ -5539,53 +5500,53 @@ Nodes (10): initialize(), list(), Listing, lookup(), page_value(), STAGING_PREFI
 Cohesion: 0.14
 Nodes (7): Carbon, GlobalHotKeyRegistry, HotKeyError, .errorDescription, invalidShortcut, registrationFailed, GlobalHotKeyTests
 
-### Community 772 - "provider.ts"
-Cohesion: 0.27
-Nodes (13): imapflow, clean(), cursorFor(), fetchMailBatch(), folderFor(), MAIL_PAGE_SIZE, MAIL_SOURCE_BYTES, parseCursor() (+5 more)
+### Community 772 - "mail/store.ts"
+Cohesion: 0.06
+Nodes (82): RFC-2047, imapflow, mailparser, decryptUserVaultValue(), encryptUserVaultValue(), exchangeGoogleMail(), fetchGoogleMailBatch(), GMAIL_SCOPE (+74 more)
 
-### Community 773 - "mail/localStore.ts"
-Cohesion: 0.36
-Nodes (14): aad(), clearMailLocal(), database(), done(), emptyLocalMail(), key(), memo, readMailLocal() (+6 more)
+### Community 773 - "cloudflare/api/package.json"
+Cohesion: 0.14
+Nodes (13): description, devDependencies, wrangler, wrangler, name, private, scripts, check (+5 more)
 
-### Community 774 - "nodeRuntime.ts"
-Cohesion: 0.18
-Nodes (19): publicConnectorError(), decodeRuntimeRequest(), runtimeEvent(), runtimeReply(), RuntimeRequest, RuntimeWire, approvalDecision(), connector() (+11 more)
+### Community 774 - "mail-sync.test.cjs"
+Cohesion: 0.19
+Nodes (7): DesktopMailSync, assert, batch, { DesktopMailSync }, { EventEmitter }, fixture(), test
 
 ### Community 775 - "activity-manager.test.cjs"
 Cohesion: 0.12
 Nodes (10): DesktopActivityManager, fs, path, assert, { DesktopActivityManager, NODE_ID, VERSION }, fixture(), { mkdtemp, rm, writeFile }, path (+2 more)
 
-### Community 776 - ".matching"
-Cohesion: 0.20
-Nodes (3): PasswordCatalogSelection, PasswordPasskeySelectionSummary, CatalogSelectionTests
+### Community 776 - "ScreenCaptureError"
+Cohesion: 0.12
+Nodes (16): ScreenCaptureError, alreadyRunning, backendFailure, captureInterrupted, displayUnavailable, encodingFailed, .errorDescription, explicitAuthorizationRequired (+8 more)
 
-### Community 777 - "backupDestinations.ts"
-Cohesion: 0.16
-Nodes (18): BACKUP_DESTINATIONS_VAULT_LABEL, createBackupDestinationRegistry(), defaults, Dependencies, invalid(), object(), originIsExact(), own() (+10 more)
+### Community 777 - "editorBlockChrome.ts"
+Cohesion: 0.35
+Nodes (14): watchEditorBlockChrome(), inlineToolbarPosition(), layoutEditorJsInlineToolbar(), watchEditorJsInlinePosition(), editorOverlayBounds(), editorTextObstacles(), moveEditorOverlay(), overlayIntersects() (+6 more)
 
 ### Community 778 - "CommanderSettingsTab"
 Cohesion: 0.13
 Nodes (10): CommanderSettingsTab, about, activity, advanced, extensions, general, search, sync (+2 more)
 
 ### Community 779 - "typecheck-ratchet.mjs"
-Cohesion: 0.25
-Nodes (14): baselinePath, compilerFailure(), diagnosticsFrom(), escapeWorkflowCommand(), here, NEVER_TOLERATED_CODES, neverToleratedErrors(), remixDir (+6 more)
+Cohesion: 0.23
+Nodes (15): baselinePath, compilerFailure(), diagnosticsFrom(), escapeWorkflowCommand(), here, NEVER_TOLERATED_CODES, neverToleratedErrors(), remixDir (+7 more)
 
 ### Community 780 - "calcLength"
 Cohesion: 0.15
 Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
-### Community 781 - "thing.tsx"
+### Community 781 - "useApi.tsx"
 Cohesion: 0.02
-Nodes (234): Derived Thing metadata, TESTING.md checklist, thingMetadata.ts, Thing storage guide, Deferred (with rationale), PR #387 — Action Thing v1: declarative capability-bounded programs, Round 3 — Lopu review round 2 rebuilt on-branch (2026-08-25, commit 7706c3eef), Round 5 — functional multi-review pass (2026-08-25, post-completion directive) (+226 more)
+Nodes (173): Derived Thing metadata, TESTING.md checklist, thingMetadata.ts, Thing storage guide, ACTIVE_API_CAPABILITY_MANIFEST_PATH, CAPABILITY_MANIFEST_TTL_MS, CapabilityManifest, requireActiveThingtimeCapability (+165 more)
 
-### Community 782 - "Thingtime Node for macOS"
-Cohesion: 0.22
-Nodes (9): Bounded streaming transport batches, Brightness and filesystem support, Build and test, Composite authorization and identity diagnostics, Electron embedding, Idempotent command contract, Implemented boundaries, Local folder sync adapter (+1 more)
+### Community 782 - "liveSessionDiscovery.ts"
+Cohesion: 0.16
+Nodes (14): LIVE_DEVICE_COMMAND_POLL_INTERVAL_MS, LIVE_SESSION_LIST_PAGE_LIMIT, LiveDeviceCommandOutcome, LiveDeviceCommandSnapshot, LiveDeviceTerminalStatus, LiveSessionListResult, MAX_LIVE_DEVICE_COMMAND_POLLS, MAX_LIVE_SESSION_LIST_PAGES (+6 more)
 
 ### Community 783 - "DocsLayout.tsx"
-Cohesion: 0.18
-Nodes (20): conceptStatusColors, getConceptEntryBySlug(), apiDocPath(), apiGroupPath(), clampDrawerWidth(), DocsDrawerContent(), DocsDrawerContentProps, DocsLayout() (+12 more)
+Cohesion: 0.16
+Nodes (22): conceptStatusColors, getConceptEntryBySlug(), getDesignEntryBySlug(), apiDocPath(), apiGroupPath(), clampDrawerWidth(), DocsDrawerContent(), DocsDrawerContentProps (+14 more)
 
 ### Community 784 - "builder-sdk.browser.tsx"
 Cohesion: 0.14
@@ -5595,21 +5556,21 @@ Nodes (15): App(), assert(), button(), change(), commits, component, field(), ro
 Cohesion: 0.10
 Nodes (21): Thingtime Pink Logo Master (SVG), Thingtime Pink Wordmark Logo 1024x190 (PNG), Thingtime Pink Wordmark Logo 10x2 (PNG), Thingtime Pink Logo Raster 128x24, Thingtime Pink Logo Raster 16x3, Thingtime Pink Wordmark Logo 2000x370 (PNG), Thingtime Pink Wordmark Logo 200x37 (PNG), Thingtime Pink Wordmark Logo 2048x379 (PNG) (+13 more)
 
-### Community 786 - "jsonlRpc.ts"
-Cohesion: 0.17
-Nodes (9): LOCAL_CONNECTOR_ERROR_MESSAGES, LocalConnectorError, LocalConnectorErrorCode, PendingRequest, RpcId, RpcMessage, RpcMessageHandler, sanitizeLocalConnectorError() (+1 more)
+### Community 786 - "FilterBuilder.tsx"
+Cohesion: 0.23
+Nodes (13): MONGO_FILTER_OPERATORS, FilterBuilder, FilterBuilderComponent(), inputStyles, OperatorSelect(), Props, ROOT_OPERATORS, RuleEditor() (+5 more)
 
 ### Community 787 - "compilerOptions"
 Cohesion: 0.10
 Nodes (20): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx (+12 more)
 
-### Community 788 - "MacShareItemImporter"
-Cohesion: 0.11
-Nodes (3): MacShareItemImporter, .active, ShareViewController
+### Community 788 - ".save"
+Cohesion: 0.09
+Nodes (4): MacShareItemImporter, .active, NativeShareTests, ShareViewController
 
 ### Community 789 - "api.tsx"
-Cohesion: 0.14
-Nodes (28): Round 2 — ACL permissions + full CRUD on one endpoint (2026-07-10, same PR), ApiEndpointDoc, ApiHttpMethod, CopyDocLinkButton(), docHashPath(), docPagePath(), DocsApi(), DocsPathLink (+20 more)
+Cohesion: 0.10
+Nodes (38): Round 2 — ACL permissions + full CRUD on one endpoint (2026-07-10, same PR), ApiEndpointDoc, ApiHttpMethod, ApiRequestExample, CopyDocLinkButton(), docHashPath(), docPagePath(), DocsApi() (+30 more)
 
 ### Community 790 - "daemon/package.json"
 Cohesion: 0.08
@@ -5619,25 +5580,25 @@ Nodes (24): bin, commander-daemon, dependencies, @commander/filesystem-indexer, 
 Cohesion: 0.13
 Nodes (13): APPLICATIONS, bundleIdentifier(), { execFile }, fs, path, { promisify }, run, assert (+5 more)
 
-### Community 792 - "brandIdentity.ts"
-Cohesion: 0.15
-Nodes (16): ORGANIZATION_LEGAL_NAME, ORGANIZATION_LOGO_HEIGHT, ORGANIZATION_LOGO_PATH, ORGANIZATION_LOGO_WIDTH, ORGANIZATION_SAME_AS, ORGANIZATION_WORDMARK_HEIGHT, ORGANIZATION_WORDMARK_PATH, ORGANIZATION_WORDMARK_WIDTH (+8 more)
+### Community 792 - "passkeys.ts"
+Cohesion: 0.03
+Nodes (131): Architecture, Ceremonies, Endpoints (all three-place registered + documented), Notes / follow-ups, Passkeys are protected things, Passkeys (WebAuthn) + cross-deployment auto-login, Verification, createSystemEnvironmentStore() (+123 more)
 
-### Community 793 - "webpages/seed.ts"
-Cohesion: 0.15
-Nodes (18): WEBPAGE_RESERVED_ID_PREFIX, appContentDefinitions(), genuineSeeded(), SeedDefinition, seedDemoSuites(), seedDemoWebpages(), seededCount(), SeedFail (+10 more)
+### Community 793 - "ScreenCapture.swift"
+Cohesion: 0.19
+Nodes (6): CoreImage, CoreMedia, ScreenCaptureAuthorization, ScreenCaptureDisplay, ScreenCaptureKitBackend, ScreenCaptureKit
 
-### Community 794 - "DeviceTelemetryCollector"
-Cohesion: 0.07
-Nodes (10): IOKit, IOKit.storage, ByteCounters, CPUTicks, DeviceResourceSampler, DeviceResourceTelemetry, PowerAssertionController, DeviceTelemetryCollector (+2 more)
+### Community 794 - "DeviceResourceSampler"
+Cohesion: 0.18
+Nodes (7): IOKit, IOKit.storage, ByteCounters, CPUTicks, DeviceResourceSampler, DeviceResourceTelemetry, SystemConfiguration
 
-### Community 795 - "mail/store.ts"
-Cohesion: 0.27
-Nodes (19): connectGoogleMailAccount(), deleteMailRecord(), digest(), document(), getRecord(), googleMailAction(), identity(), listMail() (+11 more)
+### Community 795 - "apiTestRunner.ts"
+Cohesion: 0.19
+Nodes (13): ApiTestExpectation, ApiTestGroup, ApiTestResult, ApiTestResultStatus, ApiTestRunOptions, expectNdjson(), expectRedirectedTo(), expectStatus() (+5 more)
 
-### Community 796 - "ClientTests"
-Cohesion: 0.22
-Nodes (3): ClientTests, .manifest, CapabilityContractTests
+### Community 796 - "test-device-diagnostics.mts"
+Cohesion: 0.14
+Nodes (15): account, afterLaterClear, arriving, Auth, call(), clearRequest, clearRequestId, event (+7 more)
 
 ### Community 797 - "Mobile Sync Connection Editor"
 Cohesion: 0.10
@@ -5647,45 +5608,49 @@ Nodes (20): Android foreground offline-folder downloads (2026-10-17), Android na
 Cohesion: 0.23
 Nodes (12): commander_inventory_abi_version(), commander_inventory_cancel(), commander_inventory_create(), commander_inventory_destroy(), commander_inventory_error_code(), commander_inventory_execute(), tt_inventory_available(), tt_inventory_cancel() (+4 more)
 
-### Community 799 - "backupJobs.test.mts"
-Cohesion: 0.09
-Nodes (27): admit(), clock, clone(), collection(), lock, make(), matches(), request() (+19 more)
+### Community 799 - "verify-password-manager.mjs"
+Cohesion: 0.14
+Nodes (11): entry, id, ids, listed, matches, matchingIds, read, save (+3 more)
 
-### Community 800 - "thing-metadata.integration.mts"
-Cohesion: 0.16
-Nodes (15): runThingMetadataBrowser(), ThingBrowserScenario, bytes, call(), create(), digest, get(), Handler (+7 more)
+### Community 800 - "Geo-distributing Thingtime — one URL, region-local speed, one source of truth"
+Cohesion: 0.13
+Nodes (15): 1. Where we are today (post PR #157/#159/#161, measured 2026-08-08), 2. Constraints this design must respect, 3. Primitives we already own (this matters — most of the plumbing exists), 4. The shape of the problem: reads vs writes, own-data vs global-data, 5.1 Option A — Read-local, write-global (multi-region replica set) ⭐ recommended next step, 5.2 Option B — A + write forwarding (single-hop remote writes), 5.3 Option C — Zone-sharded Global Cluster ("true" sharding), 5.4 Rejected: per-region independent databases with app-level sync (+7 more)
 
-### Community 801 - "generate-route-previews.mjs"
-Cohesion: 0.18
-Nodes (13): automaticRoutePreviewsPlugin(), copyFields, defaultRoot, extractRoutePreviews(), generateRoutePreviews(), layouts, literal(), previewOverride() (+5 more)
+### Community 801 - "build"
+Cohesion: 0.15
+Nodes (12): build, appId, asar, directories, extraFiles, extraResources, files, productName (+4 more)
+
+### Community 802 - "deviceDrawerPreferences.ts"
+Cohesion: 0.33
+Nodes (11): Section(), defaultDeviceDrawerPreferences(), DEVICE_DRAWER_SECTION_IDS, DeviceDrawerPreferences, DeviceDrawerSectionId, normalizeDeviceDrawerPreferences(), preferenceKeyFor(), readDeviceDrawerPreferences() (+3 more)
 
 ### Community 803 - "timeline.integration.mts"
 Cohesion: 0.14
 Nodes (18): actionEvents, actionHistory(), branch, branchCommand, branchPage(), call(), divergent, event (+10 more)
 
-### Community 804 - "Foreground cloud downloads to offline folders"
-Cohesion: 0.11
-Nodes (18): Binary upload fallback (native access 1.4), Build and run, Current-file background upload continuation, Foreground cloud downloads to offline folders, Installed conflict review acceptance, Installed file History acceptance, Native acceptance, Native write approval acceptance (+10 more)
+### Community 804 - "Static analysis baselines and coverage"
+Cohesion: 0.13
+Nodes (14): Static Analysis Baselines, Final local verification, Follow-up priorities, Initial evidence, Policy and commands, Regression coverage, Static analysis baselines and coverage, Workspace coverage (+6 more)
 
 ### Community 805 - "CommanderPanel"
 Cohesion: 0.18
 Nodes (5): CommanderPanel, .canBecomeKey, .canBecomeMain, .hasResizeSession, .usesCustomWindowResizeHandling
 
 ### Community 806 - "api/src/index.js"
-Cohesion: 0.11
-Nodes (12): app, configuredOrigins, io, server, smarts, body-parser, cors, dotenv (+4 more)
+Cohesion: 0.10
+Nodes (13): app, configuredOrigins, io, server, smarts, body-parser, cors, dotenv (+5 more)
 
-### Community 807 - "Where the code lives"
-Cohesion: 0.14
-Nodes (18): useApi.tsx: api.v1.attachments client with prior api.attachment-* capability negotiation, app/docs/apiDocs.ts endpoint registry: contractVersion/featureVersion feed capability manifests and Nitro route table, attachmentAccess.ts canViewHomeAttachmentTarget: purpose-specific ACL, comment inheritance, membership and profile/emoji checks, attachmentArchive.ts, attachmentArchiveCore.ts and zipStream.ts: plan, manifest and streamed stored ZIP, analyzeAttachment.ts: pending, clear, nsfw and blocked moderation status, Attachment routes: upload/parts/complete/abort, content, archive, local-object, link, annotate, delete, cleanup and detected-type backfill, privateS3.ts: AttachmentS3 interface and getPrivateS3 presigned object storage, attachments.ts createAttachmentService: upload lifecycle, download signing, copy, cascade and reap (+10 more)
+### Community 807 - "numeric-summary-acceptance.mjs"
+Cohesion: 0.21
+Nodes (8): children, create(), listeners, mint(), register(), request(), serverFile, summary()
 
 ### Community 808 - "Paged foreground conflict review (2026-10-19)"
 Cohesion: 0.12
 Nodes (19): App-owned iOS file sync recovery (2026-10-19), App-owned Mac sync lifecycle, Automatic Mac sync schedules, Backup retention and deletion races (2026-10-19), Durable Mac sync admission and relaunch, Editable conflict review acceptance, Home upload exclusions and hierarchical progress (2026-10-19), Independent S3 backup replica worker — 2026-10-19 (+11 more)
 
-### Community 809 - "codexLocalHistory.ts"
-Cohesion: 0.18
-Nodes (13): cleanCodexVisibleText(), CODEX_INTERNAL_CONTEXT_MARKER, CODEX_INTERNAL_CONTEXT_STREAM_MARKER, CodexLocalHistory, cursorEnd(), DEFAULT_SESSION_ROOT, DEFAULT_STATE_PATH, exists() (+5 more)
+### Community 809 - "56 — Unified Thing history and the timeline browser 🕰️"
+Cohesion: 0.15
+Nodes (13): 56 — Unified Thing history and the timeline browser 🕰️, Delivery shape, Done when, Existing anchors, Global timeline browser — `/history`, Goal, Horizontal looks — Cards, Line, Frames (any scope), Local first, then synced (+5 more)
 
 ### Community 811 - "LoopbackPortInspectorError"
 Cohesion: 0.22
@@ -5715,17 +5680,17 @@ Nodes (18): Private Synthetic Pilot, AI Agency and Accountable Assistance, Colla
 Cohesion: 0.09
 Nodes (22): acceptedReview, access, capturedAt, crash, crashed, crashTimer, crashTmp, created (+14 more)
 
-### Community 818 - "characters-acceptance.mjs"
-Cohesion: 0.15
-Nodes (10): characterPassword, children, cwd, delay(), env, password, policy, ports (+2 more)
+### Community 818 - "image-presentation-acceptance.mjs"
+Cohesion: 0.05
+Nodes (26): aiConnectorBundle, electronDir, indexHtml, metadata, nodeRuntimeBundle, serverEntry, webOutputDir, characterPassword (+18 more)
 
 ### Community 819 - "queryBuilderState.ts"
-Cohesion: 0.23
-Nodes (18): BsonEntry, compileBsonValue(), compileFilterGroup(), compileMongoQueryRequest(), compilePipeline(), compileProjection(), compileRule(), compileSort() (+10 more)
+Cohesion: 0.25
+Nodes (16): BsonEntry, compileBsonValue(), compileFilterGroup(), compileMongoQueryRequest(), compilePipeline(), compileProjection(), compileRule(), compileSort() (+8 more)
 
-### Community 820 - "listQuery.ts"
-Cohesion: 0.19
-Nodes (16): buildNotificationListFilters(), DEFAULT_LIST_LIMIT, escapeRegex(), MAX_LIST_LIMIT, MAX_SEARCH_CHARS, MAX_TYPE_FILTERS, NOTIFICATION_SEARCH_FIELDS, NotificationListFilters (+8 more)
+### Community 820 - "Hosting options and cost per call and per user"
+Cohesion: 0.17
+Nodes (12): Host comparison, Hosting options and cost per call and per user, Open questions, Per call, Per-user model, Recommendation, Right after the fixes (6 hours to 15:10 AEDT, 26 Nov), Sources (+4 more)
 
 ### Community 821 - "03 — Auth: Login / Register / Sessions / JWT 🟢"
 Cohesion: 0.13
@@ -5751,13 +5716,13 @@ Nodes (15): activeModal(), candidates(), choose(), choice, paint(), refresh(), c
 Cohesion: 0.20
 Nodes (14): available_signing_identity(), bundle_all(), compile_all(), default_developer_id_identity(), install_app(), launch_installed_app(), notarize_distribution_bundle(), resolve_signing_configuration() (+6 more)
 
-### Community 827 - "vercel.tsx"
-Cohesion: 0.20
-Nodes (18): VercelDeploymentsOverview, BRANCH_LIMIT_OPTIONS, buildDefaultSelectedStates(), buildStatusOptions(), dateLabel(), DeploymentRow(), DeploymentSort, DeploymentState (+10 more)
+### Community 827 - "deviceDrawerLayout.ts"
+Cohesion: 0.30
+Nodes (10): clampDeviceDrawerWidth(), DEVICE_DRAWER_DEFAULT_WIDTH, DEVICE_DRAWER_DESKTOP_BREAKPOINT, DEVICE_DRAWER_KEYBOARD_STEP, DEVICE_DRAWER_MAX_WIDTH, DEVICE_DRAWER_MIN_WIDTH, DEVICE_DRAWER_MOBILE_MIN_WIDTH, DEVICE_DRAWER_VIEWPORT_GUTTER (+2 more)
 
 ### Community 828 - "docsCode.tsx"
-Cohesion: 0.14
-Nodes (17): buildTokenPattern(), CODE_ACCENT, CODE_BG, CODE_BLUE, CODE_BORDER, CODE_GREEN, CODE_MUTED, CODE_TEXT (+9 more)
+Cohesion: 0.15
+Nodes (16): buildTokenPattern(), CODE_ACCENT, CODE_BG, CODE_BLUE, CODE_BORDER, CODE_GREEN, CODE_MUTED, CODE_TEXT (+8 more)
 
 ### Community 829 - "Token"
 Cohesion: 0.21
@@ -5769,7 +5734,7 @@ Nodes (15): signature(), asString(), EVENT_STATES, getBranchFromMeta(), getPersi
 
 ### Community 832 - "remote-device-sync.browser.tsx"
 Cohesion: 0.03
-Nodes (64): activityPhases, activityReasons, backgroundEndCauses, backgroundStatuses, counters, date(), DiscoveredPhoto, failureOperations (+56 more)
+Nodes (63): activityPhases, activityReasons, backgroundEndCauses, backgroundStatuses, counters, date(), DiscoveredPhoto, failureOperations (+55 more)
 
 ### Community 833 - "Content provenance and correction roadmap"
 Cohesion: 0.12
@@ -5783,13 +5748,17 @@ Nodes (8): PR #710 — Verified vault credentials, Scope and security contract, 
 Cohesion: 0.21
 Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
 
-### Community 836 - "projectRegistry.ts"
-Cohesion: 0.21
-Nodes (6): LocalProjectRegistry, MAX_PUBLIC_PROJECT_REFERENCES, projectLabelFromPath(), PublicProjectReference, refreshEmptyProjectRegistry(), validID()
+### Community 836 - "liveEventFixtures.ts"
+Cohesion: 0.23
+Nodes (11): animation, button(), drag, editing, input(), liveEventRecipe(), node(), pointer (+3 more)
 
 ### Community 837 - "searchCache.ts"
 Cohesion: 0.15
 Nodes (12): CacheEntry, compareNearbyEntries(), expandDirectory(), LegacyCacheEntry, lookupFromEntry(), normalizedQuery(), parseEntry(), SearchCacheLookup (+4 more)
+
+### Community 838 - "authored-controls.browser.mjs"
+Cohesion: 0.20
+Nodes (8): api(), children, cwd, delay(), env, ports, register(), waitFor()
 
 ### Community 840 - "Remote Brightness and Files"
 Cohesion: 0.12
@@ -5815,17 +5784,17 @@ Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelt
 Cohesion: 0.17
 Nodes (15): boundedInteger(), DEFAULT_INDEXING_RESOURCE_LIMITS, DEFAULT_INDEXING_SETTINGS, INDEXING_SETTINGS_VERSION, isSettingsTab(), LEGACY_DEFAULT_INDEXING_GLOBS, normalizeActivitySettings(), normalizeCalculatorSettings() (+7 more)
 
-### Community 847 - "utils/timeline/versions.ts"
-Cohesion: 0.03
-Nodes (160): Timeline-applied event, ThingWriteTransaction, checkedPreview(), createBranchMergeService(), defaults, refuse(), request, recordPageComponentBindings() (+152 more)
+### Community 847 - "timeline-recovery.integration.mts"
+Cohesion: 0.10
+Nodes (22): account, apply, call(), collisionQuery, compare(), create(), history(), multiApply (+14 more)
 
 ### Community 848 - "calcLength"
 Cohesion: 0.15
 Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
-### Community 849 - "deviceFilesystemCore.ts"
-Cohesion: 0.27
-Nodes (14): deviceSnapshotHash(), base64(), exact(), FILESYSTEM_CHUNK_BYTES, filesystemBase64Bytes(), FilesystemEntry, FilesystemInput, filesystemPath() (+6 more)
+### Community 849 - "builder-entrypoint-acceptance.mjs"
+Cohesion: 0.21
+Nodes (9): api(), children, cwd, delay(), env, point(), ports, register() (+1 more)
 
 ### Community 850 - "calcLength"
 Cohesion: 0.15
@@ -5891,9 +5860,9 @@ Nodes (16): API, database and GUI placement, Bounded folder metadata batches —
 Cohesion: 0.12
 Nodes (15): @remix-run/eslint-config/node, extends, @remix-run/eslint-config, overrides, root, rules, import/no-duplicates, no-eval (+7 more)
 
-### Community 866 - "PR #755 — Independent files in shared app forks"
-Cohesion: 0.22
-Nodes (8): Attachment Content Capability, Authorized File Copy Service, Contract and implementation — 2026-09-10, Deployed storage and browser acceptance — 2026-09-11, Evidence, PR #755 — Independent files in shared app forks, Separate post-login error report — 2026-09-11, Things Fork Contract
+### Community 866 - "27 — Trusted developer ecosystem 🧩"
+Cohesion: 0.17
+Nodes (12): 27 — Trusted developer ecosystem 🧩, Acceptance criteria, Concrete next action, Dependencies and boundaries, Goal, Phase 0 — Owner decisions, Phase 1 — Declaration and no-secrets conformance kit, Phase 2 — Immutable release and review receipts (+4 more)
 
 ### Community 867 - "chatGPTPlanBlocks.ts"
 Cohesion: 0.19
@@ -5907,9 +5876,9 @@ Nodes (19): Ranked Cost Levers, Lever 1 — Free Omni First-Pass Gate, TT_MODERA
 Cohesion: 0.25
 Nodes (7): Graph indexing, PR 1272: iOS share destination for all offered content types, Release and remaining evidence, Release compatibility recovery, Result and boundaries, Review findings retained as regressions, Verification
 
-### Community 870 - "thingtimeSyncChannel.ts"
-Cohesion: 0.17
-Nodes (19): createThingtimeSyncChannel(), isRecord(), isTabLocalPath(), isThingtimeSyncMessage(), isThingtimeSyncPath(), isWholeTreeReplacement(), parseSyncValue(), pathParts() (+11 more)
+### Community 870 - "SchemasPage.tsx"
+Cohesion: 0.24
+Nodes (12): CopyValueButton(), fieldConstraints(), flattenDocFields(), schemaAnchor(), SchemaCard(), SchemaSection, SchemasPage(), SECTIONS (+4 more)
 
 ### Community 871 - "Unified Timeline"
 Cohesion: 0.16
@@ -5923,9 +5892,9 @@ Nodes (16): Add Visit Dialog Tests, Browser Each and Item Index Limits, Componen
 Cohesion: 0.12
 Nodes (16): 39 — Recording agency and intimate-data stewardship, Acceptance criteria, Dependencies and ownership boundaries, Explicit non-goals, First owner decision packet, Objective, Phase A — Freeze and characterize current recording behavior, Phase B — Define a canonical recording family (+8 more)
 
-### Community 874 - "timeline/sync.ts"
-Cohesion: 0.02
-Nodes (113): createRelatedTimelineReader(), defaults, getRelatedTimelinePage, request, ActionOutcomeRecovery, parseActionOutcomeRecovery(), parseActionOutcomeRecoveryCommand(), retainActionOutcomeRecovery() (+105 more)
+### Community 874 - "contract.ts"
+Cohesion: 0.01
+Nodes (710): Lopu Schemas, Files and Prompt Settings, Public built-in Schema Things, Shared navigation and Builder controls, Working design mapped to the existing core, Direct named branch lookup — 2026-09-28, One record format, Visual named-branch editing — 2026-09-28, Behavior (+702 more)
 
 ### Community 875 - "createVaultController"
 Cohesion: 0.52
@@ -5935,17 +5904,13 @@ Nodes (12): createVaultController(), begin(), close(), connection(), deliver(), 
 Cohesion: 0.13
 Nodes (14): Desktop UI Entry HTML, /src/main.tsx, Launcher Entry HTML, /src/main.tsx, /src/main.tsx, Settings Entry HTML, Commander visual system, Design Tokens (+6 more)
 
-### Community 877 - "lopu-send.browser.tsx"
-Cohesion: 0.21
-Nodes (13): accept(), App(), assert(), deleted, field(), files, paste(), router (+5 more)
-
 ### Community 878 - "compilerOptions"
 Cohesion: 0.13
 Nodes (14): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib, module, resolveJsonModule (+6 more)
 
 ### Community 879 - "thingReplicas.client.ts"
 Cohesion: 0.07
-Nodes (34): shared Thing context menu, Thing storage choices, ThingStoragePanel, thingStoragePolicy.ts, readExactRange(), Asset, checkGenericCloudThingUpdate(), createBrowserThingReplicas() (+26 more)
+Nodes (38): shared Thing context menu, Thing storage choices, ThingStoragePanel, thingStoragePolicy.ts, @noble/hashes, AttachmentRange, MAX_ATTACHMENT_RANGE_BYTES, readExactRange() (+30 more)
 
 ### Community 880 - "AWS/README.md"
 Cohesion: 0.13
@@ -5955,21 +5920,21 @@ Nodes (11): AWS, AWS Configuration Inventory, S3 Restoration Guide, Media cachin
 Cohesion: 0.13
 Nodes (15): dependencies, axios, bcrypt, body-parser, cors, dotenv, express, lodash (+7 more)
 
-### Community 882 - "agent-browser-native-dependencies.test.cjs"
-Cohesion: 0.14
-Nodes (12): { createRequire }, fs, NATIVE_PACKAGES, path, prepareNative(), assert, { createRequire }, fs (+4 more)
+### Community 882 - "Thingtime Node for macOS"
+Cohesion: 0.18
+Nodes (11): Bounded streaming transport batches, Brightness and filesystem support, Build and test, Composite authorization and identity diagnostics, Electron embedding, Idempotent command contract, Implemented boundaries, Local folder sync adapter (+3 more)
 
 ### Community 883 - "Thingtime Embed SDK"
 Cohesion: 0.13
 Nodes (14): Build and verify, Persistence and conflicts, Quick start, Security model, Thingtime Embed SDK, PR #57 Thingtime Embed SDK, Secure Embed Editor Bridge, Thingtime Embed Bundle (+6 more)
 
-### Community 884 - "relationshipIndexLayout.ts"
-Cohesion: 0.28
-Nodes (11): repairRelationshipKeys(), activateIndexLayout(), INDEX_LAYOUT_DRAIN_MS, migrateRelationshipIndexLayout(), prepareRelationshipIndexLayout(), RELATIONSHIP_LAYOUT_KEY, relationshipIndexLayoutReady(), retireRelationshipLookupIndexes() (+3 more)
+### Community 884 - "mapboxGrouping.test.ts"
+Cohesion: 0.27
+Nodes (7): MapboxPoint, forbidden, groupingPath(), groupMapboxMarkers(), originalPoint(), readPath(), mapboxPointKey()
 
-### Community 885 - "optIn"
-Cohesion: 0.18
-Nodes (16): addOpt(), anyOptsIn(), anyThingsIn(), optIn(), optIndex(), optsIn(), popOpt(), popOpts() (+8 more)
+### Community 885 - "timelineExportDownload.ts"
+Cohesion: 0.35
+Nodes (9): downloadTimelineVersionExport(), object(), safe(), event, record, TIMELINE_EXPORT_FILENAME_MAX_CHARS, timelineExportFilename(), timelineExportRecord() (+1 more)
 
 ### Community 886 - "lopu/package.json"
 Cohesion: 0.13
@@ -6000,8 +5965,8 @@ Cohesion: 0.05
 Nodes (44): Account/App Ownership Links, /admin Dashboard (Users/Apps/Tiers/System), App-Owner Storage Manager (/apps/manage), Versioned Subscription Tier Catalog, Follow-up: anonymous session presentation, Follow-up: atomic first-load Feed input recovery, Follow-up: Mobile Safari compatibility-click recovery, Follow-up: persisted Thingtime function recovery (+36 more)
 
 ### Community 893 - "utils.ts"
-Cohesion: 0.09
-Nodes (31): Command(), FORMATS, convert(), optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), Command() (+23 more)
+Cohesion: 0.10
+Nodes (27): convert(), optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), copyImagesAtPathsToClipboard(), getClipboardFiles(), getClipboardImages() (+19 more)
 
 ### Community 894 - "PR #30 — Add iOS web destination picker (branch `codex/ios-deployment-url-picker`)"
 Cohesion: 0.13
@@ -6013,7 +5978,7 @@ Nodes (14): .github/workflows/all-branch.yml, Changes, Default-branch Lopu PR ma
 
 ### Community 896 - "Auth and Lopu AI"
 Cohesion: 0.10
-Nodes (20): Admin integration vault and policy proxy, Auth and Lopu AI, Background AI Tasks, Lopu AI assistant (chat, tools, live builder patches), Lopu AI Assistant, Personal Recording Runtime, Mobile and Watch Recording Automation, Native Apple push notifications (iPhone + Apple Watch) (+12 more)
+Nodes (21): Admin integration vault and policy proxy, Auth and Lopu AI, Background AI Tasks, Local attachment storage (laptop stand-in for the private bucket), Lopu AI assistant (chat, tools, live builder patches), Lopu AI Assistant, Personal Recording Runtime, Mobile and Watch Recording Automation (+13 more)
 
 ### Community 897 - "PR #719: shared CSS media context"
 Cohesion: 0.15
@@ -6023,9 +5988,9 @@ Nodes (14): PR 719 Shared CSS Media Context, 2026-09-09 early-startup recovery, 
 Cohesion: 0.15
 Nodes (13): Continuous gates, Expansion gates, First owner decision packet, L0 — Approve the charter, L1 — Inventory and classify local state, L2 — Persist one honest local draft, L3 — Reconnect through fresh authority, L4 — Make conflicts and device state legible (+5 more)
 
-### Community 899 - "ProcessUsageHistory"
-Cohesion: 0.29
-Nodes (4): Bucket, ProcessUsageHistory, Series, ProcessUsageHistoryTests
+### Community 899 - "staleChunkRecovery.ts"
+Cohesion: 0.31
+Nodes (7): clearStaleChunkReloadGuard(), isStaleChunkLoadError(), recoverStaleChunk(), reloadForStaleChunk(), STALE_CHUNK_GUARD_RESET_MS, STALE_CHUNK_RELOAD_KEY, StaleChunkRecoveryRuntime
 
 ### Community 900 - "20 — Run actions from the component tester ⚡"
 Cohesion: 0.17
@@ -6039,9 +6004,9 @@ Nodes (12): Authorization boundaries, Cleanup and deletion, Deployment contract,
 Cohesion: 0.32
 Nodes (3): Counts, Header, Manifest
 
-### Community 904 - "MobileSyncTrash.swift: recoverable same-volume moves, exclusive restore and separately consented fileTrashVersion 1.2.0"
-Cohesion: 0.15
-Nodes (14): Mac publication 1.2.0 write-check: read exact saved approval without dialog or consent mutation, mobileSyncTarget.client.ts: shared stage/publish/lookup runner, write-check and existing-consent resume, NativeFileDestination.rename: descriptor-relative anchored paths, exclusive rename/swap and EINVAL-only RENAME_RESOLVE_BENEATH fallback, NativeFileJournal: durable native operation recovery, distinct from Timeline history, NativeFileRecovery.tsx and localTrash.ts: owned retained records, surviving picker grants, confirmed restoration and child-before-parent receipt ordering, MobileFolderInventory.swift and nativeInventory.ts: private SQLite immutable pages, 128 entries/512 KiB, Mac 1.5.1 and iOS 1.3.1, MobileSyncStaging.swift and LocalSyncTarget: verified private staging, coordinated publication, atomic checks and durable receipts, MobileSyncTrash.swift: recoverable same-volume moves, exclusive restore and separately consented fileTrashVersion 1.2.0 (+6 more)
+### Community 904 - "nativeSyncVisibility.test.ts"
+Cohesion: 0.31
+Nodes (8): NATIVE_SYNC_FOREGROUND_WAIT, Page, watchNativeSyncVisibility(), active, listeners, nativeUploadMayContinue(), subscribeNativeUploadBackground(), trackNativeUploadBackground()
 
 ### Community 905 - "verify-demo-apps.mjs"
 Cohesion: 0.20
@@ -6080,8 +6045,8 @@ Cohesion: 0.21
 Nodes (14): Component.prototype.setState, React Component, ReactNoopUpdateQueue, Eight Landing Directions, Thingtime Launch Celebration, Thingtime Prototype v2 Fable Questionnaire, React Component, React Component (+6 more)
 
 ### Community 914 - "credential-import-acceptance.mts"
-Cohesion: 0.06
-Nodes (47): { spawnMock }, CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_BASE_VERSION, CREDENTIAL_IMPORT_DESTINATIONS, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_OPERATIONS, CREDENTIAL_IMPORT_PAGE_PATH, CREDENTIAL_IMPORT_REQUIREMENTS (+39 more)
+Cohesion: 0.09
+Nodes (33): CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_OPERATIONS, CREDENTIAL_IMPORT_VERSION, credentialImportMinimum(), isCredentialImportFormat(), boot(), children, cookies() (+25 more)
 
 ### Community 915 - "build-bundle.sh script"
 Cohesion: 0.15
@@ -6127,27 +6092,13 @@ Nodes (13): Shared API Documentation Registry, API -docs Routes, /docs/api API R
 Cohesion: 0.14
 Nodes (13): Sanitized Action Receipt History, Capability Negotiation Recovery, Comment Approval Card Contract, Direct Voice Transcript Recovery, Comment approval card guidance — 2026-09-10, Historical action receipt correction — 2026-09-10, Local URLs, PR #731: Lopu unified conversations, scheduled Things, attachments and discussions (+5 more)
 
-### Community 926 - "deviceAlerts.test.mts"
-Cohesion: 0.16
-Nodes (9): actor, collection, eq(), Failure, matches(), session, soundId, val() (+1 more)
-
-### Community 927 - "install-local-app.test.cjs"
-Cohesion: 0.16
-Nodes (12): assert, companionFacts(), companionFactsReader(), {
-	cpSync,
-	mkdtempSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	rmSync,
-	statSync,
-	symlinkSync,
-	writeFileSync
-}, fixture(), identifierReader(), installerPromise, installOptions() (+4 more)
+### Community 926 - "landingSections.tsx"
+Cohesion: 0.02
+Nodes (175): DEFAULT_FAMILY_THEMES, GeneratedVariant, generatedVariantFor(), Logo(), ComponentThingLike, Attention(), Hamburger(), BrutalButton() (+167 more)
 
 ### Community 928 - "bindingPatterns.test.ts"
-Cohesion: 0.20
-Nodes (3): entry(), program(), run()
+Cohesion: 0.10
+Nodes (9): entry(), program(), run(), Input, context, DOMCallback, runPlatformWorker(), fixture() (+1 more)
 
 ### Community 929 - "raycast-env.d.ts"
 Cohesion: 0.17
@@ -6157,25 +6108,25 @@ Nodes (11): Arguments, Commander, CommanderConvert, CommanderMp4ToMp3, Commander
 Cohesion: 0.25
 Nodes (13): backwardBoundaryKeys, ClosestEventTarget, EDITOR_JS_NATIVE_TEXT_FIELD_KEYS, editorJsNativeTextFieldKeys, getEditorJsArrowMovement(), getEditorJsTextField(), isAtTrueTextFieldBoundary(), nodeBoundaryLength() (+5 more)
 
-### Community 931 - "endpoint.ts"
-Cohesion: 0.02
-Nodes (174): Database — connection lifecycle and cold start, getMongoStatus opens and closes a brand-new MongoClient on every page view, maxPoolSize:10 caps concurrent DB work per instance on Fluid compute, Rate limiter costs two sequential round trips and two pool checkouts per mutating request, Status endpoint fetches full collection metadata just to count collections, agentTestEnvironment(), agentTestRefusal(), getDesktopProtectedRuntime() (+166 more)
+### Community 931 - "_endpoints.tsx"
+Cohesion: 0.04
+Nodes (96): addUserMongoEndpoint(), getUserMongoEndpoint(), getUserMongoEndpoints(), removeUserMongoEndpoint(), base64UrlToBase64(), configuredPublicPem(), CRYPTO_STANDARDS, CryptoStandard (+88 more)
 
 ### Community 932 - "Youth safety and age-appropriate agency roadmap"
 Cohesion: 0.17
 Nodes (12): Expansion gates, First owner decision packet, Measures and stop conditions, Non-negotiable boundaries, Outcome, Y0 — Assign ownership and freeze claims, Y1 — Map eligibility and data flows, Y2 — Decide the interim product posture (+4 more)
 
-### Community 933 - "definitions.test.mts"
-Cohesion: 0.14
-Nodes (7): batchSizes, delta, roots, rows, session, things, row()
+### Community 933 - "Ethical adoption baseline"
+Cohesion: 0.20
+Nodes (10): Ethical adoption baseline, Evidence ledger, Gaps that block trustworthy scale, Open questions, Privacy and safety boundary, Proposed outcome vocabulary, Refresh checklist, Strengths to compound (+2 more)
 
 ### Community 934 - "initializePasswordWorkspace"
 Cohesion: 0.49
 Nodes (10): initializePasswordWorkspace(), clearAccount(), clearQr(), decode(), discoverAccount(), lockAccount(), openAccount(), readTarget() (+2 more)
 
-### Community 935 - "partialJson.ts"
-Cohesion: 0.30
-Nodes (13): atEnd(), Cursor, LITERALS, NOTHING, parseArray(), parseLiteral(), parseNumber(), parseObject() (+5 more)
+### Community 935 - "PR 652 Commander App Ranking"
+Cohesion: 0.20
+Nodes (9): PR 652 Commander App Ranking, Catalogue and pin verification, Diagnosis and changes, PR #652: Complete Commander search catalogues, app ranking, and pin toggle, Speed-test follow-up (2026-09-05), Verification, PR #657: Commander search and network repairs, Scope (+1 more)
 
 ### Community 936 - "Renderer port and origin recovery"
 Cohesion: 0.14
@@ -6241,9 +6192,9 @@ Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commi
 Cohesion: 0.21
 Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
 
-### Community 952 - "numericSummary.ts"
-Cohesion: 0.22
-Nodes (10): allowedParams, cancelled(), Failure, Page, PageQuery, readThingNumericSummary(), reservedFields, Summary (+2 more)
+### Community 952 - "Relational access entries"
+Cohesion: 0.18
+Nodes (10): ACL storage and authorization, Authored schema and Component declarations, Growing settings and definitions, Other growing authorization collections, Paged management contract, Relational access entries, Why private reporting reached 64, PageReader (+2 more)
 
 ### Community 953 - "commitPlacement"
 Cohesion: 0.21
@@ -6273,24 +6224,20 @@ Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commi
 Cohesion: 0.21
 Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
 
-### Community 960 - "56 — Unified Thing history and the timeline browser 🕰️"
-Cohesion: 0.14
-Nodes (14): 56 — Unified Thing history and the timeline browser 🕰️, Data and API contract (already merged — audit in M3, do not redesign), Delivery shape, Done when, Existing anchors, Global timeline browser — `/history`, Goal, Horizontal looks — Cards, Line, Frames (any scope) (+6 more)
+### Community 960 - "DeviceAudioControls.tsx"
+Cohesion: 0.27
+Nodes (9): AudioLevelControl(), DeviceAudioControls, DeviceAudioControlsProps, percent(), routeConfig, RouteKind, RouteMenu(), DeviceActionKind (+1 more)
 
-### Community 961 - "PR 190 — Per-feature develop to main promotion PRs with stacks"
-Cohesion: 0.29
-Nodes (6): Conflict repair, PR 190 — Per-feature develop to main promotion PRs with stacks, Remaining hardening, Resolver control-plane hardening, Verification, Why this repair was needed
+### Community 961 - "platformApis.ts"
+Cohesion: 0.22
+Nodes (7): api(), API_EXAMPLES, ApiRecipe, bearer, bearer, googleKey, PLATFORM_API_EXAMPLES
 
 ### Community 962 - "release-workflow-contract.test.cjs"
 Cohesion: 0.22
 Nodes (11): path, { readFileSync }, requireOrder(), requireTokens(), validateControlPlane(), validateEntryShim(), assert, { existsSync, readFileSync } (+3 more)
 
-### Community 963 - "build"
-Cohesion: 0.15
-Nodes (12): build, appId, asar, directories, extraFiles, extraResources, files, productName (+4 more)
-
 ### Community 964 - "embed.tsx"
-Cohesion: 0.20
+Cohesion: 0.19
 Nodes (16): CodeWindow(), WindowTrafficLights(), BUTTON_SIZES, BUTTON_THEMES, DocsEmbed(), getSdk(), GuideHeading(), LoginButtonPreview() (+8 more)
 
 ### Community 965 - "Accessibility and language-readiness baseline"
@@ -6303,11 +6250,11 @@ Nodes (12): expectedHeadSha, headRef, implementationCommit, patchPath, patchSha2
 
 ### Community 967 - "router/package.json"
 Cohesion: 0.15
-Nodes (12): description, devDependencies, wrangler, name, private, scripts, deploy, dev (+4 more)
+Nodes (12): description, devDependencies, wrangler, wrangler, name, private, scripts, deploy (+4 more)
 
 ### Community 968 - "Attention agency and calm-use baseline"
-Cohesion: 0.17
-Nodes (12): Attention agency and calm-use baseline, Candidate agency contract, Evidence ledger, Feed and session controls, Gaps that keep agency implicit, Measurement without rewarding compulsion, Notification controls, Privacy, safety, and abuse boundaries (+4 more)
+Cohesion: 0.15
+Nodes (13): Attention agency and calm-use baseline, Candidate agency contract, Evidence ledger, Feed and session controls, Gaps that keep agency implicit, Measurement without rewarding compulsion, Notification controls, Open decisions (+5 more)
 
 ### Community 969 - "Portable ChatGPT plan connections and Electron local runtime"
 Cohesion: 0.15
@@ -6325,9 +6272,9 @@ Nodes (13): Behavior and boundaries, PR #1397 — private device location histor
 Cohesion: 0.19
 Nodes (13): Native reservation and part-signing regression, Protected file-sync provenance in browser draft cleanup, PR 1451 — Resume interrupted iPhone Photos backups and stream newest-first batches, Deferred iCloud originals, iCloud retrieval activity disclosure, Deferred-original retry fairness, Native journal and retry policy, Native queue discovery and upload (+5 more)
 
-### Community 973 - "transferAdmissions.ts"
+### Community 973 - "cloudTransport.ts"
 Cohesion: 0.02
-Nodes (145): ATTACHMENT_UPLOAD_TTL_MS, AttachmentTransferAuthority, completeAttachmentUpload, signAttachmentUploadParts, startAttachmentUpload, attachmentContentVersion(), conflict(), createCloudFileService() (+137 more)
+Nodes (218): Android binary upload ranges, iOS incoming shares, Reviewed account-file restore, iOS/ShareExtension: system Share target, iOS/ShareSupport: provider representations and atomic App Group inbox drained into Documents/Shared, iOS whole-file upload handoff, Bounded cloud downloads and staged executor — 2026-10-17, Cloud execution checkpoint — 2026-10-17 (+210 more)
 
 ### Community 974 - "PR #436 — Make Graphify output conflict-free"
 Cohesion: 0.15
@@ -6341,9 +6288,9 @@ Nodes (13): Apple Music, Index Budget Consolidation, Paired Node Media Controls,
 Cohesion: 0.15
 Nodes (12): Attachment Root Context Authorization, Private Independent Copies, Read-Only Shared Actions, Root Audience Authorization, Data template inheritance follow-up, 2026-09-09, Evidence, 2026-09-09, Intended behavior, Media authorization follow-up, 2026-09-09 (+4 more)
 
-### Community 977 - "ProviderIdentityTests"
-Cohesion: 0.17
-Nodes (8): PasswordProviderIdentity, .aaguidBytes, ProviderIdentityTests, Acceptance and limitations, Focused verification, One source and generated artifacts, Registry submission status, Thingtime passkey provider identity
+### Community 977 - "test-thing-pins-ui.mjs"
+Cohesion: 0.09
+Nodes (15): children, cwd, delay(), env, password, ports, ready(), api() (+7 more)
 
 ### Community 978 - "musingDeadline.test.mts"
 Cohesion: 0.18
@@ -6353,13 +6300,21 @@ Nodes (11): anthropicPlans, anthropicRequests, envNames, openAiPlans, openAiRequ
 Cohesion: 0.17
 Nodes (8): configure(), init(), open(), script, ThingtimeGlobal, Window, EMBED_VERSION, ThingtimeEmbedConfig
 
-### Community 980 - "Portable backup vault"
-Cohesion: 0.18
-Nodes (12): Bounded cloud path checks, Bounded foreground metadata lifecycle (2026-10-18), Cloud folder backup: selected Files inventory, retained attachment ranges and bounded SQLite scratch indexing, cloudInventoryStream.ts: shared Files 1.5.0 decoder, iOS saved-consent resume prerequisite (2026-10-19), Mac/iOS foreground paged recovery (2026-10-18), Native single-path observation (2026-10-18), Paged baseline publication (2026-10-18) (+4 more)
+### Community 980 - "file-sync-batch-budget.integration.mts"
+Cohesion: 0.20
+Nodes (8): bounded, charge, date, now, observe, observeElapsedMs, observeStarted, started
 
-### Community 981 - "appLifecycleCore.test.ts"
-Cohesion: 0.27
-Nodes (9): appControlThingMatch(), AppLifecycleSessions, AppLifecycleThings, deleteAppLifecycleInSession(), DeleteAppLifecycleResult, liveAppSessionsMatch(), findOneAndDelete(), revokedAt (+1 more)
+### Community 981 - "Milestones"
+Cohesion: 0.22
+Nodes (9): M0 — skip CI detail before any write (this PR), M1 — stop the deliveries at GitHub (owner sign-in needed), M2 — pull CI state in batches instead of pushing every event, M3 — shorten time in flight, M4 — leave per-second memory billing if M1–M3 fall short, Measure, Milestones, Vercel memory and CI webhooks (+1 more)
+
+### Community 982 - "PR #755 — Independent files in shared app forks"
+Cohesion: 0.22
+Nodes (8): Attachment Content Capability, Authorized File Copy Service, Contract and implementation — 2026-09-10, Deployed storage and browser acceptance — 2026-09-11, Evidence, PR #755 — Independent files in shared app forks, Separate post-login error report — 2026-09-11, Things Fork Contract
+
+### Community 983 - "DictationSilence"
+Cohesion: 0.17
+Nodes (8): DictationSilence, analysis, complete(), harness(), identity, job, manifest, response()
 
 ### Community 984 - "Creator sustainability and fair-value baseline"
 Cohesion: 0.18
@@ -6373,9 +6328,9 @@ Nodes (9): api(), base, cookieHeader(), failures, jar, password, remember(), run
 Cohesion: 0.22
 Nodes (11): api(), authorize(), deleteEntry(), failures, finalRaceBytes, individuallyManaged, listedApp, racingValues (+3 more)
 
-### Community 987 - "accountConfiguration.test.mts"
-Cohesion: 0.20
-Nodes (8): clone(), key, matches(), rows, things, transaction(), transactionTail, valueAt()
+### Community 987 - "run-api-tests.mts"
+Cohesion: 0.31
+Nodes (8): ApiTestContext, apiTestGroups, apiTests, CliOptions, createCookieJarFetch(), fetchEmailContext(), main(), parseArgs()
 
 ### Community 988 - "Admin dashboard, subscription tiers & ownership links"
 Cohesion: 0.15
@@ -6421,25 +6376,25 @@ Nodes (13): 49 — Personalization agency and accountable memory, Acceptance cri
 Cohesion: 0.20
 Nodes (18): createAccountController(), catalog(), discover(), handle(), live(), open(), project(), matchesDocument() (+10 more)
 
-### Community 999 - "archiveAvatarDownload.ts"
-Cohesion: 0.27
-Nodes (9): file-type, isBlockedLopuProviderHostname(), defaults, downloadArchiveAvatar(), globalV6, isPublicArchiveAvatarAddress(), special, unavailable() (+1 more)
+### Community 999 - "timeline-folders.integration.mts"
+Cohesion: 0.36
+Nodes (8): apply, call(), create(), draftAfterMove, history(), read(), remove(), version()
 
-### Community 1000 - "desktop-oauth-login.mjs"
-Cohesion: 0.50
-Nodes (4): authorizePattern, login, observe(), openInChrome()
+### Community 1000 - "timeline-folders-large.integration.mts"
+Cohesion: 0.36
+Nodes (8): call(), children, create(), history(), read(), remove(), restore, version()
 
 ### Community 1001 - "SpeechCapture"
 Cohesion: 0.12
 Nodes (3): SpeechCapture, recognitionFailureCode(), RecognitionFailureTests
 
-### Community 1002 - "library/catalog.ts"
-Cohesion: 0.23
-Nodes (8): api(), API_EXAMPLES, ApiRecipe, bearer, byId, bearer, googleKey, PLATFORM_API_EXAMPLES
+### Community 1002 - "Technical Next Steps"
+Cohesion: 0.25
+Nodes (7): APIs, Data model, Foundations, Security posture, Technical Next Steps, UI, TODO
 
-### Community 1003 - "FilterBuilder.tsx"
-Cohesion: 0.14
-Nodes (25): MONGO_BSON_VALUE_TYPES, MONGO_FILTER_OPERATORS, MongoBsonValueType, BsonValueEditor, BsonValueEditorComponent(), inputStyles, isLiteralType(), placeholderFor() (+17 more)
+### Community 1003 - "BsonValueEditor.tsx"
+Cohesion: 0.29
+Nodes (11): MONGO_BSON_VALUE_TYPES, BsonValueEditor, BsonValueEditorComponent(), inputStyles, isLiteralType(), placeholderFor(), Props, BsonValueNode (+3 more)
 
 ### Community 1004 - "Resource-conscious reach baseline"
 Cohesion: 0.17
@@ -6461,10 +6416,6 @@ Nodes (12): E0 — Assign ownership and inventory claims, E1 — Approve the cla
 Cohesion: 0.42
 Nodes (8): downloadText(), Props, RawResults(), csvCell(), displayMongoResultValue(), isMongoResultRecord(), serializeMongoResultsCsv(), tabulateMongoResults()
 
-### Community 1009 - "Local media processing in reusable Components"
-Cohesion: 0.20
-Nodes (11): FingerprintSource.uploadSingle, General local compressor (2026-10-22), Local media processing in reusable Components, Mac compound transport, Native HTTP fixture compatibility, build:client emitted-worker check and test:file-media:production-build CSP acceptance, pdfRuntime.client.getPdfRuntime executed worker initializer, Production PDF worker initialization — 2026-11-14 (+3 more)
-
 ### Community 1010 - "Action Thing v1 Security Review"
 Cohesion: 0.20
 Nodes (12): PR 387 Action Thing v1, Action Executor, Action Run Records, Action Thing v1 Design, Action Thing v2 External Capabilities, Connection Kind, Foreign Action Resolution Finding, Foreign Component Firing Finding (+4 more)
@@ -6481,17 +6432,17 @@ Nodes (11): Behavior, Main integration review and QA — 2026-09-27, PR #954 —
 Cohesion: 0.18
 Nodes (9): iOS system Share extension and ordinary /share web composer, attachmentFileSource.ts lazy multipart slices and bounded thumbnails, Final Graphify coverage, Final merged acceptance, Implementation decisions, PR 1355: incoming sharing composers, Runbooks, Shared-content transport follow-up (+1 more)
 
-### Community 1014 - "DemoDetailPage.tsx"
-Cohesion: 0.07
-Nodes (78): catalogPageId(), DEMO_LIBRARY_PATH, demoDetailHref(), DemoEntry, demoMatchesSearch(), demoPageIdentity(), isSuiteKind(), KIND_FILTERS (+70 more)
+### Community 1014 - "Change agency and humane product evolution baseline"
+Cohesion: 0.25
+Nodes (8): Change agency and humane product evolution baseline, Evidence ledger, Gaps and risks, Narrow vocabulary, Owner decisions, Refresh triggers, Smallest honest first study, Why preserve this note
 
-### Community 1015 - "Thingtime performance audit"
-Cohesion: 0.13
-Nodes (11): Thingtime Performance Audit (README), Deliberately not changed, Fixed in this pass, Headline results, How the audit was produced, Partially addressed, Refuted findings, Status (+3 more)
+### Community 1015 - "PR #864 — Five creative builder demo app suites"
+Cohesion: 0.25
+Nodes (7): Gotchas recorded, Not done (owner scoped the task down mid-way), Platform changes, PR #864 — Five creative builder demo app suites, Verification, What shipped, SuiteContentDef
 
 ### Community 1016 - "auth/users.ts"
-Cohesion: 0.01
-Nodes (294): Where the code lives, What it adds, Implementation trail, PR #65 — Everything is a thing: satellite collections collapse into things, Self-review round 1 (8-finder pass, commit 4b56c57), Self-review round 2 (regression pass on round-1 fixes, commit 49c73ae), Shape, Verification highlights (all live against the dev stack) (+286 more)
+Cohesion: 0.02
+Nodes (239): Design decisions, PR #164 — Crypto: password hasher + paste-ready mongosh rotate snippet 🔐, The "missing local lopu user" question, Verification, What it is, What it adds, Self-review round 2 (regression pass on round-1 fixes, commit 49c73ae), Validation (+231 more)
 
 ### Community 1017 - "editorJsRuntimeImports.ts"
 Cohesion: 0.11
@@ -6501,9 +6452,9 @@ Nodes (7): cacheEditorRuntimes(), loadEditorJsRuntime, loadEditorRuntimeScript()
 Cohesion: 0.20
 Nodes (9): Browser verification, Latest parent refresh (2026-08-10), PR #232 — Add media galleries and managed profile attachments, Read and authorization boundaries, Remaining live verification, Reported upload failure, Scope, User experience (+1 more)
 
-### Community 1019 - "ref_node_crypto"
-Cohesion: 0.01
-Nodes (177): CustomEvent, setup(), CHANNELS, { createHash }, { createReadStream }, [browser, buildId], keys, escapeCommand() (+169 more)
+### Community 1019 - "personal-recording-cli.mts"
+Cohesion: 0.09
+Nodes (26): target, hiddenSecret(), main(), deliverySmokeOptions(), syntheticRecordingWav(), requirements, runDeliverySmoke(), createPersonalRecordingKeychain() (+18 more)
 
 ### Community 1020 - "Thingtime Pink Icon (SVG source)"
 Cohesion: 0.18
@@ -6514,16 +6465,16 @@ Cohesion: 0.17
 Nodes (12): Thingtime Logo 100x19 (multicolor pixel wordmark), Thingtime Logo 1024x190 (multicolor pixel wordmark), Thingtime Logo 10x2 (multicolor pixel wordmark), Thingtime Logo 128x24 (multicolor pixel wordmark), Thingtime Logo 200x37 (multicolor pixel wordmark), Thingtime Logo 256x47 (multicolor pixel wordmark), Thingtime Logo 32x6 (multicolor pixel wordmark), Thingtime Logo 5000x926 (multicolor pixel wordmark) (+4 more)
 
 ### Community 1022 - "Sections.tsx"
-Cohesion: 0.09
-Nodes (39): Theme Provider, Fable (v2) — landing page tokens, Prism (v1) — product UI tokens, Shared rainbow palette, Theming system contract, 🌈 Thingtime Design Language, Voxel logo, BulletsSection() (+31 more)
+Cohesion: 0.08
+Nodes (42): Theme Provider, Fable (v2) — landing page tokens, Prism (v1) — product UI tokens, Shared rainbow palette, Theming system contract, 🌈 Thingtime Design Language, Voxel logo, External design inputs (+34 more)
 
 ### Community 1023 - "calcLength"
 Cohesion: 0.15
 Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
-### Community 1024 - "browserModel.ts"
-Cohesion: 0.04
-Nodes (74): inputs, inspected, provenance, run(), viewer, writes, createActionTimelineRecorder(), result (+66 more)
+### Community 1024 - "timeline-notes.integration.mts"
+Cohesion: 0.24
+Nodes (10): add, call(), entry(), explain, extra, history(), ninth, post() (+2 more)
 
 ### Community 1025 - "23 — Data portability and graceful exit 🧳"
 Cohesion: 0.17
@@ -6573,9 +6524,9 @@ Nodes (11): describeBuiltInComponentFrame(), describeClassComponentFrame(), desc
 Cohesion: 0.20
 Nodes (10): AI agency and accountable-assistance baseline, External design inputs, Gaps that block an honest pilot, Privacy, safety, and fairness boundary, Questions requiring owner decisions, Recommended first experiment, Refresh checklist, Repository evidence ledger (+2 more)
 
-### Community 1037 - "API endpoints and capabilities"
+### Community 1037 - "README.md"
 Cohesion: 0.01
-Nodes (204): Android README, Library Request Transport, Timeline Storage and Transaction Integration, Timeline Branch Merge, API Capability Manifest Tests, endpoint Docs Registry, useApi Capability Negotiation, Platform APIs (+196 more)
+Nodes (173): Auth Characters capability, Thingtime browser extension password workspace UI, TOTP authenticator QR code test fixture, Thingtime tree logo icon, 128px, Thingtime tree logo icon, 32px, Agent browsers and task space, Agent connection, Credentials (+165 more)
 
 ### Community 1038 - "Release Job"
 Cohesion: 0.25
@@ -6585,21 +6536,25 @@ Nodes (10): Thingtime Widgets App Release Workflow, Build Matching Signed Recove
 Cohesion: 0.27
 Nodes (3): TestFlightUploadStatusTest, TestFlightUploadStatusTest::Upload, TestFlightUploadStatus
 
-### Community 1040 - ".validate"
+### Community 1040 - "Android retained-version recovery development"
 Cohesion: 0.25
-Nodes (3): NativePhotoQueueReceipt, Observation, ObservationEnvelope
+Nodes (8): Android photo backup setup, Android retained-version recovery development, iOS native multipart jobs, iOS native multipart uploads, iOS photo backup setup, Mac photo backup setup, Mac streaming throughput, Priorities before streaming preparation
+
+### Community 1041 - "timeline-components.integration.mts"
+Cohesion: 0.36
+Nodes (5): blocks, call(), pageHistory(), readBindings(), register()
 
 ### Community 1042 - "Search and discovery agency baseline"
 Cohesion: 0.20
 Nodes (10): Candidate first pilot, Candidate measures without attention surveillance, Gaps that block accountable discovery, Open decisions, Privacy, security, fairness, and accessibility boundaries, Refresh checklist, Search and discovery agency baseline, Strengths to preserve (+2 more)
 
-### Community 1043 - "personal-recording-worker.test.ts"
-Cohesion: 0.25
-Nodes (10): credential(), claim(), claim(), analysis, complete(), harness(), identity, job (+2 more)
+### Community 1043 - "verify-actions.mjs"
+Cohesion: 0.50
+Nodes (7): api(), check(), createThing(), failures, register(), run(), runAction()
 
-### Community 1044 - "Failure"
-Cohesion: 0.20
-Nodes (9): Failure, destination, .errorDescription, http, identity, incompatible, invalid, revoked (+1 more)
+### Community 1044 - "verify-components.mjs"
+Cohesion: 0.36
+Nodes (7): api(), check(), failures, register(), run(), SAMPLE_ARGS, SAMPLE_RENDER
 
 ### Community 1045 - "Follow-Up Notes From PR #16"
 Cohesion: 0.18
@@ -6613,45 +6568,41 @@ Nodes (11): backfill-user-storage-accounting, Control Storage Class, Ordinary Di
 Cohesion: 0.20
 Nodes (10): Feature Stack Capability Manifest, Durable Feature Stack Dispatch, PR #530 Feature Stack Run History, Contract, Outcome, PR #533 — Feature Stack progress heartbeats, CI Progress Endpoint, Validation (+2 more)
 
-### Community 1048 - "Hosting options and cost per call and per user"
-Cohesion: 0.05
-Nodes (36): Host comparison, Hosting options and cost per call and per user, Open questions, Per call, Per-user model, Recommendation, Right after the fixes (6 hours to 15:10 AEDT, 26 Nov), Sources (+28 more)
+### Community 1048 - "Vercel cost reduction: getting back to $0.50–$2 a day"
+Cohesion: 0.13
+Nodes (15): Breakdown of the 4 November peak (dashboard tooltip, $14.28), Configuration observations, Daily function invocations (Vercel billing API, `thingtime` project), Evidence, Expected outcome, Hobby migration dependency, Hottest routes, last 7 days (Vercel Observability → Functions), Method and sources (+7 more)
 
 ### Community 1049 - "PR 867 — Seamless Lopu and Things controls"
 Cohesion: 0.18
 Nodes (10): Builder and Things Controls, Contracts and safeguards, Writable Graphify Working Copies, Aggregate iOS Chat Live Activity, Lopu Continuation Management, PR 867 — Seamless Lopu and Things controls, Pre-merge review (2026-09-21), Remaining acceptance limits (+2 more)
 
-### Community 1050 - "queryRunner.ts"
-Cohesion: 0.29
-Nodes (10): baseOptions(), boundedDistinctPipeline(), collectValues(), Fail, runMongoQuery(), NormalizedMongoQuery, redactMongoValue(), resolvePipelineCollections() (+2 more)
+### Community 1050 - "deviceResourceMetrics.ts"
+Cohesion: 0.42
+Nodes (10): binaryBytes(), deviceResourceMetrics(), finiteRange(), gauge(), ioRate(), networkRate(), number(), rateText() (+2 more)
 
 ### Community 1051 - "ref_node_url"
 Cohesion: 0.01
-Nodes (159): exercisePasswordWorkspace(), catalogOnly, check(), exerciseSlowCatalog(), manifest, packaged, source, {ZipReader,Uint8ArrayReader,Uint8ArrayWriter} (+151 more)
+Nodes (199): exercisePasswordWorkspace(), catalogOnly, check(), exerciseSlowCatalog(), manifest, packaged, source, {ZipReader,Uint8ArrayReader,Uint8ArrayWriter} (+191 more)
 
 ### Community 1052 - "unlinkRetirement.test.mts"
 Cohesion: 0.29
 Nodes (8): accountDoc(), Doc, home, makeCollection(), ownLink(), sourceRow(), things, world()
 
 ### Community 1054 - "19 — Anonymous participants in group chats 🕶️"
-Cohesion: 0.18
-Nodes (11): author(), 19 — Anonymous participants in group chats 🕶️, Architecture and projection rules, Create and invite, Done when, Existing anchors, Goal, Honest anonymity boundary (+3 more)
-
-### Community 1055 - "timelineExportDownload.ts"
-Cohesion: 0.35
-Nodes (9): downloadTimelineVersionExport(), object(), safe(), event, record, TIMELINE_EXPORT_FILENAME_MAX_CHARS, timelineExportFilename(), timelineExportRecord() (+1 more)
-
-### Community 1056 - "PR #237 — Add media attachments across conversations"
 Cohesion: 0.20
-Nodes (9): Authorization and lifecycle, Context, Live UI validation, PR #237 — Add media attachments across conversations, Product behavior, Regression coverage, Resolution, Stack and rollout (+1 more)
+Nodes (10): 19 — Anonymous participants in group chats 🕶️, Architecture and projection rules, Create and invite, Done when, Existing anchors, Goal, Honest anonymity boundary, Inside the chat (+2 more)
 
-### Community 1057 - "IndexingSettings.tsx"
-Cohesion: 0.24
-Nodes (15): formatBytes(), formatCount(), formatDuration(), formatIndexedAt(), formatInterval(), formatUnit(), fullDiskAccessLabel(), IgnoreRuleRow() (+7 more)
+### Community 1055 - "timeline-versions.integration.mts"
+Cohesion: 0.07
+Nodes (33): again, call(), choices, clear, clearAgain, cleared, compareRequest, comparison (+25 more)
 
-### Community 1058 - "PR #909 — Add reusable DOM receivers to Web standards programs"
-Cohesion: 0.13
-Nodes (15): PR #909 DOM Receiver Programs, PR #909 — Add reusable DOM receivers to Web standards programs, Problem and behavior, Remaining delivery work, Runtime boundaries and semantics, Validation completed locally, PR #914 HTML Form Receiver Programs, Behavior (+7 more)
+### Community 1056 - "verify-webpages.mjs"
+Cohesion: 0.46
+Nodes (7): adminSession(), api(), check(), failures, login(), register(), run()
+
+### Community 1057 - "16 — Full-power app namespaces"
+Cohesion: 0.25
+Nodes (8): 16 — Full-power app namespaces, Docs / logs / tests to move in the same PR, Explicitly deferred (logged, not forgotten), KV compat + warm-ups, Sandbox parity (test == live), Storage: bytes, not counts, The model in one paragraph, User browsing (in Thingtime)
 
 ### Community 1059 - "file-export-link-publisher.cjs"
 Cohesion: 0.18
@@ -6687,27 +6638,27 @@ Nodes (11): 26 — Community safety and accountable moderation 🛡️, Acceptan
 
 ### Community 1067 - "Login.tsx"
 Cohesion: 0.04
-Nodes (89): Review follow-up — view chrome is not broadcast (Lopu, 2026-08-30), Second pass — `settings.drawer.selectedItem` (Lopu, 2026-08-30), Second pass — `settings.editor.openConfig`, both directions (Lopu, 2026-08-30), Third pass — the DevKit prefills, and the default that keeps producing these (Lopu, 2026-08-30), Bugs found during verification (both fixed in this PR), @simplewebauthn/browser, createThingtimeCapabilityChecker(), IncompatibleThingtimeCapabilityError (+81 more)
+Nodes (81): Review follow-up — view chrome is not broadcast (Lopu, 2026-08-30), Second pass — `settings.drawer.selectedItem` (Lopu, 2026-08-30), Second pass — `settings.editor.openConfig`, both directions (Lopu, 2026-08-30), Third pass — the DevKit prefills, and the default that keeps producing these (Lopu, 2026-08-30), accountHintOriginPresentation, accountHintOriginsSummary(), hostFromOrigin(), AccountHintRow() (+73 more)
 
 ### Community 1068 - "compilerOptions"
 Cohesion: 0.20
 Nodes (9): compilerOptions, jsx, module, moduleResolution, noEmit, types, extends, include (+1 more)
 
-### Community 1069 - "liveActivityDelivery.test.mts"
-Cohesion: 0.20
-Nodes (7): deletions, filters, registrations, sent, sessions, tasks, things
+### Community 1069 - "bundled-renderer.test.cjs"
+Cohesion: 0.29
+Nodes (6): assert, electronDir, path, { readFile }, repoRoot, test
 
 ### Community 1070 - "src/package.json"
 Cohesion: 0.20
 Nodes (9): author, description, license, main, name, scripts, test, type (+1 more)
 
-### Community 1071 - "personalRecordingStore.test.mts"
-Cohesion: 0.24
-Nodes (8): actor, authority(), calls, collection, get(), matches(), result, Unavailable
+### Community 1071 - "server.mjs"
+Cohesion: 0.33
+Nodes (6): deadline, [directory, runId], receipt, receiptPath, save(), server
 
-### Community 1072 - "filesystemChanges.test.ts"
-Cohesion: 0.20
-Nodes (8): FILE_CHANGE_WORKER_SOURCE, FileChangeBatch, FileChangeObserver, FileChangeOptions, reject(), resolve(), message(), options
+### Community 1072 - "PR #1047 — Editable live agent overview"
+Cohesion: 0.29
+Nodes (7): PR 1047 Editable live agent overview, Current architecture, Current framework and saved-Thing acceptance — 2026-10-19, Current-main integration — 2026-10-19, Historical preview implementation and validation — 2026-10-19, PR #1047 — Editable live agent overview, Production release acceptance — pending
 
 ### Community 1075 - "Automation agency and accountable-recurrence baseline"
 Cohesion: 0.20
@@ -6717,9 +6668,9 @@ Nodes (10): A narrow vocabulary, Automation agency and accountable-recurrence ba
 Cohesion: 0.20
 Nodes (10): Bounded first experiment, External design inputs, Gaps this theme owns, Joyful delight and play agency baseline, Questions for owners and qualified reviewers, Repository evidence ledger, Risks and abuse cases, Stop conditions (+2 more)
 
-### Community 1077 - "ApiTryIt.tsx"
-Cohesion: 0.31
-Nodes (9): ApiRequestExample, ApiTryIt(), MUTATION_METHODS, responseLanguage(), seedBody(), serializeQuery(), statusColorScheme(), TryItResult (+1 more)
+### Community 1077 - "PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙"
+Cohesion: 0.29
+Nodes (7): PR 156: Token minter scoped personal access tokens, Debug notes, PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙, Round 2 — per-token sandbox (onlyCreatedThings) + select/unselect-all, Round 3 — tt:token/<id> grant lists (layered token permissions), Verification, What it is
 
 ### Community 1079 - "cloudDestination.ts"
 Cohesion: 0.22
@@ -6729,9 +6680,9 @@ Nodes (10): folderIdentity(), NewSyncCloudDestination, prepareSyncCloudDestinati
 Cohesion: 0.12
 Nodes (17): Debugging notes, Docs — `remix/app/routes/docs/concepts/` (+ nav wiring), Follow-ups (ideas), Goal, Kind renderers — `remix/app/components/Kinds/`, PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section, Round 10 — preserve focus across Editor.js autosave echoes, Round 4 — rich-text fidelity, read-only toggle, quote restyle, full suite (+9 more)
 
-### Community 1081 - "mobile-sync-installed-fixture.mts"
-Cohesion: 0.22
-Nodes (9): api(), base, cookies, fixture, [fixturePath, statePath, action], runtime, save(), scope (+1 more)
+### Community 1081 - "PR 190 — Per-feature develop to main promotion PRs with stacks"
+Cohesion: 0.29
+Nodes (6): Conflict repair, PR 190 — Per-feature develop to main promotion PRs with stacks, Remaining hardening, Resolver control-plane hardening, Verification, Why this repair was needed
 
 ### Community 1082 - "PR #312 — Media Thing pages and gallery layouts"
 Cohesion: 0.20
@@ -6749,21 +6700,21 @@ Nodes (10): Cross-tab sync for persisted Thingtime state, Current-develop reconc
 Cohesion: 0.29
 Nodes (6): 05 — Authed DB Write (Create / Update / Delete) 🔴, Acceptance criteria, Goal, Plan, Security notes, What exists (to build on)
 
-### Community 1086 - "vercel-build.mjs"
+### Community 1086 - "14 — Editor.js block drag/drop reordering 🟢"
 Cohesion: 0.29
-Nodes (9): assertBuildLocation(), buildForVercel(), remixOutputDirectory, repositoryRoot, rootOutputDirectory, run(), scriptPath, stageVercelOutput() (+1 more)
+Nodes (5): 14 — Editor.js block drag/drop reordering 🟢, Done when, Goal, Risks and guardrails, What already exists
 
-### Community 1088 - "Thingtime marketing suite"
-Cohesion: 0.17
-Nodes (11): Adding content, Guarantees the tests enforce, Manual checks, Publishing — the admin gate, Thingtime marketing suite, URL shapes, Marketing Publish Gate PR Notes, Decisions worth remembering (+3 more)
+### Community 1088 - "Where things live"
+Cohesion: 0.15
+Nodes (12): Adding content, Guarantees the tests enforce, Manual checks, Publishing — the admin gate, Thingtime marketing suite, URL shapes, Where things live, Marketing Publish Gate PR Notes (+4 more)
 
 ### Community 1089 - "Thingtime Passwords XcodeGen Project"
 Cohesion: 0.22
 Nodes (9): Thingtime Passwords XcodeGen Project, Thingtime app icon at 1024×1024, Thingtime app icon at 128×128, Thingtime app icon at 16×16, Thingtime app icon at 256×256, Thingtime app icon at 32×32, Thingtime app icon at 512×512, Thingtime app icon at 64×64 (+1 more)
 
-### Community 1090 - "builder-entrypoint-acceptance.mjs"
-Cohesion: 0.21
-Nodes (9): api(), children, cwd, delay(), env, point(), ports, register() (+1 more)
+### Community 1090 - "verify-subspaces.mjs"
+Cohesion: 0.29
+Nodes (11): SUBSPACE_NOTIFICATION_TYPES, api(), check(), checkOrSkip(), day, failures, isStorageGate(), register() (+3 more)
 
 ### Community 1091 - "Favicon Import HTML"
 Cohesion: 0.20
@@ -6777,9 +6728,13 @@ Nodes (10): Thingtime LinkedIn Banner (1584x396, light pixel-block wordmark with
 Cohesion: 0.29
 Nodes (9): data(), call(), login(), finish(), onMessage(), randomState(), renderButton(), shared() (+1 more)
 
-### Community 1094 - "PR #1462: Drain retired gateway connections"
-Cohesion: 0.22
-Nodes (8): Behavior, Final capability version, Measurement limits, November 13 ACL provisioning integration, November 13 relational ACL integration, PR #1462: Drain retired gateway connections, Release sequencing and acceptance, Validation and regression evidence
+### Community 1094 - "Web standards Builder app"
+Cohesion: 0.29
+Nodes (7): Web standards Builder app, audit:web-platform, Builder, /platform/runtime.html, /platform/runtime.js, test:web-platform, web-standards suite
+
+### Community 1095 - "omniRequest.ts"
+Cohesion: 0.48
+Nodes (4): ErrorLogContext, ModerationRequestError, requestOmniModeration(), requestOmniModeration()
 
 ### Community 1096 - "Built Schema Platform"
 Cohesion: 0.20
@@ -6805,9 +6760,9 @@ Nodes (5): Behavior and composition, PR 1364 — Authored rich fields, context m
 Cohesion: 0.25
 Nodes (8): AiWaterfallConfig, Saved AI Waterfall Library, PR 771 AI Waterfall Selection, Delivered contract, PR 771: Reusable AI waterfall selection for stack merges, Rollout, Saved-library follow-up, 11 September 2026, Verification on 11 September 2026
 
-### Community 1102 - "Client entry points"
-Cohesion: 0.25
-Nodes (9): useAttachmentUploads.ts and AttachmentComposer.tsx: signed-part XHR uploads, retries and drafts, attachmentUiCore.ts, attachmentArchiveActions.ts and useAttachmentArchive.ts: URLs, labels, archive menu and browser download, Client entry points, ComponentAttachments.tsx: editable tt-attachments drafts committed by saved Action and tt-media authorized rendering, MediaLightbox.tsx, ZoomableImage.tsx and imageZoomCore.ts: lightbox and bounded image pinch/pan, app/routes/media.tsx /media/:id: annotation, download and gallery download-all, PostAttachments.tsx: galleries, file rows, NSFW shield and download-all pill, sharedComposition.ts and compositionMediaCore.ts: sharedRoot authorization for embedded page/component media (+1 more)
+### Community 1102 - "googlePlaces.ts"
+Cohesion: 0.52
+Nodes (4): GooglePlacesError, guidance, providerError(), requestGooglePlaces()
 
 ### Community 1103 - "Approved iOS download publication — 2026-10-17"
 Cohesion: 0.33
@@ -6817,9 +6772,9 @@ Nodes (6): Android native write approval and actual picker acceptance (2026-10-1
 Cohesion: 0.11
 Nodes (18): Two-Stage Leased Migrations, Canonical Legacy Reader Cutover, Canonical legacy-reader cutover — 47-index candidate, Entire source plan: optimization decisions, Implementation sequence and acceptance gates, Relationship migration preparation, Shared relationship lookup cutover, Still required before claiming completion (+10 more)
 
-### Community 1105 - "syncJobJournal.ts scoped execution audit and saved-job preservation"
-Cohesion: 0.25
-Nodes (9): DesktopSyncAutomation and syncAutomationBlocks: editable interval/Start/Stop blocks; syncWindowRetention composes active and scheduled holders, Desktop sync lifecycle: nativeSyncTasks.client.ts, syncTaskRuntime.ts, NativeSyncBootstrap.tsx and hidden active SyncWindowLease, Unexecuted version-1 Two-way setup recovery to deletion-disabled Backup, iOS publication 1.2: app-owned runner, durable admissions, device/session binding and strict account transport, nativeSyncVisibility.ts: background interruption preservation, current-file lease and lease-expiry fencing, Exact saved-job recovery under the root lock, syncJobJournal.ts scoped execution audit and saved-job preservation, Legacy changed-source upload terminal no-effect Timeline receipt (+1 more)
+### Community 1105 - "devDependencies"
+Cohesion: 0.20
+Nodes (10): devDependencies, eslint, eslint-config-prettier, prettier, @types/node, @types/react, @types/tar, typescript (+2 more)
 
 ### Community 1106 - "PR #13 - Hydration, Vercel Status, and Deployment Hygiene"
 Cohesion: 0.22
@@ -6829,21 +6784,21 @@ Nodes (9): PR 13 Hydration MongoDB Thingtime Defaults Notes, Deployment And Repo
 Cohesion: 0.25
 Nodes (9): PR 1409: Device folders and explicit backup start, api.devices 1.16.0, api.devices-folders 1.0.0, configurationStart, Contracts and boundaries, Device folder and explicit backup start flow, Evidence and delivery, Semantic refresh limitation (+1 more)
 
-### Community 1108 - "_deployments.tsx"
-Cohesion: 0.23
-Nodes (9): MAX_DEPLOYMENT_HISTORY_LIMIT, normaliseDeploymentBranchLimit(), normaliseDeploymentHistoryLimit(), VercelDeploymentSummary, action, getBranchLimitFromRequest(), getDeployments(), getHistoryLimitFromRequest() (+1 more)
+### Community 1108 - "🦄 Handoff: Schema browser / builder / search-by-schema"
+Cohesion: 0.20
+Nodes (9): 0. TL;DR, 1. What Lopu asked for (verbatim intent), 4. What's NEXT (not started), 5. House rules that bit us before (don't relearn the hard way), Dev environment, 🦄 Handoff: Schema browser / builder / search-by-schema, Routing, Ship (+1 more)
 
 ### Community 1109 - "PR #607 — Rich route-aware Thingtime link previews"
 Cohesion: 0.22
-Nodes (8): Follow-ups (not blocking), Fonts, Layout is measured, not counted, PR #607 — Rich route-aware Thingtime link previews, Safety boundaries, Surfaces, Validation, Vercel routing
+Nodes (8): Follow-ups (not blocking), Fonts, Layout is measured, not counted, Outcome, PR #607 — Rich route-aware Thingtime link previews, Surfaces, Validation, Vercel routing
 
 ### Community 1110 - "PR #397 — Lopu CodeQL for every PR target"
 Cohesion: 0.22
 Nodes (8): Activation order, Default-branch listener compiler fix, Final design, Post-merge activation audit, PR #397 — Lopu CodeQL for every PR target, Single automatic Lopu entry point, Verification, Why this promotion needed a second review
 
-### Community 1111 - "prConflictResolverModelWaterfallCore"
-Cohesion: 0.20
-Nodes (11): PRConflictResolverModelWaterfallEditor, AI Workflow Base Models Catalog, prConflictResolverModelWaterfallCore, Lopu Musing Model Choices Resolver, normalizePrConflictResolverModelWaterfall, parseAiWorkflowModelOptionId, PR #388 Unlimited AI Model Waterfall, resolveAiPreferredAnthropicChoice (+3 more)
+### Community 1111 - "Editable maps and routing"
+Cohesion: 0.33
+Nodes (6): Authored marker presentation (api.maps1.2.0), Editable maps and routing, Provider contract, Storage and attribution, Verification, viewer()
 
 ### Community 1112 - "PR #635 — Complete Editor.js rich text styling"
 Cohesion: 0.22
@@ -6861,49 +6816,53 @@ Nodes (8): Boundaries, Cards look follow-up — 2026-09-27, Evolution view follo
 Cohesion: 0.25
 Nodes (8): Brand Logo SEO PR Note, Brand Identity, Brand logo SEO — Organization JSON-LD, crawlable logo `<img>`, robots.txt, sitemap, Follow-ups (not in this PR), Indexable Paths, Sitemap Core, Validation, Why
 
-### Community 1116 - "ConnectionState"
+### Community 1116 - "desktop-shutdown.test.cjs"
 Cohesion: 0.22
-Nodes (9): ConnectionState, checking, connected, failed, offline, ready, signedOut, .systemImage (+1 more)
+Nodes (6): assert, fs, path, source, test, vm
 
-### Community 1117 - "dashboardFailure.ts"
-Cohesion: 0.39
-Nodes (7): CI_DASHBOARD_QUERY_CAPACITY_CODE, CI_DASHBOARD_RETRY_AFTER_SECONDS, CI_DASHBOARD_ROUTE, ciDashboardCapacityFailure(), isCiDashboardSortMemoryError(), MongoLikeError, safeToken()
+### Community 1117 - "resource-transfer-process.cjs"
+Cohesion: 0.33
+Nodes (5): assert, {governedFetch,governedHash,governedDownload}, http, {once}, {ResourceGovernor}
 
 ### Community 1118 - "Gifted signup invitations"
-Cohesion: 0.22
-Nodes (9): Background AI replies, Feed algorithms and geographic Things, Gifted signup invitations, Legal documents, Lopu continuation development, Lopu uploads, attachment contents and HTTP SDK, Mobile authentication and moderation recovery, Recovery app sections and build dates (+1 more)
+Cohesion: 0.20
+Nodes (10): Admin error logs, Background AI replies, Feed algorithms and geographic Things, Gifted signup invitations, Legal documents, Lopu continuation development, Lopu uploads, attachment contents and HTTP SDK, Mobile authentication and moderation recovery (+2 more)
 
-### Community 1119 - "mail.test.ts"
-Cohesion: 0.25
-Nodes (5): googleMailOAuth, createGoogleMailCallback(), loader, defaults, owner
+### Community 1119 - "mail-storage.integration.mts"
+Cohesion: 0.12
+Nodes (11): googleMailOAuth, createGoogleMailCallback(), loader, defaults, owner, cookie, fixture, googleCallback (+3 more)
 
-### Community 1120 - "_template.tsx"
-Cohesion: 0.35
-Nodes (7): @monaco-editor/react, TestAPI(), Editor(), TopSpacing(), action(), earlyReturn(), Index()
+### Community 1120 - "vault-credentials.mjs"
+Cohesion: 0.53
+Nodes (5): escapeCommand(), json(), keys, mask(), request()
 
-### Community 1121 - "API — per-request handler work"
-Cohesion: 0.25
-Nodes (8): API — per-request handler work, Every attachment/image fetch pays the full auth chain plus a fail-closed rate-limit write before a 302, getCurrentUser serializes 3 independent Mongo round trips on every authenticated request, POST/PUT/PATCH /api/v1/things buffers and parses the whole body with an uncapped request.json() before any auth, Rate limiter does two sequential writes per call; 73 API routes pay it, resolveActor resolves the session twice for every Bearer-token request, resolveAppToken serializes the app lookup and the user lookup, then adds a subscription read, users/relationships serializes three independent awaits
-
-### Community 1122 - "Marketplaces And App Store"
-Cohesion: 0.40
-Nodes (4): App store, Commerce principles, Marketplaces And App Store, Thing marketplace
-
-### Community 1123 - "24 — Migration-safe continuous availability"
+### Community 1121 - "PR 747 — shared saved action contexts"
 Cohesion: 0.33
-Nodes (6): 24 — Migration-safe continuous availability, Acceptance criteria, Engineering requirements, Motivating failure class, Required rollout pattern, User-visible contract
+Nodes (5): Behavior and security, Focused main promotion, PR 747 — shared saved action contexts, Remaining broader goal, Validation
 
-### Community 1124 - "platformReportingSettingsBlocks.ts"
+### Community 1122 - "PR #853 — Builder uploads, form saves, SDK docs and scoped lookups"
+Cohesion: 0.33
+Nodes (5): Behavior, Evidence, Integration limits and local review, Main delivery (2026-09-18), PR #853 — Builder uploads, form saves, SDK docs and scoped lookups
+
+### Community 1123 - "seed-demo-app.mjs"
+Cohesion: 0.73
+Nodes (5): api(), authenticate(), ensureThing(), findOwned(), run()
+
+### Community 1124 - "timeline-themes.integration.mts"
+Cohesion: 0.47
+Nodes (5): call(), customHeaders, history(), livePayloadBytes, read()
+
+### Community 1125 - "verify-messenger.mjs"
+Cohesion: 0.53
+Nodes (5): api(), check(), failures, register(), run()
+
+### Community 1126 - "strip-exif.ts"
 Cohesion: 0.36
-Nodes (7): action(), button(), controlCss, element(), field(), PLATFORM_REPORTING_SETTINGS_BLOCKS, text()
+Nodes (5): Command(), getExifToolLocation(), installExifTool(), setExifToolLocation(), tar
 
-### Community 1125 - "previewRetentionSettingsBlocks.ts"
-Cohesion: 0.42
-Nodes (7): action(), element(), field(), inputCss, section(), text(), toggle()
-
-### Community 1126 - "PR #1015 — Complete 1PUX imports and encrypted password attachments"
+### Community 1127 - "verify-pat-tokens.mjs"
 Cohesion: 0.40
-Nodes (4): PR #1015 — Complete 1PUX imports and encrypted password attachments, Problem and coverage, Storage and security, Verification — 2026-10-17
+Nodes (3): api(), failures, mintPat()
 
 ### Community 1128 - "commanderShortcut.ts"
 Cohesion: 0.36
@@ -6921,49 +6880,45 @@ Nodes (3): SemanticRefresh, complete(), simulated_completion()
 Cohesion: 0.22
 Nodes (9): Builder Editing of Nested Controls and Text, Comments and Saved Preferences, Search Embedded Things, Subspace Membership and Permissions, Assigned Messenger Space and General Channel, Moderated Thing Embeds, Posts and Messages Views, Saved and Embedded Render Components (+1 more)
 
-### Community 1132 - "Technical Next Steps"
+### Community 1132 - "native-password-package.test.cjs"
 Cohesion: 0.25
-Nodes (7): APIs, Data model, Foundations, Security posture, Technical Next Steps, UI, TODO
+Nodes (7): assert, { createRequire }, fromBuilder, { getConfig }, path, projectDir, test
 
-### Community 1133 - "PR 1471 — saved sync receipt and scanner recovery"
-Cohesion: 0.40
-Nodes (4): Observed failures, PR 1471 — saved sync receipt and scanner recovery, Repair and safety boundary, Verification and remaining acceptance
+### Community 1133 - "24 — Migration-safe continuous availability"
+Cohesion: 0.33
+Nodes (6): 24 — Migration-safe continuous availability, Acceptance criteria, Engineering requirements, Motivating failure class, Required rollout pattern, User-visible contract
 
 ### Community 1134 - "iOS"
 Cohesion: 0.25
 Nodes (7): Available Actions, Installation, iOS, ios beta, ios build, ios generate, ios upload
 
-### Community 1135 - "Mac paged transfer acceptance"
+### Community 1135 - "permission-settings-locations.test.cjs"
 Cohesion: 0.25
-Nodes (8): Canonical-worker mixed fixture with parity validation and scoped TLS, Verified empty attachment byte-cache response: api.attachment-content 1.17.2, Local storage 1.1.0 signDownloadRange: 60-second version-and-Range-bound HMAC GET, Mac paged transfer acceptance, pagedRunJournal.queuedFolderPeer bounded committed opposite-folder lookup, supportsNativeInventoryPages patched-contract gate with bounded-scan fallback, Wide destination compatibility and patched native version gates, Wide and mixed Mac proofs: 10,003 and 10,033 paths, hashes and recovery
+Nodes (7): assert, fs, handlers, path, source, test, vm
 
 ### Community 1136 - "Support agency and accountable remedy baseline"
 Cohesion: 0.25
 Nodes (8): Evidence ledger, Gaps and risks, Narrow vocabulary, Owner decisions, Refresh triggers, Smallest honest first study, Support agency and accountable remedy baseline, Why preserve this note
 
-### Community 1137 - "Shared filesystem indexer"
-Cohesion: 0.25
-Nodes (6): Build and verify, Consumers, Coverage by host, iOS prerequisites, Shared filesystem indexer, PR 1327: Share one Rust filesystem engine across Commander and native sync
-
 ### Community 1138 - "Guarded sync ancestor deferral and healthy startup timing"
 Cohesion: 0.25
 Nodes (7): Behavior, Graph coverage, Guarded sync ancestor deferral and healthy startup timing, Matched measurement, Pre-location recovery acceptance, Required peer-base integration, Verification and remaining delivery
 
-### Community 1139 - "file-export-link-publisher.test.cjs"
-Cohesion: 0.20
-Nodes (7): assert, fs, helper, os, path, { spawn }, test
+### Community 1139 - "Marketplaces And App Store"
+Cohesion: 0.40
+Nodes (4): App store, Commerce principles, Marketplaces And App Store, Thing marketplace
 
-### Community 1140 - "PR 1282: Keep Commander indexes fresh without interrupting search"
-Cohesion: 0.29
-Nodes (6): Decisions, Graphify evidence boundary, Installed recovery and acceptance, PR 1282: Keep Commander indexes fresh without interrupting search, Result, Verification retained by the task
+### Community 1140 - "PR #1070 — Lopu defaults and per-chat AI credentials"
+Cohesion: 0.40
+Nodes (5): PR 1070 Lopu defaults and per-chat AI credentials, Behavior, Integration and remaining acceptance, PR #1070 — Lopu defaults and per-chat AI credentials, Verification — 20 October 2026
 
 ### Community 1141 - "PR #28 — Drawer-based nav revamp (branch `codex/service-account-api`)"
 Cohesion: 0.25
 Nodes (8): PR 28: Drawer-based navigation revamp, Adversarial review (25-agent workflow) — fixes applied, Components (`remix/app/components/Nav/Drawer/`), Layout integration, PR #28 — Drawer-based nav revamp (branch `codex/service-account-api`), Settings paths, Verified in live browser (desktop 1440px + mobile 390px), What changed
 
-### Community 1142 - "Frontend — bundle size and code splitting"
-Cohesion: 0.22
-Nodes (9): 1,857-line /tests API fixture table shipped to all users, 9.9 MB of production sourcemaps published as public static assets, All six kind-renderer families statically loaded on every page, apiDocs.ts (7,565-line server route registry) ships to every browser, emojis-list array (31 KB) plus O(n) linear scan inside the shared Icon component, Entire FontAwesome solid icon set (1 MB) is bundled and never used, Frontend — bundle size and code splitting, No manualChunks/vendor split — any app edit invalidates the whole 977 KB cached bundle (+1 more)
+### Community 1142 - "Confirmed findings not yet fixed"
+Cohesion: 0.05
+Nodes (39): 1,857-line /tests API fixture table shipped to all users, 9.9 MB of production sourcemaps published as public static assets, All real-time messaging is client polling; the open-chat poll refetches the entire page every 4s, All six kind-renderer families statically loaded on every page, API — caching and cache headers, /api/docs memoises a 308 KB render into an unbounded Map keyed by request origin, API — per-request handler work, apiDocs.ts (7,565-line server route registry) ships to every browser (+31 more)
 
 ### Community 1143 - "Lopu PR Manager"
 Cohesion: 0.25
@@ -7013,41 +6968,41 @@ Nodes (8): Address Search Saved Browser Action, Opt-in Authoring Factory, Change
 Cohesion: 0.25
 Nodes (8): Access and not-found refusal clearing, Draft preservation on transient failure, Monotonic restoring ancestry, Quiet execution gating, Schema read identity scope, Stale request fencing, Trigger and correction, Typed capability discovery failures
 
-### Community 1155 - "accountInventory.ts"
-Cohesion: 0.02
-Nodes (202): Draft and large-content snapshot coverage — 2026-10-18, Historical attachment bytes in account snapshots — 2026-10-18, Portable Backups, account-content v1 Snapshot Shape, Account inventory producer, Account profile content and private preferences, Attachment bytes and offline file-version recovery, backup-thing-content@2 (+194 more)
+### Community 1155 - "PR #1328 — Scoped native password delivery on Linux and Windows"
+Cohesion: 0.40
+Nodes (4): Decisions and boundaries, Delivered behavior, PR #1328 — Scoped native password delivery on Linux and Windows, Verification evidence
 
-### Community 1156 - "userPresence.ts"
-Cohesion: 0.36
-Nodes (6): createUserPresence(), IDLE_AFTER_MS, Listener, PresenceEnvironment, fixture(), WINDOW_EVENTS
+### Community 1156 - "PR1386 — Source reference coverage and notification history"
+Cohesion: 0.40
+Nodes (4): Delivered source-capture behavior, PR1386 — Source reference coverage and notification history, Remaining boundaries, Verification
 
 ### Community 1158 - "PR #64 — Add no-code MongoDB query workbench"
 Cohesion: 0.25
 Nodes (8): PR 64 MongoDB Query Builder Workbench Notes, Follow-up — main refresh and auth return (2026-07-12), Goal, Notes, PR #64 — Add no-code MongoDB query workbench, Server boundary, Verification, What shipped
 
-### Community 1159 - "PR #714 — Shared Data template controls"
+### Community 1159 - "PR #813: Feed algorithms, discovery and geographic queries"
+Cohesion: 0.40
+Nodes (4): Changes, Graph and delivery, PR #813: Feed algorithms, discovery and geographic queries, Validation
+
+### Community 1160 - "release-version.mjs"
 Cohesion: 0.29
-Nodes (7): PR #714 Shared Data Template Controls, Changes, Contract, Develop delivery and focused main promotion (2026-09-09), Evidence (2026-09-09), PR #714 — Shared Data template controls, Remaining broader-goal work
+Nodes (3): [command, requested], packageFiles, root
 
-### Community 1160 - "Change agency and humane product evolution baseline"
-Cohesion: 0.25
-Nodes (8): Change agency and humane product evolution baseline, Evidence ledger, Gaps and risks, Narrow vocabulary, Owner decisions, Refresh triggers, Smallest honest first study, Why preserve this note
-
-### Community 1161 - "Incoming shares"
+### Community 1161 - "PR #183 — Add automatic AI rebase support for PRs and stacks"
 Cohesion: 0.29
-Nodes (7): Transfer-admission 1.5 Photos-only background-file opt-in, Incoming shares, Live Photo image/motion pairing, authorized presentation and preview fallbacks, Packaged Mac Files uploader with versioned Electron bridge, Verified multipart retry and accepted-part resume, privateS3.ts canonical regional provider target and one-part lookup, Verified-empty post, comment and message original uploads
+Nodes (6): PR #183 — Add automatic AI rebase support for PRs and stacks, Rollout, Security and publication boundaries, Verification, What changed, Why this exists
 
-### Community 1162 - "bulkWriteError.ts"
-Cohesion: 0.42
-Nodes (6): hasWriteConcernEntries(), hasWriteConcernFailure(), isDuplicateOnlyBulkWriteError(), isDuplicateWriteError(), isRecord(), UnknownRecord
+### Community 1162 - "PR #875 — Integration builder pages"
+Cohesion: 0.40
+Nodes (4): Integration Builder Catalog, PR #875 — Integration builder pages, Setup and contracts, Validation
 
 ### Community 1163 - "CI control-plane storage"
 Cohesion: 0.25
 Nodes (8): Admin CI dashboard and event history, Admin migrations API metrics and capabilities, CI control-plane storage, Repository no-op suppression, CI telemetry retention policy, CI telemetry relocation migration, CI telemetry satellite storage, Things index migration and rebuild
 
-### Community 1164 - "Failure"
+### Community 1164 - "PR #26 - Environment-Aware Footer Status Checks"
 Cohesion: 0.29
-Nodes (6): Failure, empty, .errorDescription, unavailable, unsafeFile, waitingBatches
+Nodes (6): Footer Status UX, Health Checks, PR #26 - Environment-Aware Footer Status Checks, Scroll Restoration, Summary, Verification
 
 ### Community 1165 - "Tiny UX And Product Polish"
 Cohesion: 0.29
@@ -7065,9 +7020,9 @@ Nodes (6): compilerOptions, outDir, rootDir, extends, include, ../../tsconfig.ba
 Cohesion: 0.29
 Nodes (6): 2023-06-18, 2023-07-05, 2023-07-06, 2024-01-27, 2024-01-28, Image Modification DevLog - A more detailed changelog
 
-### Community 1169 - "PR 814 — Background AI execution and recovery"
-Cohesion: 0.29
-Nodes (6): Background Tasks API Contract, Behavior, Contracts and boundaries, Local QA and delivery, PR 814 — Background AI execution and recovery, Validation, 2026-09-16
+### Community 1169 - "Social previews and search metadata"
+Cohesion: 0.40
+Nodes (5): Builder component SDK, Chat continuity and iOS activity (2026-09-21), Functional component and webpage demos, Lopu message queue, Social previews and search metadata
 
 ### Community 1170 - "filesystem-indexer/tsconfig.json"
 Cohesion: 0.29
@@ -7081,9 +7036,9 @@ Nodes (6): compilerOptions, outDir, rootDir, extends, include, ../../tsconfig.ba
 Cohesion: 0.29
 Nodes (6): compilerOptions, outDir, rootDir, extends, include, ../../tsconfig.base.json
 
-### Community 1173 - "PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations"
-Cohesion: 0.25
-Nodes (8): Unified Thing Crystal Schemas PR Notes, Consumer compat surface checked, Era compatibility (the important design call), Follow-ups worth considering, PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations, Security fixes riding along, The model, Verification log
+### Community 1173 - "Native iOS TestFlight web URL"
+Cohesion: 0.40
+Nodes (5): Commander signed GitHub releases, Native iOS TestFlight web URL, Passkey deployment and Apple app setup, Recovery release catalogue and cloud publishing, Rich text controls development
 
 ### Community 1174 - "PR #790: signup invitations with gifted credits"
 Cohesion: 0.38
@@ -7137,9 +7092,9 @@ Nodes (5): anatomy(), assert(), extend(), parts(), toPart()
 Cohesion: 0.43
 Nodes (5): anatomy(), assert(), extend(), parts(), toPart()
 
-### Community 1187 - "PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙"
-Cohesion: 0.29
-Nodes (7): PR 156: Token minter scoped personal access tokens, Debug notes, PR #156 — Token minter: scoped personal access tokens for AIs, agents & scripts 🪙, Round 2 — per-token sandbox (onlyCreatedThings) + select/unselect-all, Round 3 — tt:token/<id> grant lists (layered token permissions), Verification, What it is
+### Community 1187 - "mediabunny"
+Cohesion: 0.70
+Nodes (5): mediabunny, ImageMagick WASM, resvg WASM, Third-Party Notices, Local image compression engines
 
 ### Community 1188 - "Thingtime iOS Agent Runbook"
 Cohesion: 0.29
@@ -7149,6 +7104,10 @@ Nodes (6): Apple Developer And TestFlight Flow, Common Command, Liquid Glass App
 Cohesion: 0.29
 Nodes (6): Context, Diagnostic-side-effect note, PR #206 — Keep feature promotion running across historical Git failures, Regression coverage, Resolution, Validation
 
+### Community 1191 - "routeExecution.ts"
+Cohesion: 0.09
+Nodes (34): agentTestEnvironment(), agentTestRefusal(), getDesktopProtectedRuntime(), enforceExpectedActor(), platformScheduledRunSink(), withErrorLogRequest(), storageFailureCode(), storageFailureFromResponse() (+26 more)
+
 ### Community 1192 - "Native paged folder captures — 2026-10-18"
 Cohesion: 0.50
 Nodes (4): 2026-10-19 — bounded wide-folder path observations, Cloud inventory pages (2026-10-19), Durable bounded conflict-review drafts (2026-10-19), Native paged folder captures — 2026-10-18
@@ -7157,13 +7116,13 @@ Nodes (4): 2026-10-19 — bounded wide-folder path observations, Cloud inventory
 Cohesion: 0.29
 Nodes (6): Current deployment state, Dedicated MongoDB connections and environment gateway defaults, Embed acceptance follow-up — 2026-10-26, Scope and decisions — 2026-10-26, Verification and rollout, Workspace and ownership
 
-### Community 1194 - "PR #295 — third-party-app-integration: connect 3rd party apps"
-Cohesion: 0.29
-Nodes (7): Third-Party App Integration PR, 2026-09-09 — shared-index rollout compatibility, Architecture, Known boundaries / future work, PR #295 — third-party-app-integration: connect 3rd party apps, Review rounds, Verification
+### Community 1194 - "v1/passwords/passwords.test.ts"
+Cohesion: 0.40
+Nodes (3): defaults, owner, passkeyRequest
 
 ### Community 1195 - "Service Account Provisioning API"
-Cohesion: 0.22
-Nodes (8): Email verification, Endpoint, Frontend and client usage, Request, Response, Service Account Provisioning API, API and storage contract, password()
+Cohesion: 0.33
+Nodes (5): Email verification, Endpoint, Frontend and client usage, Response, Service Account Provisioning API
 
 ### Community 1196 - "PR 1496 — Render synced file media and open PDFs inside Thingtime"
 Cohesion: 0.29
@@ -7177,13 +7136,9 @@ Nodes (6): Current-main integration, 13 November 2026, Current main integration 
 Cohesion: 0.29
 Nodes (7): PR 16 Auth and Lopu Hardening, Changed, Fixed, Follow-Up, PR #16 - Resolve Main Into Thingtime Dev Branch, Security Follow-Up - 2026-06-23, Verification
 
-### Community 1199 - "Recoverable Apple native Trash foundation — 2026-10-17"
-Cohesion: 0.22
-Nodes (9): Android foreground photo backup — 2026-10-18, Android planner-driven deletion acceptance — 2026-10-18, Android retained replacement versions — 2026-10-18, Android transactional recovery — 2026-10-17, Foreground Apple deletion and recovery browser — 2026-10-17, Fresh cloud paths before native publication — 2026-10-17, iOS file-backed upload parts — 2026-10-18, iOS original photo backup — 2026-10-18 (+1 more)
-
-### Community 1200 - "Round 2 — URL media as first-class linked attachments + moderation fixes"
-Cohesion: 0.29
-Nodes (6): Linked attachments (new), PR #496 — Composer toggle badges, linked (URL) attachments, edit-mode media, Round 1 — toggles, edit-add, rename, URL adder placement, Round 2 — URL media as first-class linked attachments + moderation fixes, Round 3 — visual Rows, unified edit media, and searchable attachments, Verified
+### Community 1200 - "repository"
+Cohesion: 0.50
+Nodes (4): repository, directory, type, url
 
 ### Community 1201 - "PR #200 — Document shared Preview runtime and Production isolation"
 Cohesion: 0.29
@@ -7198,20 +7153,20 @@ Cohesion: 0.29
 Nodes (7): PR 627 Recovery Release Sync, Delivery boundaries, Findings, Main promotion follow-up, PR #627: GitHub release catalogue and Recovery installer repair, Resulting behavior, Validation
 
 ### Community 1204 - "main.tsx"
-Cohesion: 0.20
+Cohesion: 0.21
 Nodes (3): UiErrorBoundary, UiErrorBoundaryProps, UiErrorBoundaryState
 
-### Community 1205 - "14 — Editor.js block drag/drop reordering 🟢"
-Cohesion: 0.29
-Nodes (5): 14 — Editor.js block drag/drop reordering 🟢, Done when, Goal, Risks and guardrails, What already exists
+### Community 1205 - "Unified Things Collection"
+Cohesion: 0.33
+Nodes (6): App Namespace and Storage Budget Model, Read-local Write-global Replica Set, Unified Things Collection, Geo-distributing Thingtime, Full-power App Namespaces, Everything Is a Thing Collections Migration
 
-### Community 1206 - "emojiSplash.ts"
-Cohesion: 0.43
-Nodes (6): ActiveBurst, activeBursts, leadingEmoji(), removeBurst(), splashEmoji(), splitEmojis()
+### Community 1206 - "1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md"
+Cohesion: 0.50
+Nodes (3): Evidence and remaining acceptance, Framework contract, PR 1260 — Editable Mapbox route planner framework
 
-### Community 1207 - "PR #210 — Promote the Actions control-plane rollup"
-Cohesion: 0.29
-Nodes (6): Included source PRs, PR #210 — Promote the Actions control-plane rollup, Purpose, Review focus, Validation, Why one promotion PR
+### Community 1207 - "Portable JSON and ZIP Transfer"
+Cohesion: 0.50
+Nodes (4): Capability Contracts, Native Clipboard Transfer, Batch Importer, Portable JSON and ZIP Transfer
 
 ### Community 1208 - "background.test.mjs"
 Cohesion: 0.47
@@ -7225,17 +7180,9 @@ Nodes (6): backfill-relationship-unique-keys migration, Included security substr
 Cohesion: 0.33
 Nodes (5): Develop and deploy, One-click switching, Putting live traffic through the router (the production switch), thingtime.com router Worker, What is live
 
-### Community 1211 - "LauncherWindowMode"
-Cohesion: 0.33
-Nodes (5): LauncherWindowMode, compact, .minimumSize, .size, standard
-
 ### Community 1213 - "PR #753 — Preserve public component audience boundaries"
-Cohesion: 0.38
-Nodes (7): Authorized Audience Boundaries, Delivery and remaining scope, Independently Readable Foreign Components, PR #753 — Preserve public component audience boundaries, Private Dependency Injection Protection, Reproduction and contract, Validation — 2026-09-10
-
-### Community 1214 - "CloudTransportRuntime.authorizeMutation"
-Cohesion: 0.33
-Nodes (6): cloudRequests, CloudTransportRuntime.authorizeMutation, Live identity throttling: one integer Retry-After of 1–60 seconds, cancellation and exact credential recheck, Mac native/cloud acceptance: real loopback and Swift fixture coverage; installed security boundaries untested, Mutation authorization before HTTP deadlines: POST/PUT rechecks and preserved cancellation, Signed part writer
+Cohesion: 0.22
+Nodes (9): Authorized Audience Boundaries, Delivery and remaining scope, Independently Readable Foreign Components, PR #753 — Preserve public component audience boundaries, Private Dependency Injection Protection, Reproduction and contract, Validation — 2026-09-10, Main integration — 2026-09-10 (+1 more)
 
 ### Community 1215 - "PR #550 — Saved Feature Stack run controls"
 Cohesion: 0.33
@@ -7245,9 +7192,9 @@ Nodes (5): Contract and UI, Outcome, PR #550 — Saved Feature Stack run control
 Cohesion: 0.38
 Nodes (6): Lopu Automatic Continuation, Checkpoint and Receipt Preservation, Continuation Safety Guards, PR #842 — Remove Lopu task caps and auto-continue saved progress, Runtime and rollout scope, Validation
 
-### Community 1217 - "Image presentation for profile and subspace media"
+### Community 1217 - "PR #383 — Fix Thingtime Recovery SwiftUI startup crash"
 Cohesion: 0.33
-Nodes (6): Builder ElementInspector, Image presentation for profile and subspace media, ImagePresentationDialog, imagePresentation.ts write and render validation, PresentedImage, ProfileMediaField
+Nodes (5): PR 383 Recovery Startup Crash Fix, Fix, Incident, PR #383 — Fix Thingtime Recovery SwiftUI startup crash, Validation
 
 ### Community 1218 - "PR 895 Editable Linked Records and Copy-Safe App Flows"
 Cohesion: 0.29
@@ -7265,17 +7212,21 @@ Nodes (7): PR #976 Timeline Branch Lookup, PR #977 Visual Builder Branch Editing
 Cohesion: 0.29
 Nodes (7): Boundary browser proof, Capability tests, Installed-74 frontend, Native release coordination, Real-backend full-route proof, Release and restoration limitations, Verification and provenance
 
-### Community 1222 - ".content"
-Cohesion: 0.08
-Nodes (14): Android History exports: fileExportVersion 1.0.0, bounded authorized ranges and provider-document readback, fileExportVersion 1.0.0 shared export contract, iOS History exports, Mac historical Save As: negotiated export bridge, session-bound ranges and exclusive verified publication, SessionCookie: exact tt_auth export credential pinning; missing, duplicate or changed credentials refused, cancelled, .content, FileExportInstalledTests (+6 more)
+### Community 1222 - "XCTestCase"
+Cohesion: 0.02
+Nodes (62): FileSyncCompatibilityTests, PasswordDeviceVerification, PasswordProviderIdentity, .aaguidBytes, DeviceVerificationTests, ProviderIdentityTests, CommanderApplicationMenuTests, Android History exports: fileExportVersion 1.0.0, bounded authorized ranges and provider-document readback (+54 more)
 
 ### Community 1223 - "PR 1352 — empty attachment reads and mixed large-folder sync proof"
 Cohesion: 0.33
 Nodes (5): Bounded isolated proof, Cause and correction, Checks and delivery boundaries, Performance evidence and limits, PR 1352 — empty attachment reads and mixed large-folder sync proof
 
-### Community 1224 - "mac-fixture-worker-trust.cjs"
-Cohesion: 0.22
-Nodes (8): actualCA, actualRoot, childProcess, { lstatSync, realpathSync }, rel, { resolve, relative, isAbsolute }, worker, workerExecArgv
+### Community 1224 - "PR 1062 — Stream device file transfers as indexing produces entries"
+Cohesion: 0.33
+Nodes (6): PR 1062 Stream device file transfers as indexing produces entries, Implementation, Installed failure found during validation, PR 1062 — Stream device file transfers as indexing produces entries, Still open, Verified checkpoint
+
+### Community 1225 - "Precise collection paging and progressive maps"
+Cohesion: 0.33
+Nodes (5): Count and distant-page planner diagnosis, Precise collection paging and progressive maps, Problem and behavior, Remaining acceptance boundary, Verification
 
 ### Community 1226 - "Displacement Gradient SVG"
 Cohesion: 0.29
@@ -7293,9 +7244,9 @@ Nodes (6): Delivered boundary, Main integration, Matched warm comparison — 6 N
 Cohesion: 0.38
 Nodes (5): adminCookie, api(), authCookieFrom(), failures, registerSession()
 
-### Community 1230 - "Shared Rust index and sync backend"
+### Community 1230 - "PR #65 — Everything is a thing: satellite collections collapse into things"
 Cohesion: 0.33
-Nodes (6): P0 — Correct incremental recovery, P0 — Every current Mac entry point, P0 — One durable observation store, P1 — Portable host adapters, Shared Rust index and sync backend, Verification and release gates
+Nodes (5): Implementation trail, PR #65 — Everything is a thing: satellite collections collapse into things, Self-review round 1 (8-finder pass, commit 4b56c57), Shape, Verification highlights (all live against the dev stack)
 
 ### Community 1231 - "Media uploads and attachment gallery"
 Cohesion: 0.38
@@ -7321,17 +7272,13 @@ Nodes (6): Thingtime North Star, Thingtime Vibe Map, AI Era Value Moats Light Re
 Cohesion: 0.33
 Nodes (6): Anonymous DNS-Pinned Website Icon Resolver, Public Connections Provider Icon Route, Brand Lookup Cache, Connection Provider Marks, Connections Local Link Mark, Sanitized PNG Serving
 
-### Community 1238 - "PR #498 — Saved multi-target Feature Stacks"
-Cohesion: 0.29
-Nodes (6): Delivered surface, Goal, Live preview evidence, PR #498 — Saved multi-target Feature Stacks, Safety and compatibility, Validation evidence
-
 ### Community 1239 - "vault.test.mjs"
 Cohesion: 0.53
 Nodes (5): connect(), event(), fail(), fixture(), tick()
 
-### Community 1240 - "Performance TODO"
-Cohesion: 0.40
-Nodes (5): Performance TODO, Notification Recipient Trimming, Messenger Real-time Polling, Route-level Code Splitting, Thingtime Messenger
+### Community 1240 - "PR 811 — Shared System vault and OAuth-only Claude"
+Cohesion: 0.33
+Nodes (5): Local verification environment, PR 811 — Shared System vault and OAuth-only Claude, Problem and behavior, Rollout, Validation
 
 ### Community 1241 - "PR #222 — Typecheck ratchet warning-only CI"
 Cohesion: 0.33
@@ -7341,37 +7288,13 @@ Nodes (3): PR #222 — Typecheck ratchet warning-only CI, Purpose, Validation
 Cohesion: 0.33
 Nodes (5): SearchRequest, Commander search core, Development, JSON-lines protocol, Ranking contract
 
-### Community 1243 - "PR #956 — Relational Timeline foundation"
-Cohesion: 0.33
-Nodes (6): Behavior and storage, Large Thing regression fixed before the first main merge, Main integration after PR #953, PR #956 — Relational Timeline foundation, Remaining accepted scope, Validation checkpoint
-
-### Community 1244 - "PR #482 — Make Thingtime MCP limitless, composable, and safe"
-Cohesion: 0.25
-Nodes (8): PR 482 Limitless MCP, Compatibility and operational notes, Delivered surface, Goal, Live preview evidence, Mutation safety model, PR #482 — Make Thingtime MCP limitless, composable, and safe, Validation evidence
-
 ### Community 1245 - "PR 870 Functional Demo Forms and Controls"
 Cohesion: 0.33
 Nodes (6): Local Scalar Controls, Native Actions, PR 870 Functional Demo Forms and Controls, Local acceptance environment, PR 870 — Functional demo forms and controls, Validation — 2026-09-21
 
-### Community 1247 - "createEmotionCache.ts"
-Cohesion: 0.40
-Nodes (5): @emotion/cache, defaultEmotionCache, EmotionCacheFactory, getExport(), resolveEmotionCacheFactory()
-
-### Community 1248 - "attachmentCascadeCore.ts"
-Cohesion: 0.47
-Nodes (4): AttachmentCascadeCandidate, AttachmentCascadeCleanupTarget, attachmentCascadeCleanupTargets(), isAttachmentCandidate()
-
-### Community 1249 - "values"
-Cohesion: 0.40
-Nodes (5): values(), 23 — Custom schema presentation: extend the declarative vocabulary, Done when, How to apply (when a schema needs presentation the vocabulary can't say), The anti-pattern this guards against
-
 ### Community 1251 - "ShareItemProviderBridge"
 Cohesion: 0.33
 Nodes (4): ShareItemProviderBridge, +loadImageFromProvidertypeIdentifiercompletion, +loadLivePhotoFromProvidercompletion, +loadTextFromProvidertypeIdentifiercompletion
-
-### Community 1252 - "createGoogleMailOAuth"
-Cohesion: 0.47
-Nodes (4): createGoogleMailOAuth(), live(), sessionId(), fixture()
 
 ### Community 1253 - "generate-social-card-font.mjs"
 Cohesion: 0.40
@@ -7380,14 +7303,6 @@ Nodes (5): Liberation Fonts Upstream, Liberation Sans License, chunk(), entries,
 ### Community 1254 - "build-bundle.sh script"
 Cohesion: 0.33
 Nodes (3): build-and-run.sh script, build-bundle.sh script, verify-location-entitlement.sh script
-
-### Community 1255 - "browserPasswordFill.test.ts"
-Cohesion: 0.33
-Nodes (4): nativeCalls, pages, requirements, signal()
-
-### Community 1256 - "websites.ts"
-Cohesion: 0.60
-Nodes (4): LOGIN_DESTINATIONS, passwordAutofillOrigins(), passwordWebsiteOrigin(), WebsiteField
 
 ### Community 1257 - "PR #897 — Reusable web standards Builder catalogue and isolated demos"
 Cohesion: 0.33
@@ -7425,21 +7340,13 @@ Nodes (5): PR #178 — Configurable PR conflict-resolver model waterfall, Securi
 Cohesion: 0.33
 Nodes (5): Builtin schema storage repair, Password-confirmed diagnostic reveal, PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals, Verification, Why
 
-### Community 1266 - "ios-folder-upload-policy.md"
-Cohesion: 0.40
-Nodes (3): iOS folder backup upload policy, Verification and remaining acceptance, PR 1483 — iOS folder Backup upload limits
-
-### Community 1267 - "Editable maps and routing"
-Cohesion: 0.40
-Nodes (5): Editable maps and routing, Provider contract, Storage and attribution, Verification, viewer()
+### Community 1266 - "recordingTranscripts.test.mts"
+Cohesion: 0.33
+Nodes (3): owned, queries, rows
 
 ### Community 1268 - "PR #505 — Admin CI Feature Stacks and opt-in PR previews"
 Cohesion: 0.33
 Nodes (5): PR #505 — Admin CI Feature Stacks and opt-in PR previews, Preview security boundary, Product behavior, Verification, Why
-
-### Community 1269 - "PR 1466 — iOS Photos background transfer hardening"
-Cohesion: 0.40
-Nodes (4): Evidence boundaries — 11 November 2026, PR 1466 — iOS Photos background transfer hardening, Required release acceptance, Saved-settings recovery regression — 11 November 2026
 
 ### Community 1270 - "PR #40 — Feed with personal doomscroll algorithms, full profiles + dedicated settings"
 Cohesion: 0.22
@@ -7448,14 +7355,6 @@ Nodes (8): API surface, Data model, Known scope edges, PR #40 — Feed with pers
 ### Community 1271 - "Notification History"
 Cohesion: 0.40
 Nodes (6): PR #705 Notification History, Lopu Message Persistence, Notification History, Notification Persistence, System Event Logging, Notifications
-
-### Community 1274 - "Database — index coverage and query shape"
-Cohesion: 0.40
-Nodes (5): ciControl readKind sorts on updatedAt, which no thingtime-prefixed index contains, Database — index coverage and query shape, Notification unread count fetches every one of a user's notification documents because readAt is not in the index, People search $or on unindexed displayName scans the whole user partition per keystroke, plus a COLLSCAN of legacy users, postMatch's dual-era $or forces the main feed into a blocking in-memory sort of every matching post
-
-### Community 1275 - "PR 1219: Custom drawer links and Commander attachments"
-Cohesion: 0.40
-Nodes (4): Composition and storage, PR 1219: Custom drawer links and Commander attachments, Regressions addressed, Verification
 
 ### Community 1276 - "PR 869 Remote Integration Examples"
 Cohesion: 0.33
@@ -7469,18 +7368,6 @@ Nodes (5): api.builder-workspaces 1.0.1, api.things 1.24.0, PR #876 — Franchis
 Cohesion: 1.00
 Nodes (3): PR #201 — Private S3 post attachments, PR #232 — Media galleries and managed profile attachments, PR #237 — Media attachments across conversations
 
-### Community 1279 - "PR #326 — Reopen the data-crystal namespace"
-Cohesion: 0.40
-Nodes (4): Dependency boundary, Final architecture, PR #326 — Reopen the data-crystal namespace, Required release proof
-
-### Community 1280 - "Architecture — multi-node, cross-region and real-time"
-Cohesion: 0.29
-Nodes (7): All real-time messaging is client polling; the open-chat poll refetches the entire page every 4s, Architecture — multi-node, cross-region and real-time, getCurrentUser costs 3-4 sequential Mongo round trips on every authenticated API request, uncached, listMessages re-resolves the same profiles twice and re-reads the viewer's secure blob a third time, bypassing the receipts cache, resolveChatAccess runs two independent point lookups serially on the hottest messenger path, trimRecipient fires a 3-round-trip cap sweep after every single notification emit, Weekly-summary cron runs a serial per-recipient loop of 3 queries + one SES send, up to 2000 times, inside a single Vercel function invocation
-
-### Community 1281 - "PR #1340: Device sync resource history"
-Cohesion: 0.40
-Nodes (4): PR #1340: Device sync resource history, Problem and resulting behavior, Task provenance, Verification record
-
 ### Community 1282 - "PR #705: Save system events and retain user history"
 Cohesion: 0.40
 Nodes (4): Boundaries, Cause and correction, PR #705: Save system events and retain user history, Verification
@@ -7493,29 +7380,13 @@ Nodes (5): Failure, .errorDescription, item, livePhotoResources, noRepresentatio
 Cohesion: 0.50
 Nodes (4): Ask Lopu Run Status Chat, Controller Companion PR #781, Feature Stack Progress, PR #782 — Clear Feature Stack progress and Ask Lopu
 
-### Community 1285 - "CodingKeys"
-Cohesion: 0.33
-Nodes (6): CodingKeys, backgroundAuthorized, collectionId, enabledAt, lastObservationAt, scope
-
 ### Community 1287 - "demo-integrity.js"
 Cohesion: 0.33
 Nodes (5): hostIntegrity, mutableSnapshot, originalThing, unsubscribeLater, unsubscribeThrowing
 
-### Community 1288 - "PR #964 — Help Lopu inspect Action contracts and recover from errors"
-Cohesion: 0.40
-Nodes (4): Integration follow-up, PR #964 — Help Lopu inspect Action contracts and recover from errors, Problem and behavior, Validation
-
-### Community 1289 - "PR #971 — Keep home History accessible across database selections"
-Cohesion: 0.40
-Nodes (4): Implementation, PR #971 — Keep home History accessible across database selections, Remaining scope, Validation
-
 ### Community 1290 - "PR 816 — Lopu uploads, provider media, HTTP and mobile keyboard"
 Cohesion: 0.33
 Nodes (5): Acceptance boundaries, Behavior, Local and deployment, PR 816 — Lopu uploads, provider media, HTTP and mobile keyboard, Validation (2026-09-16)
-
-### Community 1291 - "PR 1463: Shared Archive and Restore in persisted Thing menus"
-Cohesion: 0.33
-Nodes (5): CI unit regression correction, Distinct Archive read contract after current main integration, Embed regression correction, Filesync receipt-recovery integration, PR 1463: Shared Archive and Restore in persisted Thing menus
 
 ### Community 1292 - "Daily provider model availability"
 Cohesion: 0.33
@@ -7533,21 +7404,9 @@ Nodes (6): Accepted Completion Retry Testing, Expired Unfinished Pairing Testing
 Cohesion: 0.47
 Nodes (6): Credential Waterfall, Lopu Apple Watch Recording Automation, Native Push Verification, Recording and AI Subscription Rates, Recording Transcript Quotes, Shared AI Endpoint
 
-### Community 1296 - "Confirmed findings not yet fixed"
-Cohesion: 0.17
-Nodes (12): API — caching and cache headers, /api/docs memoises a 308 KB render into an unbounded Map keyed by request origin, ChatView re-downloads the entire 40-message page (plus members, emoji map, all reactions) every 4 seconds — no incremental/since parameter, Confirmed findings not yet fixed, Every read-receipt advance triggers a full messenger list refresh (2 extra GETs) on top of two active polls, Feed page never seeds from the localCache tier — every mount clears to a skeleton and refetches page 1, Frontend — data fetching, Hashed client bundles ship with no Cache-Control — the 1-year publicAssets maxAge is silently discarded (+4 more)
-
 ### Community 1297 - "PR #984 — Show a page and its related Things in one Timeline history"
 Cohesion: 0.40
 Nodes (4): Behavior and boundaries, PR #984 — Show a page and its related Things in one Timeline history, Review, Validation — 2026-09-30
-
-### Community 1298 - "PR #990 — Mac battery telemetry and full device Things page"
-Cohesion: 0.40
-Nodes (4): Contract and rollout, PR #990 — Mac battery telemetry and full device Things page, Scope and root causes, Validation
-
-### Community 1299 - "PR #853 — Builder uploads, form saves, SDK docs and scoped lookups"
-Cohesion: 0.33
-Nodes (5): Behavior, Evidence, Integration limits and local review, Main delivery (2026-09-18), PR #853 — Builder uploads, form saves, SDK docs and scoped lookups
 
 ### Community 1300 - "Admin Preview Retention API"
 Cohesion: 0.40
@@ -7556,10 +7415,6 @@ Nodes (5): Admin Preview Retention API, api.admin-ci-preview-retention Capabilit
 ### Community 1301 - "Core Thing Loops"
 Cohesion: 0.40
 Nodes (4): Core Thing Loops, Thing actions, Thing Editor Loop, Thing templates
-
-### Community 1302 - "network.ts"
-Cohesion: 0.70
-Nodes (3): ipaddr.js, publicMailAddress(), resolveMailHost()
 
 ### Community 1303 - "Public Accountability Systems"
 Cohesion: 0.40
@@ -7589,25 +7444,25 @@ Nodes (4): CARGO_TARGET_DIR, IPHONEOS_DEPLOYMENT_TARGET, SDKROOT, build-ios.sh s
 Cohesion: 0.40
 Nodes (4): Coverage boundaries, PR1052 — Commander Rust indexing and resilient Mac backup verification, Problem and result, Review and validation
 
-### Community 1314 - "PR 1498: private device diagnostics and Photos metadata recovery"
-Cohesion: 0.40
-Nodes (4): 14 November production integration, Delivered source, PR 1498: private device diagnostics and Photos metadata recovery, Verification and evidence layers
-
-### Community 1315 - "PR #875 — Integration builder pages"
-Cohesion: 0.40
-Nodes (4): Integration Builder Catalog, PR #875 — Integration builder pages, Setup and contracts, Validation
-
-### Community 1316 - "PR #978 — Preserve recorded component definitions in Timeline page versions"
+### Community 1311 - "01 — MongoDB Connection Status ✅"
 Cohesion: 0.33
-Nodes (5): Behavior and data model, Browser evidence, Limits, PR #978 — Preserve recorded component definitions in Timeline page versions, Validation
+Nodes (5): 01 — MongoDB Connection Status ✅, Goal, Possible follow-ups (nice-to-have), Verified, What exists
 
-### Community 1320 - "ensure-bcrypt-binding.js"
-Cohesion: 0.29
-Nodes (5): initial, install, path, repaired, { spawnSync }
-
-### Community 1322 - "Installed iOS download and process-exit acceptance — 2026-10-17"
+### Community 1314 - "02 — DB Populate / Seeding 🟡"
 Cohesion: 0.33
-Nodes (6): Android foreground offline-root download integration (2026-10-17), Android native write approval and actual picker acceptance (2026-10-17), Android offline-folder publication backend (2026-10-17), Android offline folders in Files (2026-10-17), Android private staging and real process-exit recovery (2026-10-17), Installed iOS download and process-exit acceptance — 2026-10-17
+Nodes (5): 02 — DB Populate / Seeding 🟡, Acceptance criteria, Decisions (locked — see FUNDAMENTALS.md), Goal, Plan
+
+### Community 1315 - "12 — Multi-emoji reactions, custom emoji picker, optimistic UI 🟢"
+Cohesion: 0.50
+Nodes (4): 12 — Multi-emoji reactions, custom emoji picker, optimistic UI 🟢, ✅ Decisions (locked), Goal, Still TODO
+
+### Community 1318 - "18 — Account invite links with optional profile prefill 🔗"
+Cohesion: 0.33
+Nodes (6): 18 — Account invite links with optional profile prefill 🔗, Done when, Existing anchors, Goal, Privacy, safety, and abuse controls, Product flow
+
+### Community 1322 - "PR #1009 — Incoming mail accounts, proxy inboxes and cloud/local sync"
+Cohesion: 0.40
+Nodes (4): Behavior, Boundaries and remaining acceptance, PR #1009 — Incoming mail accounts, proxy inboxes and cloud/local sync, Verification — 2026-10-17
 
 ### Community 1324 - "normalizeCommanderThingtimeClientId"
 Cohesion: 0.50
@@ -7621,53 +7476,29 @@ Nodes (4): compactSearchText(), fuzzyTextScore(), maximumTypoDistance(), substri
 Cohesion: 0.40
 Nodes (3): PR #1405 — Editable snapshot review and restore, Backup workspace implementation state, Public workflow integration checkpoint — 7 November 2026
 
-### Community 1327 - "PR 740 — shared-page load recovery and viewer isolation"
-Cohesion: 0.33
-Nodes (5): Behavior, Focused main promotion, PR 740 — shared-page load recovery and viewer isolation, Remaining broader sharing work, Validation and reconciliation
-
-### Community 1328 - "PR #844 — Add page context and flexible docking to Lopu"
-Cohesion: 0.29
-Nodes (6): Delivery, Page Context, PR #844 — Add page context and flexible docking to Lopu, Reply Capability 1.12.0, Validation, Flexible Window Docking
+### Community 1327 - "PR 1064 — Upload Mac sync parts through the scoped desktop host"
+Cohesion: 0.40
+Nodes (5): PR 1064 Upload Mac sync parts through the scoped desktop host, PR 1064 — Upload Mac sync parts through the scoped desktop host, Remaining acceptance, Transport and safety, Verification — 2026-10-20
 
 ### Community 1329 - "PR #899: Compose editable planner and themed collections"
 Cohesion: 0.33
 Nodes (5): Implementation, Platform rollout, PR #899: Compose editable planner and themed collections, Validation, PR #925: Editable Native Menu Controls
 
-### Community 1330 - "MobileFolderBridge.startInventoryCapture"
-Cohesion: 0.50
-Nodes (4): Shared mobile folder inventory: macOS strict capture and iOS supported backup, prepareBackup, sealBackup, MobileFolderBridge.startInventoryCapture
-
-### Community 1331 - "PR1056 — Resume Mac backup imports across reconnects and restarts"
+### Community 1332 - "Device sync placement, parent paths and activity ownership"
 Cohesion: 0.40
-Nodes (4): Behavior, Installed acceptance, PR1056 — Resume Mac backup imports across reconnects and restarts, Validation
-
-### Community 1332 - "macOS system sharing"
-Cohesion: 0.50
-Nodes (4): Acceptance, Build and fork setup, macOS system sharing, Native boundary
-
-### Community 1333 - "1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md"
-Cohesion: 0.50
-Nodes (3): Evidence and remaining acceptance, Framework contract, PR 1260 — Editable Mapbox route planner framework
+Nodes (4): Activity and performance, Device sync placement, parent paths and activity ownership, Problem and resulting behavior, Verification at initial publication
 
 ### Community 1335 - "Subspaces Communities and Updown Votes"
-Cohesion: 0.67
-Nodes (4): Subspaces Communities and Updown Votes, Subspaces, Up Down Votes, Subspaces Todo
+Cohesion: 0.29
+Nodes (8): Subspaces Communities and Updown Votes, Data model (everything is a thing — FUNDAMENTALS §3), Known limits (stated, not hidden), Subspaces, Subspaces 🪐 — Reddit-style communities + up/down votes 🔼, Up Down Votes, What shipped, Subspaces Todo
 
-### Community 1336 - "Thingtime paged backup and restore"
-Cohesion: 0.50
-Nodes (4): Independent S3 backup replica worker, Large selected-tree restore, Paged selected-folder backups, Thingtime paged backup and restore
-
-### Community 1337 - "repository"
-Cohesion: 0.50
-Nodes (4): repository, directory, type, url
+### Community 1337 - "PR 1227 — Explicit render Components for Things"
+Cohesion: 0.40
+Nodes (4): Contract, Delivery boundaries, PR 1227 — Explicit render Components for Things, Regression coverage and acceptance
 
 ### Community 1338 - "Fix Commander launch and icon beachballs"
 Cohesion: 0.40
 Nodes (4): Fix Commander launch and icon beachballs, Root cause and fix, Summary, Validation
-
-### Community 1339 - "Local file-sync recovery details disclosure"
-Cohesion: 1.00
-Nodes (3): Local file-sync recovery details disclosure, pagedRunJournal.reservedPublication owner/root/run-fenced reservation read, SyncProgressViewer expanded Progress → Recovery details
 
 ### Community 1340 - "Admin API"
 Cohesion: 0.40
@@ -7693,10 +7524,6 @@ Nodes (5): Idle Timer Controls, Keychain Credential Vault, Pairing Reconciliatio
 Cohesion: 0.40
 Nodes (5): AI Chat Archive Projection, Private Chat Archive, Attachment and Media Transport, External HTTPS Avatar Preservation, Live Chat Archive Export
 
-### Community 1348 - "PR 57 — Share Thingtime through a single-file embed SDK"
-Cohesion: 0.33
-Nodes (5): Architecture and security, Known follow-ups, PR 57 — Share Thingtime through a single-file embed SDK, Summary, Validation
-
 ### Community 1349 - "PR 816 Lopu Uploads Provider Attachments HTTP and Mobile Keyboard"
 Cohesion: 0.40
 Nodes (5): Confirmed HTTP Tools, PR 816 Lopu Uploads Provider Attachments HTTP and Mobile Keyboard, Native Upload and Private Attachment Flow, Provider Media Forwarding, Visual Viewport Composer Layout
@@ -7704,14 +7531,6 @@ Nodes (5): Confirmed HTTP Tools, PR 816 Lopu Uploads Provider Attachments HTTP a
 ### Community 1350 - "Franchise Workspaces and Vault Environments"
 Cohesion: 0.60
 Nodes (5): Franchise Workspaces and Vault Environments, Google Places Integration, Native Service Workspace, Vault Environment Moves, Workspace Access Boundaries
-
-### Community 1355 - "PR1386 — Source reference coverage and notification history"
-Cohesion: 0.40
-Nodes (4): Delivered source-capture behavior, PR1386 — Source reference coverage and notification history, Remaining boundaries, Verification
-
-### Community 1356 - "PR 1489: Incremental Photos source index"
-Cohesion: 0.40
-Nodes (4): Final followup verification, PR 1489: Incremental Photos source index, Result and decisions, Verification and limits
 
 ### Community 1357 - "Dedicated MongoDB connections and environment gateway defaults"
 Cohesion: 0.40
@@ -7728,10 +7547,6 @@ Nodes (5): Application HTML Shell, Public Posts Atom Feed, Client Entry Module, 
 ### Community 1361 - "Thingtime Isolated Map SDK Page"
 Cohesion: 0.40
 Nodes (5): Thingtime Isolated Map SDK Page, Library Runner Script, Library Browser Execution Checks, Library Examples Catalog, Library Sandbox
-
-### Community 1363 - "Native paged folder captures — 2026-10-18"
-Cohesion: 0.50
-Nodes (4): Bounded cloud path observations (2026-10-19), Cloud inventory pages (2026-10-19), Durable bounded conflict-review drafts (2026-10-19), Native paged folder captures — 2026-10-18
 
 ### Community 1367 - "verify-app-namespaces.mjs"
 Cohesion: 0.50
@@ -7753,6 +7568,10 @@ Nodes (5): API documentation routes, Registered app lifecycle, App storage allow
 Cohesion: 0.40
 Nodes (5): Content-addressed Graphify snapshots, Graphify semantic extraction through local proxy, Graphify snapshot immutability, Graphify snapshot pruning, Graphify repository writer lock
 
+### Community 1373 - "PR #489 — Add verified multi-target Feature Stacks to main"
+Cohesion: 0.40
+Nodes (4): PR #489 — Add verified multi-target Feature Stacks to main, Safety and regression focus, Scope, Validation log
+
 ### Community 1374 - "15 — Anti-abuse: global storage budgets + verification gates"
 Cohesion: 0.40
 Nodes (5): 15 — Anti-abuse: global storage budgets + verification gates, 1. Global sandbox storage budget (~0.5GB/hour app-wide), 2. Verification gates before storage (mobile within ~1 day), 3. Other vectors spotted during the PR #150/#151 audit, Definition of done
@@ -7772,6 +7591,10 @@ Nodes (4): backup:vault copy, backup:vault restore-file, backup:vault verify, Po
 ### Community 1379 - "Commander.Host.csproj"
 Cohesion: 0.50
 Nodes (3): net8.0-windows, Microsoft.Web.WebView2 (1.0.3537.50), Microsoft.NET.Sdk
+
+### Community 1380 - "PR #664 — Account-tier speed-test allowances"
+Cohesion: 0.40
+Nodes (5): PR 664 Account-tier Speed-test Allowances, Behaviour, Evidence, PR #664 — Account-tier speed-test allowances, Release and local validation
 
 ### Community 1381 - "PNPM Workspace"
 Cohesion: 0.50
@@ -7861,6 +7684,10 @@ Nodes (3): defineEl(), ready(), whenReady()
 Cohesion: 0.50
 Nodes (3): 1. `index.html` (recommended — zero setup), 2. `Thingtime Launch Celebration.dc.html` (editable source), 🎉 Thingtime — launch celebration page
 
+### Community 1403 - "PR #886 — Demo apps adopt native dialogs, countdown and local controls"
+Cohesion: 0.40
+Nodes (4): Gotcha, PR #886 — Demo apps adopt native dialogs, countdown and local controls, Verification (2026-09-22, worktree stack on main + this branch, private replica set), What changed since #864 landed
+
 ### Community 1404 - "api.attachment-content"
 Cohesion: 0.50
 Nodes (4): api.attachment-content, Desktop Cookie Proxy, Retention Validation Checkpoint, Source Version Retention
@@ -7876,6 +7703,14 @@ Nodes (3): act(), element(), refresh()
 ### Community 1408 - "commander-indexer"
 Cohesion: 0.50
 Nodes (4): commander-core, commander-indexer, commander-indexer-ffi, commander-platform
+
+### Community 1409 - "PR #903 — Add reusable JavaScript language definitions"
+Cohesion: 0.40
+Nodes (5): Behavior and scope, Delivery, PR #903 — Add reusable JavaScript language definitions, Runtime repairs, Validation and remaining acceptance
+
+### Community 1410 - "PR #977 — Edit named Timeline branches in the visual Builder"
+Cohesion: 0.40
+Nodes (4): Behavior and boundaries, Browser evidence, PR #977 — Edit named Timeline branches in the visual Builder, Validation
 
 ### Community 1416 - "PR 1226: Match the final Add drawer row and expose its editable Thing template"
 Cohesion: 0.40
@@ -7896,10 +7731,6 @@ Nodes (3): repository, type, url
 ### Community 1422 - "PR #1484: Preserve a newer signed AutoFill companion"
 Cohesion: 0.50
 Nodes (3): PR #1484: Preserve a newer signed AutoFill companion, Review correction, Verification and acceptance boundary
-
-### Community 1423 - "Bounded folder metadata validation — 2026-10-21"
-Cohesion: 0.67
-Nodes (3): Bounded folder metadata validation — 2026-10-21, Bounded recovery observations, Resource ceilings and Pause — 2026-10-21
 
 ### Community 1424 - "PR #389 — Load all Commander result icons without blocking"
 Cohesion: 0.50
@@ -7941,9 +7772,9 @@ Nodes (4): Background Tasks Capability 1.2.0, Chat Reply Capability 1.13.0, Lopu
 Cohesion: 0.50
 Nodes (4): api.things-fork 1.5.0, Copy Nested Comments and Attachment Galleries, Post Media Galleries and Collected Secret Posts, Post Discovery Grant
 
-### Community 1440 - "platforms.test.ts"
-Cohesion: 0.09
-Nodes (16): pendingByDocument, GOOGLE_MAPS_SCRIPT, googleInput, MAP_SDK_EXAMPLES, MAPBOX_SCRIPT, MAPBOX_SDK_VERSION, MAPBOX_STYLES, mapboxInput (+8 more)
+### Community 1440 - "morePackages.ts"
+Cohesion: 0.08
+Nodes (23): sdk(), colors, formats, luxon, MORE_PACKAGE_EXAMPLES, semver, validator, zod (+15 more)
 
 ### Community 1447 - "PR #987 Timeline Action Outcomes"
 Cohesion: 0.50
@@ -8065,10 +7896,6 @@ Nodes (3): Editable Thingtime Launch Celebration Source, Self-contained index.ht
 Cohesion: 0.67
 Nodes (3): card, Theme Gallery Mockup, voxel
 
-### Community 1485 - "webPlatform/types.ts"
-Cohesion: 0.09
-Nodes (28): CSS_FUNCTION_EXAMPLES, Example, examples, node(), animation, button(), drag, editing (+20 more)
-
 ### Community 1486 - "Feed Thing Rendering"
 Cohesion: 0.67
 Nodes (3): Editable Target Guard Test, Feed Thing Rendering, Thingtime Machine Key Listener
@@ -8169,6 +7996,14 @@ Nodes (3): Required Web CI contexts, Web CI build and API jobs, Web CI required-
 Cohesion: 0.67
 Nodes (3): Account Switcher, Roster Ownership Gate, Mongo Roster Model
 
+### Community 1852 - "22 — Everything is a thing: collapse the satellite collections"
+Cohesion: 0.50
+Nodes (3): 22 — Everything is a thing: collapse the satellite collections, Map findings that constrain the design (full digest: see PR note / tool-results/b9lnk4rci.txt in session scratch), Status
+
+### Community 1853 - "Unified Lopu Conversations, Scheduled Things and Discussions"
+Cohesion: 0.15
+Nodes (13): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method), feed(), Cron Tasks and Reminders Regression Checks, Lopu Chat and Composer Regression Checks, Release and Build Integration Regression Checks (+5 more)
+
 ## Ambiguous Edges - Review These
 - `Testing` → `Canonical AI Instruction Links`  [AMBIGUOUS]
   TESTING.md · relation: conceptually_related_to
@@ -8196,29 +8031,29 @@ Nodes (3): Account Switcher, Roster Ownership Gate, Mongo Roster Model
   remix/CHANGELOG.md · relation: conceptually_related_to
 - `Thingtime Pink Logo Master (SVG)` → `Thingtime Confetti Tile Pattern 2048x2048`  [AMBIGUOUS]
   remix/public/branding/presskit/thingtime-confetti-pattern-2048x2048.png · relation: conceptually_related_to
-- `Storage admission error correction` → `Transient native-fixture settings POST 503`  [AMBIGUOUS]
-  PRs/1397-codex-device-location-history-private-device-location-and-alerts.md · relation: conceptually_related_to
 - `Commander.app` → `Environment Gateway and Index Lifecycle`  [AMBIGUOUS]
   TESTING.md · relation: conceptually_related_to
+- `Storage admission error correction` → `Transient native-fixture settings POST 503`  [AMBIGUOUS]
+  PRs/1397-codex-device-location-history-private-device-location-and-alerts.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3439 isolated node(s):** `next/core-web-vitals`, `@commander/protocol`, `esbuild`, `tsx`, `../../tsconfig.base.json` (+3434 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 23829 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **680 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **3440 isolated node(s):** `next/core-web-vitals`, `@commander/protocol`, `esbuild`, `tsx`, `../../tsconfig.base.json` (+3435 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 23855 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **665 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `tag()` connect `PlatformProgram` to `claude-design-mockup-v2-fable/ds/thingtime-bundle.js`, `thingtime-app/ds/thingtime-bundle.js`, `thingtime-directions/ds/thingtime-bundle.js`, `thingtime-landing-1a-classic-centered/ds/thingtime-bundle.js`, `thingtime-landing-1b-product-split/ds/thingtime-bundle.js`, `thingtime-landing-1c-crowdfund-campaign/ds/thingtime-bundle.js`, `thingtime-landing-1d-developer-first/ds/thingtime-bundle.js`, `thingtime-landing-1e-typographic-story/ds/thingtime-bundle.js`, `thingtime-landing-1f-ecosystem-map/ds/thingtime-bundle.js`, `thingtime-landing-1g-magic-path-bar/ds/thingtime-bundle.js`, `thingtime-landing-1h-ultra-minimal-voxel/ds/thingtime-bundle.js`, `thingtime-launch-celebration/ds/thingtime-bundle.js`, `domBridge.ts`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
+- **Why does `tag()` connect `domBridge.ts` to `claude-design-mockup-v2-fable/ds/thingtime-bundle.js`, `thingtime-app/ds/thingtime-bundle.js`, `thingtime-directions/ds/thingtime-bundle.js`, `thingtime-landing-1a-classic-centered/ds/thingtime-bundle.js`, `thingtime-landing-1b-product-split/ds/thingtime-bundle.js`, `thingtime-landing-1c-crowdfund-campaign/ds/thingtime-bundle.js`, `thingtime-landing-1d-developer-first/ds/thingtime-bundle.js`, `thingtime-landing-1e-typographic-story/ds/thingtime-bundle.js`, `thingtime-landing-1f-ecosystem-map/ds/thingtime-bundle.js`, `thingtime-landing-1g-magic-path-bar/ds/thingtime-bundle.js`, `thingtime-landing-1h-ultra-minimal-voxel/ds/thingtime-bundle.js`, `thingtime-launch-celebration/ds/thingtime-bundle.js`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`, `webPlatform/types.ts`?**
+  _High betweenness centrality (0.146) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Testing` (e.g. with `Opaque Runtime Security and Execution Limits` and `Suite, Build, and Bundled API Verification`) actually correct?**
   _`Testing` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `next/core-web-vitals`, `@commander/protocol`, `esbuild` to the rest of the system?**
-  _3439 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _3440 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `json` be split into smaller, more focused modules?**
-  _Cohesion score 0.012586199022697173 - nodes in this community are weakly interconnected._
-- **Why does `displayName()` connect `thingmon/rules.ts` to `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `Service Account Provisioning API`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `remoteSyncProtocol.ts`, `diffHydratedProperties`?**
-  _High betweenness centrality (0.084) - this node is a cross-community bridge._
+  _Cohesion score 0.013623649127728042 - nodes in this community are weakly interconnected._
+- **Why does `displayName()` connect `thingmon/rules.ts` to `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `diffHydratedProperties`, `18 — Account invite links with optional profile prefill 🔗`, `diffHydratedProperties`?**
+  _High betweenness centrality (0.079) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
