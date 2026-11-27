@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LUCIDE_ICONS, LUCIDE_FOR_EMOJI } from '~/theme/icons';
-import { buildThingsItemMenu } from './thingsMenuModel';
+import { buildThingsBackgroundMenu, buildThingsItemMenu, type ThingsBackgroundMenuArgs } from './thingsMenuModel';
 import type { ThingsThing } from './thingsCore';
 
 const component = {
@@ -13,6 +13,16 @@ const component = {
 
 const commands = (args: Parameters<typeof buildThingsItemMenu>[0]) =>
   buildThingsItemMenu(args).sections.flatMap(section => section.actions.map(action => action.command));
+
+test('background New page is available only in the active library and disabled while saving', () => {
+  const base = { clipboardCount: 0, itemCount: 0, sort: 'name', groupBy: 'none', view: 'grid', displayMode: 'name' } satisfies ThingsBackgroundMenuArgs;
+  const newPageAction = (args: ThingsBackgroundMenuArgs) =>
+    buildThingsBackgroundMenu(args).sections.find(section => section.id === 'create')?.actions.find(action => action.command === 'new-page');
+  assert.equal(newPageAction({ ...base, newPage: { disabled: false } })?.label, 'New page');
+  assert.equal(newPageAction({ ...base, newPage: { disabled: true } })?.disabled, true);
+  assert.equal(newPageAction({ ...base, allowCreation: false, newPage: { disabled: false } }), undefined);
+  assert.equal(newPageAction(base), undefined);
+});
 
 test('Builder offers definition editing only for an owned, single Component', () => {
   const base = { thing: component, actCount: 1, clipboardCount: 0, ownerId: 'owner', builderMode: true };

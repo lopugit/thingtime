@@ -415,6 +415,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const [deleteThings, setDeleteThings] = useState<ThingsThing[]>([]);
   const [previewThing, setPreviewThing] = useState<ThingsThing | null>(null);
   const [builderAppDialog, setBuilderAppDialog] = useState<ThingsThing | 'new' | null>(null);
+  const [creatingBuilderPage, setCreatingBuilderPage] = useState(false);
+  const builderPageCreationPending = useRef(false);
   const [definitionThingId, setDefinitionThingId] = useState<string | null>(null);
 
 	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || assignOpen || !!builderAppDialog || !!definitionThingId || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
@@ -1339,14 +1341,20 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   }, [builderMode, builderAppDialog, rememberFolderMeta]);
 
   const createBuilderPage = useCallback(async () => {
+    if (builderPageCreationPending.current) return;
+    builderPageCreationPending.current = true;
+    setCreatingBuilderPage(true);
     try {
       const response = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: { name: 'Untitled page', version: 1, blocks: [] }, folderId, acl: ['tt:user'] });
       if (!response?.ok || !response?.thing?.id) throw new Error(response?.error || 'Could not create the page.');
-      navigate(`/builder?page=${encodeURIComponent(response.thing.id)}`);
+      if (mounted.current) navigate(`/builder?page=${encodeURIComponent(response.thing.id)}`);
     } catch (failure) {
-      lopuRef.current({ title: 'Could not create the page', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+      if (mounted.current) lopuRef.current({ title: 'Could not create the page', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+    } finally {
+      builderPageCreationPending.current = false;
+      if (mounted.current) setCreatingBuilderPage(false);
     }
-  }, [folderId, navigate]);
+  }, [folderId, mounted, navigate]);
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
     const url = `${window.location.origin}${thingShareLink(thing)}`;
@@ -1712,6 +1720,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         clipboardCount: clipboard?.ids.length || 0,
         itemCount: selectionOrderRef.current.length,
         allowCreation: !archiveOnly,
+        newPage: locationPicker ? undefined : { disabled: creatingBuilderPage },
         libraryNavigation: !locationPicker && !builderMode && !archiveOnly,
         sort,
         groupBy,
@@ -1742,6 +1751,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         case 'new-folder':
           openNewFolder(folderId);
           break;
+        case 'new-page':
+          void createBuilderPage();
+          break;
         case 'paste':
           pasteClipboard();
           break;
@@ -1762,7 +1774,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [currentPinPath, menuPinPath, folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [createBuilderPage, currentPinPath, menuPinPath, folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -2046,13 +2058,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
             </MenuList></Portal>
           </Menu>
           {!archiveOnly && <Menu placement="bottom-end">
-            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
+            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={creatingBuilderPage ? <Spinner size="xs" label="Creating page" sx={{ '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }} /> : <Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
                 {builderMode && !folderId ? <MenuItem onClick={() => setBuilderAppDialog('new')}>New app</MenuItem> : null}
-                {builderMode ? <MenuItem onClick={() => void createBuilderPage()}>New page</MenuItem> : null}
+                {!locationPicker && <MenuItem isDisabled={creatingBuilderPage} onClick={() => void createBuilderPage()}>New page</MenuItem>}
                 {builderMode ? <MenuItem as={RouterLink} to="/components">New component</MenuItem> : null}
                 {builderMode ? <MenuItem as={RouterLink} to="/actions">New action</MenuItem> : null}
                 {!locationPicker && !builderMode && <MenuItem as={RouterLink} to="/things?lidar=1">LiDAR scan</MenuItem>}

@@ -263,6 +263,7 @@ ignore the marker when enforcing content-kind exclusivity. Coverage lives in
 | Builder app/type browsing reusing the same page, app metadata and assignment dialogs | `app/components/Builder/BuilderPage.tsx`, `BuilderAppDialog.tsx`, `BuilderAssignDialog.tsx` |
 | Grid/list/columns views, tile menu button, `ThingsItemAction` union | `app/components/Things/ThingsViews.tsx` |
 | Item and background context-menu models | `app/components/Things/thingsMenuModel.ts` (built on `buildThingEntityMenu`) |
+| New page from the toolbar or background menu | `ThingsPage.tsx` shares Builder's private webpage creation flow, saves in the active folder, and opens the saved page in Builder. |
 | Pure helpers/types (`ThingsThing`, `isFolder`, sort/group options, cache keys) | `app/components/Things/thingsCore.ts`, `thingsLocation.ts` |
 | Dialogs (new folder, rename, move, share, delete, preview) | `app/components/Things/ThingsDialogs.tsx` |
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |

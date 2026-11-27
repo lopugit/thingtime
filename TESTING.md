@@ -7979,6 +7979,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] Choose **New page** from the **New** button at the library root and
+      from the background context menu inside a folder. Each creates one
+      private **Untitled page** in that location and opens it in Builder.
+      Reload Builder to confirm the page is saved. Check the toolbar menu on
+      mobile and verify the archive and folder picker omit **New page**.
+
 - [ ] In grid, list and columns (names and previews), one ordinary click on a
       Thing, folder, file or device opens it. Clicking its title behaves the
       same. Cmd/Ctrl-click selects without navigation; Shift-click retains

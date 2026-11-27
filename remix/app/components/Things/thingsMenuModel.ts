@@ -101,6 +101,7 @@ export type ThingsBackgroundMenuArgs = {
   reorderPins?: boolean;
   libraryNavigation?: boolean;
   allowCreation?: boolean;
+  newPage?: { disabled: boolean };
   clipboardCount: number;
   itemCount: number;
   sort: ThingsSort;
@@ -174,6 +175,7 @@ export const buildThingsBackgroundMenu = ({
   allowCreation = true,
   reorderPins = false,
   libraryNavigation = false,
+  newPage,
   clipboardCount,
   itemCount,
   sort,
@@ -186,6 +188,7 @@ export const buildThingsBackgroundMenu = ({
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        ...(newPage ? [{ id: 'new-page', command: 'new-page', label: 'New page', icon: '🧱', lucide: 'blocks', disabled: newPage.disabled }] : []),
         { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
         {
           id: 'paste',
