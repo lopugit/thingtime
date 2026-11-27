@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Disposable real API acceptance. All application/backend network is OS fenced.
+// Disposable real API acceptance. OS fenced by default; task-owned runs can
+// opt into normal networking with SINGLE_CLICK_NORMAL_NETWORK=1.
 // Only replica-set initialization uses the Mongo driver; product data uses APIs.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -20,6 +21,8 @@ const mongoUri = `mongodb://127.0.0.1:${ports.db}/thingtime?replicaSet=single_cl
 const children = [];
 const delay = ms => new Promise(r => setTimeout(r, ms));
 const password = randomBytes(24).toString('hex');
+// Task-owned, disposable API/database/browser runs may use normal networking.
+const normalNetwork = process.env.SINGLE_CLICK_NORMAL_NETWORK === '1';
 const env = { PATH: process.env.PATH, HOME: dir, TMPDIR: dir, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(ports.api),
   MONGODB_CONNECTION_STRING: mongoUri, JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_DATA_ENV: 'development',
   THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR: join(dir, 'attachments'), TT_WEB_PORT: String(ports.web), TT_API_PORT: String(ports.api), TT_HMR_PORT: String(ports.hmr) };
@@ -32,7 +35,9 @@ await writeFile(policy, `(version 1)(allow default)(deny network*)
 (allow network-inbound ${Object.values(ports).map(p => `(local ip "localhost:${p}")`).join(' ')})
 (allow network-outbound ${[...Object.values(ports),trap.address().port].map(p => `(remote ip "localhost:${p}")`).join(' ')})`);
 function start(executable,args,extra={}) {
-  const child = spawn('/usr/bin/sandbox-exec',['-f',policy,executable,...args], {cwd,detached:true,env:{...env,...extra},stdio:['ignore','pipe','pipe']});
+  const child = spawn(normalNetwork ? executable : '/usr/bin/sandbox-exec',normalNetwork ? args : ['-f',policy,executable,...args],
+    {cwd,detached:true,env:{...env,SINGLE_CLICK_NORMAL_NETWORK:process.env.SINGLE_CLICK_NORMAL_NETWORK,
+      SINGLE_CLICK_TREE_ONLY:process.env.SINGLE_CLICK_TREE_ONLY,...extra},stdio:['ignore','pipe','pipe']});
   let log=''; child.stdout.on('data',d=>log+=d); child.stderr.on('data',d=>log+=d); children.push(child);
   return {child,log:()=>log};
 }
@@ -62,10 +67,12 @@ let server;
 let database;
 let mongoClient;
 try {
-  assert.equal(process.platform,'darwin','Requires OS sandbox; do not fall back to unrestricted execution');
+  if (!normalNetwork) assert.equal(process.platform,'darwin','Requires OS sandbox');
   for(const port of Object.values(ports)) { const listener=createServer(); await new Promise((r,j)=>{listener.once('error',j);listener.listen(port,'127.0.0.1',r)});await new Promise(r=>listener.close(r)); }
-  const preflight=start(process.execPath,['--input-type=module','-e',`for(const url of ['http://1.1.1.1:80/','http://127.0.0.1:${trap.address().port}/redirect']){try{await fetch(url,{signal:AbortSignal.timeout(2000)});throw Error('BOUNDARY_FAILED')}catch(e){if(e.cause?.code!=='EPERM')throw e}}`]);
-  assert.equal((await once(preflight.child,'exit'))[0],0,preflight.log()); assert.equal(trapHits,1);
+  if (!normalNetwork) {
+    const preflight=start(process.execPath,['--input-type=module','-e',`for(const url of ['http://1.1.1.1:80/','http://127.0.0.1:${trap.address().port}/redirect']){try{await fetch(url,{signal:AbortSignal.timeout(2000)});throw Error('BOUNDARY_FAILED')}catch(e){if(e.cause?.code!=='EPERM')throw e}}`]);
+    assert.equal((await once(preflight.child,'exit'))[0],0,preflight.log()); assert.equal(trapHits,1);
+  }
   await mkdir(join(dir,'db'));
   const db=database=start('/opt/homebrew/bin/mongod',['--dbpath',join(dir,'db'),'--port',String(ports.db),'--bind_ip','127.0.0.1','--replSet','single_click','--nounixsocket']);
   const client=mongoClient=new MongoClient(`mongodb://127.0.0.1:${ports.db}/?directConnection=true`,{serverSelectionTimeoutMS:1000});
@@ -79,6 +86,7 @@ try {
   await stop(server); server=start(process.execPath,['.output/server/index.mjs'],{ADMIN_USERNAMES:username}); await ready(server);
   const create = async (kind,name,folderId) => (await api('/api/v1/things',{cookie:owner.cookie,body:{thingtime:[kind],crystal:{name,text:name},...(folderId?{folderId}:{})}})).data.thing;
   const folder=await create('folder','Acceptance folder');
+  const longFolder=await create('folder','Acceptance folder with a very long name that must remain readable on narrow screens');
   const alpha=await create('data','Acceptance alpha');
   const beta=await create('data','Acceptance beta');
   const nested=await create('data','Acceptance nested',folder.id);
@@ -119,7 +127,7 @@ try {
     const vite=start(process.execPath,['--input-type=module','-e',`import {createServer} from 'vite';const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${ports.web},strictPort:true}});await server.listen();`],{NODE_ENV:'development'});
     const webOrigin=`http://127.0.0.1:${ports.web}`; await ready(vite,webOrigin);
     const fixture=join(dir,'browser-fixture.json');
-    await writeFile(fixture,JSON.stringify({origin:webOrigin,cookie:owner.cookie,folder,alpha,beta,nested,childFolder,file,deviceId:paired.id,redirect:`http://127.0.0.1:${trap.address().port}/redirect`}),{mode:0o600});
+    await writeFile(fixture,JSON.stringify({origin:webOrigin,cookie:owner.cookie,folder,longFolder,alpha,beta,nested,childFolder,file,deviceId:paired.id,redirect:`http://127.0.0.1:${trap.address().port}/redirect`}),{mode:0o600});
     const ui=start(process.execPath,['scripts/things-single-click-acceptance.mjs','--browser-worker',fixture],{PLAYWRIGHT_MODULE:process.env.PLAYWRIGHT_MODULE,CHROMIUM_EXECUTABLE:process.env.CHROMIUM_EXECUTABLE,SINGLE_CLICK_EVIDENCE_DIR:process.env.SINGLE_CLICK_EVIDENCE_DIR});
     const timeout=setTimeout(()=>{try{process.kill(-ui.child.pid,'SIGTERM')}catch{}},240000);
     const result=await once(ui.child,'exit'); clearTimeout(timeout); assert.equal(result[0],0,ui.log()); console.log(ui.log());
@@ -158,9 +166,76 @@ async function browserAcceptance() {
     else {await page.screenshot({path:join(out,name+'-bottom.png'),fullPage:false});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:join(out,name+'.png'),fullPage:false});}
   };
   try {
-    for(const url of ['http://1.1.1.1:80/',fixture.redirect]) {let denied=false;try{await page.goto(url,{timeout:4000})}catch(e){assert(/ERR_NETWORK_ACCESS_DENIED|ERR_ACCESS_DENIED/.test(e.message),e.message);denied=true}assert(denied,'OS browser network fence');}
-    checks.push('browser direct-IP and redirect network denial');await context.addCookies(cookies);
-    await open('grid');const treeNode=page.locator(`[data-tree-thing-id="${fixture.folder.id}"]`);await treeNode.getByRole('button').nth(1).click();await page.locator(`[data-tree-thing-id="${fixture.childFolder.id}"]`).waitFor();assert.equal(new URL(page.url()).pathname,'/things','Tree folder stays in browser');checks.push('tree folder click reveals child in place');
+    if (process.env.SINGLE_CLICK_NORMAL_NETWORK !== '1') {
+      for(const url of ['http://1.1.1.1:80/',fixture.redirect]) {let denied=false;try{await page.goto(url,{timeout:4000})}catch(e){assert(/ERR_NETWORK_ACCESS_DENIED|ERR_ACCESS_DENIED/.test(e.message),e.message);denied=true}assert(denied,'OS browser network fence');}
+      checks.push('browser direct-IP and redirect network denial');
+    }
+    await context.addCookies(cookies);
+    await open('grid');
+    const longNode=page.locator(`[data-tree-thing-id="${fixture.longFolder.id}"]`);
+    const longName=fixture.longFolder.crystal.name;
+    const longButton=longNode.getByRole('button',{name:longName,exact:true});
+    const longTooltip=page.locator('[role="tooltip"]').filter({hasText:longName});
+    const geometry=await longNode.evaluate(row=>{const buttons=[...row.querySelectorAll('button')];const caret=buttons.find(button=>button.getAttribute('aria-label')?.startsWith('Expand '));const title=buttons.find(button=>button.hasAttribute('aria-expanded'));if(!caret||!title)return {buttons:buttons.map(button=>({label:button.getAttribute('aria-label'),expanded:button.getAttribute('aria-expanded')}))};const a=caret.getBoundingClientRect(),b=title.getBoundingClientRect(),r=row.getBoundingClientRect();return {rowHeight:r.height,gap:b.left-a.right,caretWidth:a.width,caretHeight:a.height,titleLabel:title.getAttribute('aria-label')}});
+    assert(geometry.rowHeight<=36,`Compact tree row: ${JSON.stringify(geometry)}`);
+    assert(geometry.gap<=8,`Caret-to-name gap: ${JSON.stringify(geometry)}`);
+    assert(geometry.caretWidth>=24&&geometry.caretHeight>=24,'Caret remains reachable');
+    assert.equal(geometry.titleLabel,longName,`Full title accessible label: ${JSON.stringify(geometry)}`);
+    await longButton.hover();await longTooltip.waitFor();await page.waitForTimeout(250);
+    const tooltipStyle=await longTooltip.evaluate(node=>{const style=getComputedStyle(node),content=[node,...node.querySelectorAll('*')].map(element=>getComputedStyle(element)).find(s=>s.backgroundColor!=='rgba(0, 0, 0, 0)')||style;return {background:content.backgroundColor,color:content.color,opacity:style.opacity,zIndex:style.zIndex,positionerZIndex:getComputedStyle(node.parentElement).zIndex}});
+    assert.notEqual(tooltipStyle.background,'rgba(0, 0, 0, 0)','Tooltip has an opaque readable surface');
+    assert(Number(tooltipStyle.positionerZIndex)>10271,`Tooltip positioner must clear Move dialog: ${JSON.stringify(tooltipStyle)}`);
+    await page.screenshot({path:join(out,'folder-tree-desktop-tooltip.png')});
+    await longButton.focus();await page.keyboard.press('Escape');await longTooltip.waitFor({state:'hidden'});
+    await page.keyboard.press('Tab');await longButton.focus();await longTooltip.waitFor();
+    await page.evaluate(()=>window.dispatchEvent(new Event('scroll')));await longTooltip.waitFor({state:'hidden'});
+    await downloadCdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+    const longBox=await longButton.boundingBox();const touchX=longBox.x+Math.min(24,longBox.width/2),touchY=longBox.y+longBox.height/2;
+    await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchX,y:touchY,id:1}]});
+    await page.waitForTimeout(100);
+    await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:touchX,y:touchY+45,id:1}]});
+    await page.waitForTimeout(550);await longTooltip.waitFor({state:'hidden'});
+    await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    assert.notEqual(new URL(page.url()).searchParams.get('folder'),fixture.longFolder.id,'Scrolled touch does not navigate');
+    await longButton.dispatchEvent('touchstart');await page.waitForTimeout(550);await longTooltip.waitFor();
+    await longButton.dispatchEvent('touchend');await longButton.dispatchEvent('click');
+    assert.notEqual(new URL(page.url()).searchParams.get('folder'),fixture.longFolder.id,'Hold does not navigate');
+    await page.waitForTimeout(1850);await longButton.click();await page.waitForURL(url=>url.searchParams.get('folder')===fixture.longFolder.id);
+    await open('grid');const treeNode=page.locator(`[data-tree-thing-id="${fixture.folder.id}"]`);await treeNode.getByRole('button').nth(1).click();await page.locator(`[data-tree-thing-id="${fixture.childFolder.id}"]`).waitFor();assert.equal(new URL(page.url()).pathname,'/things','Tree folder stays in browser');checks.push('compact tree, full-name hover/focus/hold, Escape/scroll dismissal, and ordinary navigation');
+    if (process.env.SINGLE_CLICK_TREE_ONLY === '1') {
+      await measure('folder-tree-desktop');
+      await page.setViewportSize({width:375,height:812});await open('grid');
+      await tile(fixture.alpha.id).getByRole('button',{name:'Acceptance alpha actions',exact:true}).click();
+      await page.getByRole('menuitem',{name:/Move.*to/}).click();
+      const dialog=page.getByRole('dialog',{name:/Move 1 thing to/});await dialog.waitFor();
+      const picker=dialog.locator(`[data-tree-thing-id="${fixture.longFolder.id}"]`);
+      const pickerButton=picker.getByRole('button',{name:longName,exact:true});
+      const pickerBounds=await picker.boundingBox();assert(pickerBounds.height<=36,'Mobile picker row stays compact');
+      const pickerButtonBounds=await pickerButton.boundingBox();
+      const mobileX=pickerButtonBounds.x+Math.min(24,pickerButtonBounds.width/2),mobileY=pickerButtonBounds.y+pickerButtonBounds.height/2;
+      await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:mobileX,y:mobileY,id:2}]});
+      await page.waitForTimeout(550);await longTooltip.waitFor();await page.waitForTimeout(250);
+      assert.equal(await longTooltip.innerText(),longName,'Touch hold reveals the complete stored name');
+      const mobileTooltipGeometry=await longTooltip.evaluate(node=>{const rect=node.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:innerWidth,height:innerHeight,positionerZIndex:getComputedStyle(node.parentElement).zIndex}});
+      assert(mobileTooltipGeometry.left>=0&&mobileTooltipGeometry.right<=mobileTooltipGeometry.width+1&&Number(mobileTooltipGeometry.positionerZIndex)>10271,
+        `Mobile tooltip must be visible above the dialog: ${JSON.stringify(mobileTooltipGeometry)}`);
+      await page.screenshot({path:join(out,'folder-tree-mobile-tooltip.png')});
+      await downloadCdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      assert.equal(await dialog.getByRole('button',{name:'Move here'}).isDisabled(),true,'Hold does not pick a destination');
+      await pickerButton.click();assert.equal(await dialog.getByRole('button',{name:'Move here'}).isEnabled(),true,'Ordinary picker click still selects destination');
+      await dialog.locator('.chakra-modal__body').evaluate(body=>{body.scrollTop=body.scrollHeight});
+      await page.screenshot({path:join(out,'folder-tree-mobile-bottom.png')});
+      await dialog.locator('.chakra-modal__body').evaluate(body=>{body.scrollTop=0});
+      await page.screenshot({path:join(out,'folder-tree-mobile.png')});
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Mobile picker has no horizontal overflow');
+      await page.keyboard.press('Escape');
+      checks.push('narrow Move picker full-name hold, no accidental selection, compact rows, scrolling, and no overflow');
+      assert.equal(await page.locator('vite-error-overlay').count(),0,'No framework error overlay');
+      assert.deepEqual(errors,[],'No uncaught browser errors');
+      await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry,tooltipStyle,mobileTooltipGeometry},null,2));
+      console.log(JSON.stringify({ok:true,checks,origin:fixture.origin,productionAccess:false,geometry,tooltipStyle,mobileTooltipGeometry}));
+      return;
+    }
     for(const view of ['grid','list','columns']) {
       await open(view);assert((await page.title()).length>0,'Page title');
       const exact=await page.evaluate(async id=>(await fetch('/api/v1/things?id='+id)).json(),fixture.alpha.id);
