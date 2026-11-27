@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, Tooltip } from '@chakra-ui/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import type { ThingsThing } from './thingsCore';
@@ -64,9 +64,66 @@ const TreeNode = ({
   props: FolderTreeProps;
 }) => {
   const [open, setOpen] = useState(false);
+  const [showFullName, setShowFullName] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const touchUntil = useRef(0);
   const children = (props.itemsFor(folder.id) || []).filter(isFolder);
   const active = props.currentFolderId === folder.id;
   const disabled = props.disabledIds?.has(folder.id) || false;
+  const name = thingDisplayName(folder);
+  const fullName = typeof folder.crystal?.title === 'string' && folder.crystal.title.trim()
+    ? folder.crystal.title
+    : typeof folder.crystal?.name === 'string' && folder.crystal.name.trim()
+      ? folder.crystal.name
+      : name;
+
+  const clearHoldTimer = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  const clearHideTimer = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  };
+  useEffect(() => () => {
+    clearHoldTimer();
+    clearHideTimer();
+  }, []);
+
+  const startHold = () => {
+    touchUntil.current = Date.now() + 700;
+    clearHoldTimer();
+    clearHideTimer();
+    held.current = false;
+    setShowFullName(false);
+    holdTimer.current = setTimeout(() => {
+      held.current = true;
+      setShowFullName(true);
+    }, 500);
+  };
+  const endHold = () => {
+    touchUntil.current = Date.now() + 700;
+    clearHoldTimer();
+    if (held.current) {
+      clearHideTimer();
+      hideTimer.current = setTimeout(() => setShowFullName(false), 1800);
+    }
+  };
+  useEffect(() => {
+    clearHoldTimer();
+    clearHideTimer();
+    held.current = false;
+    touchUntil.current = 0;
+    setShowFullName(false);
+  }, [props.currentFolderId]);
+  useEffect(() => {
+    if (!showFullName) return;
+    const closeOnScroll = () => setShowFullName(false);
+    window.addEventListener('scroll', closeOnScroll, true);
+    return () => window.removeEventListener('scroll', closeOnScroll, true);
+  }, [showFullName]);
 
   const toggle = (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -86,37 +143,63 @@ const TreeNode = ({
         cursor={disabled ? 'not-allowed' : 'pointer'}
         gap={1}
         data-tree-thing-id={folder.id}
+        position="relative"
         role="group"
-        sx={props.handlers ? BROWSE_CONTROLS_SX : undefined}
-        onContextMenu={props.handlers ? event => props.handlers!.onItemContextMenu(folder, event) : undefined}
+        sx={props.handlers ? { ...BROWSE_CONTROLS_SX,
+          '& .thing-item-controls button, & .thing-item-controls label': { minWidth: '24px', minHeight: '24px' },
+          '@media (hover: none), (pointer: coarse)': {
+            ...BROWSE_CONTROLS_SX['@media (hover: none), (pointer: coarse)'],
+            '& .thing-item-controls button, & .thing-item-controls label': { minWidth: '28px', minHeight: '28px' }
+          }
+        } : undefined}
+        onContextMenu={props.handlers ? event => {
+          if (held.current || Date.now() < touchUntil.current) { event.preventDefault(); return; }
+          props.handlers!.onItemContextMenu(folder, event);
+        } : undefined}
         opacity={disabled ? 0.4 : 1}
         paddingLeft={`${8 + depth * 14}px`}
         paddingRight={2}
-        paddingY="4px"
+        paddingY="2px"
         userSelect="none"
       >
-        <Box aria-label={open ? 'Collapse folder' : 'Expand folder'} as="button" onClick={toggle} type="button">
+        <Box aria-label={`${open ? 'Collapse' : 'Expand'} ${fullName}`} as="button" alignItems="center" display="inline-flex" flexShrink={0}
+          justifyContent="center" minHeight="24px" minWidth="24px" onClick={toggle} type="button">
           {open ? (
             <ChevronDown color="var(--tt-faint, #b6b6c0)" size={13} />
           ) : (
             <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />
           )}
         </Box>
+        <Tooltip isOpen={showFullName} label={
+          <span style={{ backgroundColor: '#20212b', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            color: '#fff', display: 'block', maxWidth: 'min(340px, calc(100vw - 32px))', overflowWrap: 'anywhere',
+            padding: '4px 8px', whiteSpace: 'normal' }}>{fullName}</span>
+        } placement="bottom-start" variant="folderTree" onClose={() => setShowFullName(false)}>
+          <Flex as="button" type="button" alignItems="center" gap={1} flex="1" minWidth={0} textAlign="left"
+            aria-expanded={open} aria-disabled={disabled} aria-label={fullName}
+            onMouseEnter={() => { if (Date.now() >= touchUntil.current && matchMedia('(hover: hover) and (pointer: fine)').matches) setShowFullName(true); }}
+            onMouseLeave={() => setShowFullName(false)}
+            onFocus={() => { if (Date.now() >= touchUntil.current) setShowFullName(true); }} onBlur={() => setShowFullName(false)}
+            onKeyDown={event => { touchUntil.current = 0; if (event.key === 'Escape') setShowFullName(false); else setShowFullName(true); }}
+            onTouchStart={startHold} onTouchMove={() => { touchUntil.current = Date.now() + 700; clearHoldTimer(); setShowFullName(false); held.current = false; }}
+            onTouchEnd={endHold} onTouchCancel={() => { touchUntil.current = Date.now() + 700; clearHoldTimer(); clearHideTimer(); held.current = false; setShowFullName(false); }}
+            onPointerCancel={() => { clearHoldTimer(); clearHideTimer(); held.current = false; setShowFullName(false); }}
+            onClick={event => {
+              if (held.current) { held.current = false; event.preventDefault(); return; }
+              if (disabled) return;
+              const intent = props.handlers ? browseClickIntent(event) : 'open';
+              if (intent === 'select') { props.handlers!.onItemClick(folder, event); return; }
+              if (intent !== 'open') return;
+              props.onPick(folder.id);
+              if (!open) { setOpen(true); props.ensureLoaded(folder.id); }
+            }}>
+            <Text fontSize="13px">{thingIcon(folder)}</Text>
+            <Text flex="1" fontSize="13px" fontWeight={active ? 600 : 400} noOfLines={1} wordBreak="break-all">
+              {name}
+            </Text>
+          </Flex>
+        </Tooltip>
         {props.handlers && <ItemSelection thing={folder} handlers={props.handlers} />}
-        <Flex as="button" type="button" alignItems="center" gap={1} flex="1" minWidth={0} textAlign="left"
-          aria-expanded={open} aria-disabled={disabled} onClick={event => {
-            if (disabled) return;
-            const intent = props.handlers ? browseClickIntent(event) : 'open';
-            if (intent === 'select') { props.handlers!.onItemClick(folder, event); return; }
-            if (intent !== 'open') return;
-            props.onPick(folder.id);
-            if (!open) { setOpen(true); props.ensureLoaded(folder.id); }
-          }}>
-          <Text fontSize="13px">{thingIcon(folder)}</Text>
-          <Text flex="1" fontSize="13px" fontWeight={active ? 600 : 400} noOfLines={1} wordBreak="break-all">
-            {thingDisplayName(folder)}
-          </Text>
-        </Flex>
         {props.handlers && <ItemMenu thing={folder} handlers={props.handlers} />}
       </Flex>
       {open && (
