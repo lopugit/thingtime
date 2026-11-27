@@ -1,17 +1,17 @@
 # Graph Report - commander-display-switching-fix-1271dd  (2026-11-27)
 
 ## Corpus Check
-- 6013 files · ~13,243,624 words
+- 6013 files · ~13,244,445 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 117 file(s) not represented in the graph (top: (none) 35, .css 18, .entitlements 11)
 
 ## Summary
-- 80765 nodes · 231542 edges · 2102 communities (1426 shown, 676 thin omitted)
+- 80765 nodes · 231544 edges · 2102 communities (1426 shown, 676 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 10519 edges (avg confidence: 0.87)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `dcf36c48`
+- Built from commit: `ad51dba0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -8249,7 +8249,7 @@ Nodes (3): Account Switcher, Roster Ownership Gate, Mongo Roster Model
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `tag()` connect `catalogue.ts` to `claude-design-mockup-v2-fable/ds/thingtime-bundle.js`, `thingtime-app/ds/thingtime-bundle.js`, `thingtime-directions/ds/thingtime-bundle.js`, `thingtime-landing-1a-classic-centered/ds/thingtime-bundle.js`, `thingtime-landing-1b-product-split/ds/thingtime-bundle.js`, `thingtime-landing-1c-crowdfund-campaign/ds/thingtime-bundle.js`, `thingtime-landing-1d-developer-first/ds/thingtime-bundle.js`, `thingtime-landing-1e-typographic-story/ds/thingtime-bundle.js`, `thingtime-landing-1f-ecosystem-map/ds/thingtime-bundle.js`, `thingtime-landing-1g-magic-path-bar/ds/thingtime-bundle.js`, `thingtime-landing-1h-ultra-minimal-voxel/ds/thingtime-bundle.js`, `thingtime-launch-celebration/ds/thingtime-bundle.js`, `domBridge.ts`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`?**
-  _High betweenness centrality (0.142) - this node is a cross-community bridge._
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Testing` (e.g. with `Opaque Runtime Security and Execution Limits` and `Suite, Build, and Bundled API Verification`) actually correct?**
   _`Testing` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `next/core-web-vitals`, `@commander/protocol`, `@commander/raycast-compat` to the rest of the system?**
@@ -8257,7 +8257,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `json` be split into smaller, more focused modules?**
   _Cohesion score 0.009006178657451042 - nodes in this community are weakly interconnected._
 - **Why does `Password Manager` connect `useApi` to `things-and-folders.md`, `.performFolderRequest`, `mobileFolders.client.ts`, `useThingtime`, `withHomeMongoTransaction`, `.publish`, `ref_react`, `PhotoLibrary`, `FileSyncOwnerScope`, `API endpoints and capabilities`, `MobileSyncConnections.tsx`, `org.json.JSONObject`, `.store`?**
-  _High betweenness centrality (0.095) - this node is a cross-community bridge._
+  _High betweenness centrality (0.097) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
