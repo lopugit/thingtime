@@ -4,7 +4,7 @@ import test from 'node:test';
 import router, { API_MANIFEST_PATH, loadRouteTable, resetApiManifestCache, resetRouteTableCache, ROUTE_TABLE_KEY } from '../src/index.js';
 import { DEFAULT_ROUTE_TABLE, resolveRoute, validateRouteTable, withTarget } from '../src/routeTable.js';
 
-const kv = (value) => ({ get: async (key, type) => (key === ROUTE_TABLE_KEY && type === 'json' ? value : null) });
+const kv = (value) => ({ get: async (key, options) => (key === ROUTE_TABLE_KEY && options?.type === 'json' && options.cacheTtl === 30 ? value : null) });
 
 const withFetch = async (handler, run) => {
 	const original = globalThis.fetch;

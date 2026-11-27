@@ -30,7 +30,8 @@ export async function loadRouteTable(env, now = Date.now()) {
 	let table = DEFAULT_ROUTE_TABLE;
 	let source = 'default';
 	try {
-		const stored = env.ROUTES ? await env.ROUTES.get(ROUTE_TABLE_KEY, 'json') : null;
+		// cacheTtl 30 s (KV's minimum) so a switch reaches every edge server quickly.
+		const stored = env.ROUTES ? await env.ROUTES.get(ROUTE_TABLE_KEY, { type: 'json', cacheTtl: 30 }) : null;
 		if (stored) {
 			const checked = validateRouteTable(stored);
 			if (checked.ok) {
