@@ -16,6 +16,7 @@ import { AclWriteFenceError, aclWriteFenceError, installThingAclWriteFence, isTh
 import { classifyThingCollModAuthority, type CollModAuthority } from './aclWriteFenceAuthority';
 import { StorageMutationError } from '../storage/storageCore';
 import { monotonicThingMutationParameters, withMonotonicThingTimestamps } from './thingMutationTimestamp';
+import { mongoRuntimeState } from './runtimeState';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -25,18 +26,17 @@ export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectio
 // pinned; custom endpoint clients (the request-scoped override — see
 // endpoint.ts) are kept LRU-bounded so an API client cycling many URLs can't
 // accumulate unbounded open connections.
-const clientCache = new Map<string, Promise<any>>();
 const MAX_CUSTOM_CLIENTS = 6;
 /** Idle socket lifetime for the home pool; also how long Fluid stays billed after a DB call. */
 export const HOME_POOL_MAX_IDLE_MS = 5_000;
 
 const getClientCachedFor = async (uri: string, isHome: boolean) => {
   await requireGatewayDatabaseAccess();
-  const cached = clientCache.get(uri);
+  const cached = mongoRuntimeState().clientCache.get(uri);
   if (cached) {
     // LRU touch — Map iteration order is insertion order
-    clientCache.delete(uri);
-    clientCache.set(uri, cached);
+    mongoRuntimeState().clientCache.delete(uri);
+    mongoRuntimeState().clientCache.set(uri, cached);
     const client = await cached;
     mongoConnectionTracker.recordAccess(client);
     return client;
@@ -80,10 +80,10 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     return client;
   })().catch((err) => {
     // don't cache a failed connection — let the next call retry
-    clientCache.delete(uri);
+    mongoRuntimeState().clientCache.delete(uri);
     throw err;
   });
-  clientCache.set(uri, entry);
+  mongoRuntimeState().clientCache.set(uri, entry);
 
   // Evict the oldest custom clients beyond the cap (never the home client).
   let homeUri: string | null = null;
@@ -92,11 +92,11 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
   } catch {
     // home unconfigured — everything counts as custom for eviction purposes
   }
-  const customUris = [...clientCache.keys()].filter((key) => key !== homeUri);
+  const customUris = [...mongoRuntimeState().clientCache.keys()].filter((key) => key !== homeUri);
   for (const staleUri of customUris.slice(0, Math.max(0, customUris.length - MAX_CUSTOM_CLIENTS))) {
-    const stale = clientCache.get(staleUri);
-    clientCache.delete(staleUri);
-    customIndexesEnsured.delete(staleUri);
+    const stale = mongoRuntimeState().clientCache.get(staleUri);
+    mongoRuntimeState().clientCache.delete(staleUri);
+    mongoRuntimeState().customIndexesEnsured.delete(staleUri);
     stale?.then((client: any) => client.close()).catch(() => {});
   }
 
@@ -108,7 +108,7 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
 // Observability may reuse a home client, but must never create or warm one.
 export const getExistingHomeMongoDb = async () => {
   let cached: Promise<any> | undefined;
-  try { cached = clientCache.get(getMongoUri()); } catch { return null; }
+  try { cached = mongoRuntimeState().clientCache.get(getMongoUri()); } catch { return null; }
   if (!cached) return null;
   await requireGatewayDatabaseAccess();
   return (await cached).db('thingtime');
@@ -302,8 +302,6 @@ const adoptVersionedCollections = async (db: any) => {
 // `thingtime` database (see FUNDAMENTALS.md §3). The memoised promise
 // includes the adoption pass, so no caller can reach a collection handle
 // before legacy names have been (re)checked.
-let homeDbPromise: Promise<any> | null = null;
-let homeDbClient: any = null;
 
 // A cancelled waiter may leave shared initialization running. Acquire its own
 // gateway lease synchronously while the initiating request is still admitted;
@@ -315,25 +313,25 @@ const getRawHomeThingtimeDb = async () => {
   mongoRequestOptions();
   await awaitMongoSharedWork(requireGatewayDatabaseAccess());
   mongoRequestOptions();
-  if (!homeDbPromise) {
-    homeDbPromise = startSharedGatewayWork(async () => {
+  if (!mongoRuntimeState().homeDbPromise) {
+    mongoRuntimeState().homeDbPromise = startSharedGatewayWork(async () => {
       const client = await getClientCachedFor(getMongoUri(), true);
       const db = client.db('thingtime');
-      homeDbClient = client;
+      mongoRuntimeState().homeDbClient = client;
       await adoptVersionedCollections(db);
       return db;
     }).catch((err) => {
       // don't cache a failed connection/adoption — let the next call retry
-      homeDbPromise = null;
-      homeDbClient = null;
+      mongoRuntimeState().homeDbPromise = null;
+      mongoRuntimeState().homeDbClient = null;
       throw err;
     });
   }
-  const db = await awaitMongoSharedWork(homeDbPromise);
+  const db = await awaitMongoSharedWork(mongoRuntimeState().homeDbPromise);
   mongoRequestOptions();
   // A warm database handle bypasses getClientCachedFor. Attribute its use at
   // this canonical access boundary too; the request context deduplicates it.
-  if (homeDbClient) mongoConnectionTracker.recordAccess(homeDbClient);
+  if (mongoRuntimeState().homeDbClient) mongoConnectionTracker.recordAccess(mongoRuntimeState().homeDbClient);
   return db;
 };
 
@@ -418,10 +416,9 @@ export const getThingtimeDb = async () => {
 // accounts, storage-accounted writes) then 500s. Probe once at boot and say
 // so loudly with the exact fix, instead of letting the first registration
 // surface a bare IllegalOperation.
-let transactionSupportProbed = false;
 export const warnIfTransactionsUnsupported = async (): Promise<void> => {
-  if (transactionSupportProbed) return;
-  transactionSupportProbed = true;
+  if (mongoRuntimeState().transactionSupportProbed) return;
+  mongoRuntimeState().transactionSupportProbed = true;
   try {
     const db = await getHomeThingtimeDb();
     const hello = await db.admin().command({ hello: 1 });
@@ -472,21 +469,20 @@ export const getRostersCollection = async () => getHomeCollection('rosters');
 export const getThingsCollection = async () => getCollection('things');
 export const getHomeThingsCollection = async () => getHomeCollection('things');
 
-let homeRelationshipKeys: { promise: Promise<boolean>; expires: number } | null = null;
 export const ensureHomeRelationshipKeys = async () => {
-	if (!homeRelationshipKeys || homeRelationshipKeys.expires <= Date.now()) {
+	if (!mongoRuntimeState().homeRelationshipKeys || mongoRuntimeState().homeRelationshipKeys.expires <= Date.now()) {
 		const promise = (async () => {
 			const { relationshipIndexLayoutReady } = await import('./relationshipIndexLayout');
 			return relationshipIndexLayoutReady(await getSettingsCollection());
 		})().catch((error) => {
-			homeRelationshipKeys = null;
+			mongoRuntimeState().homeRelationshipKeys = null;
 			throw error;
 		});
-		homeRelationshipKeys = { promise, expires: Date.now() + 30_000 };
+		mongoRuntimeState().homeRelationshipKeys = { promise, expires: Date.now() + 30_000 };
 	}
-	return homeRelationshipKeys.promise;
+	return mongoRuntimeState().homeRelationshipKeys.promise;
 };
-export const invalidateHomeRelationshipKeys = () => { homeRelationshipKeys = null; };
+export const invalidateHomeRelationshipKeys = () => { mongoRuntimeState().homeRelationshipKeys = null; };
 export const getEmailVerificationsCollection = async () => getHomeCollection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () => getHomeCollection('lopuMusingRateLimits');
 export const getThemesCollection = async () => getHomeCollection('themes');
@@ -539,8 +535,6 @@ export const getCiControlCollection = async () => getHomeCollection('ciControl')
 // renewable cross-process lease. Normal collection access awaits readiness,
 // including a fresh database's first unique-constrained insert. Failed work
 // is not cached; the next caller can retry after recovery.
-let indexesEnsured: Promise<void> | null = null;
-let ensuredFingerprint: string | null = null;
 
 // MongoDB's hard per-collection index ceiling, `_id_` included. A collection
 // sitting on it fails every createIndex with CannotCreateIndex (67), which is
@@ -1630,10 +1624,9 @@ export const thingsIndexPlanNames = async (): Promise<Set<string>> =>
 // Custom endpoints are foreign data planes: never create home settings or
 // adoption records there. Await constraints and serialize each DB's DDL; only
 // successful/in-flight runs are memoised, keyed by BOTH URI and database.
-const customIndexesEnsured = new Map<string, Map<string, Promise<void>>>();
 const ensureCustomDataIndexes = (uri: string, db: any): Promise<void> => {
-  let databases = customIndexesEnsured.get(uri);
-  if (!databases) customIndexesEnsured.set(uri, databases = new Map());
+  let databases = mongoRuntimeState().customIndexesEnsured.get(uri);
+  if (!databases) mongoRuntimeState().customIndexesEnsured.set(uri, databases = new Map());
   const dbName = db.databaseName;
   let run = databases.get(dbName);
   if (!run) {
@@ -1799,14 +1792,14 @@ export const withHomeIndexMaintenance = async <T>(work: (db: any, assertLease: (
     commandSafetyMs: policy.commandMaxTimeMS + 10_000, run: async assertLease => {
     await runBudgetedIndexWork(db, async limited => { result = await work(limited, assertLease); }, assertLease, policy.commandMaxTimeMS);
   } });
-  indexesEnsured = null;
+  mongoRuntimeState().indexesEnsured = null;
   return result;
 };
 
 // Explicit index migrations and operator recovery revoke readiness before DDL.
 // A generation fence prevents a concurrent older run from publishing ready.
 export const invalidateHomeIndexReadiness = async () => {
-  indexesEnsured = null;
+  mongoRuntimeState().indexesEnsured = null;
   const db = await getRawHomeThingtimeDb();
   await invalidateDurableIndexPlan(db.collection(physicalCollectionName('settings')));
 };
@@ -1817,20 +1810,20 @@ const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecuti
   if (force) {
     // Finish existing work before invalidating, so an older completion cannot
     // overwrite the explicit rebuild request.
-    await indexesEnsured?.catch(() => {});
-    indexesEnsured = null;
+    await mongoRuntimeState().indexesEnsured?.catch(() => {});
+    mongoRuntimeState().indexesEnsured = null;
     const raw = await getRawHomeThingtimeDb();
     await invalidateDurableIndexPlan(raw.collection(physicalCollectionName('settings')));
   }
-  if (indexesEnsured) {
-    const previous = indexesEnsured;
+  if (mongoRuntimeState().indexesEnsured) {
+    const previous = mongoRuntimeState().indexesEnsured;
     await previous;
     const db = await getRawHomeThingtimeDb();
     const marker = await db.collection(physicalCollectionName('settings')).findOne({ _id: INDEX_LIFECYCLE_ID });
-    if (ensuredFingerprint && marker?.readyFingerprint === ensuredFingerprint && !marker?.owner) return;
-    if (indexesEnsured === previous) indexesEnsured = null;
+    if (mongoRuntimeState().ensuredFingerprint && marker?.readyFingerprint === mongoRuntimeState().ensuredFingerprint && !marker?.owner) return;
+    if (mongoRuntimeState().indexesEnsured === previous) mongoRuntimeState().indexesEnsured = null;
   }
-  if (!indexesEnsured) {
+  if (!mongoRuntimeState().indexesEnsured) {
     const run = (async () => {
       const db = await getRawHomeThingtimeDb();
       const settings = db.collection(physicalCollectionName('settings'));
@@ -1855,9 +1848,9 @@ const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecuti
           await Promise.all(plan(limited));
         }, assertLease, policy.commandMaxTimeMS);
       } });
-      ensuredFingerprint = fingerprint;
+      mongoRuntimeState().ensuredFingerprint = fingerprint;
     })().catch((err: any) => {
-      if (indexesEnsured === run) indexesEnsured = null;
+      if (mongoRuntimeState().indexesEnsured === run) mongoRuntimeState().indexesEnsured = null;
       console.error(
         `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — next bootstrap call will retry:`,
         /^[A-Za-z0-9_.:-]{1,80}$/.test(String(err?.codeName || err?.code || err?.name || 'Error'))
@@ -1865,9 +1858,9 @@ const ensureIndexesShared = async ({ force = false, ...execution }: IndexExecuti
       );
       throw err;
     });
-    indexesEnsured = run;
+    mongoRuntimeState().indexesEnsured = run;
   }
-  return indexesEnsured;
+  return mongoRuntimeState().indexesEnsured;
 };
 
 // Each caller owns only its wait. The cached index initializer must not
@@ -1880,12 +1873,12 @@ export const ensureIndexes = (options: IndexExecutionOptions & { force?: boolean
 // Ownership can return to this warm worker after a drain. Closed clients and
 // previous readiness must never survive that role change.
 registerGatewayDrain(async () => {
-  clientCache.clear();
-  customIndexesEnsured.clear();
-  homeDbPromise = null;
-  homeDbClient = null;
-  indexesEnsured = null;
-  ensuredFingerprint = null;
-  homeRelationshipKeys = null;
-  transactionSupportProbed = false;
+  mongoRuntimeState().clientCache.clear();
+  mongoRuntimeState().customIndexesEnsured.clear();
+  mongoRuntimeState().homeDbPromise = null;
+  mongoRuntimeState().homeDbClient = null;
+  mongoRuntimeState().indexesEnsured = null;
+  mongoRuntimeState().ensuredFingerprint = null;
+  mongoRuntimeState().homeRelationshipKeys = null;
+  mongoRuntimeState().transactionSupportProbed = false;
 });

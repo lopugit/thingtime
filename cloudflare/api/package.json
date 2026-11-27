@@ -1,0 +1,16 @@
+{
+  "name": "thingtime-api",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare API Worker: serves the Thingtime endpoints marked for Cloudflare in the API registry, with the same handler code as Vercel, through a fixed pool of MongoDB connection shards.",
+  "scripts": {
+    "generate": "cd ../../remix && npx tsx ../cloudflare/api/scripts/generate-routes.mts",
+    "check": "cd ../../remix && npx tsx ../cloudflare/api/scripts/generate-routes.mts --check",
+    "test": "cd ../../remix && node --import tsx --test ../cloudflare/api/test/*.test.ts",
+    "dev": "wrangler dev",
+    "deploy": "npm run check && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.45.0"
+  }
+}

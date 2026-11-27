@@ -1,0 +1,15 @@
+{
+  "name": "thingtime-router",
+  "private": true,
+  "type": "module",
+  "description": "thingtime.com router Worker: sends each route group to Vercel or the Cloudflare API Worker from a one-click route table.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "routes": "node scripts/routes.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.45.0"
+  }
+}

@@ -3,7 +3,9 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:
 const PURPOSE = 'thingtime:discussion-cursor:v1';
 const MAX_CURSOR_BYTES = 1024;
 const CURSOR_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
-const developmentKey = randomBytes(32);
+// Created on first use, not at import: Cloudflare Workers refuse random values in global scope.
+let developmentKeyValue: Buffer | undefined;
+const developmentKey = () => (developmentKeyValue ??= randomBytes(32));
 export type DiscussionCursorScope = { targetId: string; viewerId: string; tokenId: string };
 export type DiscussionCursor = { createdAt: Date; id: string };
 
@@ -12,7 +14,7 @@ export type DiscussionCursor = { createdAt: Date; id: string };
 const cursorKey = (): Buffer | null => {
   const source = process.env.JWT_PRIVATE_KEY?.trim() || process.env.JWT_SECRET?.trim() || process.env.THINGTIME_ADMIN_VAULT_KEY?.trim();
   if (source) return createHmac('sha256', source).update(PURPOSE).digest();
-  return process.env.NODE_ENV === 'production' ? null : developmentKey;
+  return process.env.NODE_ENV === 'production' ? null : developmentKey();
 };
 const aad = (scope: DiscussionCursorScope) => Buffer.from(JSON.stringify([PURPOSE, scope.targetId, scope.viewerId, scope.tokenId]));
 export const discussionCursorConfigured = () => cursorKey() !== null;
