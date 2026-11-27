@@ -42,7 +42,7 @@ export function observedSeconds(reading: SpeedReading | undefined, windowMs: num
 }
 function TrackerDocument({ scopeKey, series, state, stage, document, draftState }: TransferSpeedTrackersProps & { document: SettingsDocumentControls }) {
  const [, tick] = React.useReducer(value => value + 1, 0);
- React.useEffect(() => { if (state !== 'running' || !series) return; const timer = activityInterval('timer:components/Devices/TransferSpeedTrackers:1', 'Transfer speed display', tick, 1000); return () => clearActivityInterval(timer); }, [state, series]);
+ React.useEffect(() => { if (state !== 'running' || !series) return; const timer = activityInterval('timer:components/Devices/TransferSpeedTrackers:1', 'Transfer speed display', tick, 1000, { local: true }); return () => clearActivityInterval(timer); }, [state, series]);
  const localDraft = React.useRef<TransferSpeedDraftState>({}), restored = React.useRef(false);
  const retained = draftState ?? localDraft.current;
  const [error, setError] = React.useState(retained.error ?? ''), [, redraw] = React.useReducer(value => value + 1, 0);

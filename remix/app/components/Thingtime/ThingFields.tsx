@@ -11,7 +11,7 @@ export function OneTimeCode({ value }: { value: string }) {
   React.useEffect(() => {
     let active = true;
     const update = () => totpCode(value).then(result => { if (active) { setResult(result); setInvalid(false); } }, () => { if (active) { setResult(null); setInvalid(true); } });
-    setResult(null); update(); const timer = activityInterval('timer:components/Thingtime/ThingFields:1', 'Live Thing fields', update, 1000);
+    setResult(null); update(); const timer = activityInterval('timer:components/Thingtime/ThingFields:1', 'Live Thing fields', update, 1000, { local: true });
     return () => { active = false; clearActivityInterval(timer); };
   }, [value]);
   return <Text aria-live="off" fontFamily="monospace" fontSize="lg">{invalid ? 'Enter a valid TOTP secret or setup link' : result ? `${result.code} · ${result.remaining}s` : '—'}</Text>;

@@ -11,7 +11,7 @@ export function MediaCacheSettings() {
 	React.useEffect(() => {
 		const refresh = () => mediaCacheMessage('tt-media-status').then(setStatus);
 		refresh();
-		const timer = activityInterval('timer:components/Settings/MediaCacheSettings:1', 'Media Cache Settings', refresh, 3000);
+		const timer = activityInterval('timer:components/Settings/MediaCacheSettings:1', 'Media Cache Settings', refresh, 3000, { local: true });
 		return () => clearActivityInterval(timer);
 	}, []);
 	const update = (key: 'cache' | 'previews', value: boolean) => {

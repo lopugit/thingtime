@@ -3,10 +3,32 @@ import test from 'node:test';
 
 import {
   ciFeatureIdentity,
+  isCiWebhookDetailEvent,
   verifyGitHubWebhookSignature,
   verifyVercelWebhookSignature
 } from './webhooks';
 import { ciEntityKey } from './store';
+
+test('CI detail deliveries are recognised so the webhook can skip them before any write', () => {
+  assert.equal(isCiWebhookDetailEvent('workflow_job', { action: 'completed' }), true);
+  assert.equal(isCiWebhookDetailEvent('deployment', {}), true);
+  assert.equal(isCiWebhookDetailEvent('deployment_status', {}), true);
+  assert.equal(isCiWebhookDetailEvent('workflow_run', { workflow_run: { display_title: 'Lopu manages PRs after workflow_run' } }), true);
+  // Feature Stack runs keep their workflow_run link.
+  assert.equal(
+    isCiWebhookDetailEvent('workflow_run', { workflow_run: { display_title: 'Stack feature-stack-run-0b2f6a3e-1c4d-4e5f-8a9b-0c1d2e3f4a5b' } }),
+    false
+  );
+  for (const action of ['labeled', 'unlabeled', 'assigned', 'review_requested', 'auto_merge_enabled', '']) {
+    assert.equal(isCiWebhookDetailEvent('pull_request', { action }), true, action);
+  }
+  for (const action of ['opened', 'reopened', 'synchronize', 'closed', 'ready_for_review', 'converted_to_draft', 'edited']) {
+    assert.equal(isCiWebhookDetailEvent('pull_request', { action }), false, action);
+  }
+  for (const eventType of ['push', 'create', 'delete', 'ping']) {
+    assert.equal(isCiWebhookDetailEvent(eventType, {}), false, eventType);
+  }
+});
 
 test('GitHub webhook verification matches the published HMAC-SHA256 vector', () => {
   const payload = 'Hello, World!';

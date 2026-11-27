@@ -75,10 +75,27 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.2.2 and an optional `gateway` descriptor containing only environment, stable
-origin and deployment identity. This metadata is private/no-store to prevent a
-CDN pinning the previous alias owner. Discovery itself neither authenticates an
-agent nor grants access to private Things.
+1.3.1 and an optional `gateway` descriptor containing only environment, stable
+origin and deployment identity. Browsers and any proxy in front of Vercel
+(Cloudflare fronts `thingtime.com`) receive `private, no-store`, so none of
+them can pin the previous alias owner. Discovery itself neither authenticates
+an agent nor grants access to private Things.
+
+Vercel's own CDN may keep a successful GET for one hour through
+`Vercel-CDN-Cache-Control: max-age=3600`, which Vercel consumes and never
+forwards. Vercel keys every cached response by the unique deployment URL (as
+well as method, scheme, host and path), and a manifest never changes during a
+deployment's life: feature versions are built in and gateway settings are fixed
+deployment configuration. After an alias moves, requests to the alias reach the
+new owner's cache and return the new owner's identity; a rollback reaches the
+earlier deployment's own cache, which names that deployment. Only a GET whose
+computed origin is exactly the routed HTTPS host is stored, so a forged
+forwarded host or scheme cannot place another origin's manifest under the
+alias's cache key; parallel pilot builds are never stored. A storable
+conditional GET returns the full body so the edge can keep it. Without this,
+each ownership check, and every client capability check, invoked a function on
+the alias: under light traffic, nearly one extra invocation per API call
+(about 630 an hour on 26 November 2026).
 
 ## Requests, promotion and rollback
 

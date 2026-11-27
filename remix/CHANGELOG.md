@@ -181,6 +181,64 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-26: **GitHub CI detail webhooks are skipped before any database
+  work.** Job updates, workflow runs, deployments and PR label changes were about
+  99% of ~42,000 GitHub deliveries a day, each holding a 2 GB function for
+  0.7–2 s. They now return 200 `accepted:false` unless the new Admin →
+  Automation switch **Live CI job, run and deployment updates**
+  (`ci.webhookDetail`, off by default) is on; PR state changes, pushes, branch
+  create/delete and Feature Stack runs are still recorded, and Reconcile on
+  the CI dashboard reads current state from GitHub. `api.github-ci-webhook`
+  1.1.0. Vercel Fluid functions cannot be smaller than 2 GB (a test deployment
+  asking for 1024 and 512 MB still got the same ~2.2 GB instance), so cutting
+  the seconds requests stay in flight is the memory lever. Plan:
+  [`PLAN/vercel-memory-and-ci-webhooks.md`](../PLAN/vercel-memory-and-ci-webhooks.md).
+
+- 2026-11-26: **The capabilities manifest is now kept at Vercel's edge, so
+  the environment gateway's ownership check no longer costs a function call.**
+  Before most API calls the server confirms it still owns the database by
+  fetching `/.well-known/thingtime-capabilities.json` from its own alias, and
+  trusts the answer for five seconds. Under light traffic that was nearly one
+  extra invocation per API call (about 630 an hour on 26 November). The
+  manifest now carries `Vercel-CDN-Cache-Control: max-age=3600`; Vercel keys
+  that cache per deployment, so an alias move still returns the new owner at
+  once, and browsers and Cloudflare still see `private, no-store`. Only an
+  exact-host HTTPS GET is stored (forged forwarded host/scheme refused), and a
+  storable conditional GET returns the full body so the edge can keep it.
+  Client capability checks get the same saving. `api.environment-gateway`
+  1.3.1. See `docs/environment-api-gateway.md`.
+- 2026-11-25: **Automation switches — every automatic, repeating or scheduled
+  feature now has an administrator on/off switch, and all of them start off.**
+  Admin → Automation lists 25 switches (browser polling by feature, desktop
+  folder sync, the Mac Thingtime Node, iPhone notification refresh, location
+  history and diagnostics retries, Watch pairing checks, and each of the nine
+  server scheduled jobs), each in its own collapsed section with the checkbox in
+  its heading, plus "Turn everything off". State lives in the
+  `automation-switches` settings singleton; `GET /api/v1/automation/switches`
+  (public, CDN-cached five minutes) and `GET|POST /api/v1/admin/automation-switches`
+  (`api.automation-switches` / `api.admin-automation-switches` 1.0.0). Browsers
+  gate the shared activity manager and background-refresh hub on it (a view
+  still loads once; nothing repeats or refreshes on return while off), scheduled
+  jobs check their switch before the daily claim, and the native apps read the
+  same endpoint at start, on return to the app and on Mac wake. Unknown,
+  missing or unreadable switches count as off. Local-only timers (clocks,
+  codes, local battery and node status) are not switched. **Claude (AI)**
+- 2026-11-25: Stop two more automatic checks. The iOS app no longer polls
+  notifications every 30 seconds; it refreshes when the web view loads, when a
+  push arrives and when the user returns to the app. The footer's service
+  status rows (Nitro, frontend, MongoDB, Vercel) probe their health endpoints
+  only once the footer scrolls into view, instead of on every page load.
+  **Claude (AI)**
+
+- 2026-11-25: Cut automatic server traffic. Browsers now get the page shell
+  straight from the CDN, and only link unfurlers and crawlers reach the social
+  metadata function, which served about 45K page loads a day. Network polling
+  pauses completely in hidden windows and after two minutes without
+  interaction, then refreshes on the user's next interaction; on-screen clocks
+  and codes keep running. Lopu checks background tasks every few seconds only
+  while one is running, otherwise at most once a minute. See
+  `NOTES/vercel-cost-reduction-2026-11-25.md`. **Claude (AI)**
+
 - 2026-11-21: Added admin controls for scheduled jobs and Vercel deployment profiles. Eight jobs default to daily and the Sunday summary keeps its weekly cadence. A parallel profile can serve a test alias through the preview gateway without project environment variables. — Codex (AI)
 
 - 2026-11-16: Fix Builder saves after clearing optional fields: local history
