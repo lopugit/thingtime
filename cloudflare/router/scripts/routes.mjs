@@ -57,7 +57,7 @@ if (command === 'show') {
 } else if (command === 'set' && group && target) {
 	const { table } = await readTable();
 	const next = await writeTable(withTarget(table, group, target));
-	if (target === 'worker') console.log('Note: until an API Worker is bound, the router sends "worker" routes to Vercel.');
+	if (target === 'worker') console.log('Note: only endpoints listed in the API Worker manifest (/__cf/api/manifest) go to Cloudflare; the rest of the group stays on Vercel.');
 	console.log(`saved (live within ~90 s)\n${summary(next)}`);
 } else if (command === 'reset') {
 	console.log(`saved (live within ~90 s)\n${summary(await writeTable(DEFAULT_ROUTE_TABLE))}`);

@@ -13,7 +13,13 @@ routes = [
 ]
 
 [vars]
-ROUTER_VERSION = "1.0.0"
+ROUTER_VERSION = "1.1.0"
+
+# Cloudflare API Worker (cloudflare/api). Only endpoints in its capability
+# manifest go to it; everything else stays on Vercel.
+[[services]]
+binding = "API_WORKER"
+service = "thingtime-api"
 
 # Route table (key `route-table`), written by scripts/routes.mjs.
 [[kv_namespaces]]

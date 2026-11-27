@@ -59,13 +59,57 @@ const annotate = (response, group, target) => {
 	return annotated;
 };
 
-async function dispatch(request, env, group, target) {
-	if (target === 'worker' && env.API_WORKER) {
-		return annotate(await env.API_WORKER.fetch(request), group, 'worker');
+// The API Worker's capability manifest lists exactly the endpoints and
+// methods it serves (generated from the API registry). Only those go to it;
+// everything else in a `worker` group still goes to Vercel.
+export const API_MANIFEST_PATH = '/__cf/api/manifest';
+const MANIFEST_CACHE_MS = 30_000;
+let cachedManifest = null;
+
+export function resetApiManifestCache() {
+	cachedManifest = null;
+}
+
+export async function loadApiManifest(env, now = Date.now()) {
+	if (!env.API_WORKER) return null;
+	if (cachedManifest && cachedManifest.expires > now) return cachedManifest.value;
+	let value = null;
+	try {
+		const response = await env.API_WORKER.fetch(new Request(`https://thingtime-api.internal${API_MANIFEST_PATH}`));
+		const body = response.ok ? await response.json() : null;
+		if (body && body.schemaVersion === 1 && Array.isArray(body.operations)) value = body;
+	} catch {
+		value = null;
 	}
-	// `worker` without a deployed API Worker falls back to Vercel.
-	const served = target === 'worker' ? 'vercel (worker unavailable)' : 'vercel';
-	return annotate(await fetch(request), group, served);
+	cachedManifest = { value, expires: now + MANIFEST_CACHE_MS };
+	return value;
+}
+
+export const workerServes = (manifest, pathname, method) => {
+	const verb = method === 'HEAD' ? 'GET' : method;
+	return Boolean(manifest?.operations?.some((operation) => operation.path === pathname && operation.methods.includes(verb)));
+};
+
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
+
+async function dispatch(request, env, group, target) {
+	if (target === 'worker') {
+		const manifest = await loadApiManifest(env);
+		const pathname = new URL(request.url).pathname;
+		if (!manifest) return annotate(await fetch(request), group, 'vercel (worker unavailable)');
+		if (!workerServes(manifest, pathname, request.method)) return annotate(await fetch(request), group, 'vercel (not on worker)');
+		// Keep a copy for safe methods so a refused or failed Worker answer can be replayed on Vercel.
+		const replay = SAFE_METHODS.has(request.method) ? request.clone() : null;
+		try {
+			const response = await env.API_WORKER.fetch(request);
+			if (replay && response.headers.get('x-thingtime-fallback') === 'vercel') return annotate(await fetch(replay), group, 'vercel (worker refused)');
+			return annotate(response, group, 'worker');
+		} catch (error) {
+			if (replay) return annotate(await fetch(replay), group, 'vercel (worker failed)');
+			throw error;
+		}
+	}
+	return annotate(await fetch(request), group, 'vercel');
 }
 
 export default {
@@ -74,11 +118,13 @@ export default {
 		try {
 			if (url.pathname === `${TEST_PREFIX}/health`) {
 				const { table, source } = await loadRouteTable(env);
+				const manifest = await loadApiManifest(env);
 				return json({
 					ok: true,
 					service: 'thingtime-router',
 					version: env.ROUTER_VERSION || 'unknown',
 					apiWorker: Boolean(env.API_WORKER),
+					apiWorkerOperations: manifest ? manifest.operations.map((operation) => `${operation.methods.join(',')} ${operation.path}`) : [],
 					table: {
 						source,
 						default: table.default,
@@ -90,7 +136,9 @@ export default {
 				const path = url.searchParams.get('path') || '/';
 				if (!path.startsWith('/')) return json({ ok: false, error: 'path must start with /' }, 400);
 				const { table } = await loadRouteTable(env);
-				return json({ ok: true, path, ...resolveRoute(table, path) });
+				const route = resolveRoute(table, path);
+				const onWorker = route.target === 'worker' && workerServes(await loadApiManifest(env), path, url.searchParams.get('method')?.toUpperCase() || 'GET');
+				return json({ ok: true, path, ...route, served: route.target === 'worker' ? (onWorker ? 'worker' : 'vercel (not on worker)') : 'vercel' });
 			}
 			let forward = request;
 			let path = url.pathname;

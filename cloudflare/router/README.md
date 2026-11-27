@@ -5,9 +5,15 @@ A Cloudflare Worker that sends each route group of thingtime.com to a backend
 chosen in a route table:
 
 - `vercel` passes the request through to the existing Vercel origin unchanged.
-- `worker` sends it to the Cloudflare API Worker. That Worker is bound as
-  `API_WORKER` once it exists (phase 2). Until then, `worker` routes fall back
-  to Vercel and are labelled `vercel (worker unavailable)`.
+- `worker` sends it to the Cloudflare API Worker (`cloudflare/api`, bound as
+  `API_WORKER`), but only for endpoints and methods in that Worker's capability
+  manifest (`/__cf/api/manifest`, generated from the API registry). The rest of
+  the group goes to Vercel. The response header shows which:
+  - `worker` — served by the Cloudflare API Worker;
+  - `vercel (not on worker)` — not in the manifest;
+  - `vercel (worker refused)` or `vercel (worker failed)` — a GET replayed on
+    Vercel;
+  - `vercel (worker unavailable)` — no binding or manifest.
 
 Any router error also falls back to passing the request through, so the router
 can add a path but never take the site down by itself. Every routed response

@@ -12,6 +12,24 @@ privilege or business-data changes. Test `test:migrations`,
 
 # API endpoints and capabilities
 
+**Cloudflare runtime (2026-11-27).** An endpoint can also run on the Cloudflare
+API Worker (`cloudflare/api`) behind the thingtime.com router
+(`cloudflare/router`). To enable one:
+
+1. Add `cloudflare: { featureVersion, methods }` to its doc in `apiDocs.ts`.
+   `endpoint()` adds the "Cloudflare deployment" docs note.
+2. Run `npm --prefix cloudflare/api run generate`, then commit
+   `src/routes.generated.ts`.
+
+The same handler and the shared pipeline
+(`app/api/utils/http/routeExecution.ts`, also used by Nitro's dispatcher) run on
+both runtimes. Never fork a handler for Cloudflare. A handler whose imports
+include a native module stays Vercel-only. MongoDB state for each runtime lives
+in `mongodb/runtimeState.ts`; Cloudflare runs it in a fixed pool of Durable
+Object shards. Run `npm --prefix cloudflare/api test`,
+`npm --prefix cloudflare/router test` and `test:api-capabilities`. See
+`cloudflare/api/README.md`.
+
 Private diagnostics use `api.devices-diagnostics` and
 `api.devices-node-diagnostics` 1.0.0: home-only, private owner management and
 narrow paired safe-event append. The service owns live-session/pairing fences,

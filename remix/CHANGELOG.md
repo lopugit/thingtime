@@ -181,6 +181,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-27: **API endpoints can run on Cloudflare too, from the same code.**
+  - **Marking an endpoint:** add `cloudflare: { featureVersion, methods }` to its
+    `apiDocs.ts` entry. Its docs gain a "Cloudflare deployment" note, and
+    `cloudflare/api` (generated route list) serves it through the shared request
+    pipeline `app/api/utils/http/routeExecution.ts`, which Nitro's dispatcher now
+    calls too.
+  - **MongoDB state:** moved behind `mongodb/runtimeState.ts`. Node keeps one
+    process-wide state. Cloudflare runs requests in a fixed pool of Durable
+    Object shards, each with its own client pool, so connections stay bounded by
+    the shard count.
+  - **Connection tracker:** its runtime id is now created on first use, because
+    Workers refuse randomness at import.
+  - **Routing and fallback:** the router sends a `worker` group's endpoints to
+    Cloudflare only if the API Worker's manifest lists them, and replays a
+    refused or failed GET on Vercel. Vercel-only deployments are unchanged.
+  - **First endpoint:** `GET /api/v1/automation/switches` (`api.automation-switches`
+    1.0.0 on Cloudflare).
+
 - 2026-11-27: **A Cloudflare router Worker sits in front of a test path on
   thingtime.com.** `cloudflare/router` sends each route group to Vercel or a
   future Cloudflare API Worker, chosen in a KV route table that

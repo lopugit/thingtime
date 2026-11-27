@@ -43,7 +43,26 @@ export type ApiEndpointDoc = {
   responseExamples: ApiResponseExample[];
   notes?: string[];
   featureVersion?: string;
+  /**
+   * Set when this endpoint's own handler also runs on the Cloudflare API Worker
+   * (`cloudflare/api`), behind the thingtime.com router. The same source is
+   * compiled for both runtimes, so Vercel-only deployments are unaffected.
+   * `featureVersion` versions the Cloudflare build of `api.<id>` in that
+   * Worker's capability manifest; `methods` lists what it serves there. The
+   * router sends anything else to Vercel.
+   */
+  cloudflare?: ApiCloudflareSupport;
 };
+
+export type ApiCloudflareSupport = {
+  featureVersion: `${number}.${number}.${number}`;
+  methods: ApiHttpMethod[];
+};
+
+export const cloudflareSupportNote = (doc: Pick<ApiEndpointDoc, 'id' | 'cloudflare'>) =>
+  doc.cloudflare
+    ? `Cloudflare deployment: built for Cloudflare Workers support. The same handler also runs on the Cloudflare API Worker as api.${doc.id} ${doc.cloudflare.featureVersion} (${doc.cloudflare.methods.join(', ')}). The thingtime.com router prefers it when that route group is switched to Cloudflare and falls back to Vercel; Vercel-only deployments are unaffected.`
+    : null;
 
 export type ApiPlatformExamples = {
   curl: string;
@@ -57,11 +76,15 @@ export type SerializedApiEndpointDoc = ApiEndpointDoc & {
   platformExamples: ApiPlatformExamples;
 };
 
-const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>): ApiEndpointDoc => ({
-  ...doc,
-  contractVersion: doc.contractVersion || '1.0.0',
-  docsEndpoint: `${doc.endpoint}-docs`
-});
+const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>): ApiEndpointDoc => {
+  const cloudflareNote = cloudflareSupportNote(doc);
+  return {
+    ...doc,
+    ...(cloudflareNote ? { notes: [...(doc.notes ?? []), cloudflareNote] } : {}),
+    contractVersion: doc.contractVersion || '1.0.0',
+    docsEndpoint: `${doc.endpoint}-docs`
+  };
+};
 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
  endpoint({
@@ -1111,6 +1134,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'automation-switches', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'settings',
+    cloudflare: { featureVersion: '1.0.0', methods: ['GET'] },
     title: 'Automation switches', endpoint: '/api/v1/automation/switches', methods: ['GET'],
     summary: 'Public on/off state of every automatic background feature: browser polling, desktop folder sync, the Mac Thingtime Node, iPhone and Watch background work, and server scheduled jobs.',
     detail: 'Returns { ok, switches: { "<switch id>": boolean }, updatedAt }. Every registered switch is listed. Switches are off unless an administrator turned them on; clients treat a missing, unknown or unreadable switch as off and must not start repeating or scheduled work for it. A view still loads its data once when opened. The response is non-secret and CDN-cacheable for a few minutes (public, s-maxage=300), so read it at start and when the app returns to the foreground, never on a timer. A failed server read serves the last-known-good value or all-off.',

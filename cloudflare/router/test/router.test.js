@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import router, { loadRouteTable, resetRouteTableCache, ROUTE_TABLE_KEY } from '../src/index.js';
+import router, { API_MANIFEST_PATH, loadRouteTable, resetApiManifestCache, resetRouteTableCache, ROUTE_TABLE_KEY } from '../src/index.js';
 import { DEFAULT_ROUTE_TABLE, resolveRoute, validateRouteTable, withTarget } from '../src/routeTable.js';
 
 const kv = (value) => ({ get: async (key, type) => (key === ROUTE_TABLE_KEY && type === 'json' ? value : null) });
@@ -109,21 +109,67 @@ test('a worker route without an API Worker falls back to Vercel', async () => {
 	resetRouteTableCache();
 });
 
-test('a worker route uses the API Worker binding when present', async () => {
-	resetRouteTableCache();
-	let workerCalls = 0;
-	const env = {
-		ROUTES: kv(withTarget(DEFAULT_ROUTE_TABLE, 'things', 'worker')),
-		API_WORKER: { fetch: async () => { workerCalls++; return new Response('from worker'); } }
+const manifestFor = (...operations) => ({ schemaVersion: 1, runtime: 'cloudflare', features: {}, operations });
+const apiWorker = (manifest, handler) => {
+	const calls = [];
+	return {
+		calls,
+		fetch: async (request) => {
+			if (new URL(request.url).pathname === API_MANIFEST_PATH) return Response.json(manifest);
+			calls.push(request);
+			return handler(request);
+		}
 	};
+};
+const resetCaches = () => {
+	resetRouteTableCache();
+	resetApiManifestCache();
+};
+
+test('a worker route uses the API Worker for endpoints its manifest lists', async () => {
+	resetCaches();
+	const worker = apiWorker(manifestFor({ path: '/api/v1/things', methods: ['GET'] }), async () => new Response('from worker'));
+	const env = { ROUTES: kv(withTarget(DEFAULT_ROUTE_TABLE, 'things', 'worker')), API_WORKER: worker };
 	await withFetch(async () => new Response('from vercel'), async (calls) => {
 		const response = await router.fetch(new Request('https://thingtime.com/api/v1/things'), env);
 		assert.equal(await response.text(), 'from worker');
 		assert.equal(response.headers.get('x-thingtime-route'), 'things; worker');
-		assert.equal(workerCalls, 1);
+		assert.equal(worker.calls.length, 1);
 		assert.equal(calls.length, 0);
 	});
-	resetRouteTableCache();
+	resetCaches();
+});
+
+test('endpoints or methods the API Worker does not list go to Vercel', async () => {
+	resetCaches();
+	const worker = apiWorker(manifestFor({ path: '/api/v1/things', methods: ['GET'] }), async () => new Response('from worker'));
+	const env = { ROUTES: kv(withTarget(DEFAULT_ROUTE_TABLE, '*', 'worker')), API_WORKER: worker };
+	await withFetch(async () => new Response('from vercel'), async (calls) => {
+		const post = await router.fetch(new Request('https://thingtime.com/api/v1/things', { method: 'POST', body: '{}' }), env);
+		assert.equal(post.headers.get('x-thingtime-route'), 'things; vercel (not on worker)');
+		const other = await router.fetch(new Request('https://thingtime.com/api/v1/auth/me'), env);
+		assert.equal(other.headers.get('x-thingtime-route'), 'auth; vercel (not on worker)');
+		assert.equal(worker.calls.length, 0);
+		assert.equal(calls.length, 2);
+	});
+	resetCaches();
+});
+
+test('a refused or failed Worker answer to a GET is replayed on Vercel', async () => {
+	resetCaches();
+	const manifest = manifestFor({ path: '/api/v1/things', methods: ['GET'] });
+	const env = (handler) => ({ ROUTES: kv(withTarget(DEFAULT_ROUTE_TABLE, 'things', 'worker')), API_WORKER: apiWorker(manifest, handler) });
+	await withFetch(async () => new Response('from vercel'), async (calls) => {
+		const refused = await router.fetch(new Request('https://thingtime.com/api/v1/things'), env(async () => new Response('no', { status: 421, headers: { 'x-thingtime-fallback': 'vercel' } })));
+		assert.equal(await refused.text(), 'from vercel');
+		assert.equal(refused.headers.get('x-thingtime-route'), 'things; vercel (worker refused)');
+		resetCaches();
+		const failed = await router.fetch(new Request('https://thingtime.com/api/v1/things'), env(async () => { throw new Error('shard down'); }));
+		assert.equal(await failed.text(), 'from vercel');
+		assert.equal(failed.headers.get('x-thingtime-route'), 'things; vercel (worker failed)');
+		assert.equal(calls.length, 2);
+	});
+	resetCaches();
 });
 
 test('a router failure fails open to the origin', async () => {
