@@ -232,6 +232,10 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
 	const linkedUrl = canonicalLinkedMediaUrl(record.url);
+	const livePhoto = record.livePhoto && typeof record.livePhoto === 'object' && !Array.isArray(record.livePhoto) ? record.livePhoto as Record<string, unknown> : null;
+	const validLivePhoto = !linkedUrl && livePhoto && Object.keys(livePhoto).length === 2 &&
+		typeof livePhoto.pairId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(livePhoto.pairId) &&
+		(livePhoto.role === 'photo' || livePhoto.role === 'motion');
 	return {
 		id,
 		name,
@@ -245,6 +249,7 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		mediaKind: linkedUrl
 			? safeLinkedMediaKind(record.mediaKind)
 			: safeAttachmentMediaKind(contentType === 'application/octet-stream' && detectedContentType ? detectedContentType : contentType, record.mediaKind),
+		...(validLivePhoto ? { livePhoto: { pairId: String(livePhoto.pairId).toLowerCase(), role: livePhoto.role as 'photo' | 'motion' } } : {}),
 		...(filenamePreview ? { filenamePreview } : {}),
 		...(title ? { title } : {}),
 		...(description ? { description } : {}),

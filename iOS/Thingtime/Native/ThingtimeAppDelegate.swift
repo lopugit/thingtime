@@ -6,6 +6,7 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        MobileDeviceDiagnostics.shared.activate()
         NativeBackgroundPhotoUpload.shared.activate()
         NativeUploadBackgroundCoordinator.shared.activate()
         NativeDeferredUpload.shared.activate(foreground: application.applicationState != .background)
@@ -28,6 +29,9 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         // Clear before active WebKit callbacks can authorize a new binding.
         MobileDeviceBackgroundPresence.shared.stop()
     }
+
+    func applicationDidBecomeActive(_ application: UIApplication) { MobileDeviceDiagnostics.shared.foreground() }
+    func applicationDidEnterBackground(_ application: UIApplication) { MobileDeviceDiagnostics.shared.background() }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         ThingtimeNativeNotifications.shared.setPhoneDeviceToken(deviceToken.hexString)

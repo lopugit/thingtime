@@ -12,6 +12,7 @@ import { drawerAncestorPath, drawerParentOptions } from './drawerCustomItems';
 import { CustomDrawerItems, OPEN_CUSTOM_DRAWER_SECTION } from './CustomDrawerItems';
 import { EditorDrawerSection } from './EditorDrawerSection';
 import { ReorderableList } from './ReorderableList';
+import { MarketingPublicationStatus } from '~/components/Marketing/MarketingPublicationStatus';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { isKeyPublished } from '~/marketing/publishingCore';
 
@@ -111,7 +112,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	// publication-gated sections (Marketing) read the shared publish state —
 	// catalog-free, one fetch per page load, cached for the first paint
-	const { publications } = useMarketingPublications();
+	const publicationsState = useMarketingPublications();
+	const { publications } = publicationsState;
 	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
 
 	const orderedTopItems = React.useMemo(() => {
@@ -532,6 +534,9 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					)}
 				</Flex>
 
+				<Box paddingX={5}>
+					<MarketingPublicationStatus state={publicationsState} retry={() => void publicationsState.refresh({ force: true })} />
+				</Box>
     <CustomDrawerItems preview={variant === 'popup'} onNavigate={onNavigate} onOpenChildren={openChildren} />
 				{/* second-level menu for the selected top-level item */}
 				{!!currentParentId && (

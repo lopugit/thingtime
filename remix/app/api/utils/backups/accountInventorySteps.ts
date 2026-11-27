@@ -1,3 +1,4 @@
+import { ACL_ENTRY_KIND, rootAcl, grantFamilyMatch } from '../things/relationalAcl';
 import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import { createHash } from 'node:crypto';
 import { Timestamp } from 'mongodb';
@@ -444,12 +445,30 @@ export function createAccountInventoryStepper(
 					}
 					item = await retainTimelineBackupRecord(store, snapshotId, ordinal, doc, guarded);
 				} else {
-					if (kind === 'content') await references.content(doc);
+					let snapshotDoc = doc;
+					if (kind === 'content') {
+						await references.content(doc);
+						if (doc.aclGeneration) {
+							const acl = rootAcl(doc);
+							let after = '';
+							while (true) {
+								// Use the same explicit atClusterTime as the pinned root,
+								// including after continuation in another worker process.
+								const rows = await query({ ...grantFamilyMatch('audience'), thingtime: ACL_ENTRY_KIND, targetId: doc.shareId, ownerId: doc.ownerId,
+									'crystal.revision': doc.aclGeneration, 'crystal.revoked': { $ne: true }, shareId: { $gt: after } },
+									{ _id: 0, shareId: 1, 'crystal.entry': 1 }, 250);
+								for (const row of rows) acl.push(row.crystal.entry);
+								if (rows.length < 250) break;
+								after = rows[rows.length - 1].shareId;
+							}
+							snapshotDoc = { ...doc, acl, aclGeneration: undefined };
+						}
+					}
 					item = await (kind === 'theme'
 						? retainBackupThemeSnapshot
 						: kind === 'notification'
 						? retainBackupNotification
-						: retainBackupThingSnapshot)(store, snapshotId, ordinal, doc, guarded);
+						: retainBackupThingSnapshot)(store, snapshotId, ordinal, snapshotDoc, guarded);
 				}
 			}
 			items.push(parseBackupItem(item));

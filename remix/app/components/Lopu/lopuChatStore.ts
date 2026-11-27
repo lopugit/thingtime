@@ -528,9 +528,12 @@ export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
  * previous account's conversations and any in-flight turn.
  */
 let accountGeneration = 0;
+// When background tasks were last fetched; reset so a new account loads at once.
+let lastTaskRefreshAt = -Infinity;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
 	accountGeneration++;
+	lastTaskRefreshAt = -Infinity;
   providerWrites.clear();
   accessWrites.clear(); accessRevisions.clear();
 	for (const controller of controllers.values()) controller.abort();
@@ -1527,8 +1530,14 @@ export const resetLopuStoreForTests = () => {
 
 let recoveringTasks = false;
 const recoveredTaskVersions = new Map<string, string>();
+// Without a running task there is nothing to watch: check at most once a
+// minute (and on return to the window) instead of every poll tick.
+const IDLE_TASK_REFRESH_MS = 60_000;
+const hasRunningTask = () => getAiTasks().some(task => task.status === 'running' || task.workflowStatus === 'running');
 export const recoverLopuBackgroundTasks = async () => {
  if (recoveringTasks || !state.userId) return;
+ if (!hasRunningTask() && Date.now() - lastTaskRefreshAt < IDLE_TASK_REFRESH_MS) return;
+ lastTaskRefreshAt = Date.now();
  recoveringTasks = true;
  const owner = state.userId, generation = accountGeneration;
  try {

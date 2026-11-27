@@ -1,5 +1,35 @@
 # UI shell, menus and design system
 
+## Contextual AI waterfall selection
+
+`AI/AiWaterfallSelector.tsx` matches its opening configuration to the saved
+library using `AI/savedWaterfallSelection.ts`. Compare ordered endpoint, model,
+effort and speed fields; preserve explicit template selection and fence delayed
+library reconciliation after user edits. The existing library save retains the
+matched ID and revision. Run `test:ai-models` and
+`node remix/scripts/ai-waterfall-selector-browser.mjs` (installed Playwright,
+optionally selected by `TT_PLAYWRIGHT_MODULE`) for desktop/mobile synthetic
+component coverage; follow TESTING.md for authenticated deployed acceptance.
+
+`Admin/PlatformReportingSettings.tsx` uses individually editable settings blocks
+for private scheduled-run reporting. Its selected-origin administrator transport
+requires home storage, exact identity and `api.admin-platform-reporting` 1.0.0.
+`PRConflictResolverModelWaterfallEditor.tsx` uses the published catalogue through
+`api.settings-pr-conflict-auto-resolver-model-waterfall` 1.2.0 for editing and
+persisting newly discovered effort choices. Run `test:platform-reporting` and
+`scripts/test-platform-reporting-ui.mjs` for reporting isolation and UI checks.
+
+## Publication visibility status
+
+`Marketing/marketingPublicationsStore.tsx` preserves origin-local public
+publication data during failed refreshes, clears session audit on identity
+changes and fences old completions. `MarketingPublicationStatus.tsx` supplies
+one inline refresh/degraded indicator with Retry in `Nav/Drawer/DrawerContent`
+and `Admin/MarketingPublishingTab`; cached links and controls remain usable.
+A committed publish with unavailable readback retains optimistic state while
+reconciling. Run `test:marketing` and the desktop/mobile drawer/admin checklist
+in [request cost controls](../../TESTING.md#request-cost-controls-13-november-2026).
+
 ## Shared persisted Thing actions
 
 `schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore

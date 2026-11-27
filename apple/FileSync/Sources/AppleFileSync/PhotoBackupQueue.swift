@@ -162,6 +162,7 @@ final class PhotoBackupQueue {
             try write(true, at: marker)
         }
     }
+    func checkpointAcknowledgedSourceIndex() throws { try sourceIndexOutbox().checkpointAcknowledgedIndex() }
     func pendingSourceIndex() throws -> PhotoSourceIndexPage? { try sourceIndexOutbox().first() }
     func acknowledgeSourceIndex(_ page: PhotoSourceIndexPage) throws { try sourceIndexOutbox().acknowledge(page) }
     private func observe(_ resources: [PhotoResource], cursor: OrderedPhotoCheckpoint, total: Int,

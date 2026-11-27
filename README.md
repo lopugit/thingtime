@@ -2,6 +2,14 @@
 
 https://thingtime.com
 
+### Private device diagnostics
+
+The private hidden Debug folder and safe paired-device events require no new
+provider secret or environment variable. Use the normal home database, storage
+accounting migrations and device pairing; negotiate both diagnostics 1.0 features
+on the exact origin. Custom database contexts are explicitly unavailable.
+See [the contract and isolated fixture verification](docs/private-device-diagnostics.md).
+
 ### Private device location history and locate actions
 
 Paired devices can opt into private location observations, retained with
@@ -804,6 +812,34 @@ branch runs its own control-plane contract CI. Updating the implementation no
 longer requires separately merging the same behavior into `develop` and `main`;
 the thin listeners on both branches call the same reviewed revision immediately.
 
+### Reviewed preview retirement
+
+The manual `develop-pr-preview.yml` listener accepts optional
+`retirement_deployment_ids` (a JSON array of exact deployment IDs) and
+`retirement_dry_run` (boolean). Explicit selection requires `pr_number: 0`.
+The protected controller support must be merged before forwarding these inputs;
+[controller PR #1499](https://github.com/lopugit/thingtime/pull/1499) supplies it.
+Empty selection and false keep existing scheduled and PR-event behavior.
+
+Run a selected batch with dry-run enabled first. Review its private decision
+artifact and current saved retention policy, recheck recent legitimate use, then
+execute only the reviewed exact IDs. The protected job retains its existing
+credentials and rechecks policy, project/PR ownership, grace, aliases and active
+roles. Adding listener inputs performs no cleanup or protection change.
+
+### Reviewed retained-preview maintenance
+
+The same thin listener accepts three optional manual inputs:
+`maintenance_artifact_commit`, `maintenance_manifest_path` and
+`maintenance_manifest_sha256`. The protected controller must support them before
+this listener is deployed. All three default empty; normal previews still build
+the exact current PR head. Maintenance binds a reviewed frozen artifact merged
+into canonical `main`, the exact incumbent deployment, current PR head/ref and
+reconstructed source tree. It cannot select an arbitrary old revision or URL.
+See [artifact provenance and dispatch](ops/preview-maintenance/README.md).
+Publishing a maintenance preview does not merge the feature or mark its current
+head deployed, and adding these inputs does not enable Vercel protection.
+
 ### CodeQL coverage for every PR target and branch
 
 Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
@@ -959,6 +995,13 @@ events, using:
 ```text
 https://<your-thingtime-origin>/api/v1/integrations/github/webhook
 ```
+
+Workflow job, workflow run, deployment and PR label deliveries are the bulk of
+the traffic (tens of thousands a day while PRs are active). The route skips
+them before any write unless Admin → Automation → **Live CI job, run and
+deployment updates** is on, which it is not by default. Use Reconcile on the CI
+dashboard to read the current state from GitHub instead. To stop the requests
+entirely, leave those four events unsubscribed in the GitHub App.
 
 Create a project-scoped Vercel webhook for deployment created/ready/error/
 canceled/deleted events at:
@@ -1601,7 +1644,53 @@ their existing custom develop credential scope; the publisher explicitly selects
 the logical preview gateway without exposing unrelated standard-preview settings
 to branch code. A recent configuration audit found previews and
 custom develop already share the development cluster, separate from production;
-the master preview alias and gateway activation are still pending.
+the stable production, develop and master-preview manifests were verified as
+configured gateways on 11 November 2026. See the runbook for the evidence and
+the limits of that observation. Retired owners drain only admitted database
+work; static traffic and relays do not delay pool closure. The Vercel pool
+helper lets configured idle application sockets expire before suspension.
+
+### Preview protection and request-cost controls
+
+Existing device clients keep their 20-second long-poll protocol and event cursors.
+Idle command checks now avoid transactions, and disconnects stop pending work.
+A persistent device connection remains a separate architecture decision: hosting
+SSE or WebSockets in the same metered function would still reserve memory.
+Evaluate a dedicated persistent device service only with reconnect, lease,
+authorization and load measurements; this release does not introduce one.
+
+The 13 November cost controls retain the existing Vercel/MongoDB architecture:
+protect preview entry points, revalidate capability manifests conditionally,
+bound publication reads, and cancel device polling when its caller disconnects.
+No VPS or database migration is part of this change. Deployment protection is
+**not yet enabled** by these source changes; verify its live project setting
+and acceptance separately before recording it as active.
+
+For a fork using a protected Vercel gateway, generate an automation bypass secret
+in that project's Deployment Protection settings and provide
+`VERCEL_AUTOMATION_BYPASS_SECRET="<project-automation-bypass-secret>"` only to
+the server deployments that must call that configured gateway. This is a
+platform-entry bootstrap value: protection runs before the application's vault
+or authentication can be reached. Keep the existing gateway origin,
+environment, deployment identity and signing-secret configuration from
+[the gateway runbook](docs/environment-api-gateway.md); the automation secret
+does not replace signed gateway admission, session validation or route ACLs.
+
+Deploy the server support before enabling protection. Authority discovery and
+relayed API requests send the bypass header only to the validated configured
+gateway origin; incoming bypass headers are stripped. Never use a client/public
+variable, URL parameter, committed env file, response, or log to distribute the
+secret. Verify protected preview access, signed gateway reads/writes, approved
+automation and cron/webhook integrations before widening the protected scope;
+keep intended public production routes reachable.
+
+If enabling protection blocks an integration, restore the previous protection
+scope first and verify the existing signed gateway path. Retain the prior
+working deployment and environment configuration for normal alias rollback;
+remove or rotate a bypass secret only after its consumers are verified. Do not
+reset account data, weaken application authorization, or change hosting as a
+rollback shortcut. The [cost-control checklist](TESTING.md#request-cost-controls-13-november-2026)
+separates source checks from live protection and browser acceptance.
 
 Configure a self-hosted API or the environment gateway owner with:
 
@@ -1694,6 +1783,47 @@ MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
 ### Index and storage hygiene
+
+Relational ACL writes require a strict MongoDB collection validator that keeps
+older deployments from restoring inline grants after migration. On each selected
+home or data database, the deployment principal needs `listCollections` and
+`collMod` for the physical Things collection resolved by the collection registry;
+it also needs `createCollection` when that collection does not yet exist. Check
+these specific privileges rather than assuming a generic read/write role has
+them. Keep credentials in the existing database configuration and grant only
+the required database/collection scope; no new Vercel variable is needed.
+
+For supported provisioning, open `/migrations` as an administrator and choose
+`provision-relational-acl-validator`. Negotiate `api.admin-migrations` 1.5.0 and
+`api.admin-migrations-run` 1.6.1 on the intended origin first. Run Dry run to
+inspect the home collection metadata without DDL; pending counts refer to one
+collection protection requirement, not Thing documents. A ready inspection does
+not establish authority to install a missing validator. Run installs the exact
+canonical constraint and independently reads it back, preserving unrelated
+constraints and changing no documents, grants or database privileges. Custom
+data-plane selection is refused before a migration lease is acquired.
+Failures expose only a closed stage/category such as `modify/unauthorized`,
+`inspect/unauthorized`, `modify/timeout` or `verify/not-ready`. The error also
+includes a bounded numeric MongoDB code and enumerated driver/code-name labels
+(for example `code=8000; driver=server; name=AtlasError`); no raw error message,
+original cause, arbitrary exception name, command body or connection details are
+retained. An unclassified/generic code does not establish its cause. A denial needs an
+already-authorized administrative provisioning path; this migration does not
+grant privileges or make a runtime role more powerful. Unverifiable protection stays pending in the census so Dry run remains reachable. An uncertain real run
+must be followed by Dry run before another attempt.
+
+The canonical ACL writer installs protection before its transaction, preserves
+any existing validator and verifies strict/error enforcement. Missing privileges
+or failed verification return a sanitized 503 before migration. Never bypass
+document validation or weaken an existing constraint to make a write succeed.
+Earlier relational previews omitted the timestamp floor. Their exact legacy
+ACL fences remain valid; current content or grant edits add the floor atomically
+without changing stored grants or logical-byte accounting. Null or malformed
+floors are refused. No manual data rewrite or collection scan is needed.
+Callers composing ACL writes in an outer transaction must request
+`requiresAclWriteFence` on the canonical transaction helper before entering it.
+See [relational access rollout and acceptance](docs/relational-access.md#verification-and-rollout)
+for mixed-version writes, timestamp protection and original-task recovery.
 
 The boot-time `ensureIndexes` converges every collection to the index plan in
 `remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
@@ -1972,6 +2102,39 @@ are never a fallback for it. See "Lopu voice + personal Secure Vault" above
 for the vault key and allowlist. Design note:
 `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` (§1.3 own
 providers, §6 voice + vault).
+
+### Automatic catalogue refresh and private platform run reporting
+
+The production Vercel schedule in `remix/vercel.json` calls
+`/api/v1/ai/models/sync` daily at **03:23 UTC**. The scheduler must be enabled
+on the production deployment and supply its configured `CRON_SECRET` through
+Vercel's supported protected cron authentication. Keep that irreducible
+scheduler credential in the deployment secret store; do not put it in source.
+Provider discovery persists catalogue timestamps and available model IDs. With
+a valid Anthropic catalogue API key (`ANTHROPIC_MODELS_API_KEY`, falling back to
+`ANTHROPIC_API_KEY`), explicit supported effort metadata is validated and saved
+for existing and newly discovered models. Missing or malformed metadata keeps
+the last verified options. Public-document fallback retains curated capabilities;
+speed and pricing mappings still require a reviewed release. Use the encrypted
+integration vault for provider keys; do not put them in source or client settings.
+
+Administrators can enable **Private scheduled run logs** in Admin settings.
+Create or select the platform owner account and its Character, link ownership
+through Admin → Users → Links, and choose an administrator-owned private ACL
+group. The configuring administrator must own the platform account directly or
+through that explicit account link. A group owner is an implicit member; add any
+other intended administrators through ordinary group membership controls.
+No account names, group IDs or credentials are hardcoded for forks. Reporting
+is off until configured, and every write rechecks the owner, Character, group
+and administrator authority. Disabling the Character or removing the ownership
+link prevents subsequent publication.
+
+Posts contain allowlisted run status, timestamps and identifiers, carry an
+explicit editable renderer, and are private to their Character and selected
+group. Settings show the latest delivery receipt. Manual administrator calls
+are not presented as scheduler invocations. Configure a fork's own identities,
+audience and scheduler before enabling reporting; never reuse production
+identity IDs or provider secrets.
 
 ```sh
 # at least one provider key makes Lopu think; with neither it answers with an
@@ -7203,3 +7366,30 @@ tab after the normal extension update. Forks use their own trusted HTTPS origin;
 no extra environment variables, provider secrets or AppID fetch service is needed.
 Only empty/default and exact-origin HTTPS AppIDs are handled locally; other cases
 remain native. See [Password manager](docs/password-manager.md).
+
+### Relational access and saved configuration
+
+Growing ACLs, app selected-resource grants, subspace definitions and saved
+endpoint/deployment settings use separate protected Things. See
+[relational access](docs/relational-access.md) for compatibility and rollout.
+New forks use a replica set for transactional migration and configure the
+existing `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>` in their
+runtime secret store (the existing admin vault key remains the documented
+fallback). Reuse that key across upgrades. Endpoint URLs, remote tokens and
+path rules are owner-bound encrypted records; no new provider key is needed.
+Without the vault key, existing unmigrated settings remain readable, but
+saving or deleting settings returns an unavailable error before external
+credential operations. No secret belongs in repository configuration.
+
+### Receive macOS system shares
+
+The signed Thingtime Mac app includes a Sharing extension for text, URLs, images
+and files. It opens the same New post / Message / Save to Things composer used
+on iOS with the current desktop session. Pending shares can be reopened from
+File → Resume shared content or Saved shares. See [macOS sharing](docs/macos-sharing.md)
+for activation, local retention, fork-safe signing setup and verification.
+
+For a second Vercel project with no configured environment variables, use the
+[parallel deployment setup](docs/environment-api-gateway.md#parallel-hobby-frontend-with-database-backed-enrollment).
+The protected GitHub publisher builds for an enrolled test alias. Its API calls
+use the project's Vercel workload identity and the existing preview authority.

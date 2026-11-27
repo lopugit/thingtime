@@ -63,3 +63,13 @@ test('action-run is the system family: all delivery channels opt-in', () => {
   assert.equal(prefs.email['action-run'], false);
   assert.equal(normalizeNotificationPrefs({ email: { 'action-run': true } }).email['action-run'], true);
 });
+
+
+test('private message types enable bell delivery with email opt-in and preserve explicit choices', () => {
+  for (const type of ['chat-message', 'chat-request'] as const) {
+    assert.equal(normalizeNotificationPrefs(null).push[type], true);
+    assert.equal(normalizeNotificationPrefs(null).email[type], false);
+    const saved = normalizeNotificationPrefs({ [type]: false, email: { [type]: true } });
+    assert.equal(saved.push[type], false); assert.equal(saved.email[type], true);
+  }
+});

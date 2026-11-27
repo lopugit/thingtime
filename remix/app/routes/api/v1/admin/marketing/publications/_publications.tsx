@@ -1,7 +1,8 @@
 import { json, readJsonBody } from '~/api/http';
 
+import { withMongoRequestBudget } from '~/api/utils/mongodb/requestBudget';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
-import { applyMarketingPublicationChanges, getMarketingPublications } from '~/api/utils/marketing/marketingPublications';
+import { applyMarketingPublicationChanges, getMarketingPublicationsResult } from '~/api/utils/marketing/marketingPublications';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { MAX_PUBLICATION_CHANGES } from '~/marketing/publishing';
 
@@ -26,9 +27,21 @@ const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store, max-age=0', Pragm
 const MAX_BODY_BYTES = 512 * 1024;
 
 export const loader = async ({ request }: { request: Request }) => {
-	const gate = await requireAdmin(request);
-	if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status, headers: PRIVATE_HEADERS });
-	return json({ ok: true, publications: await getMarketingPublications({ audit: true }) }, { headers: PRIVATE_HEADERS });
+	try {
+		return await withMongoRequestBudget(request.signal, 6000, async () => {
+			const gate = await requireAdmin(request);
+			if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status, headers: PRIVATE_HEADERS });
+			const result = await getMarketingPublicationsResult({ audit: true });
+			return json(result, {
+				status: result.ok === false ? result.status : 200,
+				headers: { ...PRIVATE_HEADERS, ...(!result.ok ? { 'Retry-After': '15' } : {}) }
+			});
+		});
+	} catch {
+		return json({ ok: false, freshness: 'unavailable', error: 'Marketing publishing is temporarily unavailable' }, {
+			status: 503, headers: { ...PRIVATE_HEADERS, 'Retry-After': '15' }
+		});
+	}
 };
 
 export const action = async ({ request }: { request: Request }) => {
@@ -47,5 +60,5 @@ export const action = async ({ request }: { request: Request }) => {
 
 	const result = await applyMarketingPublicationChanges(body.changes, gate.user.username);
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status, headers: PRIVATE_HEADERS });
-	return json({ ok: true, publications: result.publications, applied: result.applied }, { headers: PRIVATE_HEADERS });
+	return json({ ok: true, publications: result.publications, freshness: result.freshness, applied: result.applied }, { headers: PRIVATE_HEADERS });
 };

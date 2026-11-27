@@ -51,6 +51,21 @@ test('a stored copy reserves visitor bytes, pins source version, and uses normal
 	}
 });
 
+test('a copied Live Photo part retains its explicit pair for post and file copies', async () => {
+ const f = fixture(), pairId = '166b6596-37e9-4f51-b589-cf90c912d54d';
+ f.setSource({ crystal: { name: 'photo.jpeg', size: 9 * 1024 * 1024, contentType: 'image/jpeg', mediaKind: 'image',
+  livePhoto: { pairId, role: 'photo' } } });
+ let prepared: any;
+ f.deps.start = async (_owner, input) => { prepared = input; return { ok: true, upload: { id: 'copy' } }; };
+ assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor', sharedRoot: 'page' }, 'source')).ok, true);
+ assert.deepEqual(prepared.livePhoto, { pairId, role: 'photo' });
+ const saved = fixture(); saved.setSource({ ownerId: 'visitor', attachmentPurpose: 'post', crystal: { name: 'photo.jpeg', size: 9 * 1024 * 1024, contentType: 'image/jpeg', mediaKind: 'image', livePhoto: { pairId, role: 'photo' } } });
+ saved.setDestination({ attachmentPurpose: 'file' });
+ saved.deps.start = async (_owner, input) => { prepared = input; return { ok: true, upload: { id: 'copy' } }; };
+ assert.equal((await copyStoredAttachment(saved.deps, { id: 'visitor' }, 'source', undefined, 'file')).ok, true);
+ assert.deepEqual(prepared.livePhoto, { pairId, role: 'photo' });
+});
+
 test('linked copies preserve canonical external metadata without S3 or upload writes', async () => {
 	const f = fixture();
 	const crystal = { name: 'photo.png', contentType: 'image/png', mediaKind: 'image' as const, size: 0,

@@ -1,3 +1,4 @@
+import { ACL_ENTRY_KIND } from '../things/relationalAcl';
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
@@ -164,9 +165,15 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 					const deltaBytes = sizeBytes - storedThemeSizeBytes(before);
 					if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
 
+					// The theme editor owns public/private replacement semantics. Retire
+					// any previous relational generation in the same transaction.
+					if (before.aclGeneration || before.aclRevision) {
+						await things.deleteMany({ thingtime: ACL_ENTRY_KIND, targetId: before.shareId, ownerId }, { session });
+					}
 					const write = await things.updateOne(
 						{ _id: before._id, ownerId, thingtime: 'theme', ...themeStorageCas(before) } as any,
         {
+          $unset: { aclBaseline: '', aclBaselineVersion: '', aclGeneration: '', aclRevision: '', aclEntryCount: '', aclLegacyRevision: '' },
           $set: {
 								crystal,
 								extended,
@@ -196,6 +203,12 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 						updatedAt: now
 					};
+					delete updatedThing.aclBaseline;
+					delete updatedThing.aclBaselineVersion;
+					delete updatedThing.aclGeneration;
+					delete updatedThing.aclRevision;
+					delete updatedThing.aclEntryCount;
+					delete updatedThing.aclLegacyRevision;
 					await recordThemeMutation(things, before, updatedThing, capture, session);
 				});
 			} catch (error) {

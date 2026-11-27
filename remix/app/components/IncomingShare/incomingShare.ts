@@ -1,7 +1,8 @@
+import type { EditorJsDoc } from '../Editor/editorJsValue';
 import { capabilitySatisfies } from '../../api/utils/capabilities/capabilityContract';
-import { createAttachmentSourceFile } from '../Attachments/attachmentFileSource';
+import { createAttachmentSourceFile, validAttachmentLivePhoto } from '../Attachments/attachmentFileSource';
 export type IncomingShareSubmission = { destination: 'post' | 'message' | 'save'; operationId: string; targetId?: string | null; recoveryPayload?: string; outcomeIds?: string[] };
-export type IncomingShareDraft = { id: string; accountId: string; apiOrigin: string; text: string; files: File[]; directories: string[]; submission: IncomingShareSubmission | null };
+export type IncomingShareDraft = { id: string; accountId: string; apiOrigin: string; text: string; files: File[]; directories: string[]; warnings: string[]; submission: IncomingShareSubmission | null };
 export type IncomingShareBridge = { version: string; request: (body: Record<string, unknown>) => Promise<any> };
 declare global { interface Window { thingtimeShare?: IncomingShareBridge } }
 export function incomingShareRequestId(search: string): string | null {
@@ -18,9 +19,17 @@ export async function readIncomingShare(bridge: IncomingShareBridge, requestId: 
  signal.throwIfAborted();
  if (String(payload.id).toLowerCase() !== requestId.toLowerCase() || payload.accountId !== accountId || payload.apiOrigin !== origin || typeof payload.text !== 'string' || !Array.isArray(payload.attachments)) throw new Error('The shared item could not be verified for this account.');
  if (payload.directories !== undefined && (!Array.isArray(payload.directories) || payload.directories.some((value: unknown) => typeof value !== 'string'))) throw new Error('A shared folder has invalid metadata.');
+ if (payload.warnings !== undefined && (!Array.isArray(payload.warnings) || payload.warnings.some((value: unknown) => typeof value !== 'string' || !value.trim()))) throw new Error('A shared item has invalid warnings.');
  const ids = new Set<string>();
+ const pairs = new Map<string, Set<string>>();
  const files = payload.attachments.map((item: any) => {
   if (typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.name !== 'string' || typeof item.type !== 'string' || !Number.isSafeInteger(item.size) || item.size < 0) throw new Error('A shared file has invalid metadata.');
+  if (item.livePhoto !== undefined) {
+   if (!validAttachmentLivePhoto(item.livePhoto) || item.size === 0 || (item.livePhoto.role === 'photo' ? !['image/jpeg', 'image/png'].includes(item.type) : !['video/quicktime', 'video/mp4'].includes(item.type))) throw new Error('A shared Live Photo has invalid metadata.');
+   const roles = pairs.get(item.livePhoto.pairId) || new Set<string>();
+   if (roles.has(item.livePhoto.role)) throw new Error('A shared Live Photo has duplicate parts.');
+   roles.add(item.livePhoto.role); pairs.set(item.livePhoto.pairId, roles);
+  }
   ids.add(item.id);
   return createAttachmentSourceFile(item, async (start, end, transferSignal) => {
    const chunks: ArrayBuffer[] = [];
@@ -47,7 +56,14 @@ export async function readIncomingShare(bridge: IncomingShareBridge, requestId: 
    return new Blob([bytes], { type: 'image/jpeg' });
   });
  });
+ for (const roles of pairs.values()) if (!roles.has('photo') || !roles.has('motion')) throw new Error('A shared Live Photo is incomplete.');
  const submission = payload.submission;
  if (submission && (!['post', 'message', 'save'].includes(submission.destination) || typeof submission.operationId !== 'string' || (submission.recoveryPayload !== undefined && typeof submission.recoveryPayload !== 'string') || (submission.outcomeIds !== undefined && (!Array.isArray(submission.outcomeIds) || submission.outcomeIds.some((id: unknown) => typeof id !== 'string'))))) throw new Error('This share has an invalid saved submission.');
- return { id: requestId.toLowerCase(), accountId, apiOrigin: origin, text: payload.text, files, submission: submission || null, directories: payload.directories || [] };
+ return { id: requestId.toLowerCase(), accountId, apiOrigin: origin, text: payload.text, files, submission: submission || null, directories: payload.directories || [], warnings: payload.warnings || [] };
+}
+
+/** System shares contain literal text, not Markdown paragraph soft breaks. */
+export function incomingShareEditorDocument(text: string): EditorJsDoc {
+ const html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n|\r|\n/g, '<br>');
+ return { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: html } }] };
 }

@@ -111,6 +111,22 @@ final class PhotoSourceIndexOutbox {
             }
         }
     }
+    /// One actual backup pass may check an acknowledged index without
+    /// rediscovering its source prefix. The immutable empty page uses the
+    /// existing progress contract; it reports no new resources or work units.
+    func checkpointAcknowledgedIndex() throws {
+        var state = try loadState()
+        guard state.head > state.sequence, let progress = state.progress, let passId = state.passId else { return }
+        guard state.sequence < Int.max else { throw PhotoLibraryReader.Failure.changed }
+        let page = PhotoSourceIndexPage(epoch: epoch.uuidString.lowercased(), passId: passId, sequence: state.sequence + 1,
+            requestId: UUID().uuidString.lowercased(), entries: [], progress: progress)
+        try write(page, pageURL(page.sequence))
+        state.sequence = page.sequence
+        // Preserve the already allocated request through uncertain counter
+        // persistence, exactly like a resource page.
+        cachedState = state
+        try saveState(state)
+    }
     func first() throws -> PhotoSourceIndexPage? {
         let state = try loadState()
         guard state.head <= state.sequence else { return nil }

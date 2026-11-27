@@ -26,6 +26,7 @@ import {
 } from '@chakra-ui/react';
 
 import { MongoConnectionInventory } from './MongoConnectionInventory';
+import { DeploymentProfileSettings } from './DeploymentProfileSettings';
 import { PreviewRetentionSettings } from './PreviewRetentionSettings';
 import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
@@ -51,6 +52,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+import { AutomationSwitchesSettings } from './AutomationSwitchesSettings';
 // The marketing publishing panel imports the 1,600-page marketing catalog;
 // keep it out of the admin chunk until the tab is actually opened.
 const MarketingPublishingTab = React.lazy(() =>
@@ -1034,6 +1036,9 @@ export const AdminDashboard = () => {
             <PreviewRetentionSettings key={user.id} />
           </TabPanel>
           <TabPanel px={0}>
+            <DeploymentProfileSettings key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
             <IntegrationManager />
           </TabPanel>
           <TabPanel px={0}>
@@ -1054,6 +1059,9 @@ export const AdminDashboard = () => {
 					</TabPanel>
 					<TabPanel px={0}>
 						<AdminPanel category="access" />
+          </TabPanel>
+          <TabPanel px={0}>
+            <AutomationSwitchesSettings key={user.id} />
           </TabPanel>
         </TabPanels>
       </Tabs>

@@ -1,5 +1,9 @@
 # Thingtime notes
 
+[Hosting options and cost per call and per user](hosting-options-2026-11-26.md) — two months of Vercel billing per call and per user, compared with cheaper hosts; why Hobby can't hold production (2026-11-26).
+
+[Vercel cost reduction](vercel-cost-reduction-2026-11-25.md) — what drove $10–15/day and the plan back to $0.50–$2/day (2026-11-25).
+
 [Device location history and find-device evidence](device-location-history.md) — current device, map and platform boundaries (2026-11-06).
 
 [Shared Rust index/sync evidence](shared-rust-index-sync.md) — current producers, permission boundaries and portability (2026-11-04).

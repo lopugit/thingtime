@@ -1,5 +1,14 @@
 # Commander testing checklist
 
+## Rust worker pipe recovery
+
+- [ ] Run the daemon search and filesystem-indexer tests, including the closed-stdin subprocess fixture.
+      A worker that closes stdin while staying alive must reject all pending index requests without an unhandled
+      EPIPE, recover on the next request, and leave search usable through its deterministic fallback.
+      Delayed stdout, exit and repeated pipe errors from a retired worker must not affect replacement requests.
+- [ ] In the installed signed app, verify daemon health and application/file searches after worker failure/recovery;
+      confirm the daemon remains running, existing settings persist and restart activity stays bounded.
+
 ## Launcher
 
 - [ ] Upgrade a schema-3 fixture while a writer migration/first refresh is pending. Valid old files must remain

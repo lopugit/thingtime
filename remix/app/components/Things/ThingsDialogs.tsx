@@ -1,3 +1,5 @@
+import { ThingFilePreview } from './ThingFilePreview';
+import { fileMediaReference } from './fileMediaPresentation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -476,7 +478,7 @@ export const PreviewModal = ({
               ))}
             </Flex>
             <Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" overflow="hidden" padding={3}>
-              {thing.thingtime.includes('component') ? (
+              {fileMediaReference(thing) ? <ThingFilePreview thing={thing} /> : thing.thingtime.includes('component') ? (
                 // the interactive surface for component instances: the kind
                 // renderer resolves the template AND its ttAction wrapper
                 // handles clicks (grid previews stay pointerEvents:none)

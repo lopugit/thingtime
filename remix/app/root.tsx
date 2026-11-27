@@ -45,6 +45,7 @@ import { rememberAuthReturnTo } from './utils/authReturn';
 import { bindTransferIdentity } from './utils/thingTransfer/intent';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
+import { scheduleSessionRecoveryReset } from './utils/sessionRecovery';
 
 const setThingtime = (glob: any) => {
   try {
@@ -76,6 +77,9 @@ export default function App() {
   const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
   const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
+  React.useEffect(() => {
+    if (!identity.pending) return scheduleSessionRecoveryReset();
+  }, [identity.pending]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');

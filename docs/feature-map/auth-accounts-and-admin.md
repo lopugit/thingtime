@@ -324,7 +324,11 @@ Private MCP task delegation uses `api/utils/agents/reporting.ts`, the independen
 Character, exact private workspace references and subspace membership. Protected
 binding/operation Things fence duplicate and ambiguous writes; the executor's
 server-only operation policy constrains saved Actions. See
-[setup, recovery and acceptance](../agent-reporting.md).
+[setup, multi-account discovery and selection, recovery and acceptance](../agent-reporting.md).
+Inspect all task-authorized connected accounts with explicit account IDs before
+preparing a task; prefer its existing verified owner/origin binding. A private
+subspace membership grant does not confer saved-workspace ownership or a host
+OAuth connection.
 
 See [Characters](../characters.md) for the settings, login modes, private ownership,
 admin lookup, session selection, agent coordination and acceptance runbook.
@@ -567,3 +571,72 @@ full request hashing retains AppID in the verification/session binding.
 `browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
+
+Relational access/configuration: `apps/appAllowlist.ts` owns registered
+origin/callback rows; `apps/sharedThings.ts` owns session resource grants;
+`auth/accountConfiguration.ts` owns encrypted endpoint/link/path-rule records.
+Account-link administration is home-pinned; co-manager writes fence the exact
+current link in the transaction. Account/session writers own migration and
+revocation boundaries. Run `test:acl:relational`, desktop OAuth and account-link
+authorization tests. See [relational access](../relational-access.md).
+
+Character creation: `auth/characters.ts` and `accounts/accountLinks.ts` bind an
+optional normalized handle to the owner/request ID through a protected roster
+receipt in the canonical registration transaction. `api.auth-characters` 1.3.0
+adds chosen handles; `CharactersSettings.tsx` and `characterClient.ts` negotiate
+that version for this operation. Run `test:characters` and the creation/receipt
+regressions; see [Characters](../characters.md).
+
+Admin scheduled invocation reporting: `Admin/PlatformReportingSettings.tsx`
+composes `platformReportingSettingsBlocks.ts` through the normal editable
+settings document host, uses exact account/origin transport and negotiates
+`api.admin-platform-reporting` 1.0.0, groups 1.2.1 and users-profile 1.2.0.
+The UI resolves public handles, selects private audience groups, preserves
+same-account drafts and fences uncertain group creation. The synthetic browser
+regression is `scripts/test-platform-reporting-ui.mjs`; real-account readback and
+log delivery remain independent acceptance gates.
+
+## Session error recovery
+
+`components/Layout/RootRecovery.tsx` runs `utils/sessionRecovery.ts` while its
+error screen is mounted. It probes the existing `/api/root-data` session GET
+with the current query and validates its root contract before reloading the
+current full URL. `hooks/backgroundRefresh.ts` coalesces probes, slows failures
+and hidden-tab polling, and wakes on focus/online. A tab-local non-sensitive
+reload guard prevents rapid boot/reload loops; thirty seconds of stable
+successful `root.tsx` rendering clears it. Recovery never invokes the
+temporary-account POST or other actions.
+Run `test:root-data` and `test:hooks`; use TESTING.md's session read checklist.
+
+Scheduled jobs in Admin use the editable `JobScheduleSettings` document,
+`api.admin-job-schedules` and home database settings. The scheduler and signed
+GitHub dispatch use the same registered job paths and one atomic UTC-day claim.
+The default digest is weekly on Sunday. All other defaults run daily.
+
+The Admin deployment profile editor uses separate editable blocks in
+`Admin/deploymentProfileBlocks.ts`. The home-plane store in
+`ciControl/deploymentProfiles.ts` protects each destination and revision.
+`admin/ci/deployment-profiles` requires the active administrator, while
+`integrations/ci/deployment-profiles` is a purpose-bound, signed controller
+read. Register both through the API docs and Nitro catch-all.
+
+## Automation switches (Admin → Automation)
+
+One administrator on/off switch per automatic, repeating or scheduled feature;
+all are off unless turned on. See `TESTING.md` → "Automation switches".
+
+| Concern | Path |
+| --- | --- |
+| Switch catalogue, defaults, activity-id → switch mapping | `app/automation/automationSwitches.ts` |
+| Settings singleton store (`automation-switches`) | `app/api/utils/automation/automationSwitchesStore.ts` |
+| Public read (CDN-cached) | `app/routes/api/v1/automation/switches/_switches.tsx` (`api.automation-switches`) |
+| Admin read/save | `app/routes/api/v1/admin/automation-switches/_automation-switches.tsx` (`api.admin-automation-switches`) |
+| Browser enforcement | `app/automation/automationSwitchesClient.ts`, consumed by `app/activity/activityManager.ts` (`blocked`) and `app/hooks/backgroundRefresh.ts` (`blocked`) |
+| Scheduled jobs | `claimScheduledDay` in `app/api/utils/automation/jobSchedules.ts` checks `scheduled.<job id>` |
+| Admin UI (editable blocks) | `app/components/Admin/AutomationSwitchesSettings.tsx`, `automationSwitchBlocks.ts` |
+| Native readers | `iOS/Shared/ThingtimeAutomationSwitches.swift` (iPhone + Watch), `macos/ThingtimeNode/Sources/ThingtimeNodeCore/ThingtimeAutomationSwitches.swift` |
+
+When adding a new poller, register it through `activityInterval` or
+`subscribeBackgroundRefresh` (unlisted ids fall under `web.other`), or add a
+switch to the catalogue and check it before starting native or server loops.
+Tests: `npm --prefix remix run test:automation`.

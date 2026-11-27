@@ -43,7 +43,7 @@ export function PasswordEntryEditor({ entry, scopeKey, disabled, onChange }: {
       if (current) setCodes(Object.fromEntries(values));
     };
     void update();
-    const timer = activityInterval('timer:password-entry:totp', 'Password verification codes', update, 1000);
+    const timer = activityInterval('timer:password-entry:totp', 'Password verification codes', update, 1000, { local: true });
     return () => { current = false; clearActivityInterval(timer); };
   }, [entry.fields]);
   for (const id of identities.current.keys()) if (!entry.fields.some(field => field.id === id)) identities.current.delete(id);

@@ -139,3 +139,106 @@ test('a refused admin write throws and reconciles against the server', async () 
 	);
 	assert.deepEqual(readCache().published, [], 'the optimistic key does not survive the refusal');
 });
+
+test('a degraded response keeps usable data and exposes the failure without replacing the durable good cache', async () => {
+	const { refreshMarketingPublications, getMarketingPublicationsSnapshot, resetMarketingPublicationsIdentity } = await loadStore();
+	stubFetch({ get: () => jsonResponse({ ok: true, publications: WITH_AUDIT }) });
+	await refreshMarketingPublications({ force: true });
+	const previousCache = readCache();
+	stubFetch({ get: () => jsonResponse({ ok: false, freshness: 'stale', error: 'Temporarily unavailable', publications: WITH_AUDIT }, 503) });
+	assert.equal(await refreshMarketingPublications({ force: true }), null);
+	const state = getMarketingPublicationsSnapshot();
+	assert.equal(state.status, 'degraded');
+	assert.ok(state.error);
+	assert.deepEqual(state.publications?.published, WITH_AUDIT.published);
+	assert.equal(state.publications?.audit, undefined);
+	assert.deepEqual(readCache(), previousCache);
+	resetMarketingPublicationsIdentity();
+});
+
+test('identity changes immediately remove audit and prevent old responses from restoring it', async () => {
+	const { refreshMarketingPublications, getMarketingPublicationsSnapshot, resetMarketingPublicationsIdentity } = await loadStore();
+	let finish!: (response: Response) => void;
+	(globalThis as any).fetch = () => new Promise<Response>(resolve => { finish = resolve; });
+	const pending = refreshMarketingPublications({ force: true });
+	resetMarketingPublicationsIdentity();
+	assert.equal(getMarketingPublicationsSnapshot().publications?.audit, undefined);
+	finish(jsonResponse({ ok: true, publications: WITH_AUDIT }));
+	assert.equal(await pending, null);
+	assert.equal(getMarketingPublicationsSnapshot().publications?.audit, undefined);
+});
+
+test('the read deadline aborts a stalled body after headers and retains the last good publication list', async () => {
+	const { refreshMarketingPublications, getMarketingPublicationsSnapshot, resetMarketingPublicationsIdentity } = await loadStore();
+	const originalTimeout = globalThis.setTimeout;
+	let aborted = false;
+	globalThis.setTimeout = ((callback: (...args: any[]) => void, delay?: number, ...args: any[]) => originalTimeout(callback, delay === 12000 ? 15 : delay, ...args)) as typeof setTimeout;
+	(globalThis as any).fetch = async (_url: string, init: RequestInit) => ({
+		status: 200, ok: true, headers: new Headers({ 'Content-Type': 'application/json' }),
+		json: () => new Promise((_, reject) => init.signal!.addEventListener('abort', () => {
+			aborted = true;
+			reject(init.signal!.reason);
+		}, { once: true }))
+	});
+	const before = getMarketingPublicationsSnapshot().publications?.published;
+	try {
+		assert.equal(await refreshMarketingPublications({ force: true }), null);
+		assert.equal(aborted, true, 'the actual fetch/body signal is cancelled');
+		assert.equal(getMarketingPublicationsSnapshot().status, 'degraded');
+		assert.deepEqual(getMarketingPublicationsSnapshot().publications?.published, before);
+	} finally {
+		globalThis.setTimeout = originalTimeout;
+		resetMarketingPublicationsIdentity();
+	}
+});
+
+test('an acknowledged write with unavailable readback keeps optimistic data until reconciliation', async () => {
+	const { applyMarketingPublicationChanges, refreshMarketingPublications, getMarketingPublicationsSnapshot, resetMarketingPublicationsIdentity } = await loadStore();
+	stubFetch({ get: () => jsonResponse({ ok: true, publications: { published: [], hidden: [], updatedAt: null } }) });
+	await refreshMarketingPublications({ force: true });
+	stubFetch({
+		post: () => jsonResponse({ ok: true, applied: 1, freshness: 'unavailable' }),
+		get: () => jsonResponse({ ok: false, error: 'Temporarily unavailable', freshness: 'unavailable' }, 503)
+	});
+	const result = await applyMarketingPublicationChanges([{ key: 'hub', state: 'published' }]);
+	assert.deepEqual(result.published, ['hub']);
+	await refreshMarketingPublications();
+	assert.deepEqual(getMarketingPublicationsSnapshot().publications?.published, ['hub']);
+	assert.equal(getMarketingPublicationsSnapshot().status, 'degraded');
+	resetMarketingPublicationsIdentity();
+});
+
+test('a pre-write GET cannot overwrite a committed change and post-commit verification starts a new read', async () => {
+	const { applyMarketingPublicationChanges, refreshMarketingPublications, getMarketingPublicationsSnapshot, resetMarketingPublicationsIdentity } = await loadStore();
+	const empty = { published: [], hidden: [], updatedAt: null };
+	stubFetch({ get: () => jsonResponse({ ok: true, publications: empty }) });
+	await refreshMarketingPublications({ force: true });
+	let finishOld!: (response: Response) => void;
+	let finishVerification!: (response: Response) => void;
+	let oldSignal: AbortSignal | null = null;
+	let reads = 0;
+	(globalThis as any).fetch = async (_url: string, init: RequestInit) => {
+		if (init.method === 'POST') return jsonResponse({ ok: true, applied: 1, freshness: 'unavailable' });
+		reads += 1;
+		if (reads === 1) {
+			oldSignal = init.signal as AbortSignal;
+			return new Promise<Response>(resolve => { finishOld = resolve; });
+		}
+		return new Promise<Response>(resolve => { finishVerification = resolve; });
+	};
+	const oldRead = refreshMarketingPublications({ force: true });
+	await applyMarketingPublicationChanges([{ key: 'hub', state: 'published' }]);
+	assert.equal((oldSignal as AbortSignal | null)?.aborted, true, 'the actual old transfer is cancelled at write admission');
+	assert.equal(reads, 2, 'post-commit verification does not join the pre-write GET');
+	finishOld(jsonResponse({ ok: true, publications: empty }));
+	assert.equal(await oldRead, null, 'even an abort-ignoring transport cannot commit an old result');
+	assert.deepEqual(getMarketingPublicationsSnapshot().publications?.published, ['hub']);
+	assert.equal(getMarketingPublicationsSnapshot().status, 'degraded');
+	assert.equal(getMarketingPublicationsSnapshot().refreshing, true, 'old cleanup cannot clear the newer request');
+	const verification = refreshMarketingPublications();
+	finishVerification(jsonResponse({ ok: true, publications: { ...empty, published: ['hub'] } }));
+	await verification;
+	assert.equal(getMarketingPublicationsSnapshot().status, 'live');
+	assert.deepEqual(getMarketingPublicationsSnapshot().publications?.published, ['hub']);
+	resetMarketingPublicationsIdentity();
+});

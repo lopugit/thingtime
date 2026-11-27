@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.7.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.8.0"
+    static let photoAutomationVersion = "1.8.1"
     static let uploadPolicyVersion = "1.1.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
@@ -596,7 +596,12 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 // Continued processing presents a system task and is only for
                 // user-initiated work. Automatic Photos use the durable lane.
                 if payload["continueInBackground"] as? Bool == true && (grant.sourceKind != "photos" || payload["userInitiated"] as? Bool == true) {
-                    self.background = await NativeUploadBackgroundCoordinator.shared.begin(size: request.source.size, expired: { [weak self] in
+                    let diagnostic = MobileDeviceDiagnostics.shared.recorder(for: scope, expectedDeviceId: authorization.scope.deviceId)
+                    self.background = await NativeUploadBackgroundCoordinator.shared.begin(size: request.source.size, diagnostic: { outcome, error in
+                        var event = NativePhotoDiagnosticProjection.outcome(outcome, error: error)
+                        event.configurationId = authorization.id
+                        diagnostic?(event)
+                    }, expired: { [weak self] in
                         if self?.generation == operation { self?.suspend(.inactive) }
                     })
                 }

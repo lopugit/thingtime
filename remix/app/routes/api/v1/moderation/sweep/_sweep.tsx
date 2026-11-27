@@ -1,3 +1,5 @@
+import { scheduledJobSecret } from '~/api/utils/automation/scheduledJobSecret';
+import { recordScheduledPassResult } from '~/api/utils/automation/scheduledRunContext';
 // GET /api/v1/moderation/sweep — scheduled moderation safety net (Vercel
 // Cron, CRON_SECRET bearer, same contract as /api/v1/attachments/cleanup).
 // One bounded pass per call:
@@ -27,7 +29,7 @@ type SweepDependencies = {
 };
 
 const defaultDependencies: SweepDependencies = {
-	getSecret: () => process.env.CRON_SECRET,
+	getSecret: () => scheduledJobSecret(),
 	sweepText: sweepUnmoderatedTextThings,
 	sweepAttachments: sweepUnanalyzedAttachments,
 	startContinuation: startModerationSweepDrain
@@ -57,6 +59,7 @@ export const createModerationSweepLoader = (overrides: Partial<SweepDependencies
 			const continuationRunId = shouldContinueModerationSweep(text, attachments)
 				? await dependencies.startContinuation()
 				: null;
+      recordScheduledPassResult('/api/v1/moderation/sweep',{text,attachments,continuationRunId});
 			return json({ ok: true, text, attachments, continuationRunId });
 		});
 };

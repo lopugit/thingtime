@@ -11,6 +11,7 @@ import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights
 import { getPostFeatures } from '../things/things';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { hydrateAlgorithmWeights, replaceAlgorithmWeights, deleteAlgorithmWeights, algorithmWeightCounts } from './weightEntries';
 import { parseAlgorithmTransfer, type AlgorithmTransferContent } from './algorithmTransferCore';
 
 // Personal feed algorithms: named, branchable interest-weight profiles trained
@@ -79,9 +80,6 @@ export type SharedAlgorithmPreview = {
   ownerUsername: string | null;
 };
 
-const MAX_ALGORITHMS_PER_USER = 50;
-const MAX_NAME_CHARS = 60;
-const MAX_EVENTS_PER_BATCH = 100;
 const DEFAULT_EMOJI = '🧠';
 
 type Fail = { ok: false; status: number; error: string };
@@ -199,8 +197,7 @@ const sanitizeEvents = (value: unknown): EngagementEvent[] => {
         typeof entry === 'object' &&
         typeof (entry as { thingId?: unknown }).thingId === 'string' &&
         typeof (entry as { signal?: unknown }).signal === 'string'
-    )
-    .slice(0, MAX_EVENTS_PER_BATCH);
+    );
 };
 
 const sanitizeEmoji = (value: unknown): string => {
@@ -221,7 +218,7 @@ const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown): Pro
   const id = shareId.trim();
   const things = await getThingsCollection();
   const thing = await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any);
-  if (thing) return { doc: algorithmThingToDoc(thing), era: 'things' };
+  if (thing) return { doc: algorithmThingToDoc((await hydrateAlgorithmWeights(things, [thing]))[0]), era: 'things' };
   const algorithms = await getFeedAlgorithmsCollection();
   const legacy = (await algorithms.findOne({ shareId: id, ownerId } as any)) as any as FeedAlgorithmDoc | null;
   return legacy ? { doc: legacy, era: 'legacy' } : null;
@@ -238,7 +235,7 @@ const findSharedAlgorithm = async (shareId: unknown): Promise<FeedAlgorithmDoc |
   const id = shareId.trim();
   const things = await getThingsCollection();
   const thing = await things.findOne({ shareId: id, thingtime: 'feed-algorithm', 'crystal.shared': true } as any);
-  if (thing) return algorithmThingToDoc(thing);
+  if (thing) return algorithmThingToDoc((await hydrateAlgorithmWeights(things, [thing]))[0]);
   const algorithms = await getFeedAlgorithmsCollection();
   const legacy = (await algorithms.findOne({ shareId: id, shared: true } as any)) as any as FeedAlgorithmDoc | null;
   return legacy || null;
@@ -263,19 +260,19 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
   // {ownerId}. Merge both (dedup by shareId), keep the picker's stable
   // createdAt-ascending order across the pair.
   const things = await getThingsCollection();
-  const thingDocs = (
+  const thingDocs = (await hydrateAlgorithmWeights(things,
     await things
       .find({ thingtime: 'feed-algorithm', ownerId } as any)
       .sort({ createdAt: 1 })
-      .limit(MAX_ALGORITHMS_PER_USER)
+      .batchSize(100)
       .toArray()
-  ).map(algorithmThingToDoc);
+  )).map(algorithmThingToDoc);
 
   const algorithms = await getFeedAlgorithmsCollection();
   const legacyDocs = (await algorithms
     .find({ ownerId })
     .sort({ createdAt: 1 })
-    .limit(MAX_ALGORITHMS_PER_USER)
+    .batchSize(100)
     .toArray()) as any as FeedAlgorithmDoc[];
 
   const seen = new Set<string>();
@@ -286,7 +283,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
     docs.push(doc);
   }
   docs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const page = docs.slice(0, MAX_ALGORITHMS_PER_USER);
+  const page = docs;
 
   const interestsByDoc = page.map((doc) => topInterests(doc.weights || emptyWeights()));
   const usernames = await resolveAuthorUsernames(
@@ -312,7 +309,7 @@ export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string
 };
 
 /** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
- * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+ * The canonical writer still owns storage admission, private ACL and IDs. */
 export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
   const parsed = parseAlgorithmTransfer(content);
   return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
@@ -333,19 +330,11 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   // Validate again at the writer boundary, even for an in-process caller.
   const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
   if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
-  const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
   const things = await getThingsCollection();
   const algorithms = await getFeedAlgorithmsCollection();
-  // the per-user cap spans both eras, or it would silently double mid-migration
-  const [thingCount, legacyCount] = await Promise.all([
-    things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any),
-    algorithms.countDocuments({ ownerId })
-  ]);
-  if (thingCount + legacyCount >= MAX_ALGORITHMS_PER_USER) {
-    return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
-  }
 
   let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
@@ -386,7 +375,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     shareId: randomUUID(),
     ownerId,
     name,
-    description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
+    description: typeof input.description === 'string' ? input.description.trim() : '',
     listed: false,
     emoji: sanitizeEmoji(input.emoji),
     parentId,
@@ -412,7 +401,8 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
       name: doc.name,
       emoji: doc.emoji,
       parentId: doc.parentId,
-      weights: doc.weights,
+      weightsGeneration: randomUUID(),
+      weightsCounts: algorithmWeightCounts(doc.weights),
       eventCount: doc.eventCount,
       lastTrainedAt: doc.lastTrainedAt,
       shared: doc.shared,
@@ -427,7 +417,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     createdAt: now,
     updatedAt: now
 	};
-	const sizeBytes = thingStorageSizeBytes(thing);
+	let sizeBytes = thingStorageSizeBytes(thing);
 	Object.assign(thing, {
 		storageClass: 'content',
 		sizeBytes,
@@ -435,6 +425,9 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	});
 	try {
 		await withHomeMongoTransaction(async (session) => {
+      thing.crystal.weightsGeneration = await replaceAlgorithmWeights(things, thing, doc.weights, session);
+      sizeBytes = thingStorageSizeBytes(thing);
+      Object.assign(thing, { sizeBytes });
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 		});
@@ -458,7 +451,7 @@ export const updateAlgorithm = async (
 
   const set: Record<string, any> = { updatedAt: new Date() };
   if (input.name !== undefined) {
-    const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
     if (!name) return fail(400, 'Algorithm name is required');
     set.name = name;
   }
@@ -473,7 +466,7 @@ export const updateAlgorithm = async (
 
   if (input.description !== undefined) {
     if (typeof input.description !== 'string') return fail(400, 'description must be text');
-    set.description = input.description.trim().slice(0, 300);
+    set.description = input.description.trim();
   }
   if (input.listed !== undefined) {
     if (typeof input.listed !== 'boolean') return fail(400, 'listed must be a boolean');
@@ -497,6 +490,12 @@ export const updateAlgorithm = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
 				const crystal = { ...(before.crystal || {}) };
+        if (!crystal.weightsGeneration) {
+          const weights = crystal.weights || emptyWeights();
+          crystal.weightsGeneration = await replaceAlgorithmWeights(things, before, weights, session);
+          crystal.weightsCounts = algorithmWeightCounts(weights);
+          delete crystal.weights;
+        }
 				if (set.name !== undefined) crystal.name = set.name;
 				if (set.emoji !== undefined) crystal.emoji = set.emoji;
 				if (set.shared !== undefined) crystal.shared = set.shared;
@@ -531,7 +530,7 @@ export const updateAlgorithm = async (
 				if (write.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
-				updatedDoc = algorithmThingToDoc({
+				updatedDoc = algorithmThingToDoc((await hydrateAlgorithmWeights(things, [{
 					...before,
 					crystal,
 					extended,
@@ -541,7 +540,7 @@ export const updateAlgorithm = async (
 					sizeBytes,
 					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 					updatedAt: set.updatedAt
-				});
+				}], session))[0]);
 			});
   } else {
 			const things = await getThingsCollection();
@@ -585,6 +584,7 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 			const legacyRes = await algorithms.deleteOne({ shareId: id, ownerId } as any, { session });
 			if (before) {
+        await deleteAlgorithmWeights(things, id, ownerId, session);
 				const exactBytes = currentContentStorageSizeBytes(before);
 				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
@@ -653,7 +653,7 @@ export const trackEngagement = async (
 	// miss milestones and re-fire ones already celebrated.
 	let eventCount = 0;
 	try {
-		// Weights replace as one object (never dotted per-tag keys), but the
+		// Weight rows and the root generation replace atomically; the
 		// before-image is read inside the transaction so concurrent training is
 		// composed rather than lost. Its exact size delta shares the commit with
 		// the account ledger.
@@ -664,7 +664,8 @@ export const trackEngagement = async (
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
 				}
-				const trained = applyEventsToWeights(before.crystal?.weights || emptyWeights(), events, features);
+				const [complete] = await hydrateAlgorithmWeights(things, [before], session);
+        const trained = applyEventsToWeights(complete.crystal?.weights || emptyWeights(), events, features);
 				if (!trained.applied) {
 					applied = 0;
 					eventCount = Math.max(0, Number(before.crystal?.eventCount || 0));
@@ -672,10 +673,12 @@ export const trackEngagement = async (
 				}
 				const crystal = {
 					...(before.crystal || {}),
-					weights: trained.weights,
+					weightsGeneration: await replaceAlgorithmWeights(things, before, trained.weights, session),
+          weightsCounts: algorithmWeightCounts(trained.weights),
 					eventCount: Math.max(0, Number(before.crystal?.eventCount || 0)) + trained.applied,
 					lastTrainedAt: now
 				};
+        delete crystal.weights;
 				const extended = before.extended ?? null;
 				const tags = Array.isArray(before.tags) ? before.tags : [];
 				const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });

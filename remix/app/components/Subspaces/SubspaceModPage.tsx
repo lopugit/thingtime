@@ -445,9 +445,8 @@ const MemberFlairModal = ({
 									flex="1"
 									minWidth="160px"
 									borderRadius={RADIUS_MD}
-									placeholder="Flair text (≤ 40 chars)"
+									placeholder="Flair text"
 									value={text}
-									maxLength={40}
 									autoFocus
 									onChange={(event) => setText(event.target.value)}
 									onKeyDown={(event) => {
@@ -1178,14 +1177,14 @@ const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: 
 	};
 	return (
 		<Card>
-			<Label>Rules · {rules.length}/15</Label>
+			<Label>Rules · {rules.length}</Label>
 			{rules.map((rule, index) => (
 				<Flex key={index} flexDirection="column" rowGap={1} border={BORDER} borderRadius={RADIUS_MD} padding={3} data-rule-index={index}>
 					<Flex columnGap={2} alignItems="center">
 						<Text fontSize="xs" color={MUTED} width="18px">
 							{index + 1}.
 						</Text>
-						<Input size="sm" borderRadius={RADIUS_MD} placeholder="Rule title" value={rule.title} maxLength={100} onChange={(event) => update(index, { title: event.target.value })} />
+						<Input size="sm" borderRadius={RADIUS_MD} placeholder="Rule title" value={rule.title} onChange={(event) => update(index, { title: event.target.value })} />
 						<Button size="xs" variant="ghost" onClick={() => move(index, -1)} aria-label="Move up">
 							▲
 						</Button>
@@ -1196,11 +1195,11 @@ const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: 
 							✕
 						</Button>
 					</Flex>
-					<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Detail (optional)" value={rule.text || ''} maxLength={500} onChange={(event) => update(index, { text: event.target.value || null })} />
+					<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Detail (optional)" value={rule.text || ''} onChange={(event) => update(index, { text: event.target.value || null })} />
 				</Flex>
 			))}
 			<Flex columnGap={2}>
-				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={rules.length >= 15} onClick={() => setRules((prev) => [...prev, { title: '', text: null }])}>
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} onClick={() => setRules((prev) => [...prev, { title: '', text: null }])}>
 					Add rule ➕
 				</Button>
 				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-rules">
@@ -1215,7 +1214,7 @@ const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: 
 // The canned reasons the Remove modal offers moderators beside the rules —
 // { title, message }: the title — message become the stored reason the
 // author sees on the card and in their bell. Ids are minted from titles on
-// save (the flair-id grammar); ≤ 20.
+// save (the flair-id grammar).
 const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: (next: PublicSubspace) => void }) => {
 	const api = useApi();
 	const lopu = useLopu();
@@ -1250,7 +1249,7 @@ const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; 
 	return (
 		<Card>
 			<Box>
-				<Label>Removal reasons · {reasons.length}/20</Label>
+				<Label>Removal reasons · {reasons.length}</Label>
 				<Text fontSize="xs" color={MUTED}>
 					What the Remove 🧹 modal offers beside the rules. The author sees the title and message on their removed post and in their bell.
 				</Text>
@@ -1266,7 +1265,7 @@ const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; 
 							<Text fontSize="xs" color={MUTED} width="18px" flexShrink={0}>
 								{index + 1}.
 							</Text>
-							<Input size="sm" flex="1" minWidth={0} borderRadius={RADIUS_MD} placeholder="Title (e.g. No spam)" value={reason.title} maxLength={80} onChange={(event) => update(index, { title: event.target.value })} data-testid="mod-removal-reason-title" />
+							<Input size="sm" flex="1" minWidth={0} borderRadius={RADIUS_MD} placeholder="Title (e.g. No spam)" value={reason.title} onChange={(event) => update(index, { title: event.target.value })} data-testid="mod-removal-reason-title" />
 							<Flex alignItems="center" flexShrink={0}>
 								<Button size="xs" variant="ghost" onClick={() => move(index, -1)} aria-label="Move up">
 									▲
@@ -1282,7 +1281,7 @@ const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; 
 						<Text fontSize="10px" fontFamily="mono" color={MUTED} title="Reason id (set on first save)" isTruncated maxWidth="100%" paddingLeft="26px" data-testid="mod-removal-reason-id">
 							id · {reason.id || 'new'}
 						</Text>
-						<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Message to the author (optional, ≤ 500)" value={reason.message} maxLength={500} onChange={(event) => update(index, { message: event.target.value })} data-testid="mod-removal-reason-message" />
+						<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Message to the author (optional)" value={reason.message} onChange={(event) => update(index, { message: event.target.value })} data-testid="mod-removal-reason-message" />
 					</Flex>
 				))}
 				{reasons.length === 0 && (
@@ -1292,7 +1291,7 @@ const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; 
 				)}
 			</Flex>
 			<Flex columnGap={2}>
-				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={reasons.length >= 20} onClick={() => setReasons((prev) => [...prev, { id: '', title: '', message: '' }])} data-testid="mod-add-removal-reason">
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} onClick={() => setReasons((prev) => [...prev, { id: '', title: '', message: '' }])} data-testid="mod-add-removal-reason">
 					Add reason ➕
 				</Button>
 				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-removal-reasons">
@@ -1329,11 +1328,11 @@ const FlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved:
 	};
 	return (
 		<Card>
-			<Label>Post flairs · {flairs.length}/50</Label>
+			<Label>Post flairs · {flairs.length}</Label>
 			{flairs.map((flair, index) => (
 				<Flex key={index} columnGap={2} rowGap={2} alignItems="center" flexWrap="wrap" border={BORDER} borderRadius={RADIUS_MD} padding={2} data-flair-index={index}>
 					<Input size="sm" width="56px" textAlign="center" borderRadius={RADIUS_MD} placeholder="🏷️" value={flair.emoji || ''} maxLength={8} onChange={(event) => update(index, { emoji: event.target.value || null })} />
-					<Input size="sm" flex="1" minWidth="140px" borderRadius={RADIUS_MD} placeholder="Label" value={flair.label} maxLength={64} onChange={(event) => update(index, { label: event.target.value })} />
+					<Input size="sm" flex="1" minWidth="140px" borderRadius={RADIUS_MD} placeholder="Label" value={flair.label} onChange={(event) => update(index, { label: event.target.value })} />
 					<Input size="sm" width="110px" fontFamily="mono" borderRadius={RADIUS_MD} placeholder="#color" value={flair.color || ''} maxLength={32} onChange={(event) => update(index, { color: event.target.value || null })} />
 					<Flex as="label" alignItems="center" columnGap={1} fontSize="xs" color={MUTED} cursor="pointer">
 						<Switch size="sm" isChecked={flair.modOnly} onChange={(event) => update(index, { modOnly: event.target.checked })} />
@@ -1348,7 +1347,7 @@ const FlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved:
 				</Flex>
 			))}
 			<Flex columnGap={2}>
-				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={flairs.length >= 50} onClick={() => setFlairs((prev) => [...prev, { id: '', label: '', emoji: null, color: null, modOnly: false }])}>
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} onClick={() => setFlairs((prev) => [...prev, { id: '', label: '', emoji: null, color: null, modOnly: false }])}>
 					Add flair ➕
 				</Button>
 				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-flairs">
@@ -1394,7 +1393,7 @@ const UserFlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSa
 	return (
 		<Card>
 			<Box>
-				<Label>User flairs · {flairs.length}/50</Label>
+				<Label>User flairs · {flairs.length}</Label>
 				<Text fontSize="xs" color={MUTED}>
 					What members wear beside their name here — on their posts and comments in s/{subspace.slug}. Set one for a member from the Members tab.
 				</Text>
@@ -1403,7 +1402,7 @@ const UserFlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSa
 				{flairs.map((flair, index) => (
 					<Flex key={index} columnGap={2} rowGap={2} alignItems="center" flexWrap="wrap" border={BORDER} borderRadius={RADIUS_MD} padding={2} data-user-flair-index={index}>
 						<Input size="sm" width="56px" textAlign="center" borderRadius={RADIUS_MD} placeholder="🏷️" value={flair.emoji || ''} maxLength={8} onChange={(event) => update(index, { emoji: event.target.value || null })} />
-						<Input size="sm" flex="1" minWidth="140px" borderRadius={RADIUS_MD} placeholder="Label" value={flair.label} maxLength={64} onChange={(event) => update(index, { label: event.target.value })} />
+						<Input size="sm" flex="1" minWidth="140px" borderRadius={RADIUS_MD} placeholder="Label" value={flair.label} onChange={(event) => update(index, { label: event.target.value })} />
 						<Input size="sm" width="110px" fontFamily="mono" borderRadius={RADIUS_MD} placeholder="#color" value={flair.color || ''} maxLength={32} onChange={(event) => update(index, { color: event.target.value || null })} />
 						<Flex as="label" alignItems="center" columnGap={1} fontSize="xs" color={MUTED} cursor="pointer" title="Only moderators can give this flair to someone">
 							<Switch size="sm" isChecked={flair.modOnly} onChange={(event) => update(index, { modOnly: event.target.checked })} />
@@ -1425,11 +1424,11 @@ const UserFlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSa
 				</Flex>
 				<Flex as="label" alignItems="center" columnGap={2} fontSize="sm" color={INK} cursor="pointer" opacity={selfAssign ? 1 : 0.55}>
 					<Switch size="sm" isChecked={allowCustom} onChange={(event) => setAllowCustom(event.target.checked)} data-testid="mod-user-flair-allow-custom" />
-					Members may type their own text (≤ 40 chars)
+					Members may type their own text
 				</Flex>
 			</Flex>
 			<Flex columnGap={2}>
-				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={flairs.length >= 50} onClick={() => setFlairs((prev) => [...prev, { id: '', label: '', emoji: null, color: null, modOnly: false }])}>
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} onClick={() => setFlairs((prev) => [...prev, { id: '', label: '', emoji: null, color: null, modOnly: false }])}>
 					Add user flair ➕
 				</Button>
 				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-user-flairs">

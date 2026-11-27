@@ -9,7 +9,7 @@ import {
   normalizeLimitlessMutationOperations
 } from './pluginLimitlessCore';
 
-const MCP_LAB_SCRIPT_HASH = 'sha256-EIabPPWdF7FAxu5/3Y6fMmhH4wbbHXK51o1HOg8YzA8=';
+const MCP_LAB_SCRIPT_HASH = 'sha256-6sdpeXmgnL2I6d8kPVfqlTAkz2zjGBlAH+UJ387S3P0=';
 
 test('the Limitless Lab CSP hash matches the shipped MCP App module', () => {
   const script = renderThingtimeMcpUi().match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];

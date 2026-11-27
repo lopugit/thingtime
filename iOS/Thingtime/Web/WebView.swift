@@ -88,6 +88,7 @@ struct WebView: UIViewRepresentable {
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
             context.coordinator.pendingNativeScanOrigin = nil
+            MobileDeviceDiagnostics.shared.suspendAuthorization()
             NativeDeferredUpload.shared.disarm()
             MobileDeviceBackgroundPresence.shared.destinationChanged()
             context.coordinator.mobileLocation.invalidate()

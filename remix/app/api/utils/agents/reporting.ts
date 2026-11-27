@@ -12,7 +12,9 @@ import { attachmentModerationStatus } from '../moderation/moderationCore';
 import { newThingDoc } from '../messenger/shared';
 import { findSubspaceById, findSubspaceBySlug, accessOf, canModerate, isActiveMember, membershipOf } from '../subspaces/gate';
 import { listSubspaces, mutateMember } from '../subspaces/subspaces';
-import { createThing, getThing, updateThing, viewerOf, type Fail, type PublicPost, type PublicThing, type Viewer } from '../things/things';
+import { createThing, getThing, updateThing, grantThingAclEntries, readAllThingAclEntries, viewerOf, type Fail, type PublicPost, type PublicThing, type Viewer } from '../things/things';
+import { hasRelationalAclEntries } from '../things/relationalAcl';
+import { StorageMutationError } from '../storage/storageCore';
 import { runAction, type ActionOperationPolicy } from '../actions/execute';
 import { REPORT_ACTION_ROLES, privateReportingAcl, reportingDigest, reportingUuid, validReportingWorkspace, type ReportAction, type ReportingWorkspace } from './reportingCore';
 
@@ -26,7 +28,7 @@ class ReportingError extends Error { constructor(public status: number, message:
 type CoordinationRead = { ok: true; thing: PublicThing; post: PublicPost | null };
 const isSubspacePostAcl = (acl: unknown) => Array.isArray(acl) && acl.length === 1 && acl[0] === 'tt:all';
 const isPrivateCoordinationPost = (post: any, subspaceId: string) => post?.subspacePrivate === true &&
-  post.crystal?.subspaceId === subspaceId && !post.targetId && !post.appId && isSubspacePostAcl(post.acl);
+  post.crystal?.subspaceId === subspaceId && !post.targetId && !post.appId && isSubspacePostAcl(post.acl) && !hasRelationalAclEntries(post);
 const privateCoordinationProjection = (read: Fail | CoordinationRead, postId: string, characterId: string, subspaceId: string): read is CoordinationRead =>
   read.ok === true && read.thing.id === postId && read.thing.targetId === null && read.thing.author?.id === characterId &&
   isSubspacePostAcl(read.thing.acl) && read.post?.id === postId &&
@@ -38,7 +40,7 @@ const privateCoordinationProjection = (read: Fail | CoordinationRead, postId: st
 // current private membership may we check the owner's ordinary member view.
 // The canonical read still enforces moderation and live subspace access.
 const readCoordinationAsOwner = (ownerViewer: Viewer, id: string) =>
-  getThing(ownerViewer?.pat?.visibility === 'private' ? { id: ownerViewer.id, username: ownerViewer.username } : ownerViewer, id);
+  readReportingThing(ownerViewer?.pat?.visibility === 'private' ? { id: ownerViewer.id, username: ownerViewer.username } : ownerViewer, id);
 
 /** The scope delegates only this closed task workflow. No session/token is
  * minted, and the Character is never returned as a general account actor. */
@@ -112,14 +114,37 @@ export async function agentReporting(request: Request, input: any) {
       const existing = await membershipOf(String(subspace.shareId), String(character._id));
       if (existing && !isActiveMember(existing)) return fail(403, 'Task Character membership was revoked; reporting will not re-enable it');
       if (!existing) { await assertOwner(); requireOk(await mutateMember(ownerViewer, { id: String(subspace.shareId), userId: String(character._id), action: 'add' }, { insertOnly: true })); }
+      // Completed per-reference grants fence interrupted preparation: a later
+      // removal must remain revoked rather than silently being restored. This
+      // map is bounded by the fixed saved-workspace roles, never task count.
+      const characterViewer: Viewer = { id: String(character._id), username: character.username };
+      const grantReference = async (viewer: Viewer, id: string, current: any) => {
+        const progressKey = reportingDigest(id);
+        if (binding.crystal.preparationGrants?.[progressKey]) {
+          if (!(await readReportingThing(characterViewer, id)).ok)
+            throw new ReportingError(403, 'Task Character workspace access was revoked during preparation');
+          return;
+        }
+        let intent = binding.crystal.preparationIntents?.[progressKey];
+        if (!intent) {
+          intent = { generation: current.aclGeneration ?? null };
+          // First writer fixes the intended generation. A concurrent prepare
+          // must reload this intent instead of replacing it after revocation.
+          await things.updateOne({ ...filter, [`crystal.preparationIntents.${progressKey}`]: { $exists: false } } as any,
+            { $set: { [`crystal.preparationIntents.${progressKey}`]: intent } });
+          const latest = await things.findOne(filter as any);
+          intent = latest?.crystal.preparationIntents?.[progressKey];
+          if (!intent) throw new ReportingError(409, 'Task preparation intent is unavailable');
+        }
+        requireOk(await grantThingAclEntries(viewer, id, ['tt:custom', `tt:user/${character.username}`], { refuseRevoked: true, expectedAclGeneration: intent.generation, captureTimeline: false }));
+        await things.updateOne(filter as any, { $set: { [`crystal.preparationGrants.${progressKey}`]: true } });
+      };
       // Explicit agents.report consent covers read grants only to the exact
       // supplied owner-private references. It never changes their visibility.
       for (const id of referenceIds(workspace)) {
         await assertOwner();
         const current = await requirePrivateReference(ownerId, ownerViewer, id);
-        const grant = `tt:user/${character.username}`;
-        if (!current.acl.includes(grant) && !current.acl.includes(`${grant}/write`))
-          requireOk(await updateThing(ownerViewer, id, { acl: [...new Set([...current.acl, 'tt:custom', grant])] }, { expectedUpdatedAt: current.updatedAt instanceof Date ? current.updatedAt.toISOString() : current.updatedAt }));
+        await grantReference(ownerViewer, id, current);
       }
       if (binding.crystal.parent) {
         const parent = binding.crystal.parent;
@@ -129,9 +154,7 @@ export async function agentReporting(request: Request, input: any) {
           await assertOwner();
           const grantViewer: Viewer = { id: String(actor._id), username: actor.username };
           const current = await requirePrivateReference(String(actor._id), grantViewer, id, 'data');
-          const grant = `tt:user/${character.username}`;
-          if (!current.acl.includes(grant)) requireOk(await updateThing(grantViewer, id, { acl: [...new Set([...current.acl, 'tt:custom', grant])] },
-            { expectedUpdatedAt: current.updatedAt instanceof Date ? current.updatedAt.toISOString() : current.updatedAt }));
+          await grantReference(grantViewer, id, current);
         }
       }
       await verifyBinding(binding, ownerId, ownerViewer);
@@ -139,6 +162,7 @@ export async function agentReporting(request: Request, input: any) {
       return { ok: true as const, binding: safeBinding(binding) };
     }
     if (!binding) return fail(404, 'Prepare this stable task identity first');
+    if (!binding.crystal.prepared) return fail(409, 'Task preparation is incomplete; resume prepare with the same externalTaskId and workspace references');
     const verified = await verifyBinding(binding, ownerId, ownerViewer);
     await assertOwner();
     if (input.operation === 'get') {
@@ -148,7 +172,7 @@ export async function agentReporting(request: Request, input: any) {
       const readPolicy = reportingPolicy(things, binding, verified.character, owner.username, 'readOverview', '');
       for (const id of [...new Set(ids)] as string[]) {
         await assertOwner(); await readPolicy.access(id, 'read');
-        records.push(requireOk(await getThing(ownerViewer, id)).thing);
+        records.push(requireOk(await readReportingThing(ownerViewer, id)).thing);
       }
       const activeId = binding.crystal.activeOperation;
       const active = activeId ? await things.findOne({ thingtime: 'agent-reporting-operation', ownerId, targetId: binding.shareId,
@@ -210,8 +234,7 @@ export async function agentReporting(request: Request, input: any) {
       const ids = policy.createdIds;
       const records = { ...binding.crystal.records };
       for (const id of ids) {
-        const doc = await things.findOne({ shareId: id, ownerId: String(verified.character._id), thingtime: 'data' } as any);
-        if (!doc || !privateReportingAcl(doc.acl) || !(await getThing(ownerViewer, id)).ok) throw new ReportingError(409, 'Reporting readback failed');
+        const doc = await requirePrivateReference(String(verified.character._id), ownerViewer, id, 'data');
         for (const role of ['project', 'task', 'agent'] as const) if (doc.crystal?.schemaId === binding.crystal.workspace.schemas[role]) records[`${role}Id`] = id;
       }
       await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
@@ -239,11 +262,42 @@ function receiptResponse(receipt: any, digest: string, binding: any) {
   return { ok: true as const, binding: safeBinding(binding), receipt: { requestId: receipt.crystal.requestId, status: 'complete', result: receipt.crystal.result } };
 }
 const referenceIds = (workspace: ReportingWorkspace): string[] => [...new Set([...Object.values(workspace.pages), ...Object.values(workspace.schemas), ...Object.values(workspace.actions)])] as string[];
+// Shared workspace grants can change while another task reads its references.
+// Retry only reads with a proven ACL snapshot conflict. Stable access refusals
+// remain refusals; no grant, Action, or receipt is replayed by this helper.
+async function readReportingReference(viewer: Viewer, id: string, required?: { ownerId: string; kind?: string }) {
+  const things = await getThingsCollection();
+  const conflict = () => new ReportingError(409, 'Reporting reference access changed while it was being read; retry the same task request');
+  const privateRefusal = () => new ReportingError(403, 'Reporting references must be exact, accessible, owner-private saved Things of the expected kind');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const raw = await things.findOne({ shareId: id, ...(required ? { ownerId: required.ownerId } : {}) } as any);
+      const revision = raw ? JSON.stringify([raw.ownerId, raw.aclGeneration, raw.aclRevision]) : null;
+      if (required && (!raw || raw.appId || raw.targetId ||
+          (required.kind && !raw.thingtime.includes(required.kind)) || !privateReportingAcl(await readAllThingAclEntries(raw)))) throw privateRefusal();
+      const read = await getThing(viewer, id);
+      if (read.ok === false && read.status === 404 && raw) {
+        const current = await things.findOne({ shareId: id } as any, { projection: { ownerId: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1 } });
+        if (current && current.ownerId === raw.ownerId &&
+            JSON.stringify([current.ownerId, current.aclGeneration, current.aclRevision]) !== revision) {
+          if (attempt < 2) continue;
+          throw conflict();
+        }
+      }
+      if (required && !read.ok) throw privateRefusal();
+      return { raw, read };
+    } catch (error) {
+      if (!(error instanceof StorageMutationError) || error.status !== 409) throw error;
+      if (attempt === 2) throw conflict();
+    }
+  }
+  throw conflict();
+}
+async function readReportingThing(viewer: Viewer, id: string) {
+  return (await readReportingReference(viewer, id)).read;
+}
 async function requirePrivateReference(ownerId: string, viewer: Viewer, id: string, kind?: string) {
-  const raw = await (await getThingsCollection()).findOne({ shareId: id, ownerId } as any);
-  if (!raw || raw.appId || raw.targetId || !privateReportingAcl(raw.acl) || (kind && !raw.thingtime.includes(kind)) || !(await getThing(viewer, id)).ok)
-    throw new ReportingError(403, 'Reporting references must be exact, accessible, owner-private saved Things of the expected kind');
-  return raw;
+  return (await readReportingReference(viewer, id, { ownerId, kind })).raw;
 }
 async function verifyWorkspace(ownerId: string, viewer: Viewer, workspace: ReportingWorkspace) {
   for (const id of Object.values(workspace.pages)) await requirePrivateReference(ownerId, viewer, id, 'webpage');
@@ -265,7 +319,7 @@ async function verifyBinding(binding: any, ownerId: string, ownerViewer: Viewer)
       !isActiveMember(await membershipOf(workspace.subspaceId!, String(character._id)))) throw new ReportingError(403, 'Private coordination membership or administration was revoked');
   await verifyWorkspace(ownerId, ownerViewer, workspace);
   const viewer: Viewer = { id: String(character._id), username: character.username };
-  for (const id of referenceIds(workspace)) if (!(await getThing(viewer, id)).ok) throw new ReportingError(403, 'Task Character workspace access was revoked');
+  for (const id of referenceIds(workspace)) if (!(await readReportingThing(viewer, id)).ok) throw new ReportingError(403, 'Task Character workspace access was revoked');
   if (binding.crystal.parent) {
     const parent = binding.crystal.parent;
     const parentBinding = await (await getThingsCollection()).findOne({ shareId: parent.bindingId, thingtime: 'agent-reporting-binding', ownerId } as any);
@@ -277,7 +331,7 @@ async function verifyBinding(binding: any, ownerId: string, ownerViewer: Viewer)
     await requirePrivateReference(String(projectCharacter._id), { id: String(projectCharacter._id), username: projectCharacter.username }, parent.projectId, 'data');
     if (!isActiveMember(await membershipOf(workspace.subspaceId!, String(projectCharacter._id)))) throw new ReportingError(403, 'Project Character membership was revoked');
     if (!isActiveMember(await membershipOf(workspace.subspaceId!, String(parentCharacter._id)))) throw new ReportingError(403, 'Parent task Character membership was revoked');
-    for (const id of [parent.projectId, parent.taskId]) if (!(await getThing(viewer, id)).ok) throw new ReportingError(403, 'Child task access to its exact parent roots was revoked');
+    for (const id of [parent.projectId, parent.taskId]) if (!(await readReportingThing(viewer, id)).ok) throw new ReportingError(403, 'Child task access to its exact parent roots was revoked');
   }
   return { character, viewer };
 }
@@ -326,8 +380,9 @@ function reportingPolicy(things: any, binding: any, character: any, ownerUsernam
     access: async (id, operation) => {
       const parentRoot = binding.crystal.parent && [binding.crystal.parent.projectId, binding.crystal.parent.taskId].includes(id);
       if (parentRoot && operation !== 'read') throw new ReportingError(403, 'Child reporting cannot update parent task or project roots');
-      const doc = await things.findOne({ shareId: id, ownerId: parentRoot ? (id === binding.crystal.parent.projectId ? binding.crystal.parent.projectCharacterId : binding.crystal.parent.characterId) : String(character._id), thingtime: 'data' });
-      if (!doc || !schemaIds.includes(doc.crystal?.schemaId) || !privateReportingAcl(doc.acl)) throw new ReportingError(403, 'Reporting may access only this task Character’s private workspace records');
+      const expectedOwner = parentRoot ? (id === binding.crystal.parent.projectId ? binding.crystal.parent.projectCharacterId : binding.crystal.parent.characterId) : String(character._id);
+      const doc = await requirePrivateReference(expectedOwner, { id: String(character._id), username: character.username }, id, 'data');
+      if (!schemaIds.includes(doc.crystal?.schemaId)) throw new ReportingError(403, 'Reporting may access only this task Character’s private workspace records');
       if (operation === 'update' && (creates || (!primaryUpdate && (!role || doc.crystal.schemaId !== workspace.schemas[role])) || (primaryUpdate && !(['project', 'task', 'agent'] as const).some(key => workspace.schemas[key] === doc.crystal.schemaId)))) throw new ReportingError(403, 'This Action updates the wrong reporting role');
       if (operation === 'update' && (primaryUpdate || ['project', 'task', 'agent'].includes(role!)) && !Object.values(records).includes(id)) throw new ReportingError(403, 'This record is not bound to the task');
     },
@@ -359,8 +414,8 @@ async function coordinateReporting(context: {
   if (validated.ok === false) return fail(validated.status, validated.error);
   if (input.renderComponent.id !== undefined) {
     if (!ref(input.renderComponent.id)) return fail(400, 'renderComponent.id must reference an accessible saved Component');
-    const component = requireOk(await getThing(viewer, input.renderComponent.id)).thing;
-    if (!component.thingtime.includes('component') || !(await getThing(ownerViewer, input.renderComponent.id)).ok)
+    const component = requireOk(await readReportingThing(viewer, input.renderComponent.id)).thing;
+    if (!component.thingtime.includes('component') || !(await readReportingThing(ownerViewer, input.renderComponent.id)).ok)
       return fail(403, 'The task Character and owner require access to the saved render Component');
   }
   const digest = reportingDigest({ operation: 'coordinate', title: input.title, text: input.text, renderComponent: input.renderComponent });
@@ -385,7 +440,7 @@ async function coordinateReporting(context: {
       throw new ReportingError(409, 'Coordination post is saved and waiting for text moderation; retry this same requestId and payload after release');
     if (attachmentModerationStatus(saved) === 'blocked')
       throw new ReportingError(409, 'Coordination post was blocked by text moderation');
-    const [authorRead, ownerRead, anonymousRead] = await Promise.all([getThing(viewer, postId), readCoordinationAsOwner(ownerViewer, postId), getThing(null, postId)]);
+    const [authorRead, ownerRead, anonymousRead] = await Promise.all([readReportingThing(viewer, postId), readCoordinationAsOwner(ownerViewer, postId), readReportingThing(null, postId)]);
     const exactPrivateProjection = (read: typeof ownerRead) => privateCoordinationProjection(read, postId, String(character._id), subspaceId) &&
       sameContent(read.thing.crystal);
     if (!exactPrivateProjection(authorRead) || !exactPrivateProjection(ownerRead) || anonymousRead.ok !== false || anonymousRead.status !== 404)

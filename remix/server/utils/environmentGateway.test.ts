@@ -3,9 +3,10 @@ import test from 'node:test';
 import { H3 } from 'nitro/h3';
 
 import middleware from '../middleware/environment-gateway';
+import robotsHandler from '../handlers/robots';
 import { thingtimeCapabilityManifest } from '../../app/api/utils/capabilities/thingtimeCapabilities';
-import { createGatewayAuthority, getGatewaySettings, requireGatewayDatabaseAccess } from '../../app/api/utils/deployment/environmentGateway';
-import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, proxyEnvironmentRequest, restoreGatewayRequest } from './environmentGateway';
+import { createGatewayAuthority, gatewayAuthority, getGatewaySettings, registerGatewayDrain, requireGatewayDatabaseAccess } from '../../app/api/utils/deployment/environmentGateway';
+import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, isGatewayDataPath, proxyEnvironmentRequest, restoreGatewayRequest, withGatewayShellWork } from './environmentGateway';
 
 const origin = 'https://gateway.test';
 const follower = 'https://follower.test';
@@ -19,6 +20,26 @@ const fixture = async (run: () => Promise<void>) => {
   try { await run(); } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 };
 const aliasManifest = () => { const manifest = thingtimeCapabilityManifest(origin); manifest.gateway!.deploymentId = 'owner'; return manifest; };
+
+test('real middleware serves deployment-local crawler policy without contacting an unavailable gateway', async t => fixture(async () => {
+  const network = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Gateway unavailable'); });
+  const app = new H3().use(middleware).all('/robots.txt', robotsHandler);
+  assert.equal(isGatewayDataPath('/robots.txt'), false);
+  assert.equal(isGatewayDataPath('/api/v1/things'), true);
+  assert.equal(isGatewayDataPath('/sitemap.xml'), true);
+  for (const method of ['GET', 'HEAD']) {
+    const response = await app.fetch(new Request(follower + '/robots.txt', { method }));
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    if (method === 'GET') assert.match(body, /^Disallow: \/$/m);
+    else assert.equal(body, '');
+  }
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'production';
+  const production = await app.fetch(new Request(follower + '/robots.txt'));
+  assert.equal(production.status, 200);
+  assert.match(await production.text(), /^Allow: \/$/m);
+  assert.equal(network.mock.callCount(), 0);
+}));
 
 test('signed relay preserves authentication, original URL, cookies, transport hooks and manual redirects', async t => fixture(async () => {
   const settings = getGatewaySettings()!;
@@ -171,6 +192,71 @@ test('credential relay binds import headers and omits proofs and payloads from g
   assert.equal(diagnostic.includes(proof) || diagnostic.includes(body), false);
 }));
 
+
+test('static and follower streams cannot delay old owner pool drain', async t => fixture(async () => {
+  process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'owner';
+  let owner = 'owner', closes = 0;
+  const streams: Response[] = [];
+  const manifest = () => { const value = aliasManifest(); value.gateway!.deploymentId = owner; return value; };
+  const stream = () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new TextEncoder().encode('open')); }
+  }));
+  t.mock.method(globalThis, 'fetch', async url => String(url).includes('.well-known') ? Response.json(manifest()) : stream());
+  const removeDrain = registerGatewayDrain(async () => { closes++; });
+  const app = new H3().use(middleware).all('/**', () => stream());
+  try {
+    await gatewayAuthority.current(true);
+    const admitted = await app.fetch(new Request(origin + '/api/v1/things')); streams.push(admitted);
+    const staticResponse = await app.fetch(new Request(origin + '/assets/open')); streams.push(staticResponse);
+    owner = 'successor';
+    await gatewayAuthority.current(true);
+    const forwarded = await app.fetch(new Request(origin + '/api/v1/things')); streams.push(forwarded);
+    assert.equal(closes, 0, 'original admitted stream is still active');
+    await admitted.body!.cancel();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(closes, 1, 'static and forwarded streams remain open while old pool drains');
+    owner = 'owner'; await gatewayAuthority.current(true);
+    const rollback = await app.fetch(new Request(origin + '/api/v1/things')); streams.push(rollback);
+    assert.equal(rollback.status, 200);
+    await rollback.body!.cancel();
+  } finally {
+    await Promise.allSettled(streams.map(response => response.body!.cancel()));
+    removeDrain();
+  }
+}));
+
+
+test('shell metadata holds owner admission, while follower shells use a database-free fallback', async t => fixture(async () => {
+  process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'owner';
+  let owner = 'owner', closes = 0, reads = 0;
+  let finishMetadata!: () => void, metadataStarted!: () => void;
+  const pendingMetadata = new Promise<void>(resolve => { finishMetadata = resolve; });
+  const started = new Promise<void>(resolve => { metadataStarted = resolve; });
+  t.mock.method(globalThis, 'fetch', async () => {
+    const value = aliasManifest(); value.gateway!.deploymentId = owner; return Response.json(value);
+  });
+  const removeDrain = registerGatewayDrain(async () => { closes++; });
+  try {
+    await gatewayAuthority.current(true);
+    const metadata = withGatewayShellWork(async () => {
+      reads++; metadataStarted(); await pendingMetadata;
+      await requireGatewayDatabaseAccess();
+      return 'public owner metadata';
+    }, () => 'generic metadata');
+    await started;
+    owner = 'successor'; await gatewayAuthority.current(true);
+    assert.equal(closes, 0, 'owner metadata query remains admitted through promotion');
+    assert.equal(await withGatewayShellWork(async () => { reads++; throw Error('follower must not query'); }, () => 'generic metadata'), 'generic metadata');
+    finishMetadata();
+    assert.equal(await metadata, 'public owner metadata');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(reads, 1); assert.equal(closes, 1);
+    process.env.THINGTIME_MONGODB_CONNECTION_MODE = 'dedicated';
+    assert.equal(await withGatewayShellWork(async () => { reads++; return 'dedicated metadata'; }, () => 'generic metadata'), 'dedicated metadata');
+    assert.equal(reads, 2, 'dedicated shells retain their own metadata lookup');
+  } finally { finishMetadata(); removeDrain(); }
+}));
+
 test('gateway relay replaces spoofed bypass headers and never reflects the secret', async t => fixture(async () => {
   const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   const secret = 'synthetic-platform-bypass';
@@ -206,3 +292,139 @@ test('gateway relay replaces spoofed bypass headers and never reflects the secre
     else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
   }
 }));
+
+test('platform protection bypass is server-selected, stripped on restore/response and never followed to a redirect', async t => fixture(async () => {
+  const previous = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = 'synthetic-platform-bypass';
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(aliasManifest()) }).current();
+    let sent = 0;
+    t.mock.method(globalThis, 'fetch', async (target, init) => {
+      sent++;
+      assert.equal(String(target), origin + '/api/v1/things');
+      assert.equal(init?.redirect, 'manual');
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('x-vercel-protection-bypass'), 'synthetic-platform-bypass');
+      assert.equal(Buffer.from(headers.get(GATEWAY_RELAY_HEADER)!, 'base64url').toString('utf8').includes('synthetic-platform-bypass'), false);
+      assert.equal(headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(new Request(target, init), settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return new Response(null, { status: 302, headers: {
+        Location: 'https://foreign.test/redirect', 'x-vercel-protection-bypass': 'synthetic-platform-bypass'
+      } });
+    });
+    const result = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(result.status, 302);
+    assert.equal(result.headers.get('Location'), 'https://foreign.test/redirect');
+    assert.equal(result.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(sent, 1, 'A foreign redirect must not receive the server-only header');
+    const refused = await proxyEnvironmentRequest(new Request('https://unrelated.test/api/v1/things'), authority!);
+    assert.equal(refused.status, 421);
+    assert.equal(sent, 1, 'An unrecognized source cannot relay a protected request');
+  } finally {
+    if (previous === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = previous;
+
+  }
+}));
+
+test('gateway relay replaces spoofed bypass headers and never reflects the secret', async t => fixture(async () => {
+  const prior = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const secret = 'synthetic-platform-bypass';
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = secret;
+  try {
+    const settings = getGatewaySettings()!;
+    const authority = await createGatewayAuthority({ settings: () => settings,
+      fetch: async () => Response.json(aliasManifest()) }).current();
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).origin, settings.origin);
+      const incoming = new Request(url, init);
+      assert.equal(incoming.headers.get('x-vercel-protection-bypass'), secret);
+      assert.equal(incoming.headers.has('x-vercel-set-bypass-cookie'), false);
+      const restored = restoreGatewayRequest(incoming, settings)!;
+      assert.equal(restored.headers.has('x-vercel-protection-bypass'), false);
+      assert.equal(restored.headers.has('x-vercel-set-bypass-cookie'), false);
+      return Response.json({ ok: true }, { headers: {
+        'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true'
+      } });
+    });
+    const response = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: {
+      'x-vercel-protection-bypass': 'untrusted-caller-value', 'x-vercel-set-bypass-cookie': 'true'
+    } }), authority!);
+    assert.equal(response.status, 200);
+    assert.equal(calls, 1);
+    assert.equal(response.headers.has('x-vercel-protection-bypass'), false);
+    assert.equal(response.headers.has('x-vercel-set-bypass-cookie'), false);
+    assert.equal((await response.text()).includes(secret), false);
+  } finally {
+    if (prior === undefined) delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    else process.env.VERCEL_AUTOMATION_BYPASS_SECRET = prior;
+  }
+}));
+
+test('parallel configuration and workload identities are bound to the enrolled test project and isolated preview gateway', async () => {
+  const { generateKeyPair, SignJWT } = await import('jose');
+  const { authenticatePilot, isPilotGateway, PILOT_GATEWAY } = await import('./deploymentPilot');
+  const { selectPilotBuild } = await import('../../app/api/utils/deployment/pilotBuild');
+  const profile = { id: 'hobby-test', teamSlug: 'test-team', teamId: 'team_1', projectName: 'demo', projectId: 'prj_1',
+    mode: 'parallel' as const, enabled: true, label: 'Hobby', testOrigin: 'https://demo-example.vercel.app' };
+  assert.deepEqual(selectPilotBuild({}), null);
+  assert.throws(() => selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id }));
+  assert.throws(() => selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: 'https://thingtime.com' }));
+  assert.deepEqual(selectPilotBuild({ THINGTIME_PILOT_PROFILE_ID: profile.id, THINGTIME_PILOT_ORIGIN: profile.testOrigin }),
+    { profileId: profile.id, origin: profile.testOrigin });
+  const settings = { origin: PILOT_GATEWAY, environment: 'preview', deploymentId: 'preview', secret: 'unused' };
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development' }), true);
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'production' }), false);
+  assert.equal(isPilotGateway(settings, { THINGTIME_DATA_ENV: 'development', THINGTIME_FEDERATION_ID: 'production' }), false);
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const sign = (claims = {}, expiry = '10m') => new SignJWT({ owner: profile.teamSlug, project: profile.projectName,
+    project_id: profile.projectId, owner_id: profile.teamId, environment: 'production', ...claims }).setProtectedHeader({ alg: 'RS256' })
+    .setAudience('https://vercel.com/test-team').setIssuer('https://oidc.vercel.com/test-team')
+    .setSubject('owner:test-team:project:demo:environment:production').setIssuedAt().setExpirationTime(expiry).sign(privateKey);
+  const token = await sign();
+  const key = async () => publicKey;
+  assert.equal(await authenticatePilot(token, profile, key), true);
+  assert.equal(await authenticatePilot(token, { ...profile, enabled: false }, key), false);
+  assert.equal(await authenticatePilot(token, { ...profile, mode: 'primary' }, key), false);
+  for (const claims of [{ project_id: 'prj_2' }, { owner_id: 'team_2' }, { environment: 'preview' }])
+    assert.equal(await authenticatePilot(await sign(claims), profile, key), false);
+  assert.equal(await authenticatePilot(await sign({}, '-1h'), profile, key), false);
+});
+
+test('pilot uses only the exact preview gateway and keeps the Vercel identity separate from user authorization', async t => {
+  const { proxyPilotRequest } = await import('./environmentGateway');
+  const { PILOT_GATEWAY, PILOT_OIDC_HEADER, PILOT_PROFILE_HEADER, TRUSTED_SOURCE_HEADER } = await import('./deploymentPilot');
+  const pilot = { profileId: 'pilot', origin: 'https://aligned-hobby.vercel.app' };
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string | URL, init: RequestInit) => {
+    calls.push(String(url));
+    assert.equal(new URL(url).origin, PILOT_GATEWAY);
+    const headers = new Headers(init.headers);
+    assert.equal(headers.get(TRUSTED_SOURCE_HEADER), 'synthetic.workload');
+    assert.equal(headers.get('x-vercel-oidc-token'), null);
+    if (String(url).endsWith('/.well-known/thingtime-capabilities.json')) {
+      const manifest = thingtimeCapabilityManifest(PILOT_GATEWAY);
+      return Response.json({ ...manifest, gateway: { origin: PILOT_GATEWAY, environment: 'preview', deploymentId: 'preview' } });
+    }
+    assert.equal(headers.get('authorization'), 'Bearer synthetic-user');
+    assert.equal(headers.get(PILOT_OIDC_HEADER), 'synthetic.workload');
+    assert.equal(headers.get(PILOT_PROFILE_HEADER), pilot.profileId);
+    return new Response('ok', { headers: { [PILOT_OIDC_HEADER]: 'never-forward', [TRUSTED_SOURCE_HEADER]: 'never-forward' } });
+  });
+  const req = (url: string) => new Request(url, { headers: { authorization: 'Bearer synthetic-user', 'x-vercel-oidc-token': 'synthetic.workload',
+    [TRUSTED_SOURCE_HEADER]: 'visitor-input', [PILOT_PROFILE_HEADER]: 'visitor-input' } });
+  assert.equal((await proxyPilotRequest(req('https://other.test/api/v1/things'), pilot)).status, 421);
+  assert.equal(calls.length, 0);
+  const response = await proxyPilotRequest(req(pilot.origin + '/api/v1/things'), pilot);
+  assert.equal(await response.text(), 'ok');
+  assert.equal(response.headers.get(PILOT_OIDC_HEADER), null);
+  assert.equal(response.headers.get(TRUSTED_SOURCE_HEADER), null);
+  assert.equal(calls.length, 2);
+});

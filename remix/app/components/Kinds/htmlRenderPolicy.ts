@@ -18,6 +18,8 @@ export const HTML_ALLOWED_TAGS = new Set([
 	'tt-map',
 	'tt-mapbox',
 	'tt-media',
+	'tt-pdf',
+	'tt-pdf-page',
 	'tt-attachments',
 	'tt-discussion',
 	'dl',
@@ -226,6 +228,8 @@ export const ALLOWED_PROPS = new Set([
 	// click wrapper reads to run an action AS the viewer. Values are plain
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
+	'data-tt-pdf',
+	'data-tt-pdf-value',
 	'data-tt-action-inputs',
 	// Inert composition slots adopted only by the trusted authored menu.
 	'data-tt-menu-slot',

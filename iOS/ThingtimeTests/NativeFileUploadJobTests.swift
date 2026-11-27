@@ -53,6 +53,35 @@ final class NativeFileUploadJobTests: XCTestCase {
         return (NativeUploadFileRequest(source: source, uploadId: "upload", requestId: "operation", authorization: try authorization()), digest)
     }
 
+    func testDiagnosticProjectionKeepsClosedFailureAndCountsWithoutPhotoOrRunMetadata() throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),
+            grantRevision: String(repeating: "a", count: 64), runId: "private-run-handle", expiresAt: now.addingTimeInterval(3600))
+        run.stage = "waiting"; run.retrySource = .budget; run.retryAt = now.addingTimeInterval(13)
+        run.pendingOriginals = 6; run.unavailableOriginals = 2
+        let activity = try JSONDecoder().decode(NativePhotoRunActivity.Snapshot.self, from: Data("""
+            {"phase":"waiting","reason":"interrupted","failureOperation":"parts","events":[],
+             "indexed":{"photos":10,"videos":1,"files":12},"latestFound":{"kind":"photo","capturedAt":0},
+             "indexing":{"unit":"assets","completed":11,"total":11},
+             "backgroundEnd":{"cause":"system-ended","at":0,"measuredUnits":17,"lastProgressAt":0}}
+            """.utf8))
+        let value = NativePhotoDiagnosticProjection.event(run, activity: activity, at: now)
+        try value.validate()
+        XCTAssertEqual(value.state, .waiting); XCTAssertEqual(value.reason, .interrupted)
+        XCTAssertEqual(value.failureOperation, .parts); XCTAssertEqual(value.retrySource, .budget)
+        XCTAssertEqual(value.counts?.indexedResources, 12); XCTAssertEqual(value.counts?.pendingOriginals, 6)
+        XCTAssertEqual(value.background?.cause, .systemEnded); XCTAssertEqual(value.background?.measuredUnits, 17)
+        XCTAssertEqual(value.runKey?.count, 64)
+        let data = try value.encoded(), json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(json["latestFound"]); XCTAssertNil(json["events"]); XCTAssertNil(json["runId"])
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("private-run-handle"))
+        run.pauseByUser()
+        XCTAssertEqual(NativePhotoDiagnosticProjection.event(run, activity: activity, at: now).state, .paused)
+        run.stage = "complete"; run.userPaused = false; run.armed = true
+        XCTAssertEqual(NativePhotoDiagnosticProjection.event(run, activity: activity, at: now).state, .complete)
+    }
+
     func testSourceIndexRotationReconcilesStaleJournalWithoutChangingByteEpoch() throws {
         let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
         var run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),

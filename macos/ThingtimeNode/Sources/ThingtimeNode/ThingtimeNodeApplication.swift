@@ -316,6 +316,9 @@ private actor MultiAccountControlPlaneRuntime {
         let liveSync: LiveAISyncCoordinator
         let flushTask: Task<Void, Never>
     }
+    /// Whether the administrator's `mac.node` Automation switch let the
+    /// command and status loops run at the last check.
+    private var commandsRunning = false
 
     private let location: DeviceLocationService
     private let baseURL: URL
@@ -453,7 +456,25 @@ private actor MultiAccountControlPlaneRuntime {
             liveSync: liveSync,
             flushTask: flushTask
         )
-        await scheduler.start()
+        if await ThingtimeAutomationSwitches.shared.isEnabled("mac.node", origin: baseURL) {
+            await scheduler.start()
+            commandsRunning = true
+        } else {
+            commandsRunning = false
+            ThingtimeNodeLog.lifecycle.info("Remote commands and status reports are off (Admin → Automation → Mac Thingtime Node).")
+        }
+    }
+
+    /// Re-reads the `mac.node` switch (on wake) and starts or stops the
+    /// command, status and location loops of every paired account to match.
+    func applyAutomationSwitch() async {
+        let enabled = await ThingtimeAutomationSwitches.shared.isEnabled("mac.node", origin: baseURL)
+        guard enabled != commandsRunning else { return }
+        commandsRunning = enabled
+        for runtime in accounts.values {
+            if enabled { await runtime.scheduler.start() } else { await runtime.scheduler.stop() }
+        }
+        ThingtimeNodeLog.lifecycle.info("Remote commands and status reports turned \(enabled ? "on" : "off", privacy: .public) by Admin → Automation.")
     }
 
     private func stopAccount(_ deviceID: String, revoke: Bool = false) async {
@@ -478,6 +499,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var connectorRuntime: ConnectorRuntime?
     private var desktopChatRuntime: DesktopChatRuntime?
     private var controlPlaneRuntime: MultiAccountControlPlaneRuntime?
+    private var wakeObserver: NSObjectProtocol?
     private var liveSyncEventTask: Task<Void, Never>?
     private var desktopChatEventTask: Task<Void, Never>?
     private var listener: NSXPCListener?
@@ -601,6 +623,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                     if Task.isCancelled { return }
                     await controlPlaneRuntime.captureConnectorEvent(event)
                 }
+            }
+            // No timer re-checks the Automation switch: the Mac waking up is
+            // the cue to apply an administrator's change.
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { _ in
+                Task { await controlPlaneRuntime.applyAutomationSwitch() }
             }
             refreshStatus(nil)
             ThingtimeNodeLog.lifecycle.info("Thingtime Node started")

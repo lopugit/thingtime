@@ -75,19 +75,43 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.1.0 and an optional `gateway` descriptor containing only environment, stable
-origin and deployment identity. This metadata is private/no-store to prevent a
-CDN pinning the previous alias owner. Discovery itself neither authenticates an
-agent nor grants access to private Things.
+1.3.1 and an optional `gateway` descriptor containing only environment, stable
+origin and deployment identity. Browsers and any proxy in front of Vercel
+(Cloudflare fronts `thingtime.com`) receive `private, no-store`, so none of
+them can pin the previous alias owner. Discovery itself neither authenticates
+an agent nor grants access to private Things.
+
+Vercel's own CDN may keep a successful GET for one hour through
+`Vercel-CDN-Cache-Control: max-age=3600`, which Vercel consumes and never
+forwards. Vercel keys every cached response by the unique deployment URL (as
+well as method, scheme, host and path), and a manifest never changes during a
+deployment's life: feature versions are built in and gateway settings are fixed
+deployment configuration. After an alias moves, requests to the alias reach the
+new owner's cache and return the new owner's identity; a rollback reaches the
+earlier deployment's own cache, which names that deployment. Only a GET whose
+computed origin is exactly the routed HTTPS host is stored, so a forged
+forwarded host or scheme cannot place another origin's manifest under the
+alias's cache key; parallel pilot builds are never stored. A storable
+conditional GET returns the full body so the edge can keep it. Without this,
+each ownership check, and every client capability check, invoked a function on
+the alias: under light traffic, nearly one extra invocation per API call
+(about 630 an hour on 26 November 2026).
 
 ## Requests, promotion and rollback
 
-Each worker resolves its configured alias with a credential-free, bounded,
-redirect-refusing manifest request. Only the matching deployment identity may
+Each worker resolves its configured alias with a bounded, redirect-refusing
+manifest request. A configured server-only platform protection header is sent
+only to that verified origin; it does not replace signed gateway authentication.
+Only the matching deployment identity may
 open its MongoDB client. Ownership caches for at most five seconds; errors,
 missing capabilities, different environments and changed origins fail closed.
 There is no stale-on-error database fallback. Requests also negotiate the
 specific semantic feature version and advertised path/method before forwarding.
+
+Shared connection and index initialization leaves only its initiating HTTP
+request's cancellation budget. It retains an independent gateway work lease
+until initialization settles, even if its last waiter disconnects. Demotion
+then closes clients and evicts readiness before rollback can admit new work.
 A branch with a newer or incompatible API must wait for its environment gateway
 to support that API; a preview therefore runs its own frontend against the
 canonical environment backend, not its branch-specific backend implementation.
@@ -119,6 +143,16 @@ before reopening a pool if a rollback promotes it again. Multiple warm gateway
 instances still have separate pools and monitoring sockets. This selects one
 deployment, **not one process or socket**, and does not change the Atlas tier.
 
+Drain accounting covers only admitted database work and its explicitly leased
+background jobs. Static responses and follower relays cannot keep a retired
+owner's pools open. An ended request's async context no longer grants database
+admission; a detached job must acquire its own lease before its parent ends.
+Demotion fences concurrent admission, and rollback waits for pool closure and
+cache eviction. Clients with a positive `maxIdleTimeMS` attach to Vercel's
+supported pool helper so Fluid can keep the invocation alive through the idle
+timeout. This retires idle application sockets; it does not claim to close all
+monitoring sockets or turn a frozen legacy deployment into a cooperative peer.
+
 ## Rollout and environment mapping
 
 The intended mapping separates the logical gateway environment from Vercel's
@@ -140,11 +174,13 @@ select the backend; the explicit gateway configuration does. Dedicated PRs
 retain that same credential target and run their own handlers against its
 configured development database.
 
-The latest configuration audit confirmed that custom develop and previews use
-the same development cluster, separate from production. The
-`master.previews.thingtime.com` alias has not yet been created or verified, and
-gateway activation across these origins is pending. Do not treat the intended
-mapping as proof of live gateway operation.
+The configuration audit confirmed that custom develop and previews use the
+same development cluster, separate from production. On 11 November 2026,
+credential-free manifests on all three stable origins returned their matching
+environment and gateway identity. Vercel metadata independently matched the
+production and preview-master deployments to source `1f5c09c08` on `main`.
+This confirms gateway configuration and deployment identity, not an exact Atlas
+connection total or proof that every historical deployment has drained.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -185,6 +221,8 @@ the lifecycle tests and admin migration recovery checks before changing the plan
 npm --prefix remix run test:environment-gateway
 npm --prefix remix run test:collections
 npm --prefix remix run test:api-capabilities
+npm --prefix remix run build:client
+npm --prefix remix run sync:nitro-template
 NITRO_PRESET=node-server npm --prefix remix run build:server
 node remix/scripts/environment-gateway-acceptance.mjs
 ```
@@ -199,7 +237,7 @@ or credentials and does not expose a public dev server.
 
 ## Promotion procedure
 
-Use the intended mapping and pending-activation status above. Do not select an
+Use the intended mapping and observed activation status above. Do not select an
 arbitrary PR deployment as the shared preview backend or treat staging/wildcard
 aliases as acceptance evidence. Build the gateway from the intended integration
 branch, run contract and real API acceptance, then promote that immutable
@@ -270,3 +308,49 @@ proof that an already submitted server operation stopped instantaneously.
 Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
+
+## Parallel Hobby frontend with database-backed enrollment
+
+A protected GitHub build may set `THINGTIME_PILOT_PROFILE_ID` and
+`THINGTIME_PILOT_ORIGIN`. These two **nonsecret build inputs** compile the
+profile identifier and exact HTTPS `.vercel.app` test alias into the server.
+Keep both unset for ordinary builds. The pilot needs zero user-configured
+Vercel project or deployment environment variables. Its application handlers
+and configuration remain on the preview data authority. Its local server
+cannot open a MongoDB connection. It has no cron schedules.
+
+Use a dedicated Vercel project whose production deployments only the approved
+publisher can create. Disable Git source builds. Verify the project’s immutable
+team and project IDs, enrolled alias, OIDC team issuer, and deploy permissions
+before enabling its parallel profile. An OIDC identity authenticates a
+**project and environment**. It does not attest an individual Git commit or
+deployment ID. Restricted publisher access and the controller’s independent
+source/deployment verification remain necessary.
+
+On the preview gateway, enable the same profile in its own database. The
+gateway requires its fixed preview origin, current gateway ownership, a
+development data environment with the development authority and a
+nonproduction federation ID. Independently verify its actual database and
+credentials are distinct from production. A profile saved in a separate
+production database cannot grant access on this gateway.
+
+For Vercel-protected preview ingress, configure a Trusted Sources external
+service restricted to the exact Hobby team issuer, audience, project subject,
+immutable owner/project IDs and intended preview target. See
+[Vercel Trusted Sources](https://vercel.com/changelog/trusted-sources-for-deployment-protection)
+and [OIDC claims](https://vercel.com/docs/oidc/reference). The frontend sends
+the short-lived provider identity only to the fixed preview gateway over TLS.
+The server verifies the signature, claims and the enabled database record
+before normal user authorization. The pilot cannot select another MongoDB URL.
+
+Verify the exact public test alias manifest reports its own origin and a null
+gateway. An anonymous GET of `/api/v1/health/mongodb` must report a connected
+non-custom database whose identity matches the independently checked preview
+authority. Disable the profile and verify that same probe is refused. Compare
+only redacted outcomes. Platform SSO redirects on the preflight indicate the
+edge does not accept the configured caller.
+
+This setup depends on an independently running preview owner. Retiring the
+old project also requires an independently bootstrapped replacement for each
+data authority, including its database authentication and vault key. A pilot
+deployment alone cannot take ownership of production.

@@ -1,3 +1,6 @@
+import { dispatchScheduledRequest } from '../../../app/api/utils/automation/scheduledDispatch';
+import { platformScheduledRunSink } from '../../../app/api/utils/automation/platformReporting';
+import { createScheduledRunReporter } from '../../../app/api/utils/automation/scheduledRunReporting';
 import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
 import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
@@ -22,6 +25,9 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/admin/automation-switches': () => import('../../../app/routes/api/v1/admin/automation-switches/_automation-switches'),
+  'v1/admin/job-schedules': () => import('../../../app/routes/api/v1/admin/job-schedules/_job-schedules'),
+  'v1/admin/platform-reporting': () => import('../../../app/routes/api/v1/admin/platform-reporting/_platform-reporting'),
   'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
@@ -46,6 +52,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/webpages/seed-demos': () => import('../../../app/routes/api/v1/admin/webpages/seed-demos/_seed-demos'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/deployment-profiles': () => import('../../../app/routes/api/v1/admin/ci/deployment-profiles/_deployment-profiles'),
   'v1/admin/ci/preview-retention': () => import('../../../app/routes/api/v1/admin/ci/preview-retention/_preview-retention'),
   'v1/admin/ci/previews': () => import('../../../app/routes/api/v1/admin/ci/previews/_previews'),
   'v1/admin/ci/stacks/chat': () => import('../../../app/routes/api/v1/admin/ci/stacks/chat/_chat'),
@@ -89,6 +96,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
+  'v1/integrations/ci/deployment-profiles': () => import('../../../app/routes/api/v1/integrations/ci/deployment-profiles/_deployment-profiles'),
   'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/ci/progress': () => import('../../../app/routes/api/v1/integrations/ci/progress/_progress'),
@@ -199,6 +207,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/observations': () => import('../../../app/routes/api/v1/devices/observations/_observations'),
 	'v1/devices/observation-settings': () => import('../../../app/routes/api/v1/devices/observation-settings/_observation-settings'),
 	'v1/devices/node/observations': () => import('../../../app/routes/api/v1/devices/node/observations/_observations'),
+    'v1/devices/diagnostics': () => import('../../../app/routes/api/v1/devices/diagnostics/_diagnostics'),
+    'v1/devices/node/diagnostics': () => import('../../../app/routes/api/v1/devices/node/diagnostics/_diagnostics'),
 	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
@@ -293,6 +303,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
   'v1/settings/connector-protections': () => import('../../../app/routes/api/v1/settings/connector-protections/_connector-protections'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
+  'v1/automation/switches': () => import('../../../app/routes/api/v1/automation/switches/_switches'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
 		import('../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'),
@@ -330,7 +341,9 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
+	'v1/things/pins': () => import('../../../app/routes/api/v1/things/pins/_pins'),
 	'v1/things/storage-policy': () => import('../../../app/routes/api/v1/things/storage-policy/_storage-policy'),
+	'v1/things/acl': () => import('../../../app/routes/api/v1/things/acl/_acl'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/users/activity': () => import('../../../app/routes/api/v1/users/activity/_activity'),
@@ -393,7 +406,13 @@ const normalizeResponse = (value: unknown) => {
   return jsonResponse(value ?? null);
 };
 
+// The private-post sink is supplied by the platform reporting integration.
+const reportScheduledRequest = createScheduledRunReporter({ sink: platformScheduledRunSink });
+
 export default defineHandler(async (event) => {
+  // srvx attaches its socket-close listener lazily when signal is first read.
+  // Observe it before any asynchronous route work, including failures.
+  const requestSignal = event.req.signal;
   const refusedTest = agentTestRefusal();
   if (refusedTest) return refusedTest;
   const path = normalizePath(event.context.params?.path, event.req.url);
@@ -553,11 +572,13 @@ export default defineHandler(async (event) => {
       const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
       if (identityFailure) return identityFailure;
       if (event.req.headers.has('X-Thingtime-Background-Id')) {
+        if (event.req.headers.has('X-Thingtime-Schedule-Time')) return new Response(null, { status: 403 });
         const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
       try {
-        return normalizeResponse(await handler({ request: event.req }));
+        return dispatchScheduledRequest(event.req, '/api/' + path, request =>
+          reportScheduledRequest(request, '/api/' + path, async () => normalizeResponse(await handler({ request }))));
       } finally {
         // Source/queue transactions have finished before the recovery worker
         // opens its own transaction. Durable jobs also survive a lost request.
@@ -569,7 +590,7 @@ export default defineHandler(async (event) => {
         }
       }
     });
-    if (response.status >= 500 && path !== 'v1/admin/error-logs') {
+    if (!requestSignal.aborted && response.status >= 500 && path !== 'v1/admin/error-logs') {
       const code = await storageFailureFromResponse(response);
       await recordErrorLog(new Error(code ? 'Storage accounting requires recovery' : 'HTTP request returned a server error'), { source: code ? 'storage-accounting' : 'http-response', status: response.status, code });
     }
@@ -579,19 +600,19 @@ export default defineHandler(async (event) => {
       return err;
     }
 		if (err instanceof StorageMutationError) {
-      if (err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
+      if (!requestSignal.aborted && err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
 			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
 		}
 
     throw err;
   }
   } catch (error) {
-    if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
+    if (!requestSignal.aborted && !(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
   } finally {
     // Request-bound telemetry only. Health/discovery and proxy returns do not
     // warm clients or schedule polling; publication reuses an existing home pool.
-    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+    if (!requestSignal.aborted && !path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
       try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
     }
   }

@@ -29,6 +29,9 @@ test('entity schemas inherit canonical verbs while extending their own sections'
     rename: true,
     edit: true,
     share: true,
+    pin: true,
+    unpin: true,
+    'reorder-pins': true,
     archive: true,
     restore: true,
     delete: true,
@@ -41,6 +44,16 @@ test('entity schemas inherit canonical verbs while extending their own sections'
   assert.equal(actions.at(-1)?.command, 'delete');
   assert.ok(actions.some(action => action.command === 'flair'));
   assert.deepEqual(buildThingEntityMenu({}).sections, []);
+});
+test('pin verbs require an adapter for the current parent path and share the organise section', () => {
+  const menu = buildThingEntityMenu({ pin: true, 'reorder-pins': { disabled: true } }, [
+    { id: 'organise', label: 'Organise', actions: [{ id: 'move', command: 'move', label: 'Move', icon: '📁' }] }
+  ]);
+  assert.equal(menu.sections.filter(section => section.id === 'organise').length, 1);
+  assert.deepEqual(menu.sections[0].actions.map(action => action.command), ['move', 'pin', 'reorder-pins']);
+  assert.equal(menu.sections[0].actions[2].disabled, true);
+  assert.deepEqual(buildThingEntityMenu({ unpin: true }).sections[0].actions, [THING_ACTIONS.unpin]);
+  assert.deepEqual(buildThingEntityMenu({ open: true }).sections.flatMap(section => section.actions).map(action => action.command), ['open']);
 });
 test('Drive right-click and touch menus inherit the same model and retain bulk safety', () => {
   const thing: any = { id: 'watch-upload-test', thingtime: ['post'], author: { id: 'owner' }, acl: ['tt:user'], tags: ['apple-watch'] };

@@ -4,6 +4,18 @@ import { test } from 'node:test';
 import { loadWebpageClient, mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '~/api/utils/capabilities/capabilityContract';
+import { capabilitySatisfies } from '~/api/utils/capabilities/capabilityContract';
+import { BUILDER_SAVE_REQUIREMENTS } from './webpageBlocks';
+
+test('Builder save negotiates the corrected empty-value write contracts', () => {
+	for (const [feature, required] of Object.entries(BUILDER_SAVE_REQUIREMENTS)) {
+		assert.equal(capabilitySatisfies(required, required), true, feature);
+		assert.equal(capabilitySatisfies(required.replace(/1$/, '2'), required), true, feature);
+		assert.equal(capabilitySatisfies(required.replace(/1$/, '0'), required), false, feature);
+		assert.equal(capabilitySatisfies('2.0.0', required), false, feature);
+		assert.equal(capabilitySatisfies(undefined, required), false, feature);
+	}
+});
 
 // SiteBlocksHost resolves the site doc for EVERY route a signed-in viewer
 // lands on, so resolveWebpageClient screens the path against the same bounds

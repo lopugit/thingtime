@@ -342,9 +342,10 @@ export const pickLopuChatDefaults = (
 export const composeAiWorkflowModelChoice = (
   modelId: string,
   effort: AiModelEffort | null,
-  speed: AiModelSpeed
+  speed: AiModelSpeed,
+  verifiedBase?: AiWorkflowBaseModel
 ): AiWorkflowModelChoice | null =>
-  parseAiWorkflowModelOptionId([modelId, ...(effort ? [effort] : []), ...(speed === 'fast' ? ['fast'] : [])].join(':'));
+  parseAiWorkflowModelOptionId([modelId, ...(effort ? [effort] : []), ...(speed === 'fast' ? ['fast'] : [])].join(':'),verifiedBase);
 
 export type LopuModelRequest = { model?: unknown; effort?: unknown; speed?: unknown };
 
@@ -398,7 +399,8 @@ export const resolveLopuModelChoice = (
 
   const rawModel = typeof request.model === 'string' ? request.model.trim() : '';
   if (rawModel && rawModel !== 'default') {
-    const parsed = parseAiWorkflowModelOptionId(rawModel);
+    const projected=byId.get(rawModel.split(':')[0]);
+    const parsed = parseAiWorkflowModelOptionId(rawModel,projected);
     const candidate = parsed && parsed.provider !== 'default' ? (byId.get(parsed.model) ?? null) : null;
     if (!parsed || !candidate) {
       if (!lenient) return choiceFail(`Unknown model "${rawModel.slice(0, 80)}"`);
@@ -474,7 +476,7 @@ export const resolveLopuModelChoice = (
     return choiceFail(rawSpeed === 'fast' ? `${model.label} does not offer a fast lane` : 'speed must be normal or fast');
   }
 
-  const choice = composeAiWorkflowModelChoice(model.id, effort, speed) ?? {
+  const choice = composeAiWorkflowModelChoice(model.id, effort, speed, model) ?? {
     id: model.id,
     model: model.id,
     label: model.label,

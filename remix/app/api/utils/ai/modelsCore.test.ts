@@ -76,6 +76,14 @@ test('the catalog derives one row per real base model, in catalog order, with th
   assert.equal(getAiModelCatalogEntry(42), null);
 });
 
+test('Opus 5.5 public catalogue includes all verified effort choices', () => {
+  const entry = getAiModelCatalogEntry('claude-opus-5-5')!;
+  const model = publicAiModel(entry, true, aiProviderStatusFromEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'fixture' }));
+  assert.equal(model.label, 'Claude Opus 5.5');
+  assert.deepEqual(model.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.deepEqual(model.speeds, ['normal']);
+});
+
 test('family is derived from provider and id', () => {
   assert.equal(aiModelFamilyOf('anthropic', 'claude-haiku-4-5'), 'claude');
   assert.equal(aiModelFamilyOf('openai', 'gpt-5.6-sol'), 'gpt');

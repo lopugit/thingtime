@@ -1,3 +1,4 @@
+import { assertDeviceOperation, deviceMongoOptions, pauseDevicePolling, type DeviceOperationOptions } from './devicePolling';
 import {resolveDeviceMedia} from './deviceAlertMedia';
 import {notificationDoc,SYSTEM_NOTIFICATION_ACTOR} from '../notifications/notifications';
 import { normalizeDeviceScriptResult, type DeviceScriptResult } from './deviceScript';
@@ -469,11 +470,12 @@ export const listDeviceCommands = async (
 
 const leaseHash = (leaseId: string): string => deviceHash('lease', leaseId);
 
-const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, deviceId: string, command: any, now: Date): Promise<boolean> => {
+const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, deviceId: string, command: any, now: Date, options: DeviceOperationOptions = {}): Promise<boolean> => {
 	const expiresAt = command.crystal?.leaseExpiresAt ? new Date(command.crystal.leaseExpiresAt) : null;
 	if (!expiresAt || !Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() > now.getTime()) return false;
 	let changed = false;
 	await withHomeMongoTransaction(async (session) => {
+		assertDeviceOperation(options);
 		const result = await things.updateOne(
 			{
 				_id: command._id,
@@ -494,7 +496,7 @@ const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, devi
 					updatedAt: now
 				}
 			},
-			{ session }
+			{ ...deviceMongoOptions(options), session }
 		);
 		if (!result.modifiedCount) return;
 		changed = true;
@@ -509,11 +511,12 @@ const markOneExpiredLeaseNeedsReview = async (things: any, ownerId: string, devi
 			},
 			session
 		);
+		assertDeviceOperation(options);
 	});
 	return changed;
 };
 
-const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string): Promise<void> => {
+const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string, options: DeviceOperationOptions): Promise<void> => {
 	const things = await getHomeThingsCollection();
 	const now = new Date();
 	const expired = await things
@@ -523,12 +526,12 @@ const markExpiredLeasesNeedsReview = async (ownerId: string, deviceId: string): 
 			targetId: deviceId,
 			'crystal.status': { $in: ['claimed', 'running', 'needs-approval'] },
 			'crystal.leaseExpiresAt': { $lte: now }
-		} as any)
+		} as any, deviceMongoOptions(options))
 		.sort({ 'crystal.leaseExpiresAt': 1 })
 		.limit(25)
 		.toArray();
 	for (const command of expired as any[]) {
-		await markOneExpiredLeaseNeedsReview(things, ownerId, deviceId, command, now);
+		await markOneExpiredLeaseNeedsReview(things, ownerId, deviceId, command, now, options);
 	}
 };
 
@@ -537,28 +540,34 @@ export type NodeDeviceCommand = PublicDeviceCommand & { leaseId: string };
 export const claimNextDeviceCommand = async (
 	ownerId: string,
 	deviceId: string,
-	waitMsValue: unknown
+	waitMsValue: unknown,
+	options: DeviceOperationOptions = {}
 ): Promise<DeviceFail | { ok: true; command: NodeDeviceCommand | null; serverTime: string }> => {
-	if (!(await deviceExistsForOwner(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	const budget = { ...options, deadlineAt: options.deadlineAt ?? Date.now() + 25_000 };
+	assertDeviceOperation(budget);
+	if (!(await deviceExistsForOwner(ownerId, deviceId, undefined, budget))) return deviceFail(404, 'Device not found');
 	const waitMs = Math.max(0, Math.min(20_000, Math.floor(Number(waitMsValue) || 0)));
 	const deadline = Date.now() + waitMs;
 	const things = await getHomeThingsCollection();
+	const queuedFilter = {
+		thingtime: 'device-command', ownerId, targetId: deviceId,
+		'crystal.status': 'queued', 'crystal.deliveryChannel': { $ne: 'apns' },
+		$or: [{ 'crystal.requiresApproval': { $ne: true } }, { 'crystal.approvalState': 'approved' }]
+	};
 	for (;;) {
-		await markExpiredLeasesNeedsReview(ownerId, deviceId);
+		assertDeviceOperation(budget);
+		await markExpiredLeasesNeedsReview(ownerId, deviceId, budget);
 		const leaseId = randomBytes(24).toString('base64url');
 		const now = new Date();
 		const leaseExpiresAt = new Date(now.getTime() + DEVICE_COMMAND_LEASE_MS);
 		let claimed: any = null;
-		await withHomeMongoTransaction(async (session) => {
+		// Retain cross-instance polling and its delivery latency, but idle queues
+		// need only an indexed read, never a no-effect MongoDB transaction.
+		const candidate = await things.findOne(queuedFilter, { ...deviceMongoOptions(budget), projection: { _id: 1 } });
+		if (candidate) await withHomeMongoTransaction(async (session) => {
+			assertDeviceOperation(budget);
 			claimed = await things.findOneAndUpdate(
-				{
-					thingtime: 'device-command',
-					ownerId,
-					targetId: deviceId,
-					'crystal.status': 'queued',
-					'crystal.deliveryChannel':{$ne:'apns'},
-					$or: [{ 'crystal.requiresApproval': { $ne: true } }, { 'crystal.approvalState': 'approved' }]
-				} as any,
+				queuedFilter,
 				{
 					$set: {
 						'crystal.status': 'claimed',
@@ -568,7 +577,7 @@ export const claimNextDeviceCommand = async (
 						updatedAt: now
 					}
 				},
-				{ sort: { createdAt: 1, shareId: 1 }, returnDocument: 'after', session }
+				{ ...deviceMongoOptions(budget), sort: { createdAt: 1, shareId: 1 }, returnDocument: 'after', session }
 			);
 			if (!claimed) return;
 			await appendDeviceEvent(
@@ -582,10 +591,11 @@ export const claimNextDeviceCommand = async (
 				},
 				session
 			);
+			assertDeviceOperation(budget);
 		});
 		if (claimed) return { ok: true, command: { ...publicDeviceCommand(claimed), input: claimed.crystal.input, leaseId }, serverTime: new Date().toISOString() };
 		if (Date.now() >= deadline) return { ok: true, command: null, serverTime: new Date().toISOString() };
-		await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(1, deadline - Date.now()))));
+		await pauseDevicePolling(Math.min(500, Math.max(1, deadline - Date.now())), budget);
 	}
 };
 

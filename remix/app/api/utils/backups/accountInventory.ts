@@ -1,3 +1,4 @@
+import { materializeThingContentSnapshotDocument } from '../timeline/recordMutation';
 import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import {
 	backupDraftProjection,
@@ -49,7 +50,7 @@ export const contentProjection = {
 	crystal: 1,
 	extended: 1,
 	tags: 1,
-	acl: 1,
+	acl: 1, aclGeneration: 1, aclBaseline: 1, aclBaselineVersion: 1, aclRevision: 1,
 	folderId: 1,
 	targetId: 1,
 	geo: 1,
@@ -79,7 +80,7 @@ export function family(doc: Census, supportedContentOnly = false): Family {
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'theme') return 'theme';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'notification') return 'notification';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'subscription') return 'excluded-authority';
-	if (doc.thingtime.length === 1 && ['backup-job', 'backup-job-event'].includes(doc.thingtime[0])) return 'excluded-authority';
+	if (doc.thingtime.length === 1 && ['backup-job', 'backup-job-event', 'acl-entry', 'session-resource-grant', 'account-config-entry'].includes(doc.thingtime[0])) return 'excluded-authority';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
@@ -366,7 +367,7 @@ export function createAccountInventoryProducer(
 									boundary();
 									sameRow(doc, expected[count++], kind);
 									const retain = kind === 'theme' ? retainBackupThemeSnapshot : kind === 'notification' ? retainBackupNotification : retainBackupThingSnapshot;
-									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
+									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, kind === 'content' ? await materializeThingContentSnapshotDocument(collection, doc, session) : doc, {
 										...access,
 										scope,
 										authorize: check

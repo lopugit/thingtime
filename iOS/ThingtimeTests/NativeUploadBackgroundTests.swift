@@ -40,6 +40,44 @@ private final class ProcessingTaskFixture: NativeDeferredUploadSystemTask {
 }
 @MainActor
 final class NativeUploadBackgroundTests: XCTestCase {
+    func testScopedBackgroundOutcomesRetainTheOriginalSinkAndCompleteOnce() async throws {
+        let scheduler = BackgroundSchedulerFixture(), coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate()
+        let first = BackgroundTaskFixture(); scheduler.delivered = first
+        var old: [MobileDeviceDiagnosticEvent.Background.Outcome] = [], next: [MobileDeviceDiagnosticEvent.Background.Outcome] = []
+        let one = await coordinator.begin(size: 12, diagnostic: { outcome, _ in old.append(outcome) }, expired: {})
+        let lease = try XCTUnwrap(one), lateExpiry = first.expiration
+        lease.progress(6); lateExpiry?(); lateExpiry?()
+        XCTAssertEqual(old, [.submitted, .active, .expired])
+        XCTAssertEqual(first.completions, [false])
+        scheduler.delivered = BackgroundTaskFixture()
+        let two = await coordinator.begin(size: 12, diagnostic: { outcome, _ in next.append(outcome) }, expired: {})
+        lateExpiry?(); lease.finish(success: true)
+        XCTAssertEqual(old, [.submitted, .active, .expired])
+        XCTAssertEqual(next, [.submitted, .active])
+        two?.finish(success: true); two?.finish(success: false)
+        XCTAssertEqual(next, [.submitted, .active, .completed])
+    }
+
+    func testSubmissionAndTimeoutDiagnosticsAreClosedWithoutChangingFailureBehavior() async throws {
+        let scheduler = BackgroundSchedulerFixture(), coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate(); scheduler.reject = true
+        var outcomes: [MobileDeviceDiagnosticEvent.Background.Outcome] = []
+        var errors: [MobileDeviceDiagnosticEvent.SystemError] = []
+        let rejected = await coordinator.begin(size: 12, diagnostic: { outcome, error in
+            outcomes.append(outcome); if let error { errors.append(error) }
+        }, expired: {})
+        XCTAssertNil(rejected); XCTAssertEqual(outcomes, [.submitted, .declined])
+        XCTAssertEqual(errors.first?.domain, .network)
+        XCTAssertEqual(errors.first?.code, Int64(URLError.notConnectedToInternet.rawValue))
+        scheduler.reject = false; outcomes.removeAll()
+        let timedOut = await coordinator.begin(size: 12, timeoutNanoseconds: 1_000_000,
+            diagnostic: { outcome, _ in outcomes.append(outcome) }, expired: { XCTFail("Undelivered request cannot expire") })
+        XCTAssertNil(timedOut); XCTAssertEqual(outcomes, [.submitted, .launchTimeout])
+        let late = BackgroundTaskFixture(); scheduler.handler?(late)
+        XCTAssertEqual(late.completions, [false]); XCTAssertEqual(outcomes, [.submitted, .launchTimeout])
+    }
+
     func testDistinctDuplicateDeliveryCannotReplaceTheActiveLease() async throws {
         let scheduler = BackgroundSchedulerFixture()
         let coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)

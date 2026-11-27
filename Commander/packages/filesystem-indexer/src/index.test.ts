@@ -48,6 +48,35 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
+  it('survives a real EPIPE, rejects all in-flight requests, and replaces the worker', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/closed-stdin-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-broken-pipe.sqlite3',
+      prefixArguments: [fixture],
+      requestTimeoutMs: 3_000,
+    });
+    try {
+      // The fixture acknowledges only after closing its read end, but remains alive.
+      const firstWorker = await client.status();
+      const failed = client.query({ query: 'x'.repeat(128 * 1_024) });
+      const alsoPending = client.status();
+      const results = await Promise.allSettled([failed, alsoPending]);
+      expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+      for (const result of results) {
+        if (result.status === 'rejected') expect(result.reason).toMatchObject({ code: 'EPIPE' });
+      }
+      const replacement = await client.status();
+      expect(replacement).toMatchObject({ schemaVersion: 1 });
+      expect(replacement.totalRecords).not.toBe(firstWorker.totalRecords);
+    } finally {
+      await client.close();
+    }
+  });
+
   it('coalesces overlapping index requests into one worker operation', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({
@@ -169,7 +198,8 @@ describe('reader policy lifecycle', () => {
       binaryPath: process.execPath,
       databasePath: '/tmp/scoped-reader.sqlite3',
       prefixArguments: [fixture],
-      requestTimeoutMs: 250,
+      // Include fresh Node startup under the same load as the full native build.
+      requestTimeoutMs: 2_000,
     });
     try {
       await client.readPolicy({ sources: [{ id: 'filesystem:/tmp', root: '/tmp', kinds: ['file'] }] });

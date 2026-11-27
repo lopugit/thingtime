@@ -159,6 +159,7 @@ const attachmentRequestFingerprint = (metadata: AttachmentCrystal, purpose: Atta
 				name: metadata.name,
 				size: metadata.size,
 				contentType: metadata.contentType,
+				...(metadata.livePhoto ? { livePhoto: metadata.livePhoto } : {}),
 				// Preserve the original post-upload fingerprint so in-flight uploads
 				// created before purpose stamping remain safely resumable.
 				...(purpose === 'post' ? {} : { purpose })
@@ -813,7 +814,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment upload request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose', 'fileSyncOrigin', 'contentFingerprint'].includes(key))) {
+			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose', 'fileSyncOrigin', 'contentFingerprint', 'livePhoto'].includes(key))) {
 				return fail(400, 'Invalid attachment upload request');
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
@@ -842,9 +843,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const sanitized = sanitizeAttachmentPublicMetadata({
 				name: raw.filename,
 				size: sizeBytes,
-				contentType: raw.contentType
+				contentType: raw.contentType,
+				livePhoto: raw.livePhoto
 			});
 			if (sanitized.ok === false) return fail(400, sanitized.error);
+			if (sanitized.crystal.livePhoto && (!['post', 'comment', 'message', 'file'].includes(intent.purpose) || sizeBytes === 0 ||
+				(sanitized.crystal.livePhoto.role === 'photo' ? !['image/jpeg', 'image/png'].includes(sanitized.crystal.contentType) : !['video/quicktime', 'video/mp4'].includes(sanitized.crystal.contentType)))) {
+				return fail(400, 'Live Photo pairing requires supported image and motion uploads');
+			}
 			if (intent.purpose === 'profile' || intent.purpose === 'subspace-icon' || intent.purpose === 'subspace-banner') {
 				if (sizeBytes > MAX_PROFILE_ATTACHMENT_BYTES) {
 					return fail(400, `Profile images can contain at most ${MAX_PROFILE_ATTACHMENT_BYTES} bytes`);
@@ -867,7 +873,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				// Never trust a browser-provided media type for inline rendering. The
 				// finalized value comes only from server-side magic-byte detection.
 				contentType: 'application/octet-stream',
-				mediaKind: attachmentMediaKindForContentType('application/octet-stream')
+				mediaKind: attachmentMediaKindForContentType('application/octet-stream'),
+				...(sanitized.crystal.livePhoto ? { livePhoto: sanitized.crystal.livePhoto } : {})
 			};
 			const plan = attachmentPartPlan(sizeBytes);
 			const s3 = dependencies.getS3();

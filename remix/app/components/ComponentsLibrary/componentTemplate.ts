@@ -64,9 +64,9 @@ export const MAX_RESOLVED_VALUES = MAX_RESOLVED_NODES;
 // Headroom, measured over the whole 2800-component catalog: 6,611 chars at
 // each component's declared defaults (3,560 of values + 3,051 of keys), and
 // 40,593 with every arg driven to what a saved version may actually store
-// (MAX_COMPONENT_SAVED_ARGS 24 x MAX_COMPONENT_SAVED_ARG_CHARS 2000, every
-// enum value swept — 37,696 of values + 2,897 of keys). So the real worst case
-// sits ~6.5x under this cap and nothing that ships truncates.
+// (the historical catalog used 24 saved args of 2000 chars, every enum value
+// swept — 37,696 of values + 2,897 of keys). These are render expansion
+// budgets, independent of the count of authored arguments or saved values.
 export const MAX_RESOLVED_CHARS = 256 * 1024;
 
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*)\}/g;

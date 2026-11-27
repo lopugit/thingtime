@@ -8,21 +8,11 @@ import {
 	MAX_SUBSPACE_ACCENT_CHARS,
 	MAX_SUBSPACE_DESCRIPTION_CHARS,
 	MAX_SUBSPACE_FLAIR_ID_CHARS,
-	MAX_SUBSPACE_FLAIR_LABEL_CHARS,
-	MAX_SUBSPACE_FLAIRS,
 	MAX_SUBSPACE_ICON_CHARS,
 	MAX_SUBSPACE_MOD_REASON_CHARS,
 	MAX_SUBSPACE_NAME_CHARS,
-	MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS,
-	MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS,
-	MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS,
-	MAX_SUBSPACE_REMOVAL_REASONS,
 	MAX_SUBSPACE_REPORT_NOTE_CHARS,
 	MAX_SUBSPACE_REPORT_REASON_CHARS,
-	MAX_SUBSPACE_RULE_TEXT_CHARS,
-	MAX_SUBSPACE_RULE_TITLE_CHARS,
-	MAX_SUBSPACE_RULES,
-	MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS,
 	SUBSPACE_ACCESS_MODES,
 	SUBSPACE_ACTIVE_WINDOW_DAYS,
 	SUBSPACE_FEED_SORTS,
@@ -114,15 +104,13 @@ export const sanitizeReason = (value: unknown): string | null => boundedText(val
 export const sanitizeRules = (value: unknown): SubspaceRule[] | Fail => {
 	if (value === undefined || value === null) return [];
 	if (!Array.isArray(value)) return fail(400, 'rules must be a list');
-	if (value.length > MAX_SUBSPACE_RULES) return fail(400, `A subspace can have at most ${MAX_SUBSPACE_RULES} rules`);
 	const rules: SubspaceRule[] = [];
 	for (const entry of value) {
 		const raw = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : typeof entry === 'string' ? { title: entry } : null;
 		if (!raw) return fail(400, 'Each rule needs a title');
-		const title = boundedText(raw.title, MAX_SUBSPACE_RULE_TITLE_CHARS);
+		const title = typeof raw.title === 'string' ? raw.title.replace(/\s+/g,' ').trim() : '';
 		if (!title) return fail(400, 'Each rule needs a title');
 		const textValue = typeof raw.text === 'string' ? raw.text.trim() : '';
-		if (textValue.length > MAX_SUBSPACE_RULE_TEXT_CHARS) return fail(400, `Rule text is too long (max ${MAX_SUBSPACE_RULE_TEXT_CHARS})`);
 		rules.push({ title, text: textValue || null });
 	}
 	return rules;
@@ -178,13 +166,12 @@ export const sanitizeIcon = (value: unknown): string | null => {
 export const sanitizeFlairs = (value: unknown): SubspaceFlair[] | Fail => {
 	if (value === undefined || value === null) return [];
 	if (!Array.isArray(value)) return fail(400, 'flairs must be a list');
-	if (value.length > MAX_SUBSPACE_FLAIRS) return fail(400, `A subspace can have at most ${MAX_SUBSPACE_FLAIRS} flairs`);
 	const flairs: SubspaceFlair[] = [];
 	const seen = new Set<string>();
 	for (const entry of value) {
 		const raw = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : typeof entry === 'string' ? { label: entry } : null;
 		if (!raw) return fail(400, 'Each flair needs a label');
-		const label = boundedText(raw.label, MAX_SUBSPACE_FLAIR_LABEL_CHARS);
+		const label = typeof raw.label === 'string' ? raw.label.replace(/\s+/g,' ').trim() : '';
 		if (!label) return fail(400, 'Each flair needs a label');
 		const requestedId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
 		const id = requestedId || slugifyFlairId(label, 'flair');
@@ -240,16 +227,14 @@ export type SubspaceRemovalReason = { id: string; title: string; message: string
 export const sanitizeRemovalReasons = (value: unknown): SubspaceRemovalReason[] | Fail => {
 	if (value === undefined || value === null) return [];
 	if (!Array.isArray(value)) return fail(400, 'removalReasons must be a list');
-	if (value.length > MAX_SUBSPACE_REMOVAL_REASONS) return fail(400, `A subspace can have at most ${MAX_SUBSPACE_REMOVAL_REASONS} removal reasons`);
 	const reasons: SubspaceRemovalReason[] = [];
 	const seen = new Set<string>();
 	for (const entry of value) {
 		const raw = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : typeof entry === 'string' ? { title: entry } : null;
 		if (!raw) return fail(400, 'Each removal reason needs a title');
-		const title = boundedText(raw.title, MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS);
+		const title = typeof raw.title === 'string' ? raw.title.replace(/\s+/g,' ').trim() : '';
 		if (!title) return fail(400, 'Each removal reason needs a title');
 		const message = typeof raw.message === 'string' ? raw.message.replace(/\s+/g, ' ').trim() : '';
-		if (message.length > MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS) return fail(400, `Removal reason message is too long (max ${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS})`);
 		const requestedId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
 		// minted from the title: its slug, or a hashed reason-… id when the
 		// title has no Latin letters / digits (the editor exposes no id field)
@@ -311,7 +296,7 @@ export const resolveRemovalReason = (
 	const ruleIndexRaw = input.ruleIndex === undefined || input.ruleIndex === null || input.ruleIndex === '' ? null : Number(input.ruleIndex);
 	if (ruleIndexRaw !== null && (!Number.isInteger(ruleIndexRaw) || ruleIndexRaw < 0)) return fail(400, 'ruleIndex must be a whole number — the 0-based position of one of the subspace’s rules');
 	if (reasonId && ruleIndexRaw !== null) return fail(400, 'Pick a removal reason (reasonId) or cite a rule (ruleIndex), not both');
-	const compose = (head: string) => [head, note].filter(Boolean).join(' · ').slice(0, MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS);
+	const compose = (head: string) => [head, note].filter(Boolean).join(' · ');
 	if (reasonId) {
 		const canned = removalReasonById(reasons, reasonId);
 		if (!canned) return fail(400, `No removal reason "${reasonId}" here — pick one of the subspace’s reasons or write your own`);
@@ -360,7 +345,7 @@ export const userFlairOfCrystal = (crystal: Record<string, any> | null | undefin
 	if (!text) return null;
 	return {
 		id: typeof raw.id === 'string' && raw.id ? raw.id : null,
-		text: text.slice(0, MAX_SUBSPACE_FLAIR_LABEL_CHARS),
+		text,
 		emoji: sanitizeIcon(raw.emoji),
 		color: sanitizeColor(raw.color)
 	};
@@ -395,14 +380,14 @@ export type UserFlairActor = { moderator: boolean; self: boolean };
 
 // The one decision every user-flair write runs. `flairId` picks a template
 // (unknown → 400; modOnly → moderators only, 403); `text` without an id is
-// custom text (≤ MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS, optional emoji/color
+// custom text (optional emoji/color
 // under the icon/color rules); neither (null id + empty text) clears. A
 // member may only serve themselves while userFlairSelfAssign is on and, for
 // custom text, allowCustomUserFlair is on — clearing their own is always
 // allowed. Moderators are bound by neither switch and may dress anyone.
 export const resolveUserFlair = (request: UserFlairRequest, settings: UserFlairSettings, actor: UserFlairActor): SubspaceUserFlair | null | Fail => {
 	const flairId = typeof request.flairId === 'string' ? request.flairId.trim().toLowerCase() : '';
-	const text = boundedText(request.text, MAX_SUBSPACE_FLAIR_LABEL_CHARS);
+	const text = typeof request.text === 'string' ? request.text.replace(/\s+/g, ' ').trim() : '';
 	if (!flairId && !text) return null; // clear
 	if (!actor.moderator && !settings.userFlairSelfAssign) return fail(403, 'Members can’t pick their own flair here — ask a moderator 🎩');
 	if (flairId) {
@@ -412,7 +397,6 @@ export const resolveUserFlair = (request: UserFlairRequest, settings: UserFlairS
 		return { id: template.id, text: template.label, emoji: template.emoji, color: template.color };
 	}
 	if (!actor.moderator && !settings.allowCustomUserFlair) return fail(403, 'Custom flair text is off here — pick one of the templates');
-	if (text.length > MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS) return fail(400, `Flair text is too long (max ${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} characters)`);
 	return { id: null, text, emoji: sanitizeIcon(request.emoji), color: sanitizeColor(request.color) };
 };
 

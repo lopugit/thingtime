@@ -7,9 +7,11 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -26,6 +28,7 @@ import {
   ingestSemanticCache,
   listSnapshots,
   markSnapshotReadOnly,
+  prepareWorkingOutput,
   pruneSnapshots,
   selectSnapshot,
   snapshotRetentionLimit,
@@ -103,6 +106,28 @@ test("source fingerprint never changes the caller's staged index", () => {
     assert.equal(git(root, ["diff", "--cached", "--binary"]), patchBefore)
   } finally {
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("an external work directory resolves its AST cache symlink", () => {
+  const root = fixture()
+  const external = mkdtempSync(path.join(tmpdir(), "thingtime-graphify-external-work-"))
+  try {
+    symlinkSync(external, path.join(root, "graphify-out", ".work"), "dir")
+    const fingerprint = computeSourceFingerprint(root)
+    const output = prepareWorkingOutput(root, fingerprint.sourceFingerprint)
+    const ast = path.join(output, "cache", "ast")
+    assert.equal(realpathSync(ast), realpathSync(path.join(root, "graphify-out", "cache", "ast")))
+    assert.equal(statSync(ast).isDirectory(), true)
+    const packedOutput = writeOutput(root, "external-packed", 1)
+    const graph = `{"nodes":[{"id":"${"a".repeat(4000)}"}],"links":[]}`
+    writeFileSync(path.join(packedOutput, "graph.json"), graph)
+    const packed = finalizeSnapshot(root, packedOutput, { ...fingerprint, version: "graphify test", maximumPortableGraphBytes: 1024 })
+    activateSnapshot(root, packed)
+    assert.equal(readFileSync(path.join(packed.path, ".graphify_graph.json"), "utf8"), graph)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+    rmSync(external, { recursive: true, force: true })
   }
 })
 

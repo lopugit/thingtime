@@ -1,4 +1,4 @@
-import { attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
+import { attachmentSourceLivePhoto, attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
@@ -6,6 +6,7 @@ import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilit
 import React from 'react';
 
 import { useApi, type ThingRequestOptions } from '~/hooks/useApi';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import { resolveDesktopFileUpload } from './desktopAttachmentUpload';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import {
@@ -155,6 +156,7 @@ export const useAttachmentUploads = (
 	options: AttachmentUploadOptions = {}
 ) => {
 	const uploadPurpose = options.purpose ?? 'post';
+	const dataPlane = useDataPlane();
 	const prepareLocalImage = options.prepareLocalImage;
 	// Archive imports promise byte-for-byte fidelity; ordinary media selections are normalized.
 	const convertHeic = options.selectionScope !== 'transfer';
@@ -286,7 +288,7 @@ export const useAttachmentUploads = (
 					// A native preview is a bounded thumbnail, never the original file.
 					const preview = await attachmentSourcePreview(file).catch(() => null);
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
-					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview) });
+					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview), previewContentType: preview.type });
 				}
 				if (convertHeic && !prepareLocalImage && !isAttachmentSourceFile(file) && isHeicImage(file)) {
 					file = await prepareHeicImage(file);
@@ -307,7 +309,9 @@ export const useAttachmentUploads = (
 					patchUpload(localId, attempt, { file, previewUrl, status: 'ready', progress: 100 });
 					return;
 				}
-				const desktop = purpose === 'file' && ownerId ? await resolveDesktopFileUpload(ownerId) : null;
+				// The native transport is home-pinned; custom-plane media must stay
+				// on its selected plane. Files retain their existing home-only path.
+				const desktop = ownerId && (purpose === 'file' || dataPlane === 'home') ? await resolveDesktopFileUpload(ownerId) : null;
 				controller.signal.throwIfAborted();
 				if (canResume && savedPlan?.scope?.expectedApiOrigin !== desktop?.scope.expectedApiOrigin)
 					throw new Error('The selected API server changed.');
@@ -322,6 +326,7 @@ export const useAttachmentUploads = (
 							filename: file.name,
 							contentType: file.type || 'application/octet-stream',
 							sizeBytes: file.size,
+							...(attachmentSourceLivePhoto(existing?.sourceFile || file) ? { livePhoto: attachmentSourceLivePhoto(existing?.sourceFile || file) } : {}),
 							...(purpose === 'post' ? {} : { purpose })
 						},
 						{ ...desktop?.scope, signal: controller.signal }
@@ -415,7 +420,7 @@ export const useAttachmentUploads = (
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 			}
 		},
-		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose, ownerId]
+		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose, ownerId, dataPlane]
 	);
 
 	pumpRef.current = () => {

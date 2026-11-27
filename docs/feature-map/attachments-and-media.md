@@ -126,6 +126,15 @@ Run that suite on both platforms and Rust workspace tests; see `TESTING.md`
 
 ## Incoming shares
 
+Live Photo pairing uses `attachments/attachmentCore.ts` and the normal attachment
+metadata contract, native `ShareComposerSession` descriptors and lazy source
+files. The image/motion identity survives upload, projection and private copy.
+`LivePhoto`/gallery presentation consumes only complete authorized pairs;
+`VideoPreview` and `ProgressiveImage` handle paused frames and bounded image
+fallback. Run `test:attachments`, `test:share-media-previews:browser`,
+`test:live-photo-playback:browser` and native importer/session tests. Real Photos share
+provider and physical-device acceptance remain separate from synthetic fixtures.
+
 The iOS system Share extension hosts the ordinary `/share` web composer through
 `iOS/ShareSupport/ShareComposerBridge.swift`. `components/IncomingShare/` verifies
 the exact native request, account and origin; `attachmentFileSource.ts` supplies
@@ -946,3 +955,32 @@ checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
 still reads both replicas afresh. The canonical mixed fixture reports queued
 peer deferrals before first confirmed file alongside byte/hash/recovery proof.
 - Local file-sync recovery details: `pagedRunJournal.reservedPublication` performs an owner/root/run-fenced read of the original reserved operation and cloud file binding; `SyncProgressViewer` shows its safe identity and receipt markers only inside the expanded Progress → Recovery details disclosure. This diagnostic does not authorize publication, reset saved work, or interpret a missing server receipt as a terminal fence.
+
+### File media presentation and PDF reading — 2026-11-13
+
+`ThingFilePreview` reads the exact bound attachment for a canonical Files Thing;
+`fileMediaPresentation` supplies an explicit embedded render Component. Existing
+`renderComponent` declarations retain precedence. Names mode keeps image/video
+thumbnails independently of expanded rendered previews. Detail and quick look
+reuse the same media path and preserve shared-root/Character authorization.
+
+`PdfDocument` supplies a narrow document/page adapter to `tt-pdf` / `tt-pdf-page`.
+Its toolbar is the editable HTML Component tree in `pdfPresentation.ts`; local
+`data-tt-pdf` controls do not execute saved Actions or PDF JavaScript. Uploaded
+PDFs are recognized from canonical MIME/detected MIME, read through fingerprint
+and pinned bounded ranges, and destroyed on identity/navigation changes. Worker,
+font, CMap and decoder assets are self-hosted by `ensure-pdf-assets.mjs` during
+dev/build; no external document viewer receives file content. Browser integration
+is `node remix/scripts/file-media.browser.mjs` (synthetic transport, actual
+PDF.js/React, desktop/mobile); production/installed acceptance remains separate.
+
+`pdfViewerBlocks()` exposes the toolbar, individual labels, inputs, buttons,
+status and page canvas as ordinary saved element blocks. `HtmlBlockElement`
+applies the narrow PDF context to each block while preserving Builder selection
+and editing. `api.things` 1.66 / update 1.30 negotiate the additive saved grammar.
+PDF documents load on viewport approach; ComponentMedia no longer rejects a
+valid attachment list merely because it exceeds 50 items.
+
+### Production PDF worker initialization — 2026-11-14
+
+`pdfRuntime.client.getPdfRuntime()` sets the self-hosted worker on the executed loading path. Keep this inside the called initializer: the app’s `sideEffects: false` package contract allows production bundlers to drop setup beside re-exports. `build:client` verifies emitted worker initialization; `test:file-media:production-build` renders a synthetic PDF from the emitted Vite chunks under production CSP with a real worker. The reusable synthetic bytes live in `scripts/pdf-fixture.mjs`; existing desktop/mobile media fixtures use the same document.

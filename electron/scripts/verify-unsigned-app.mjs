@@ -1,3 +1,4 @@
+import { verifyShareExtension } from './verify-share-extension.mjs';
 import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { existsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
@@ -31,6 +32,7 @@ await verifyUnsignedArtifacts({
     runtimePath
 }, undefined, { requireNodeLocationEntitlement: true });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
+await verifyShareExtension(appPath, { required: true, unsigned: true });
 const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
 if (requireBundledMongo || existsSync(mongoRoot))
     await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });

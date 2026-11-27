@@ -246,6 +246,7 @@ final class NativeDeferredUpload {
     private var continuedCompleted: Int64 = 0
     private var continuedKnownOriginals: Int64 = 0
     private var originalsRemaining: Int64?
+    private var photoDiagnostic: (run: NativePhotoRunRecord, recorder: MobileDeviceDiagnostics.Recorder, transition: String?, candidate: String?, nextSample: Date)?
 
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
          grants: MobileFolderStore? = nil, photos: PhotoLibraryReader? = nil, parts: FileUploadPartStore? = nil,
@@ -328,6 +329,11 @@ final class NativeDeferredUpload {
     /// from starting. Only a fresh exact owner/admission handoff re-arms it.
     func disarm(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil,
                 clearSummaries: Bool = true) {
+        if configurationId == nil && rootId == nil { MobileDeviceDiagnostics.shared.suspendAuthorization(matching: scope) }
+        if let captured = photoDiagnostic,
+           (scope == nil || captured.run.scope == scope),
+           (configurationId == nil || captured.run.authorization.id == configurationId),
+           (rootId == nil || captured.run.rootId == rootId) { photoDiagnostic = nil }
         if scope == nil || scope == verifiedScope { verifiedScope = nil }
         NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId)
         if clearSummaries { NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId, rootId: rootId) }
@@ -390,6 +396,7 @@ final class NativeDeferredUpload {
             (deviceId == nil || run.authorization.scope.deviceId == deviceId) {
             if explicitPause { run.pauseByUser() } else { run.armed = false }
             try photoRuns.write(run); affected.append(run)
+            reportPhotoProgress(run)
         }
         return affected
     }
@@ -577,10 +584,18 @@ final class NativeDeferredUpload {
             recordBackgroundRequest(run, .declined); return "declined"
         }
         let id = UUID(), requestedRun = run
+        let diagnostic = MobileDeviceDiagnostics.shared.recorder(for: run.scope, expectedDeviceId: deviceId)
         continuedRequest = id
         defer { if continuedRequest == id { continuedRequest = nil } }
         let lease = await NativeUploadBackgroundCoordinator.shared.begin(presentation: .init(title: "Thingtime Photos backup",
-            subtitle: "Checking this backup…", completedSubtitle: "Photos backup finished", bytes: nil), expired: { [weak self, weak executionLease] in
+            subtitle: "Checking this backup…", completedSubtitle: "Photos backup finished", bytes: nil), diagnostic: { [weak executionLease] outcome, error in
+                var event = NativePhotoDiagnosticProjection.outcome(outcome, error: error, run: requestedRun)
+                if let measured = executionLease?.continuedMeasurement {
+                    event.background?.measuredUnits = MobileDeviceDiagnosticEvent.measurement(measured.0)
+                    event.background?.lastProgressAt = measured.1.map(MobileDeviceDiagnosticEvent.timestamp)
+                }
+                diagnostic?(event)
+            }, expired: { [weak self, weak executionLease] in
                 guard let self, let executionLease, self.executionLease === executionLease else { return }
                 self.interruptContinuedRun(requestedRun, request: id)
             })
@@ -687,8 +702,30 @@ final class NativeDeferredUpload {
     }
 
     private func reportPhotoProgress(_ run: NativePhotoRunRecord, immediately: Bool = false) {
+        reportPhotoDiagnostic(run)
         if run.nativeOwnsRun {
             NotificationCenter.default.post(name: Self.photoProgressChanged, object: nil, userInfo: ["immediate": immediately])
+        }
+    }
+
+    private func reportPhotoDiagnostic(_ run: NativePhotoRunRecord) {
+        if var captured = photoDiagnostic, captured.run.sameRun(run) {
+            let now = Date(), liveActivity = activity(for: run)?.snapshot() ?? run.activity
+            let candidate = NativePhotoDiagnosticProjection.event(run, activity: liveActivity, at: now)
+            let candidateKey = NativePhotoDiagnosticProjection.transitionKey(candidate)
+            // Avoid disk reads as well as uploads for every byte/asset hint.
+            // Closed phase/error transitions still pass through immediately.
+            guard captured.candidate != candidateKey || now >= captured.nextSample else { return }
+            // Persisted terminal/retry state wins over the caller's older copy.
+            let saved = (try? photoRuns.lookup(run)).flatMap { $0.sameRun(run) ? $0 : nil } ?? run
+            var event = NativePhotoDiagnosticProjection.event(saved, activity: liveActivity ?? saved.activity, at: now)
+            let transition = NativePhotoDiagnosticProjection.transitionKey(event)
+            if captured.transition != transition {
+                event.code = event.state == .failed ? .failed : event.state == .complete ? .completed : event.state == .waiting ? .waiting : .started
+                captured.transition = transition
+            }
+            captured.candidate = candidateKey; captured.nextSample = now.addingTimeInterval(10); photoDiagnostic = captured
+            captured.recorder(event)
         }
     }
 
@@ -942,6 +979,7 @@ final class NativeDeferredUpload {
             defer {
                 self.background = nil; self.executionLease = nil; self.nativeExecution = false; self.activePhotoRun = nil; self.currentFile = nil
                 self.continuedRun = nil; self.activeContinuedRequest = nil; self.originalsRemaining = nil; self.photoActivity = nil
+                self.photoDiagnostic = nil
                 self.schedule(); self.startNativeForegroundIfNeeded()
             }
             var success = true
@@ -1211,6 +1249,8 @@ final class NativeDeferredUpload {
 
     private func advancePhotoRun(_ proposed: NativePhotoRunRecord, checkExecution: @escaping () throws -> Void) async throws {
         guard var run = try photoRuns.lookup(proposed), run.sameRun(proposed), run.armed else { throw CancellationError() }
+        photoDiagnostic = MobileDeviceDiagnostics.shared.recorder(for: run.scope, expectedDeviceId: run.authorization.scope.deviceId)
+            .map { (run, $0, nil, nil, .distantPast) }
         activePhotoRun = proposed
         defer { activePhotoRun = nil; currentFile = nil; fileWork.removeAll(); originalsRemaining = nil }
         let activity = NativePhotoRunActivity(run.activity)
@@ -1358,6 +1398,17 @@ final class NativeDeferredUpload {
                     if !Task.isCancelled { cloudFailure = authorityError ?? error }
                 }
             }
+        }
+        if startWithSingleAsset {
+            try await authorize()
+            let checkpointIndex = Task.detached {
+                try photos.checkpointAcknowledgedQueueSourceIndex(scope: photoScope, request: queue)
+            }
+            try await withTaskCancellationHandler(operation: { try await checkpointIndex.value }, onCancel: { checkpointIndex.cancel() })
+            // This runs once per admitted pass, not once per flush/asset. A
+            // discarded acknowledged index now reaches the existing 409 path
+            // and metadata-only rotation, preserving the byte queue receipts.
+            try await flushSourceIndex()
         }
         if run.retryCloudGaps, run.batch == nil {
             try await authorize()

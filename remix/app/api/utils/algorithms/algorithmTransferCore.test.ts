@@ -22,16 +22,21 @@ test('algorithm transfers reject authority, lineage, active selection and execut
   }
 });
 
-test('malformed and unbounded interest profiles fail rather than being truncated', () => {
+test('malformed interest profiles fail rather than being truncated', () => {
   for (const weight of [NaN, Infinity, 50.01, -50.01, '3', null]) {
     assert.throws(() => parseAlgorithmTransfer({ ...fixture(), weights: { ...fixture().weights, tags: { tag: weight } } }));
   }
   for (const weights of [[], {}, { ...fixture().weights, extra: {} }, { ...fixture().weights, tags: [] },
-    { ...fixture().weights, tags: JSON.parse('{"__proto__":1}') },
-    { ...fixture().weights, tags: Object.fromEntries(Array.from({ length: 10_001 }, (_, i) => [String(i), 1])) }]) {
+    { ...fixture().weights, tags: JSON.parse('{"__proto__":1}') }]) {
     assert.throws(() => parseAlgorithmTransfer({ ...fixture(), weights }));
   }
   for (const patch of [{ eventCount: -1 }, { eventCount: 1.5 }, { lastTrainedAt: 'yesterday' }, { lastTrainedAt: '2026-09-11' }, { name: ' x ' }]) {
     assert.throws(() => parseAlgorithmTransfer({ ...fixture(), ...patch }));
   }
+});
+
+
+test('portable profiles preserve more than ten thousand weights per bucket', () => {
+  const weights = { ...fixture().weights, tags: Object.fromEntries(Array.from({ length: 10_001 }, (_, i) => [String(i), 1])) };
+  assert.deepEqual(parseAlgorithmTransfer({ ...fixture(), weights }).weights, weights);
 });

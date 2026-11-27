@@ -614,6 +614,11 @@
     }
   },
   {
+    "pattern": "/things/debug",
+    "label": "Things Debug",
+    "preview": {}
+  },
+  {
     "pattern": "/vercel",
     "label": "Vercel",
     "preview": {}

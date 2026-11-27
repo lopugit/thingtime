@@ -14,7 +14,11 @@ mock.module('~/api/utils/auth/requireAdmin', { namedExports: { requireAdmin: asy
 mock.module('~/api/utils/mongodb/collections', { namedExports: { withHomeIndexRecovery: async (work: () => Promise<unknown>) => {
   entered++; return recovery.run(true, work);
 } } });
-mock.module('~/api/utils/migrations/migrations', { namedExports: { runMigration: async () => {
+mock.module('~/api/utils/migrations/migrations', { namedExports: { getMigration: (id: unknown) => {
+  assert.equal(id, 'fixture-repair');
+  assert.equal(recovery.getStore(), true, 'migration lookup stays inside the authorized repair scope');
+  return { id: 'fixture-repair', homeOnly: false };
+}, runMigration: async () => {
   assert.equal(recovery.getStore(), true, 'repair is authorized before the recovery scope is entered');
   repaired++;
   return { ok: true, migration: 'fixture-repair', report: {} };

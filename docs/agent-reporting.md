@@ -49,6 +49,48 @@ subspace. The feature refuses a custom data plane. Character disablement,
 membership removal, credential revocation and removal of a saved reference's
 access are checked again on later work.
 
+## Discover and select accounts before preparing a task
+
+Use one canonical `thingtime` MCP for the independently connected `@thingtime`
+and `@lopu` accounts. Its multi-account support does not mean both accounts are
+currently authenticated in this host. Connections, live scopes and access must
+be verified in each requesting chat/host; another agent's successful connection
+is evidence only for that agent's host.
+
+1. Call `list_thingtime_accounts` and inspect every task-authorized candidate on
+   the selected origin. Pass each exact `accountId` to `get_thingtime_profile`;
+   verify the live owning user, origin and independent `agents.report` scope.
+   Do not stop at the first unavailable account, rely on the default account,
+   or infer reporting access from `things` or `things.read`.
+2. For candidates with the required scope, call `get_thingtime_agent_task` with
+   the existing stable `externalTaskId` before any preparation. Prefer its
+   existing owner/origin binding. A replacement connector account ID for the
+   same verified owner and origin can resume it. A different owning user cannot
+   silently take it over. Multiple existing bindings require reconciliation;
+   do not write to both or create a third.
+3. Check the exact saved workspace and private Thingtime Agents subspace for
+   the selected account. The gateway's workspace ownership, ACL, administration
+   and Character membership checks remain authoritative. Subspace membership
+   by itself does not make another owner's saved workspace eligible. If no
+   binding exists, prepare it once under a verified eligible owner; retain that
+   owner, origin, external task identity and safe binding IDs across restarts.
+4. Record unavailable scopes, authentication, workspace access and membership
+   separately for each candidate. Continue discovery of other authorized
+   candidates, while keeping any existing task bound to its owner. Do not use a
+   different owner to evade an unresolved operation, revoked access or refusal.
+   Preserve request IDs and immutable inputs during recovery.
+
+When an authorized account is absent, add its connection through this host's
+registered OAuth controls within the same canonical MCP; do not replace a
+working account or create another MCP. For a missing reporting scope, use the
+exact-account upgrade above. Enumerate again after either flow and verify live
+profiles, then an actual saved Action write and exact-record readback. Report
+which accounts are connected and eligible, and which dependency remains; never
+claim both work from support for multiple accounts alone. Keep private records,
+scopes, audiences and credentials isolated. Do not silently migrate tasks across
+owners, duplicate workspace schemas, publish a replacement subspace, or fall
+back to owner/public posting when a candidate fails.
+
 ## MCP workflow
 
 1. Call `prepare_thingtime_agent_task` with the connected account, a stable
@@ -99,6 +141,21 @@ by this write gateway; use the reporting readback tool or the independently
 authorized overview read adapter.
 
 ## Failure and recovery
+
+With `api.agent-reporting` 1.2.0, preparation uses atomic relational ACL grants
+instead of appending every task Character to a bounded workspace array.
+An incomplete preparation returns a distinct resumable state rather than
+misreporting all missing initial grants as revoked access. Retry `prepare`
+with the same external task identity and unchanged workspace references.
+Already completed grants, immutable generation intents and explicit revocations
+remain checked; resuming must not re-enable revoked access or create a new
+Character. See [relational access](relational-access.md).
+
+Before interpreting a subspace permission failure, read back the exact private
+subspace ID and stored slug through supported controls. A display name does not
+establish its slug: punctuation such as underscores and hyphens is significant.
+Correct a verified target mismatch before diagnosing account access or server
+behavior; do not infer a runtime defect from a guessed target.
 
 Missing capability, permission, private reference, membership and Character
 liveness are distinct failures. Do not substitute owner posting, public records,

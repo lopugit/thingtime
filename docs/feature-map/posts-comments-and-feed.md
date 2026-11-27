@@ -169,3 +169,41 @@ checks desktop/mobile rendering and saved controls.
 The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
 covers saved/embedded render declarations, exact saved content and both embed
 placements with rendered/data views and reload.
+
+
+## Private Messenger notification delivery
+
+`app/api/utils/messenger/messageNotifications.ts` runs cursor-paged, bounded
+post-commit fanout through canonical `notifications.emitNotificationOnce`.
+`sendMessage` and exact-request reconciliation both schedule this request-owned
+work. Every recipient retains current `resolveChatAccess` checks (including
+linked-subspace access); message content stays in the chat. Active members get
+`chat-message`; pending members get one coalesced `chat-request`, and acceptance
+never replays it. Muted delivery retains history only. The notification registry,
+UI copy/preferences, APNs and email template share these actor-preserving types.
+Event deduplication and request coalescing use the existing protected root
+`uniqueKeys` index; notification IDs retain their ordinary random identities. External delivery after persistence
+is best effort, not an exactly-once transport guarantee. API contracts are
+`api.chats-messages` 1.7.0 and notification list/settings 1.9.0. Run
+`test:messenger`, `test:notifications`, `test:api-capabilities` and the Messenger
+manual checklist in `TESTING.md`.
+`node remix/scripts/verify-message-notifications.mjs --ui` exercises the compiled
+handler with a disposable replica, synthetic Character and owner, and isolated
+Chrome receiver views. See `TESTING.md` for its optional browser prerequisites.
+
+Growing subspace rules/flairs/reasons are ordered billable child Things in
+`subspaces/definitions.ts`; pin cursors in `subspaces/pinPaging.ts` exhaust all
+pins before ordinary posts. `algorithms/weightEntries.ts` stores each learned
+weight separately with generation/count integrity and canonical accounting.
+Ranking math is unchanged. Run `test:subspaces`, `test:feed` and the new
+`test:acl:relational` regressions; scale acceptance exercises real moderator
+forms and feed pagination. See [relational access](../relational-access.md).
+
+## macOS incoming system shares
+
+The signed `macos/ThingtimeShare` extension stages private provider content and
+opens Electron’s `electron/lib/incoming-share.cjs` bridge. Its scoped modal
+uses the existing `/share` route and iOS `ShareInbox`/`ShareComposerSession`
+contract. See [macOS sharing](../macos-sharing.md) for the App Group, packaging,
+account/origin boundaries and installed acceptance. Run Electron tests and
+`pnpm --dir electron run test:share-native`.

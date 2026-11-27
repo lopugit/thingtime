@@ -173,3 +173,28 @@ test('idle catalog choices refresh across windows and snapshots stay stable betw
 	assert.equal(manager.read()[0].enabled, true);
 	assert.equal(manager.read()[0].state, 'Idle — no mounted owner');
 });
+
+test('idle users pause network polling but keep local and background work running', () => {
+	let idle = false;
+	const manager = createActivityManager({ storage: () => ({ getItem: () => '[]', setItem() {} }), hidden: () => false, idle: () => idle, notify: (fn) => fn() });
+	const running = new Map<string, number>();
+	const track = (id: string) => () => {
+		running.set(id, (running.get(id) ?? 0) + 1);
+		return () => running.set(id, (running.get(id) ?? 0) - 1);
+	};
+	manager.register({ id: 'poll', title: 'Notifications', kind: 'polling' }, track('poll'));
+	manager.register({ id: 'clock', title: 'Clock', kind: 'polling', local: true }, track('clock'));
+	manager.register({ id: 'sync', title: 'Sync', kind: 'polling', background: true }, track('sync'));
+	manager.register({ id: 'listen', title: 'Listener', kind: 'listener' }, track('listen'));
+	assert.deepEqual(Object.fromEntries(running), { poll: 1, clock: 1, sync: 1, listen: 1 });
+	idle = true;
+	manager.visibilityChanged();
+	assert.equal(running.get('poll'), 0, 'network polling pauses while nobody is using the window');
+	assert.equal(running.get('clock'), 1, 'on-screen clocks keep ticking');
+	assert.equal(running.get('sync'), 1, 'background work is unaffected');
+	assert.equal(running.get('listen'), 1, 'listeners are not polling');
+	assert.equal(manager.read().find((row) => row.id === 'poll')?.state, 'Paused until you use Thingtime again');
+	idle = false;
+	manager.visibilityChanged();
+	assert.equal(running.get('poll'), 1, 'the next interaction restarts polling');
+});
