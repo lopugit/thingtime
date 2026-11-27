@@ -181,6 +181,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-27: **A Cloudflare router Worker sits in front of a test path on
+  thingtime.com.** `cloudflare/router` sends each route group to Vercel or a
+  future Cloudflare API Worker, chosen in a KV route table that
+  `scripts/routes.mjs` switches in about 90 s with no deploy. Any router error
+  passes the request straight through to Vercel. It is deployed to the
+  thingtime.com Cloudflare account (Workers Paid) on `thingtime.com/__cf/*`
+  only, so live traffic is unchanged. `/__cf/via/<path>` routes a real path
+  through it. Phase 1 of `PLAN/cloudflare-workers-migration.md`.
+
 - 2026-11-27: **A database call no longer keeps a 2 GB server billed for a
   minute.** `attachDatabasePool` holds the Fluid instance open for the MongoDB
   pool's idle timeout + 100 ms after every connection checkout, and the home
