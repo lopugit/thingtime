@@ -181,6 +181,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-27: **The health check and `auth/me` stop doing heavy work on every
+  call.** `health/nitro`'s storage readiness scans the whole `things`
+  collection (~2.8 s) and was cached for 30 s, while the storage monitor calls it
+  about 180 times a day. A `ready` result is now kept for 15 minutes; other
+  states are still re-checked after 30 s. `auth/me` opened a MongoDB transaction
+  on every call to make sure the hidden Debug folder exists. It now reads first
+  and opens a transaction only to create the folder.
+
 - 2026-11-27: **A database call no longer keeps a 2 GB server billed for a
   minute.** `attachDatabasePool` holds the Fluid instance open for the MongoDB
   pool's idle timeout + 100 ms after every connection checkout, and the home

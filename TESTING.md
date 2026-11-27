@@ -14272,6 +14272,11 @@ separate from deterministic discovery/lease tests.
       checkout, so a longer value turns sparse traffic into an always-on
       instance. After a change, compare a day's Fluid Provisioned Memory
       GB-hr in the FOCUS billing export, not only request latency.
+- [ ] Hot-path cost (2026-11-27): `GET /api/v1/health/nitro` answers a second
+      call within 15 minutes from cache when storage is `ready` (no second full
+      `things` scan); a `recovering` or `migration-required` result is re-read
+      after 30 s. A signed-in `GET /api/v1/auth/me` opens no MongoDB transaction
+      once the hidden Debug folder exists (`deviceDiagnosticsEnsure.test.ts`).
 ### Transfer speed windows (2026-10-19)
 
 - Check each decimal bit unit and logical file/folder/inode unit independently

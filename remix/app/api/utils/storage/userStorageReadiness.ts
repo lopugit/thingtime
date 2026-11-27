@@ -18,7 +18,15 @@ export type UserStorageAccountingReadiness = {
 	migrationId: typeof USER_STORAGE_ACCOUNTING_MIGRATION_ID;
 };
 
+// The source check scans the whole `things` collection for one unaccounted
+// row (~2.8 s in production, plus scan load on Atlas). Its only caller is the
+// health endpoint, which the storage release monitor polls every 15 minutes
+// and after every production build. A `ready` result is kept for 15 minutes;
+// recovering or migration-required results are re-checked after 30 s so a
+// completed recovery shows quickly. A fresh deployment starts with an empty
+// cache, so each new release is still checked on its first health read.
 const CACHE_MS = 30_000;
+export const READY_CACHE_MS = 15 * 60_000;
 let cachedReadiness: { expiresAt: number; promise: Promise<UserStorageAccountingReadiness> } | null = null;
 
 export const userStorageLedgersAreReady = (ownerIds: readonly string[], ledgers: readonly any[]): boolean => {
@@ -108,9 +116,15 @@ export const getUserStorageAccountingReadiness = (): Promise<UserStorageAccounti
 	if (cachedReadiness && cachedReadiness.expiresAt > now) return cachedReadiness.promise;
 
 	const promise = readUserStorageAccountingReadiness();
-	cachedReadiness = { expiresAt: now + CACHE_MS, promise };
-	promise.catch(() => {
-		if (cachedReadiness?.promise === promise) cachedReadiness = null;
-	});
+	const entry = { expiresAt: now + CACHE_MS, promise };
+	cachedReadiness = entry;
+	promise.then(
+		(readiness) => {
+			if (cachedReadiness === entry && readiness.state === 'ready') entry.expiresAt = Date.now() + READY_CACHE_MS;
+		},
+		() => {
+			if (cachedReadiness === entry) cachedReadiness = null;
+		}
+	);
 	return promise;
 };
