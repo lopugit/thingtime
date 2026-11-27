@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LUCIDE_ICONS, LUCIDE_FOR_EMOJI } from '~/theme/icons';
-import { buildThingsItemMenu } from './thingsMenuModel';
+import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import type { ThingsThing } from './thingsCore';
 
 const component = {
@@ -81,4 +81,14 @@ test('pin verbs are shared across ordinary, timeline and archived metadata menus
     assert.ok(pinned.includes('unpin'));
     assert.ok(!pinned.includes('pin'));
   }
+});
+
+test('New page is offered in writable browser menus and omitted in pickers and archives', () => {
+  const options = { clipboardCount: 0, itemCount: 0, sort: 'newest', groupBy: 'none', view: 'grid', displayMode: 'name' } as const;
+  const pageActions = (allowCreation: boolean, allowNewPage: boolean) =>
+    buildThingsBackgroundMenu({ ...options, allowCreation, allowNewPage }).sections
+      .flatMap(section => section.actions).filter(action => action.command === 'new-page');
+  assert.deepEqual(pageActions(true, true).map(action => action.label), ['New page']);
+  assert.equal(pageActions(true, false).length, 0);
+  assert.equal(pageActions(false, true).length, 0);
 });
