@@ -515,7 +515,8 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 		'api.admin-lopu-accounts',
 		'api.admin-lopu-credits'
 	]) {
-		assert.equal(manifest.features[feature], '1.0.0', feature);
+		// history 1.1.0: usage rows may carry surface model-check (additive)
+		assert.equal(manifest.features[feature], feature === 'api.lopu-account-history' ? '1.1.0' : '1.0.0', feature);
 	}
 });
 

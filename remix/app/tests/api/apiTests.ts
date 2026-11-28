@@ -1236,7 +1236,7 @@ export const apiTests: ApiTestDefinition[] = [
           body.entries.length <= 5 &&
           body.entries.every((row: any) => isObject(row) && typeof row.id === 'string' && typeof row.entry === 'string' && Number.isSafeInteger(row.amountMicros) && typeof row.amountCredits === 'number') &&
           Array.isArray(body?.usage) &&
-          body.usage.every((row: any) => isObject(row) && typeof row.id === 'string' && ['chat', 'voice', 'voice-session'].includes(row.surface) && ['thingtime', 'byo', 'free'].includes(row.billing) && Number.isSafeInteger(row.costMicros)) &&
+          body.usage.every((row: any) => isObject(row) && typeof row.id === 'string' && ['chat', 'voice', 'voice-session', 'model-check'].includes(row.surface) && ['thingtime', 'byo', 'free'].includes(row.billing) && Number.isSafeInteger(row.costMicros)) &&
           (body.nextCursor === null || typeof body.nextCursor === 'string')) ||
         (body?.ok === false && typeof body?.error === 'string'),
       'Lopu credit history returned (or refused with an error shape).'

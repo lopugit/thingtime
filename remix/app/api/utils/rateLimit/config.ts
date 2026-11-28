@@ -272,6 +272,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'ai.chatgpt-plan': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
+  // the model picker's Check Models (POST /api/v1/ai/models/check): one tiny
+  // provider call per selectable model, so one click spends one hit per row —
+  // roomy enough for a few full checks of a large catalogue in ten minutes;
+  // enforced fail-closed at the route, per user
+  'ai.models.check': { limit: 200, windowMs: 600_000, enabled: true },
   // admin catalog toggles, on-demand re-seed and provider-key re-check
   // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
   // the seed is a batch write and the probe dials the providers (5 s cap

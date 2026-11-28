@@ -3724,11 +3724,11 @@ const lopuUsageSchema: ThingtimeSchema = {
     'recorded, never debited) or "free" (the canned fallback). costMicros is the list price from api/utils/ai/pricing.ts ' +
     '(priced: false for a model outside the pricing table, estimated: true for a sibling-priced row); debitedMicros is ' +
     'the amount taken from the account. Listed through GET /api/v1/lopu/account/history beside the debits that point at it.',
-  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session)',
+  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session, model check)',
   fields: [
     { name: 'chatId', type: 'string', required: false, max: 160, description: 'The Lopu conversation (chat turns).' },
     { name: 'requestId', type: 'string', required: false, max: 160, description: 'The client request id of the turn.' },
-    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session'], description: 'Which Lopu surface ran the turn.' },
+    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session', 'model-check'], description: 'Which Lopu surface ran the turn (model-check = the model picker\'s Check Models liveness call).' },
     { name: 'provider', type: 'string', required: true, max: 40, description: 'claude | openai | vault | test | fallback, or the vault connection kind.' },
     { name: 'providerLabel', type: 'string', required: false, max: 80, description: 'The vault connection’s display name (byo turns).' },
     { name: 'model', type: 'string', required: false, max: 128, description: 'The model that answered.' },

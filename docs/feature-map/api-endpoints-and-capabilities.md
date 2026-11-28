@@ -70,6 +70,17 @@ execution. Run `test:chatgpt`, `test:api-capabilities` and `test:mcp-demo`, then
 complete the connected-host and desktop/mobile checklist in `TESTING.md`.
 
 
+`api.ai-models-check` 1.0.0 (`POST /api/v1/ai/models/check`) backs the Lopu model
+picker's **Check Models** button. The route (`routes/api/v1/ai/models/check/_check.tsx`)
+checks one `{ model }` or `{ providerId }` per request; `api/utils/ai/modelCheck.ts`
+sends that choice only "Live? Y/N" on the same client a chat turn uses (no tools,
+history or provider fallback), runs the Lopu access gate first and records a
+`model-check` usage row (`api.lopu-account-history` 1.1.0). The client store
+`components/Lopu/lopuModelCheck.ts` runs rows two at a time, fenced per viewer and
+run, and retries short-`Retry-After` 429s boundedly. Rate bucket `ai.models.check`.
+Run `test:ai-models`, `test:lopu-ui` and `test:api-capabilities`, then the Lopu
+picker checklist in `TESTING.md`.
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;

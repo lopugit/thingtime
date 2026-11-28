@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/ai/anthropicApiKey.ts', 'app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
+  ['app/api/utils/ai/anthropicApiKey.ts', 'app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/ai/modelCheck.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -137,6 +137,21 @@ assert.equal(
 const localGraphify = readFileSync(resolve(remixRoot, '..', 'graphifyExtract.sh'), 'utf8');
 assert.match(localGraphify, /OPENAI_BASE_URL=http:\/\/127\.0\.0\.1:4768\/v1/);
 assert.match(localGraphify, /GRAPHIFY_OPENAI_MODEL=codex-default/);
+
+// The model picker's Check Models probe (POST /api/v1/ai/models/check) never
+// chooses a model: it checks exactly the catalog row the caller named,
+// validated by resolveLopuModelChoice against the Admin-curated catalog
+// (disabled / unavailable rows are refused before any call), with one call
+// per check (SDK retries off), the named output ceiling on both providers and
+// never an env model id. Vault/plan checks use the owner's own connection.
+const modelCheck = readFileSync(join(remixRoot, 'app/api/utils/ai/modelCheck.ts'), 'utf8');
+assert.match(modelCheck, /resolveLopuModelChoice\(\{ model: row\.id/);
+assert.match(modelCheck, /max_tokens: AI_MODEL_CHECK_MAX_OUTPUT_TOKENS/);
+assert.match(modelCheck, /max_completion_tokens: AI_MODEL_CHECK_MAX_OUTPUT_TOKENS/);
+assert.doesNotMatch(modelCheck, /max_tokens:\s*\d/);
+assert.match(modelCheck, /new OpenAI\(\{ maxRetries: 0 \}\)/);
+assert.doesNotMatch(modelCheck, /model:\s*process\.env\./);
+assert.doesNotMatch(modelCheck, /getAiPreferredModelWaterfall|resolveAiPreferred/);
 
 console.log('application AI model routing contract: self-test OK');
 

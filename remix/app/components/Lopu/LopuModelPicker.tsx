@@ -1,8 +1,11 @@
 import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
 import React from 'react';
-import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Select, Switch, Text } from '@chakra-ui/react';
+import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Select, Spinner, Switch, Text, VisuallyHidden } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, CircleCheck, CircleDashed, CircleMinus, CircleX } from 'lucide-react';
+
+import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, subscribeLopuStore, type LopuChatDefaults, type LopuChatSettings } from './lopuChatStore';
 import {
@@ -20,14 +23,30 @@ import {
 	type LopuVaultInfo,
 	type LopuVaultProvider
 } from './lopuProviderCore';
-import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx } from './lopuTheme';
+import {
+	createLopuModelCheckFn,
+	describeLopuModelCheck,
+	describeLopuModelCheckEntry,
+	ensureLopuModelCheckScope,
+	getLopuModelCheckServerSnapshot,
+	getLopuModelCheckSnapshot,
+	lopuModelCheckItems,
+	lopuModelCheckResultsFor,
+	startLopuModelCheck,
+	subscribeLopuModelCheck,
+	type LopuModelCheckEntry
+} from './lopuModelCheck';
+import { LOPU_REDUCED_MOTION, LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx } from './lopuTheme';
 
 // The composer's model chip and its picker popover (design brief): server
 // models grouped by provider family (Claude / OpenAI), then "Your providers"
 // from the viewer's Secure Vault; a per-model effort segmented control; the
 // speed toggle only when the model offers a fast lane; unavailable entries
 // stay listed but disabled with the reason; a footer link to manage vault
-// providers. Uncontrolled Popover on purpose (a controlled trigger re-runs
+// providers; a "Check Models" button that sends every selectable option the
+// tiny message "Live? Y/N" (lopuModelCheck.ts → POST /api/v1/ai/models/check)
+// and marks each row with a green tick (replied) or a red cross (errored).
+// Uncontrolled Popover on purpose (a controlled trigger re-runs
 // onToggle after our onClick and closes on the same click) — the render
 // prop hands us onClose for the footer link.
 //
@@ -119,7 +138,58 @@ export const LopuSegmented = ({
 	</Flex>
 );
 
-const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProviderOption; selected: boolean; compact: boolean; onPick: (option: LopuProviderOption) => void }) => {
+// One row's Check Models result: a single subtle spinner while its check
+// runs, then a green tick (it replied) or a red cross (it errored). Colour is
+// semantic here (the theme's positive / danger tokens), never decoration.
+const CheckStatusIcon = ({ entry }: { entry: LopuModelCheckEntry | undefined }) => {
+	if (!entry) return null;
+	const common = { display: 'inline-flex', flexShrink: 0, 'aria-hidden': true } as const;
+	if (entry.status === 'checking')
+		return (
+			<Box as="span" {...common} color={LOPU_UI.faint} data-lopu-check="checking">
+				<Spinner size="xs" thickness="1.5px" speed="0.8s" sx={{ [LOPU_REDUCED_MOTION]: { animationDuration: '2.4s' } }} />
+			</Box>
+		);
+	if (entry.status === 'queued')
+		return (
+			<Box as="span" {...common} color={LOPU_UI.faint} data-lopu-check="queued">
+				<CircleDashed size={14} strokeWidth={2} />
+			</Box>
+		);
+	if (entry.status === 'live')
+		return (
+			<Box as="span" {...common} color={LOPU_UI.positive} data-lopu-check="live">
+				<CircleCheck size={15} strokeWidth={2.2} />
+			</Box>
+		);
+	if (entry.status === 'error')
+		return (
+			<Box as="span" {...common} color={LOPU_UI.danger} data-lopu-check="error">
+				<CircleX size={15} strokeWidth={2.2} />
+			</Box>
+		);
+	return (
+		<Box as="span" {...common} color={LOPU_UI.faint} data-lopu-check="skipped">
+			<CircleMinus size={14} strokeWidth={2} />
+		</Box>
+	);
+};
+
+const OptionRow = ({
+	option,
+	selected,
+	compact,
+	onPick,
+	check
+}: {
+	option: LopuProviderOption;
+	selected: boolean;
+	compact: boolean;
+	onPick: (option: LopuProviderOption) => void;
+	check?: LopuModelCheckEntry;
+}) => {
+	const checkText = describeLopuModelCheckEntry(check);
+	const detail = option.reason || option.hint || option.model || null;
 	const rowRef = React.useRef<HTMLButtonElement | null>(null);
 	// the list is long (two families + the vault): open on the current choice
 	React.useEffect(() => {
@@ -134,7 +204,7 @@ const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProvider
 		aria-selected={selected}
 		aria-disabled={option.disabled || undefined}
 		disabled={option.disabled}
-		title={option.reason || option.hint || option.model || undefined}
+		title={[checkText, detail].filter(Boolean).join(' — ') || undefined}
 		display="flex"
 		alignItems="center"
 		gap={2}
@@ -170,7 +240,14 @@ const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProvider
 					{option.reason || option.hint}
 				</Text>
 			) : null}
+			{check?.status === 'error' && check.message ? (
+				<Text as="span" display="block" fontSize="11px" color={LOPU_UI.danger} lineHeight="1.3" isTruncated data-lopu-check-error>
+					{check.message}
+				</Text>
+			) : null}
+			{checkText ? <VisuallyHidden>{`, ${checkText}`}</VisuallyHidden> : null}
 		</Box>
+		<CheckStatusIcon entry={check} />
 		{selected ? (
 			<Box as="span" display="inline-flex" color={LOPU_UI.ink} flexShrink={0} aria-hidden="true">
 				<Check size={14} strokeWidth={2.4} />
@@ -200,6 +277,24 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 	const offersFast = !!current && Array.isArray(current.speeds) && current.speeds.includes('fast');
 	const summary = describeLopuChoice(models, vaultProviders, value);
 	const selectedKey = lopuProviderChoiceKey(value);
+
+	// ——— Check Models ———
+	// Results belong to this viewer on this origin; another account's (or a
+	// previous origin's) results are never drawn, and are dropped on switch.
+	const api = useApi();
+	const user = useCurrentUser();
+	const canCheck = !!user?.id && !user.temporary;
+	const checkScope = canCheck ? `${typeof window === 'undefined' ? '' : window.location.origin}|${user!.id}` : null;
+	const checkSnapshot = React.useSyncExternalStore(subscribeLopuModelCheck, getLopuModelCheckSnapshot, getLopuModelCheckServerSnapshot);
+	const checks = lopuModelCheckResultsFor(checkSnapshot, checkScope);
+	React.useEffect(() => ensureLopuModelCheckScope(checkScope), [checkScope]);
+	const checkItems = React.useMemo(() => lopuModelCheckItems(groups), [groups]);
+	const checkModel = api.v1.ai.checkModel;
+	const runCheck = React.useCallback(() => {
+		if (!checkScope || checks.running || !checkItems.length) return;
+		void startLopuModelCheck({ scope: checkScope, items: checkItems, check: createLopuModelCheckFn(checkModel) });
+	}, [checkScope, checks.running, checkItems, checkModel]);
+	const checkSummary = checks.running ? null : describeLopuModelCheck(checks);
 
 	const pick = (option: LopuProviderOption) => {
 		if (option.kind === 'vault') {
@@ -253,10 +348,47 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 						aria-label="Choose what Lopu thinks with"
 					>
 						<PopoverBody p={0} maxH="calc(100dvh - 24px)" overflowY="auto" overscrollBehavior="contain">
-							<Flex align="center" px={3} pt={2.5} pb={1}>
+							<Flex align="center" justify="space-between" gap={2} px={3} pt={2.5} pb={1} minW={0}>
 								<Text as="span" sx={lopuEyebrowSx}>
 									Model
 								</Text>
+								{canCheck && checkItems.length ? (
+									<Flex align="center" gap={2} minW={0}>
+										<Text as="span" role="status" fontSize="11px" color={LOPU_UI.muted} lineHeight="1.2" isTruncated minW={0}>
+											{checkSummary}
+										</Text>
+										<Box
+											as="button"
+											type="button"
+											data-lopu-check-models
+											// aria-disabled, never `disabled`: disabling the focused button
+											// blurs it and the popover closes on blur mid-run
+											aria-disabled={checks.running || undefined}
+											aria-busy={checks.running || undefined}
+											title={'Send every model you can pick a tiny "Live? Y/N" message and mark which ones reply'}
+											onClick={runCheck}
+											display="inline-flex"
+											alignItems="center"
+											flexShrink={0}
+											height="24px"
+											px={2.5}
+											borderRadius={LOPU_UI.pill}
+											border={LOPU_UI.border}
+											bg={LOPU_UI.card}
+											color={checks.running ? LOPU_UI.muted : LOPU_UI.ink}
+											fontSize="11px"
+											fontWeight={600}
+											lineHeight={1}
+											whiteSpace="nowrap"
+											cursor={checks.running ? 'progress' : 'pointer'}
+											transition={`background ${LOPU_UI.transitionFast}`}
+											_hover={checks.running ? undefined : { bg: LOPU_UI.surfaceHover }}
+											sx={lopuFocusRingSx}
+										>
+											{checks.running ? `Checking ${checks.done}/${checks.total}` : 'Check Models'}
+										</Box>
+									</Flex>
+								) : null}
 							</Flex>
 							<Box maxH="272px" overflowY="auto" px={1.5} pb={1.5} role="listbox" aria-label="Models and providers">
 								{groups.length === 0 ? (
@@ -270,7 +402,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 											{group.label}
 										</Text>
 										{group.options.map((option) => (
-											<OptionRow key={option.key} option={option} selected={option.key === selectedKey} compact={compact} onPick={pick} />
+											<OptionRow key={option.key} option={option} selected={option.key === selectedKey} compact={compact} onPick={pick} check={checks.results[option.key]} />
 										))}
 									</Box>
 								))}
