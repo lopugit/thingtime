@@ -9505,6 +9505,24 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   persists. With `THINGTIME_USER_VAULT_KEY` unset locally the vault shows
   "Encryption not configured", the list is empty and `verify-lopu.mjs` §K
   asserts that path (the BYO turn is skipped).
+- Check Models (model picker header, `POST /api/v1/ai/models/check`): signed
+  in, open the composer's model chip and press **Check Models**. Every
+  selectable row (catalog models and your providers; disabled "needs key"
+  rows are skipped) gets one spinner, then a green tick when the model
+  answered "Live? Y/N" or a red cross with a one-line reason (401 key
+  rejected, 404 model not found, 429, timeout) under its label; the button
+  reads "Checking n/total" and the header ends with "n live · m errors".
+  Close the popover mid-run and reopen it: the run continued and its results
+  are still drawn. Switch account: the previous account's ticks disappear
+  before the new account renders. No message appears in any conversation;
+  Credits & usage lists one "Model check · <model>" row per successful
+  Thingtime-key check. An unverified / out-of-credit account shows the gate's
+  reason as each row's cross; three chats streaming at once make checks wait
+  (429 LOPU_TURN_IN_FLIGHT, Retry-After 5) instead of failing. A
+  desktop-device ChatGPT plan row shows a grey "not checked" mark. Check the
+  header and long error lines at 320px popover width on desktop and a 375px
+  phone, keyboard-focus the button, and verify reduced motion slows the
+  spinner. Signed out, the button is absent.
 - Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
   mobile toggles the floating window (also with the launcher bubble turned
   off in settings); it pulses while a turn streams and renders nothing on

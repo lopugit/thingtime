@@ -52,6 +52,7 @@ import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRet
 import { requireActiveThingtimeCapability, requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
 import { requireSubspaceImagePresentation } from '~/utils/subspaceMediaCapabilities';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
+import { AI_MODEL_CHECK_REQUIREMENTS, type AiModelCheckOutcome, type AiModelCheckTarget } from '~/api/utils/ai/modelCheckCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
@@ -560,6 +561,14 @@ export function useApi() {
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
+      }, [asyncFetcher]),
+      // the model picker's Check Models: send ONE selectable model or provider
+      // connection "Live? Y/N" ({ model } | { providerId }); throws a
+      // ThingtimeApiError on a refusal (403/402 access gate, 429 busy or rate
+      // limited with Retry-After) — lopuModelCheck.ts maps both into answers
+      checkModel: useCallback(async (target: AiModelCheckTarget, options?: { signal?: AbortSignal }): Promise<AiModelCheckOutcome> => {
+        for (const [feature, minimum] of Object.entries(AI_MODEL_CHECK_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
+        return asyncFetcher.submit(target, { action: '/api/v1/ai/models/check', signal: options?.signal, errorContext: 'check that model' });
       }, [asyncFetcher])
     },
     admin: {

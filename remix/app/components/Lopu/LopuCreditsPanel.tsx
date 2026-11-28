@@ -34,7 +34,7 @@ const LEDGER_LABELS: Record<LopuLedgerEntry['entry'], string> = {
 
 const REQUEST_STATUS_LABELS: Record<NonNullable<LopuLedgerEntry['requestStatus']>, string> = { pending: 'waiting for an admin', approved: 'approved', declined: 'declined' };
 
-const SURFACE_LABELS: Record<NonNullable<LopuUsageRow['surface']>, string> = { chat: 'Chat turn', voice: 'Voice turn', 'voice-session': 'Voice session' };
+const SURFACE_LABELS: Record<NonNullable<LopuUsageRow['surface']>, string> = { chat: 'Chat turn', voice: 'Voice turn', 'voice-session': 'Voice session', 'model-check': 'Model check' };
 
 const inputSx = {
 	bg: LOPU_UI.surfaceAlt,

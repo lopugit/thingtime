@@ -16,7 +16,7 @@ import { isLopuBilling, type LopuBilling } from './accessCore';
 //
 //   lopu-account  one per user (uniqueKeys lopuAccount:<userId>), the running
 //                 balance + lifetime and monthly counters
-//   lopu-usage    one per turn (chat / voice / voice-session): tokens, price,
+//   lopu-usage    one per turn (chat / voice / voice-session / model-check): tokens, price,
 //                 what was actually debited
 //   lopu-credit   the ledger: starter / grant / topup / debit / adjust /
 //                 refund rows with balanceAfterMicros, and top-up REQUESTS
@@ -65,8 +65,11 @@ export const LOPU_ADMIN_CREDIT_ENTRIES = ['grant', 'topup', 'adjust', 'refund'] 
 export type LopuAdminCreditEntry = (typeof LOPU_ADMIN_CREDIT_ENTRIES)[number];
 export const LOPU_REQUEST_STATUSES = ['pending', 'approved', 'declined'] as const;
 export type LopuRequestStatus = (typeof LOPU_REQUEST_STATUSES)[number];
-export const LOPU_USAGE_SURFACES = ['chat', 'voice', 'voice-session'] as const;
+// model-check = the model picker's "Check Models" liveness call (ai/modelCheck.ts)
+export const LOPU_USAGE_SURFACES = ['chat', 'voice', 'voice-session', 'model-check'] as const;
 export type LopuUsageSurface = (typeof LOPU_USAGE_SURFACES)[number];
+// the debit ledger row's reason prefix per surface
+const LOPU_USAGE_SURFACE_REASONS: Record<LopuUsageSurface, string> = { chat: 'Chat turn', voice: 'Voice turn', 'voice-session': 'Voice session turn', 'model-check': 'Model check' };
 
 export const LOPU_TOPUP_MIN_CREDITS = 0.5;
 export const LOPU_TOPUP_MAX_CREDITS = 1000;
@@ -798,7 +801,7 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
           entry: 'debit',
           amountMicros: -debited,
           balanceAfterMicros: record.crystal.balanceMicros,
-          reason: `${input.surface === 'chat' ? 'Chat' : input.surface === 'voice' ? 'Voice' : 'Voice session'} turn${usageCrystal.model ? ` · ${usageCrystal.model}` : ''}`,
+          reason: `${LOPU_USAGE_SURFACE_REASONS[input.surface]}${usageCrystal.model ? ` · ${usageCrystal.model}` : ''}`,
           actorId: userId,
           usageId
         } satisfies LopuCreditCrystal, at);
