@@ -3374,6 +3374,35 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Provider sync statuses; never credentials or provider error bodies.', body: { ok: true, report: [] } }]
   }),
   endpoint({
+    id: 'ai-models-check', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    group: 'lopu', title: 'Check a Lopu model is live',
+    endpoint: '/api/v1/ai/models/check', methods: ['POST'],
+    summary: 'Send one selectable Lopu model or provider connection the tiny message "Live? Y/N" and report whether it answered — the model picker\'s Check Models button.',
+    detail: 'Body: exactly one of model (a catalog model id from GET /api/v1/ai/models) or providerId (one of the caller\'s own vaultProviders ids, including server-runtime ChatGPT plan connections); any other field is a 400. ' +
+      'One request checks one choice, so a client checks a list with its own bounded concurrency and paints each answer as it arrives. ' +
+      'Catalog models run on the same server client a chat turn uses (Claude OAuth runtime or the OpenAI key, with the Responses transport for registry-marked models) at the catalog\'s cheapest effort tier and normal speed; vault connections run through the shared plain-completion adapter; ChatGPT plan connections use the owned runtime\'s subscription Responses contract and never API billing. ' +
+      'The model receives only a one-line system instruction and "Live? Y/N" with a 512-token output ceiling and a 60-second deadline: no tools, no history, no account data. There is never a fallback to another provider. Nothing is written to a conversation. ' +
+      'The Lopu access gate runs first exactly as for a chat turn: 403 LOPU_UNVERIFIED / LOPU_GUEST, 402 LOPU_NO_CREDITS (Thingtime keys), 429 LOPU_TURN_IN_FLIGHT with Retry-After when three billed turns are already running. A successful check records a lopu-usage row with surface model-check and debits Thingtime-key usage at list price like any turn. ' +
+      'Answers 200 { ok: true, live: true, target, model, provider, billing, reply (the model\'s first 40 characters), latencyMs, costMicros, checkedAt } when the model replied, or 200 { ok: true, live: false, target, model, provider, billing, error, latencyMs, costMicros: 0, checkedAt } when it is unavailable, timed out or the provider refused — error is a short fixed-form reason (HTTP status class, model not found, timeout) and never a provider body or credential. An unknown catalog id or a connection that is not the caller\'s is a 404. ' +
+      'A failure that reports the model missing triggers the existing cooled-down provider catalogue recovery. Device-local ChatGPT plan connections run on the Thingtime desktop app and are not checked by this route.',
+    auth: { mode: 'session', description: 'Full, non-temporary first-party user session; same-origin JSON only (2 KiB body). Rate limited per user by ai.models.check (default 200 per ten minutes), enforced fail-closed. Responses are private/no-store.' },
+    steps: [
+      'Negotiate api.ai-models-check >=1.0.0 on the selected origin.',
+      'GET /api/v1/ai/models and collect the selectable (available) models and vaultProviders.',
+      'POST { model } or { providerId } for each, a few at a time; retry a 429 LOPU_TURN_IN_FLIGHT after Retry-After.',
+      'Render live: true as reachable and live: false or a refusal as not reachable, with its error.'
+    ],
+    requestExamples: [
+      { name: 'Catalog model', description: 'Check one of Thingtime\'s models.', method: 'POST', body: { model: 'claude-opus-5' } },
+      { name: 'Your provider', description: 'Check one of your Secure Vault connections.', method: 'POST', body: { providerId: 'your-vault-provider-id' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'The model answered.', body: { ok: true, live: true, target: { model: 'claude-opus-5' }, model: 'claude-opus-5', provider: 'claude', billing: 'thingtime', reply: 'Y', latencyMs: 2140, costMicros: 310, checkedAt: '2026-11-28T00:00:00.000Z' } },
+      { status: 200, description: 'The model did not answer.', body: { ok: true, live: false, target: { model: 'gpt-5' }, model: 'gpt-5', provider: 'openai', billing: 'thingtime', error: 'GPT-5 is rate-limited or out of quota right now (HTTP 429).', latencyMs: 380, costMicros: 0, checkedAt: '2026-11-28T00:00:00.000Z' } },
+      { status: 401, description: 'Not signed in with a full account.', body: { ok: false, error: 'Sign in with a full account to check models.' } }
+    ]
+  }),
+  endpoint({
     id: 'ai-chatgpt-plan', contractVersion: '1.2.0', featureVersion: '1.2.0',
     group: 'lopu', title: 'ChatGPT plan connections', endpoint: '/api/v1/ai/chatgpt-plan',
     summary: 'Connects the current account to ChatGPT plan usage on Thingtime desktop or a configured local or self-hosted runtime.',
@@ -5569,6 +5598,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'lopu-account-history',
+    // 1.1.0: usage rows may carry surface model-check (the model picker's Check Models, additive)
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'lopu',
     title: 'Lopu credit history',
     endpoint: '/api/v1/lopu/account/history',
@@ -5578,7 +5610,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '{ id, entry: starter | grant | topup | debit | adjust | refund | request, amountMicros (signed), amountCredits, balanceAfterMicros ' +
       '(null on a request), reason, actorId, usageId, requestId, requestStatus (pending | approved | declined on requests), note, ' +
       'resolvedAt, resolvedBy, grantedMicros, createdAt, updatedAt }; usage holds the lopu-usage rows the page’s debit entries reference — ' +
-      '{ id, chatId, requestId, surface: chat | voice | voice-session, provider, providerLabel, model, billing, inputTokens, outputTokens, ' +
+      '{ id, chatId, requestId, surface: chat | voice | voice-session | model-check, provider, providerLabel, model, billing, inputTokens, outputTokens, ' +
       'cacheReadTokens, cacheWriteTokens, costMicros, costCredits, priced, estimated, debitedMicros, toolCalls, hops, durationMs, createdAt }. ' +
       'Follow nextCursor for older rows; a malformed cursor is a 400.',
     auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account.' },

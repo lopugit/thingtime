@@ -1158,7 +1158,9 @@ const labelFor = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | nu
         ? choice?.label || 'Your provider'
         : choice?.label || choice?.model || provider;
 
-const vaultClientOptions = (config: LopuVaultProviderClientConfig): AnthropicClientOptions & OpenAiClientOptions => ({
+// Shared with the model picker's liveness check (ai/modelCheck.ts) so both
+// dial a user's endpoint with exactly the same SDK options.
+export const vaultClientOptions = (config: LopuVaultProviderClientConfig): AnthropicClientOptions & OpenAiClientOptions => ({
   apiKey: config.apiKey,
   baseURL: config.baseURL,
   // never let the server's own credentials ride along on a user's endpoint:

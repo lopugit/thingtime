@@ -69,7 +69,7 @@ export type LopuUsageRow = {
 	id: string;
 	chatId: string | null;
 	requestId: string | null;
-	surface: 'chat' | 'voice' | 'voice-session' | null;
+	surface: 'chat' | 'voice' | 'voice-session' | 'model-check' | null;
 	provider: string | null;
 	model: string | null;
 	billing: LopuBilling | null;
@@ -189,7 +189,7 @@ export const normalizeLopuUsageRow = (raw: unknown): LopuUsageRow | null => {
 	const crystal = record(source.crystal) ?? source;
 	const id = stringOrNull(source.id ?? crystal.id);
 	if (!id) return null;
-	const surface = crystal.surface === 'chat' || crystal.surface === 'voice' || crystal.surface === 'voice-session' ? crystal.surface : null;
+	const surface = crystal.surface === 'chat' || crystal.surface === 'voice' || crystal.surface === 'voice-session' || crystal.surface === 'model-check' ? crystal.surface : null;
 	return {
 		id,
 		chatId: stringOrNull(crystal.chatId),
