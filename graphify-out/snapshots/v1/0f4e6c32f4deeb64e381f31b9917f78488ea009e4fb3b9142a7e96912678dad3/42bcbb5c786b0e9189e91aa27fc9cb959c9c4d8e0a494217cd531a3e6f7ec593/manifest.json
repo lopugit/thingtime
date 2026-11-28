@@ -24774,10 +24774,10 @@
     "semantic_hash": "03f518ef9bd3e52148b6143d78c3df16"
   },
   "remix/scripts/ai-model-routing-contract.mjs": {
-    "mtime": 1795835688.5109503,
-    "seen": 1795835966.1545315,
-    "ast_hash": "7e5710395fb3e1b19f5ff3459d22d0ef",
-    "semantic_hash": "7e5710395fb3e1b19f5ff3459d22d0ef"
+    "mtime": 1795837839.4275537,
+    "seen": 1795837945.7230275,
+    "ast_hash": "d374f9b953ea605ba7ec405477b3107b",
+    "semantic_hash": ""
   },
   "remix/scripts/archive-ui-smoke.mts": {
     "mtime": 1795835688.5109503,
